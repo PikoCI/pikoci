@@ -16,7 +16,7 @@ const (
 	StepTypeRunner  StepType = "runner"
 )
 
-// HookStep represents a single step inside a hook (on_success, on_failure, ensure).
+// HookStep represents a single step inside a hook (on_success, on_failure, on_cancel, ensure).
 // It can be either a runner command or a put step.
 type HookStep struct {
 	Type   StepType             `json:"type"`
@@ -32,6 +32,7 @@ type Job struct {
 
 	OnSuccess []HookStep `json:"on_success,omitempty"`
 	OnFailure []HookStep `json:"on_failure,omitempty"`
+	OnCancel  []HookStep `json:"on_cancel,omitempty"`
 	Ensure    []HookStep `json:"ensure,omitempty"`
 }
 
@@ -47,7 +48,7 @@ func (j *Job) GetSteps() []GetStep {
 }
 
 // AllPutSteps returns all put steps from the plan and from hooks (on_success,
-// on_failure, ensure) at both step and job level.
+// on_failure, on_cancel, ensure) at both step and job level.
 func (j *Job) AllPutSteps() []PutStep {
 	seen := make(map[string]bool)
 	var steps []PutStep
@@ -74,10 +75,12 @@ func (j *Job) AllPutSteps() []PutStep {
 		}
 		collectHooks(p.OnSuccess)
 		collectHooks(p.OnFailure)
+		collectHooks(p.OnCancel)
 		collectHooks(p.Ensure)
 	}
 	collectHooks(j.OnSuccess)
 	collectHooks(j.OnFailure)
+	collectHooks(j.OnCancel)
 	collectHooks(j.Ensure)
 	return steps
 }
@@ -103,6 +106,7 @@ type PlanStep struct {
 	Service   *ServiceStep          `json:"service,omitempty"`
 	OnSuccess []HookStep `json:"on_success,omitempty"`
 	OnFailure []HookStep `json:"on_failure,omitempty"`
+	OnCancel  []HookStep `json:"on_cancel,omitempty"`
 	Ensure    []HookStep `json:"ensure,omitempty"`
 }
 

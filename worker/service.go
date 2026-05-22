@@ -237,7 +237,7 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 		if err == nil && current.Status == build.Cancelled {
 			b.Status = build.Cancelled
 			w.updateBuild(ctx, m, b)
-			w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnFailure, "on_failure", resolved, "cancelled")
+			w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnCancel, "on_cancel", resolved, "cancelled")
 			w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.Ensure, "ensure", resolved, "cancelled")
 			return
 		}
@@ -861,7 +861,7 @@ func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Bui
 	return params, versionID
 }
 
-// runHooks runs a list of hooks (on_success, on_failure, ensure) and appends
+// runHooks runs a list of hooks (on_success, on_failure, on_cancel, ensure) and appends
 // the results as build steps.
 func (w *Worker) runHooks(ctx context.Context, m queue.Body, b *build.Build, steps *[]build.Step, cwd string, pp *pipeline.Pipeline, stepName string, hooks []job.HookStep, hookType string, resolved map[string]string, buildStatus ...string) {
 	for i, h := range hooks {

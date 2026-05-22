@@ -178,7 +178,7 @@ func (r *PipelineRepository) FilterAll(ctx context.Context) ([]*pipeline.WithTea
 		SELECT
 			t.id, t.name, t.canonical,
 			p.id, p.name, p.raw, p.public,
-			j.id, j.name, j.plan, j.on_success, j.on_failure, j.ensure,
+			j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure,
 			r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check,
 			rt.id, rt.name, rt.`+"`check`"+`, rt.pull, rt.push, rt.params,
 			ru.id, ru.name, ru.run,
@@ -228,7 +228,7 @@ func scanPipelinesWithTeam(rows *sql.Rows) ([]*pipeline.WithTeam, error) {
 		err := rows.Scan(
 			&tt.ID, &tt.Name, &tt.Canonical,
 			&pp.ID, &pp.Name, &pp.Raw, &pp.Public,
-			&j.ID, &j.Name, &j.Plan, &j.OnSuccess, &j.OnFailure, &j.Ensure,
+			&j.ID, &j.Name, &j.Plan, &j.OnSuccess, &j.OnFailure, &j.OnCancel, &j.Ensure,
 			&r.ID, &r.Name, &r.Type, &r.Canonical, &r.Params, &r.CheckInterval, &r.Logs, &r.LastCheck, &r.NextCheck,
 			&rt.ID, &rt.Name, &rt.Check, &rt.Pull, &rt.Push, &rt.Params,
 			&ru.ID, &ru.Name, &ru.Run,
@@ -326,7 +326,7 @@ func (r *PipelineRepository) Delete(ctx context.Context, tc, pn string) error {
 const pipelineQuery = `
 	SELECT
 		p.id, p.name, p.raw, p.public,
-		j.id, j.name, j.plan, j.on_success, j.on_failure, j.ensure,
+		j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure,
 		r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check,
 		rt.id, rt.name, rt.` + "`check`" + `, rt.pull, rt.push, rt.params,
 		ru.id, ru.name, ru.run,
@@ -364,7 +364,7 @@ func scanPipelines(rows *sql.Rows) ([]*pipeline.Pipeline, error) {
 
 		err := rows.Scan(
 			&pp.ID, &pp.Name, &pp.Raw, &pp.Public,
-			&j.ID, &j.Name, &j.Plan, &j.OnSuccess, &j.OnFailure, &j.Ensure,
+			&j.ID, &j.Name, &j.Plan, &j.OnSuccess, &j.OnFailure, &j.OnCancel, &j.Ensure,
 			&r.ID, &r.Name, &r.Type, &r.Canonical, &r.Params, &r.CheckInterval, &r.Logs, &r.LastCheck, &r.NextCheck,
 			&rt.ID, &rt.Name, &rt.Check, &rt.Pull, &rt.Push, &rt.Params,
 			&ru.ID, &ru.Name, &ru.Run,

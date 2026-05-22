@@ -26,6 +26,7 @@ type dbJob struct {
 	Plan        sql.NullString
 	OnSuccess   sql.NullString
 	OnFailure   sql.NullString
+	OnCancel    sql.NullString
 	Ensure      sql.NullString
 	Concurrency sql.NullInt64
 }
@@ -34,12 +35,14 @@ func newDBJob(p job.Job) dbJob {
 	pl, _ := json.Marshal(p.Plan)
 	s, _ := json.Marshal(p.OnSuccess)
 	f, _ := json.Marshal(p.OnFailure)
+	c, _ := json.Marshal(p.OnCancel)
 	e, _ := json.Marshal(p.Ensure)
 	return dbJob{
 		Name:        toNullString(p.Name),
 		Plan:        toNullString(string(pl)),
 		OnSuccess:   toNullString(string(s)),
 		OnFailure:   toNullString(string(f)),
+		OnCancel:    toNullString(string(c)),
 		Ensure:      toNullString(string(e)),
 		Concurrency: sql.NullInt64{Int64: int64(p.Concurrency), Valid: true},
 	}
@@ -55,6 +58,7 @@ func (dbp *dbJob) toDomainEntity() *job.Job {
 	_ = json.Unmarshal([]byte(dbp.Plan.String), &j.Plan)
 	_ = json.Unmarshal([]byte(dbp.OnSuccess.String), &j.OnSuccess)
 	_ = json.Unmarshal([]byte(dbp.OnFailure.String), &j.OnFailure)
+	_ = json.Unmarshal([]byte(dbp.OnCancel.String), &j.OnCancel)
 	_ = json.Unmarshal([]byte(dbp.Ensure.String), &j.Ensure)
 
 	return j
@@ -63,8 +67,8 @@ func (dbp *dbJob) toDomainEntity() *job.Job {
 func (r *JobRepository) Create(ctx context.Context, tc, pn string, j job.Job) (uint32, error) {
 	dbj := newDBJob(j)
 	res, err := r.querier.ExecContext(ctx, `
-		INSERT INTO jobs(name, plan, on_success, on_failure, ensure, concurrency, pipeline_id)
-		VALUES (?, ?, ?, ?, ?, ?,
+		INSERT INTO jobs(name, plan, on_success, on_failure, on_cancel, ensure, concurrency, pipeline_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?,
 			-- pipeline_id
 			(
 				SELECT p.id
@@ -72,7 +76,7 @@ func (r *JobRepository) Create(ctx context.Context, tc, pn string, j job.Job) (u
 				JOIN teams AS t
 					ON p.team_id = t.id
 				WHERE t.canonical = ? AND p.name = ?
-			))`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.Ensure, dbj.Concurrency, tc, pn)
+			))`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, tc, pn)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -89,7 +93,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 	dbj := newDBJob(j)
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE jobs AS j
-		SET name = ?, plan = ?, on_success = ?, on_failure = ?, ensure = ?, concurrency = ?
+		SET name = ?, plan = ?, on_success = ?, on_failure = ?, on_cancel = ?, ensure = ?, concurrency = ?
 		FROM (
 			SELECT j.id
 			FROM jobs AS j
@@ -100,7 +104,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 			WHERE t.canonical = ? AND p.name = ? AND j.name = ?
 		) AS jj
 		WHERE jj.id = j.id
-	`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.Ensure, dbj.Concurrency, tc, pn, jn)
+	`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, tc, pn, jn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -115,7 +119,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 
 func (r *JobRepository) Find(ctx context.Context, tc, pn, jn string) (*job.Job, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.ensure, j.concurrency
+		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency
 		FROM jobs AS j
 		JOIN pipelines AS p
 			ON j.pipeline_id = p.id
@@ -134,7 +138,7 @@ func (r *JobRepository) Find(ctx context.Context, tc, pn, jn string) (*job.Job, 
 
 func (r *JobRepository) Filter(ctx context.Context, tc, pn string) ([]*job.Job, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.ensure, j.concurrency
+		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency
 		FROM jobs AS j
 		JOIN pipelines AS p
 			ON j.pipeline_id = p.id
@@ -189,6 +193,7 @@ func scanJob(s sqlr.Scanner) (*job.Job, error) {
 		&j.Plan,
 		&j.OnSuccess,
 		&j.OnFailure,
+		&j.OnCancel,
 		&j.Ensure,
 		&j.Concurrency,
 	)

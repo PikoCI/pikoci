@@ -33,7 +33,7 @@ type hclGetStep struct {
 	Timeout  string   `json:"timeout" hcl:"timeout,optional"`
 	Attempts int      `json:"attempts" hcl:"attempts,optional"`
 
-	// Remain absorbs hook blocks (on_success, on_failure, ensure) so hclsimple.Decode
+	// Remain absorbs hook blocks (on_success, on_failure, on_cancel, ensure) so hclsimple.Decode
 	// doesn't reject them. Hooks are parsed from the raw AST by parseHooks instead,
 	// which supports both labeled (runner) and unlabeled (put) hook blocks.
 	Remain hcl.Body `hcl:",remain"`
@@ -507,6 +507,7 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 			Plan:        jobPlans[hj.Name],
 			OnSuccess:   jh.OnSuccess,
 			OnFailure:   jh.OnFailure,
+			OnCancel:    jh.OnCancel,
 			Ensure:      jh.Ensure,
 		}
 		pp.Jobs = append(pp.Jobs, j)
@@ -523,11 +524,12 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 type jobHooks struct {
 	OnSuccess []job.HookStep
 	OnFailure []job.HookStep
+	OnCancel  []job.HookStep
 	Ensure    []job.HookStep
 }
 
 // parseHooks finds all hook steps (runner commands and put blocks) inside a specific
-// hook type (on_success, on_failure, ensure) within the given AST block.
+// hook type (on_success, on_failure, on_cancel, ensure) within the given AST block.
 // Labeled blocks (e.g. on_success "exec" { ... }) are runner commands.
 // Unlabeled blocks (e.g. on_success { put "type" "name" { ... } }) contain put steps.
 func parseHooks(block *hclsyntax.Block, ectx *hcl.EvalContext, hookType string) []job.HookStep {
@@ -697,6 +699,7 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 					},
 					OnSuccess: parseHooks(innerBlock, ectx, "on_success"),
 					OnFailure: parseHooks(innerBlock, ectx, "on_failure"),
+					OnCancel:  parseHooks(innerBlock, ectx, "on_cancel"),
 					Ensure:    parseHooks(innerBlock, ectx, "ensure"),
 				})
 			case "task":
@@ -728,6 +731,7 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 					},
 					OnSuccess: parseHooks(innerBlock, ectx, "on_success"),
 					OnFailure: parseHooks(innerBlock, ectx, "on_failure"),
+					OnCancel:  parseHooks(innerBlock, ectx, "on_cancel"),
 					Ensure:    parseHooks(innerBlock, ectx, "ensure"),
 				})
 			case "put":
@@ -771,6 +775,7 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 					},
 					OnSuccess: parseHooks(innerBlock, ectx, "on_success"),
 					OnFailure: parseHooks(innerBlock, ectx, "on_failure"),
+					OnCancel:  parseHooks(innerBlock, ectx, "on_cancel"),
 					Ensure:    parseHooks(innerBlock, ectx, "ensure"),
 				})
 			}
@@ -782,6 +787,7 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 		jh := jobHooks{
 			OnSuccess: parseHooks(block, ectx, "on_success"),
 			OnFailure: parseHooks(block, ectx, "on_failure"),
+			OnCancel:  parseHooks(block, ectx, "on_cancel"),
 			Ensure:    parseHooks(block, ectx, "ensure"),
 		}
 		jobHooksMap[hj.Name] = jh
