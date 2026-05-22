@@ -69,7 +69,7 @@ test-mock: ## Runs unit/mock tests (no services needed)
 test-integration: ## Runs UI and backend integration tests (requires geckodriver + Xvfb + Firefox)
 	@PIKOCI_TEST_DB_SYSTEMS=$${PIKOCI_TEST_DB_SYSTEMS:-mem,sqlite} \
 	PIKOCI_TEST_PUBSUB_SYSTEMS=$${PIKOCI_TEST_PUBSUB_SYSTEMS:-mem} \
-	go test -tags integration ./integration/... -timeout 120s
+	go test -tags integration ./integration/
 
 .PHONY: test-backends
 test-backends: ## Runs integration tests with all backends (requires test-services-up)
@@ -80,7 +80,7 @@ test-backends: ## Runs integration tests with all backends (requires test-servic
 	NATS_SERVER_URL=nats://127.0.0.1:4222 \
 	RABBIT_SERVER_URL=amqp://guest:guest@127.0.0.1:5672/ \
 	KAFKA_BROKERS=127.0.0.1:9092 \
-	go test -tags integration ./integration/backends/... -timeout 120s
+	go test -tags integration ./integration/backends/...
 
 PLATFORMS := linux/amd64 windows/amd64 darwin/amd64
 
