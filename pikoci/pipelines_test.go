@@ -1359,3 +1359,143 @@ func TestGetPipelineImage_ShowsLinkedResources(t *testing.T) {
 	assert.True(t, strings.Contains(dot, `"cron.timer"`), "first linked resource should appear")
 	assert.True(t, strings.Contains(dot, `"git.repo"`), "second linked resource should appear")
 }
+
+func TestGetPipelineImage_JobStatusColors(t *testing.T) {
+	// Helper to build a simple pipeline with one job triggered by a cron resource.
+	makePipeline := func() *pipeline.Pipeline {
+		return &pipeline.Pipeline{
+			Name: "p",
+			Resources: []resource.Resource{
+				{ID: 1, Canonical: "cron.tick"},
+			},
+			Jobs: []job.Job{
+				{
+					ID:   1,
+					Name: "j",
+					Plan: []job.PlanStep{
+						{
+							Type: job.StepTypeGet,
+							Get:  &job.GetStep{Type: "cron", Name: "tick", Trigger: true},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	// Color constants matching pipelines.go
+	colorSucceeded := `"#00A83A"`
+	colorFailed := `"#FF004D"`
+	colorDefault := `"#83769C"`
+	colorStartedBorder := `"#CC8200"`
+
+	tests := []struct {
+		name            string
+		builds          []*build.Build
+		wantFillColor   string
+		wantDashedStyle bool
+	}{
+		{
+			name:            "no builds - default color, no outline",
+			builds:          []*build.Build{},
+			wantFillColor:   colorDefault,
+			wantDashedStyle: false,
+		},
+		{
+			name: "latest main build succeeded",
+			builds: []*build.Build{
+				{ID: 1, BuildNumber: "1", Status: build.Failed},
+				{ID: 2, BuildNumber: "2", Status: build.Succeeded},
+			},
+			wantFillColor:   colorSucceeded,
+			wantDashedStyle: false,
+		},
+		{
+			name: "latest main build failed",
+			builds: []*build.Build{
+				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
+				{ID: 2, BuildNumber: "2", Status: build.Failed},
+			},
+			wantFillColor:   colorFailed,
+			wantDashedStyle: false,
+		},
+		{
+			name: "latest main build running - shows previous color with dashed outline",
+			builds: []*build.Build{
+				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
+				{ID: 2, BuildNumber: "2", Status: build.Started},
+			},
+			wantFillColor:   colorSucceeded,
+			wantDashedStyle: true,
+		},
+		{
+			name: "retry running - latest main build color with dashed outline",
+			builds: []*build.Build{
+				{ID: 1, BuildNumber: "1", Status: build.Failed},
+				{ID: 2, BuildNumber: "1.1", Status: build.Started},
+			},
+			wantFillColor:   colorFailed,
+			wantDashedStyle: true,
+		},
+		{
+			name: "retry succeeded - latest main build color unchanged",
+			builds: []*build.Build{
+				{ID: 1, BuildNumber: "1", Status: build.Failed},
+				{ID: 2, BuildNumber: "1.1", Status: build.Succeeded},
+			},
+			wantFillColor:   colorFailed,
+			wantDashedStyle: false,
+		},
+		{
+			name: "only build is running - default color with dashed outline",
+			builds: []*build.Build{
+				{ID: 1, BuildNumber: "1", Status: build.Started},
+			},
+			wantFillColor:   colorDefault,
+			wantDashedStyle: true,
+		},
+		{
+			name: "multiple main builds with retries - latest main build wins",
+			builds: []*build.Build{
+				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
+				{ID: 2, BuildNumber: "1.1", Status: build.Succeeded},
+				{ID: 3, BuildNumber: "2", Status: build.Failed},
+				{ID: 4, BuildNumber: "2.1", Status: build.Started},
+			},
+			wantFillColor:   colorFailed,
+			wantDashedStyle: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			s := newService(ctrl)
+			ctx := context.TODO()
+
+			pp := makePipeline()
+			s.Pipelines.EXPECT().Find(ctx, "main", "p").Return(pp, nil)
+			s.Builds.EXPECT().Filter(ctx, "main", "p", "j").Return(tt.builds, nil)
+
+			img, err := s.S.GetPipelineImage(ctx, "main", "p", "dot")
+			require.NoError(t, err)
+
+			dot := string(img)
+
+			// Check fill color on the job node
+			assert.Contains(t, dot, fmt.Sprintf("fillcolor=%s", tt.wantFillColor),
+				"expected fill color %s", tt.wantFillColor)
+
+			// Check dashed outline on the subgraph cluster
+			if tt.wantDashedStyle {
+				assert.Contains(t, dot, fmt.Sprintf("color=%s", colorStartedBorder),
+					"expected running border color on subgraph")
+				assert.Contains(t, dot, `style="dashed,bold"`,
+					"expected dashed style on subgraph when build is running")
+			} else {
+				assert.Contains(t, dot, "style=invis",
+					"expected invisible style on subgraph when no build is running")
+			}
+		})
+	}
+}

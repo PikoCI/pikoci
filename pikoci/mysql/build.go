@@ -246,6 +246,7 @@ func (r *BuildRepository) Filter(ctx context.Context, tc, pn, jn string) ([]*bui
 		JOIN teams AS t
 			ON p.team_id = t.id
 		WHERE t.canonical = ? AND p.name = ? AND j.name = ?
+		ORDER BY b.id ASC
 	`, tc, pn, jn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter builds: %w", err)
