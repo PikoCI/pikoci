@@ -18,6 +18,7 @@ import (
 	pipeline "github.com/xescugc/pikoci/pikoci/pipeline"
 	resource "github.com/xescugc/pikoci/pikoci/resource"
 	team "github.com/xescugc/pikoci/pikoci/team"
+	trigger "github.com/xescugc/pikoci/pikoci/trigger"
 	user "github.com/xescugc/pikoci/pikoci/user"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -163,6 +164,21 @@ func (m *Service) CreateTeamMember(ctx context.Context, tc string, tm team.Membe
 func (mr *ServiceMockRecorder) CreateTeamMember(ctx, tc, tm any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTeamMember", reflect.TypeOf((*Service)(nil).CreateTeamMember), ctx, tc, tm)
+}
+
+// CreateTrigger mocks base method.
+func (m *Service) CreateTrigger(ctx context.Context, tc, name string, version map[string]any) (*trigger.Trigger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateTrigger", ctx, tc, name, version)
+	ret0, _ := ret[0].(*trigger.Trigger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateTrigger indicates an expected call of CreateTrigger.
+func (mr *ServiceMockRecorder) CreateTrigger(ctx, tc, name, version any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTrigger", reflect.TypeOf((*Service)(nil).CreateTrigger), ctx, tc, name, version)
 }
 
 // CreateUser mocks base method.
@@ -518,6 +534,21 @@ func (m *Service) ListTeams(ctx context.Context, un string) ([]*team.WithMembers
 func (mr *ServiceMockRecorder) ListTeams(ctx, un any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTeams", reflect.TypeOf((*Service)(nil).ListTeams), ctx, un)
+}
+
+// ListTriggersAfter mocks base method.
+func (m *Service) ListTriggersAfter(ctx context.Context, tc, name string, afterID uint32) ([]*trigger.Trigger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListTriggersAfter", ctx, tc, name, afterID)
+	ret0, _ := ret[0].([]*trigger.Trigger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTriggersAfter indicates an expected call of ListTriggersAfter.
+func (mr *ServiceMockRecorder) ListTriggersAfter(ctx, tc, name, afterID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTriggersAfter", reflect.TypeOf((*Service)(nil).ListTriggersAfter), ctx, tc, name, afterID)
 }
 
 // ListUsers mocks base method.

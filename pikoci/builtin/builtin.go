@@ -11,7 +11,7 @@ import (
 	"github.com/xescugc/pikoci/pikoci/sectype"
 )
 
-//go:embed resource_types/cron.hcl resource_types/git.hcl
+//go:embed resource_types/cron.hcl resource_types/git.hcl resource_types/trigger.hcl
 var resourceTypeFS embed.FS
 
 //go:embed runners/*.hcl

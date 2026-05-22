@@ -32,6 +32,17 @@ func TestResourceTypes(t *testing.T) {
 		assert.Contains(t, rt.Params, "branch")
 		assert.Contains(t, rt.Params, "pr")
 	})
+
+	t.Run("trigger", func(t *testing.T) {
+		rt, ok := rts["trigger"]
+		require.True(t, ok)
+		assert.Equal(t, "trigger", rt.Name)
+		assert.Equal(t, "pikoci://trigger", rt.Source)
+		assert.Nil(t, rt.Check)
+		assert.Nil(t, rt.Pull)
+		assert.Nil(t, rt.Push)
+		assert.Empty(t, rt.Params)
+	})
 }
 
 func TestRunners(t *testing.T) {

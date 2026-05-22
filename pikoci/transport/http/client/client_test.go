@@ -21,6 +21,7 @@ import (
 	"github.com/xescugc/pikoci/pikoci/team"
 	thttp "github.com/xescugc/pikoci/pikoci/transport/http"
 	"github.com/xescugc/pikoci/pikoci/transport/http/client"
+	"github.com/xescugc/pikoci/pikoci/trigger"
 	"github.com/xescugc/pikoci/pikoci/user"
 )
 
@@ -533,6 +534,52 @@ func TestTriggerPipelineResource(t *testing.T) {
 
 	err = c.TriggerPipelineResource(context.Background(), "team", "pipe", "res1")
 	require.NoError(t, err)
+}
+
+func TestCreateTrigger(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/triggers/{name}", func(w http.ResponseWriter, req *http.Request) {
+		var body thttp.CreateTriggerRequest
+		json.NewDecoder(req.Body).Decode(&body)
+		assert.Equal(t, "build succeeded", body.Version["payload"])
+		jsonHandler(w, thttp.CreateTriggerResponse{Trigger: &trigger.Trigger{
+			ID:      1,
+			Name:    "trigger.deploy",
+			Version: body.Version,
+		}})
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	tr, err := c.CreateTrigger(context.Background(), "team", "trigger.deploy", map[string]interface{}{"payload": "build succeeded"})
+	require.NoError(t, err)
+	assert.Equal(t, uint32(1), tr.ID)
+	assert.Equal(t, "trigger.deploy", tr.Name)
+}
+
+func TestListTriggersAfter(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/triggers/{name}", func(w http.ResponseWriter, req *http.Request) {
+		after := req.URL.Query().Get("after")
+		assert.Equal(t, "5", after)
+		jsonHandler(w, thttp.ListTriggersAfterResponse{Triggers: []*trigger.Trigger{
+			{ID: 6, Name: "trigger.deploy"},
+			{ID: 7, Name: "trigger.deploy"},
+		}})
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	triggers, err := c.ListTriggersAfter(context.Background(), "team", "trigger.deploy", 5)
+	require.NoError(t, err)
+	assert.Len(t, triggers, 2)
+	assert.Equal(t, uint32(6), triggers[0].ID)
 }
 
 func TestRequestError(t *testing.T) {

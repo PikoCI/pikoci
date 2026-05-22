@@ -228,6 +228,9 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger) http.Handler {
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/resources/{resource_canonical}/trigger").Name(TriggerPipelineResource.String()).Handler(triggerPipelineResource(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/resources/{resource_canonical}/webhook_token").Name(RegenerateWebhookToken.String()).Handler(regenerateWebhookToken(s))
 
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/triggers/{trigger_name}").Name(CreateTrigger.String()).Handler(createTrigger(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/triggers/{trigger_name}").Name(ListTriggersAfter.String()).Handler(listTriggersAfter(s))
+
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/image{ext}").Name(GetPipelineImage.String()).Handler(getPipelineImage(s))
 
 	api.NotFoundHandler = http.HandlerFunc(

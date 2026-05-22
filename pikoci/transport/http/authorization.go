@@ -57,6 +57,9 @@ var (
 
 		WebhookTrigger:         nothing,
 		RegenerateWebhookToken: admin,
+
+		CreateTrigger:     admin,
+		ListTriggersAfter: member,
 	}
 )
 
