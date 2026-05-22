@@ -133,7 +133,7 @@ This starts:
 
 - **Caddy** — reverse proxy with automatic HTTPS (ports 80/443)
 - **Prometheus** — scrapes PikoCI `/metrics` and Node Exporter
-- **Grafana** — dashboards (accessible at `grafana.ci.pikoci.com`)
+- **Grafana** — dashboards (accessible at `grafana.pikoci.com`)
 - **Node Exporter** — host-level metrics
 
 ### 7. DNS
@@ -141,7 +141,7 @@ This starts:
 Point your domain's A record to the server IP:
 
 - `ci.pikoci.com` (or your domain) → server IP
-- `grafana.ci.pikoci.com` → server IP
+- `grafana.pikoci.com` → server IP
 
 Caddy handles TLS certificates automatically via Let's Encrypt.
 
