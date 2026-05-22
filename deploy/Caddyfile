@@ -1,4 +1,7 @@
 {$PIKOCI_DOMAIN} {
+	header Access-Control-Allow-Origin https://{$PIKOCI_WWW_DOMAIN}
+	header Access-Control-Allow-Methods "GET, OPTIONS"
+	header Access-Control-Allow-Headers "Content-Type, Authorization"
 	reverse_proxy host.docker.internal:8080
 }
 
