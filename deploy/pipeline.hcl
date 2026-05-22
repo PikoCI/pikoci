@@ -187,8 +187,10 @@ job "deploy" {
       args = [
         "-ec",
         <<-EOT
-        # Delay the restart so the build can finish updating its status
-        nohup sh -c 'sleep 5 && kill -QUIT $(pidof pikoci)' >/dev/null 2>&1 &
+        # Schedule restart after the build completes. The systemd service
+        # will start the new binary automatically. We use setsid to detach
+        # from the PikoCI process tree so the sleep survives the restart.
+        setsid sh -c 'sleep 10 && systemctl restart pikoci' </dev/null >/dev/null 2>&1 &
         EOT
       ]
     }
