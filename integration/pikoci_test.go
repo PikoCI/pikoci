@@ -808,7 +808,9 @@ job "gen" {
 		adminJWT := lr.Data.JWT
 
 		pub := true
-		updateBody, _ := json.Marshal(thttp.UpdatePipelineRequest{Public: &pub})
+		updateBody, _ := json.Marshal(struct {
+			Public *bool `json:"public"`
+		}{Public: &pub})
 		updateReq, err := http.NewRequest(http.MethodPut, pikoURL+"/teams/main/pipelines/cron.json", bytes.NewReader(updateBody))
 		require.NoError(t, err)
 		updateReq.Header.Set("Authorization", "Bearer "+adminJWT)
