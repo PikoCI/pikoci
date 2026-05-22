@@ -143,10 +143,10 @@ job "build-latest" {
         <<-EOT
         cd ${var.git_name}
 
-        echo "${var.ghcr_token}" | docker login -u "${var.ghcr_username}" --password-stdin
+        echo "${var.ghcr_token}" | docker login ghcr.io -u "${var.ghcr_username}" --password-stdin
 
         docker buildx create --use --name pikoci-builder 2>/dev/null || docker buildx use pikoci-builder
-        docker buildx build --platform linux/amd64,linux/arm64 -t xescugc/pikoci:latest --push .
+        docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/pikoci/pikoci:latest --push .
         EOT
       ]
     }
@@ -225,10 +225,10 @@ job "build-release" {
         cd ${var.git_name}
         TAG=$(git describe --tags --exact-match)
 
-        echo "${var.ghcr_token}" | docker login -u "${var.ghcr_username}" --password-stdin
+        echo "${var.ghcr_token}" | docker login ghcr.io -u "${var.ghcr_username}" --password-stdin
 
         docker buildx create --use --name pikoci-builder 2>/dev/null || docker buildx use pikoci-builder
-        docker buildx build --platform linux/amd64,linux/arm64 -t xescugc/pikoci:$TAG --push .
+        docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/pikoci/pikoci:$TAG --push .
         EOT
       ]
     }
