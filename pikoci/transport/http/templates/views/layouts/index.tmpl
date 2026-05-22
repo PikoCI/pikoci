@@ -2027,7 +2027,7 @@
             data.push(pp.charCodeAt(i));
           }
           if (this.model.get("id")){
-            this.collection.create({name: name, config: data, vars: vars, public: isPublic}, {
+            this.collection.create({name: name, canonical: this.model.get("canonical"), config: data, vars: vars, public: isPublic}, {
               wait: true,
               url: this.model.url(),
               success: function(m) {
