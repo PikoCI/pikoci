@@ -1566,7 +1566,7 @@
       // HCL stream language for CodeMirror
       app.hclLanguage = function() {
         var CM = window.PikoCM
-        var keywords = 'job resource resource_type runner_type secret_type service_type variable get put task service plan params start stop ready_check secret on_success on_failure ensure concurrency'
+        var keywords = 'job resource resource_type runner_type secret_type service_type variable get put task service plan params start stop ready_check secret on_success on_failure on_cancel ensure concurrency'
         var keywordSet = {}
         keywords.split(' ').forEach(function(k){ keywordSet[k] = true })
         var atoms = {true:true, false:true, null:true}
@@ -1796,6 +1796,8 @@
             }),
             parent: this.$el.find('#pipeline-editor')[0],
           })
+          // Expose editor for integration tests
+          window._pikoEditor = this.editor
           this._themeObserver = new MutationObserver(function() {
             var dark = document.documentElement.getAttribute('data-theme') === 'dark'
             that.editor.dispatch({

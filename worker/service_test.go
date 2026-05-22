@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -2846,6 +2847,124 @@ func TestProcessJob_Retry_FailsOnVersionLookupError(t *testing.T) {
 		}).AnyTimes()
 
 	w.processJob(ctx, m, cwd, pp)
+}
+
+func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	topic := mock.NewTopic(ctrl)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	w := &Worker{
+		pikoci: svc,
+		topic:  topic,
+		logger: logger,
+	}
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical: "main",
+		PipelineName:  "test-pipeline",
+		JobName:       "cancel-hook-job",
+	}
+
+	cancelMarker := filepath.Join(t.TempDir(), "on_cancel_ran")
+	failureMarker := filepath.Join(t.TempDir(), "on_failure_ran")
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "cancel-hook-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "long-task",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"60"},
+								Params: map[string]string{"path": "sleep"},
+							},
+						},
+					},
+				},
+				OnCancel: []job.HookStep{
+					{
+						Type: job.StepTypeRunner,
+						Runner: &utils.RunnerCommand{
+							Runner: "exec",
+							Args:   []string{"-ec", fmt.Sprintf("touch %s", cancelMarker)},
+							Params: map[string]string{"path": "/bin/sh"},
+						},
+					},
+				},
+				OnFailure: []job.HookStep{
+					{
+						Type: job.StepTypeRunner,
+						Runner: &utils.RunnerCommand{
+							Runner: "exec",
+							Args:   []string{"-ec", fmt.Sprintf("touch %s", failureMarker)},
+							Params: map[string]string{"path": "/bin/sh"},
+						},
+					},
+				},
+				Ensure: []job.HookStep{},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+		Return(&build.Build{ID: 800, BuildNumber: "800"}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	// GetJobBuild: return Started first, then Cancelled on subsequent calls
+	callCount := 0
+	svc.EXPECT().GetJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "800").
+		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string) (*build.Build, error) {
+			callCount++
+			if callCount <= 1 {
+				return &build.Build{ID: 800, BuildNumber: "800", Status: build.Started}, nil
+			}
+			return &build.Build{ID: 800, BuildNumber: "800", Status: build.Cancelled}, nil
+		}).AnyTimes()
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "800", gomock.Any()).
+		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	done := make(chan struct{})
+	go func() {
+		w.processJob(ctx, m, cwd, pp)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("processJob did not finish in time")
+	}
+
+	assert.Equal(t, build.Cancelled, capturedBuild.Status)
+
+	// on_cancel hook should have run
+	_, err := os.Stat(cancelMarker)
+	assert.NoError(t, err, "on_cancel hook should have run (marker file should exist)")
+
+	// on_failure hook should NOT have run
+	_, err = os.Stat(failureMarker)
+	assert.True(t, os.IsNotExist(err), "on_failure hook should NOT run on cancellation (marker file should not exist)")
 }
 
 // Silence the unused import warnings

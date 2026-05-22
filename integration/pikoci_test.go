@@ -254,10 +254,7 @@ func TestPikoCI(t *testing.T) {
 			name, err := wd.FindElement(selenium.ByCSSSelector, "#name")
 			require.NoError(t, err)
 
-			pipeline, err := wd.FindElement(selenium.ByCSSSelector, ".cm-content")
-			require.NoError(t, err)
-
-			pipeline.SendKeys(`
+			setEditorContent(t, wd, `
 resource "cron" "my_cron" {
   check_interval = "@every 1m"
 }
@@ -276,7 +273,7 @@ job "gen" {
 			name.SendKeys("cron")
 
 			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
-				_, err := wd.FindElement(selenium.ByCSSSelector, "div#pipeline-graph>svg")
+				_, err := wd.FindElement(selenium.ByCSSSelector, "#graph svg")
 
 				return err == nil
 			}, 5*time.Second)
@@ -298,13 +295,7 @@ job "gen" {
 
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Update Pipeline"), 5*time.Second)
 
-			pipeline, err := wd.FindElement(selenium.ByCSSSelector, ".cm-content")
-			require.NoError(t, err)
-			// Select all and delete to clear CodeMirror editor
-			pipeline.SendKeys(selenium.ControlKey + "a")
-			pipeline.SendKeys(selenium.DeleteKey)
-
-			pipeline.SendKeys(`
+			setEditorContent(t, wd, `
 resource "cron" "my_cron_edit" {
   check_interval = "@every 1m"
 }
@@ -466,10 +457,7 @@ job "gen" {
 				name, err := wd.FindElement(selenium.ByCSSSelector, "#name")
 				require.NoError(t, err)
 
-				pipeline, err := wd.FindElement(selenium.ByCSSSelector, ".cm-content")
-				require.NoError(t, err)
-
-				pipeline.SendKeys(`
+				setEditorContent(t, wd, `
 resource "cron" "my_cron" {
   check_interval = "@every 1m"
 }
@@ -488,7 +476,7 @@ job "gen" {
 				name.SendKeys("cron")
 
 				waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
-					_, err := wd.FindElement(selenium.ByCSSSelector, "div#pipeline-graph>svg")
+					_, err := wd.FindElement(selenium.ByCSSSelector, "#graph svg")
 
 					return err == nil
 				}, 5*time.Second)
@@ -911,6 +899,22 @@ func eqText(by, value, txt string) waitForFn {
 
 func containsString(s, substr string) bool {
 	return strings.Contains(s, substr)
+}
+
+// setEditorContent sets the CodeMirror editor content via JavaScript,
+// bypassing contenteditable issues with Selenium WebDriver.
+func setEditorContent(t *testing.T, wd selenium.WebDriver, content string) {
+	t.Helper()
+	_, err := wd.ExecuteScript(`
+		var view = window._pikoEditor;
+		if (view) {
+			view.dispatch({changes: {from: 0, to: view.state.doc.length, insert: arguments[0]}});
+		}
+		// Also sync hidden textarea as fallback
+		var ta = document.getElementById('pipeline');
+		if (ta) { ta.value = arguments[0]; }
+	`, []interface{}{content})
+	require.NoError(t, err)
 }
 
 func screenshot(t *testing.T, wd selenium.WebDriver) {
