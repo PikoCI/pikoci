@@ -815,6 +815,9 @@ job "gen" {
 		updateResp, err := http.DefaultClient.Do(updateReq)
 		require.NoError(t, err)
 		defer updateResp.Body.Close()
+		var updateResult thttp.UpdatePipelineResponse
+		json.NewDecoder(updateResp.Body).Decode(&updateResult)
+		require.Empty(t, updateResult.Err, "update pipeline error")
 		require.Equal(t, http.StatusOK, updateResp.StatusCode)
 
 		t.Run("CanViewPipeline", func(t *testing.T) {
