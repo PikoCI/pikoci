@@ -106,8 +106,9 @@ func TestDBBackends(t *testing.T) {
 
 				// Create a pipeline under default team
 				ppID, err := ppr.Create(ctx, "main", pipeline.Pipeline{
-					Name: "test-pipeline",
-					Raw:  []byte("raw config content"),
+					Name:      "test-pipeline",
+					Canonical: "test-pipeline",
+					Raw:       []byte("raw config content"),
 				})
 				require.NoError(t, err)
 				assert.NotZero(t, ppID)
