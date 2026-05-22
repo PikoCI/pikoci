@@ -433,3 +433,84 @@ Either `status` or `conclusion` must be set. Use `status = "in_progress"` first 
 9. Note the **Installation ID** from the URL after installing, or via `GET /app/installations`
 
 Use the `file` secret type with `format = "raw"` to read the PEM key (see example above). Never hardcode the private key in the pipeline file.
+
+## Built-in: trigger
+
+The `trigger` resource type enables cross-pipeline and cross-job triggering without webhook tokens or external auth. It uses the internal database as a team-scoped event bus.
+
+You do not need to define the resource type — it is built in. Just declare a resource:
+
+```hcl
+resource "trigger" "deploy" {}
+```
+
+Trigger resources are scoped by team and matched by their canonical name (`trigger.deploy`). Any pipeline in the same team that declares a resource with the same type and name shares the same trigger stream.
+
+### How it works
+
+- **put** — inserts a trigger event into the database with the put step's params as the version payload
+- **check** — queries the database for trigger events newer than the last seen, creates resource versions, and triggers downstream jobs
+- **get** — no special handling; the standard resource version flow passes version fields as `$version_<key>` env vars
+
+No container or script is executed for check/put — the worker handles these operations internally.
+
+### Data passing
+
+Put step params become the trigger's version payload. When a downstream job's get step runs, the standard resource version mechanism passes them as `version_<key>` env vars:
+
+| Pipeline A put step | Pipeline B get step env vars |
+|---|---|
+| `build_sha = "abc123"` | `$version_build_sha=abc123` |
+| `status = "success"` | `$version_status=success` |
+| *(auto)* `trigger_pipeline` | `$version_trigger_pipeline=pipeline-a` |
+| *(auto)* `trigger_job` | `$version_trigger_job=build` |
+| *(auto)* `trigger_build` | `$version_trigger_build=42` |
+
+The `trigger_pipeline`, `trigger_job`, and `trigger_build` fields are added automatically by the worker.
+
+### Example: cross-pipeline triggering
+
+**Pipeline A** — fires the trigger after a successful build:
+
+```hcl
+resource "trigger" "deploy" {}
+
+job "build" {
+  get "git" "repo" { trigger = true }
+
+  task "compile" {
+    run "exec" {
+      path = "make"
+      args = ["build"]
+    }
+  }
+
+  on_success {
+    put "trigger" "deploy" {
+      build_sha = "abc123"
+      status    = "success"
+    }
+  }
+}
+```
+
+**Pipeline B** — listens for the trigger and deploys:
+
+```hcl
+resource "trigger" "deploy" {}
+
+job "deploy" {
+  get "trigger" "deploy" { trigger = true }
+
+  task "run-deploy" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo deploying $version_build_sha"]
+    }
+  }
+}
+```
+
+### Visibility
+
+Trigger events appear as resource versions in the existing resource versions UI. Each pipeline's `trigger.deploy` resource shows the trigger events just like any other resource — no dedicated trigger UI is needed.

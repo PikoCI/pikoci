@@ -122,11 +122,12 @@ var serverCmd = &cobra.Command{
 		br := mysql.NewBuildRepository(querier, cfg.DBSystem)
 		rur := mysql.NewRunnerRepository(querier)
 		str := mysql.NewSecretTypeRepository(querier)
+		tgr := mysql.NewTriggerRepository(querier)
 
 		suow := unitwork.NewStartUnitOfWork(db, cfg.DBSystem)
 
 		logger.Info("initializing service")
-		var svc = pikoci.New(ctx, topic, ur, tr, ppr, jr, rr, rt, br, rur, str, suow, jwtSecret, logger)
+		var svc = pikoci.New(ctx, topic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
 		svc.StartScheduler(ctx)
 		logger.Info("initialized service")
 

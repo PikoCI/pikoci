@@ -13,6 +13,7 @@ import (
 	"github.com/xescugc/pikoci/pikoci/scheduler"
 	"github.com/xescugc/pikoci/pikoci/sectype"
 	"github.com/xescugc/pikoci/pikoci/team"
+	"github.com/xescugc/pikoci/pikoci/trigger"
 	"github.com/xescugc/pikoci/pikoci/unitwork"
 	"github.com/xescugc/pikoci/pikoci/user"
 
@@ -80,6 +81,9 @@ type Service interface {
 
 	WebhookTrigger(ctx context.Context, token string) error
 	RegenerateWebhookToken(ctx context.Context, tc, pn, rCan string) (string, error)
+
+	CreateTrigger(ctx context.Context, tc, name string, version map[string]interface{}) (*trigger.Trigger, error)
+	ListTriggersAfter(ctx context.Context, tc, name string, afterID uint32) ([]*trigger.Trigger, error)
 }
 
 type PikoCI struct {
@@ -93,6 +97,7 @@ type PikoCI struct {
 	Builds        build.Repository
 	Runners       runner.Repository
 	SecretTypes   sectype.Repository
+	Triggers      trigger.Repository
 	StartUoW      unitwork.StartUnitOfWork
 	Ctx           context.Context
 
@@ -102,7 +107,7 @@ type PikoCI struct {
 	logger    *slog.Logger
 }
 
-func New(ctx context.Context, t queue.Topic, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, suow unitwork.StartUnitOfWork, js []byte, l *slog.Logger) *PikoCI {
+func New(ctx context.Context, t queue.Topic, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, suow unitwork.StartUnitOfWork, js []byte, l *slog.Logger) *PikoCI {
 	return &PikoCI{
 		Ctx:           ctx,
 		Topic:         t,
@@ -115,6 +120,7 @@ func New(ctx context.Context, t queue.Topic, ur user.Repository, tr team.Reposit
 		Builds:        br,
 		Runners:       rur,
 		SecretTypes:   str,
+		Triggers:      tgr,
 		StartUoW:      suow,
 		JWTSecret:     js,
 		logger:        l,

@@ -693,6 +693,10 @@ func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, c
 		return false
 	}
 
+	if rt.Source == "pikoci://trigger" {
+		return w.runPutStepTrigger(ctx, m, b, pp, p, ps)
+	}
+
 	if rt.Push == nil {
 		return false
 	}
@@ -951,6 +955,11 @@ func (w *Worker) processResourceCheck(ctx context.Context, m queue.Body, cwd str
 		return
 	}
 
+	if rt.Source == "pikoci://trigger" {
+		w.processResourceCheckTrigger(ctx, m, pp, r)
+		return
+	}
+
 	if rt.Check == nil {
 		w.logger.Error("resource type has no check command", "type", r.Type)
 		return
@@ -1054,6 +1063,97 @@ func (w *Worker) processResourceCheck(ctx context.Context, m queue.Body, cwd str
 			"pipeline", m.PipelineName, "resource", r.Canonical, "version_id", cv.ID)
 		w.triggerResourceJobs(ctx, m, pp, r, cv)
 	}
+}
+
+func (w *Worker) processResourceCheckTrigger(ctx context.Context, m queue.Body, pp *pipeline.Pipeline, r resource.Resource) {
+	w.logger.Info("running trigger resource check", "resource", r.Canonical)
+
+	// Get latest resource version to find the last trigger_id
+	var afterID uint32
+	dbvers, err := w.pikoci.ListResourceVersions(ctx, m.TeamCanonical, m.PipelineName, r.Canonical)
+	if err != nil {
+		w.logger.Error("failed to list resource versions for trigger check", "error", err)
+		return
+	}
+	if len(dbvers) > 0 {
+		if tid, ok := dbvers[0].Version["trigger_id"]; ok {
+			switch v := tid.(type) {
+			case float64:
+				afterID = uint32(v)
+			case json.Number:
+				n, _ := v.Int64()
+				afterID = uint32(n)
+			}
+		}
+	}
+
+	triggers, err := w.pikoci.ListTriggersAfter(ctx, m.TeamCanonical, r.Canonical, afterID)
+	if err != nil {
+		w.logger.Error("failed to list triggers", "error", err)
+		return
+	}
+
+	for _, t := range triggers {
+		version := make(map[string]interface{})
+		for k, v := range t.Version {
+			version[k] = v
+		}
+		version["trigger_id"] = float64(t.ID)
+
+		cv, err := w.pikoci.CreateResourceVersion(ctx, m.TeamCanonical, m.PipelineName, r.Canonical, resource.Version{
+			Version: version,
+		})
+		if err != nil {
+			if isDuplicateKeyError(err) {
+				w.logger.Info("duplicate trigger version skipped",
+					"pipeline", m.PipelineName, "resource", r.Canonical, "trigger_id", t.ID)
+				continue
+			}
+			w.logger.Error("failed to create resource version from trigger", "error", err)
+			return
+		}
+		w.logger.Info("trigger version created, triggering jobs",
+			"pipeline", m.PipelineName, "resource", r.Canonical, "trigger_id", t.ID, "version_id", cv.ID)
+		w.triggerResourceJobs(ctx, m, pp, r, cv)
+	}
+}
+
+func (w *Worker) runPutStepTrigger(ctx context.Context, m queue.Body, b *build.Build, pp *pipeline.Pipeline, p job.PutStep, ps job.PlanStep) bool {
+	rCan := utils.ResourceCanonical(p.Type, p.Name)
+
+	// Collect put params as version data
+	version := make(map[string]interface{})
+	for k, v := range p.Params {
+		version[k] = v
+	}
+	// Add metadata
+	version["trigger_pipeline"] = m.PipelineName
+	version["trigger_job"] = m.JobName
+	version["trigger_build"] = b.BuildNumber
+
+	_, err := w.pikoci.CreateTrigger(ctx, m.TeamCanonical, rCan, version)
+
+	// Append step to build as Succeeded
+	status := build.Succeeded
+	var logs string
+	if err != nil {
+		status = build.Failed
+		logs = fmt.Sprintf("failed to create trigger: %v", err)
+		w.logger.Error("failed to create trigger", "resource", rCan, "error", err)
+	} else {
+		w.logger.Info("trigger created", "resource", rCan, "pipeline", m.PipelineName)
+	}
+
+	b.Steps = append(b.Steps, build.Step{Type: "put", Name: p.Name, Logs: logs, Status: status})
+	w.updateBuild(ctx, m, *b)
+
+	if err != nil {
+		b.Status = build.Failed
+		w.failBuild(ctx, m, *b, nil)
+		return true
+	}
+
+	return false
 }
 
 // triggerResourceJobs triggers jobs that depend on a resource via "get" with trigger=true.

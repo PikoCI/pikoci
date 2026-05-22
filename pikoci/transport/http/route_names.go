@@ -52,4 +52,7 @@ const (
 
 	WebhookTrigger
 	RegenerateWebhookToken
+
+	CreateTrigger
+	ListTriggersAfter
 )

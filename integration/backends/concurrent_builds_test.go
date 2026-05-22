@@ -62,10 +62,11 @@ func TestConcurrentBuildCreation(t *testing.T) {
 	br := mysql.NewBuildRepository(db, mysql.SQLite)
 	rur := mysql.NewRunnerRepository(db)
 	str := mysql.NewSecretTypeRepository(db)
+	tgr := mysql.NewTriggerRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.SQLite)
 
 	jwtSecret := []byte("test-secret")
-	svc := pikoci.New(ctx, topic, ur, tr, ppr, jr, rr, rt, br, rur, str, suow, jwtSecret, logger)
+	svc := pikoci.New(ctx, topic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
 	svc.StartScheduler(ctx)
 
 	_, _ = svc.CreateUser(ctx, user.User{

@@ -54,10 +54,11 @@ func TestSecretsE2E(t *testing.T) {
 	br := mysql.NewBuildRepository(db, mysql.Mem)
 	rur := mysql.NewRunnerRepository(db)
 	str := mysql.NewSecretTypeRepository(db)
+	tgr := mysql.NewTriggerRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 
 	jwtSecret := []byte("test-secret")
-	svc := pikoci.New(ctx, topic, ur, tr, ppr, jr, rr, rt, br, rur, str, suow, jwtSecret, logger)
+	svc := pikoci.New(ctx, topic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
 	svc.StartScheduler(ctx)
 
 	// Migration already creates admin user and "main" team.

@@ -140,9 +140,10 @@ func TestSecretsVaultE2E(t *testing.T) {
 	br := mysql.NewBuildRepository(db, mysql.Mem)
 	rur := mysql.NewRunnerRepository(db)
 	str := mysql.NewSecretTypeRepository(db)
+	tgr := mysql.NewTriggerRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 
-	svc := pikoci.New(ctx, topic, ur, tr, ppr, jr, rr, rt, br, rur, str, suow, []byte("jwt"), logger)
+	svc := pikoci.New(ctx, topic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, []byte("jwt"), logger)
 	svc.StartScheduler(ctx)
 
 	_, _ = svc.CreateUser(ctx, user.User{
