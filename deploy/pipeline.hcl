@@ -194,6 +194,24 @@ job "deploy" {
   }
 }
 
+job "deploy-website" {
+  get "git" "pikoci_com" {
+    trigger = true
+  }
+  task "copy-to-server" {
+    run "exec" {
+      path = "/bin/sh"
+      args = [
+        "-ec",
+        <<-EOT
+        mkdir -p /var/www/pikoci.com
+        cp pikoci.com/index.html /var/www/pikoci.com/index.html
+        EOT
+      ]
+    }
+  }
+}
+
 job "build-release" {
   get "git" "pikoci_tag" {
     trigger = true
@@ -245,6 +263,14 @@ resource "git" "pikoci_master" {
     url    = var.git_url
     name   = var.git_name
     branch = "master"
+  }
+}
+
+resource "git" "pikoci_com" {
+  params {
+    url    = "https://github.com/pikoci/pikoci.com"
+    name   = "pikoci.com"
+    branch = "main"
   }
 }
 

@@ -10,9 +10,11 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      - /var/www/pikoci.com:/var/www/pikoci.com:ro
     environment:
       - PIKOCI_DOMAIN=${PIKOCI_DOMAIN}
       - PIKOCI_GRAFANA_DOMAIN=${PIKOCI_GRAFANA_DOMAIN}
+      - PIKOCI_WWW_DOMAIN=${PIKOCI_WWW_DOMAIN}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

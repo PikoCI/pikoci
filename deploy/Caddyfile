@@ -5,3 +5,8 @@
 {$PIKOCI_GRAFANA_DOMAIN} {
 	reverse_proxy grafana:3000
 }
+
+{$PIKOCI_WWW_DOMAIN} {
+	root * /var/www/pikoci.com
+	file_server
+}
