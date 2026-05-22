@@ -89,7 +89,7 @@ func (r *BuildRepository) Create(ctx context.Context, tc, pn, jn string, b build
 			JOIN jobs AS j ON b.job_id = j.id
 			JOIN pipelines AS p ON j.pipeline_id = p.id
 			JOIN teams AS t ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND j.name = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 			  AND b.build_number NOT LIKE '%.%'
 		`, tc, pn, jn).Scan(&maxNum)
 		if err != nil {
@@ -112,7 +112,7 @@ func (r *BuildRepository) Create(ctx context.Context, tc, pn, jn string, b build
 						ON j.pipeline_id = p.id
 					JOIN teams AS t
 						ON p.team_id = t.id
-					WHERE t.canonical = ? AND p.name = ? AND j.name = ?
+					WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 				))`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, buildNumber, tc, pn, jn)
 		if err != nil {
 			if isUniqueViolation(err) {
@@ -148,7 +148,7 @@ func (r *BuildRepository) CreateRetry(ctx context.Context, tc, pn, jn, parentBui
 			JOIN jobs AS j ON b.job_id = j.id
 			JOIN pipelines AS p ON j.pipeline_id = p.id
 			JOIN teams AS t ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND j.name = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 			  AND b.build_number LIKE ?
 		`, tc, pn, jn, likePattern).Scan(&maxNum)
 		if err != nil {
@@ -170,7 +170,7 @@ func (r *BuildRepository) CreateRetry(ctx context.Context, tc, pn, jn, parentBui
 						ON j.pipeline_id = p.id
 					JOIN teams AS t
 						ON p.team_id = t.id
-					WHERE t.canonical = ? AND p.name = ? AND j.name = ?
+					WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 				))`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, buildNumber, tc, pn, jn)
 		if err != nil {
 			if isUniqueViolation(err) {
@@ -224,7 +224,7 @@ func (r *BuildRepository) Find(ctx context.Context, tc, pn, jn string, buildNumb
 			ON j.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ? AND j.name = ? AND b.build_number = ?
+		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ? AND b.build_number = ?
 	`, tc, pn, jn, buildNumber)
 
 	j, err := scanBuild(row)
@@ -245,7 +245,7 @@ func (r *BuildRepository) Filter(ctx context.Context, tc, pn, jn string) ([]*bui
 			ON j.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ? AND j.name = ?
+		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 		ORDER BY b.id ASC
 	`, tc, pn, jn)
 	if err != nil {
@@ -274,7 +274,7 @@ func (r *BuildRepository) Update(ctx context.Context, tc, pn, jn string, buildNu
 				ON j.pipeline_id = p.id
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND j.name = ? AND b.build_number = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ? AND b.build_number = ?
 		) AS bb
 		WHERE bb.id = b.id
 	`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, tc, pn, jn, buildNumber)
@@ -303,7 +303,7 @@ func (r *BuildRepository) Delete(ctx context.Context, tc, pn, jn string, buildNu
 				ON j.pipeline_id = p.id
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND j.name = ? AND b.build_number = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ? AND b.build_number = ?
 		)
 	`, tc, pn, jn, buildNumber)
 	if err != nil {
@@ -356,7 +356,7 @@ func (r *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn
 		JOIN jobs j ON b.job_id = j.id
 		JOIN pipelines p ON j.pipeline_id = p.id
 		JOIN teams t ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ? AND b.status = 'succeeded'
+		WHERE t.canonical = ? AND p.canonical = ? AND b.status = 'succeeded'
 		  AND j.name IN (` + strings.Join(placeholders, ", ") + `)
 		  AND bgv.step_name = ?
 		  AND bgv.version_id NOT IN (
@@ -445,7 +445,7 @@ func (r *BuildRepository) CountRunning(ctx context.Context, tc, pn, jn string) (
 		JOIN jobs AS j ON b.job_id = j.id
 		JOIN pipelines AS p ON j.pipeline_id = p.id
 		JOIN teams AS t ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ? AND j.name = ?
+		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 		  AND b.status = 'started'
 	`, tc, pn, jn).Scan(&count)
 	if err != nil {

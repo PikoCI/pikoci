@@ -67,7 +67,7 @@ func (r *SecretTypeRepository) Create(ctx context.Context, tc, pn string, st sec
 				FROM pipelines AS p
 				JOIN teams AS t
 					ON p.team_id = t.id
-				WHERE t.canonical = ? AND p.name = ?
+				WHERE t.canonical = ? AND p.canonical = ?
 			))`, dbst.Name, dbst.Source, dbst.Get, dbst.Params, dbst.Config, tc, pn)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
@@ -93,7 +93,7 @@ func (r *SecretTypeRepository) Update(ctx context.Context, tc, pn, stn string, s
 				ON st.pipeline_id = p.id
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND st.name = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND st.name = ?
 		)
 	`, dbst.Name, dbst.Source, dbst.Get, dbst.Params, dbst.Config, tc, pn, stn)
 	if err != nil {
@@ -116,7 +116,7 @@ func (r *SecretTypeRepository) Find(ctx context.Context, tc, pn, stn string) (*s
 			ON st.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ? AND st.name = ?
+		WHERE t.canonical = ? AND p.canonical = ? AND st.name = ?
 	`, tc, pn, stn)
 
 	st, err := scanSecretType(row)
@@ -135,7 +135,7 @@ func (r *SecretTypeRepository) Filter(ctx context.Context, tc, pn string) ([]*se
 			ON st.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ?
+		WHERE t.canonical = ? AND p.canonical = ?
 	`, tc, pn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter SecretTypes: %w", err)
@@ -160,7 +160,7 @@ func (r *SecretTypeRepository) Delete(ctx context.Context, tc, pn, stn string) e
 				ON st.pipeline_id = p.id
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND st.name = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND st.name = ?
 		)
 	`, tc, pn, stn)
 	if err != nil {

@@ -75,7 +75,7 @@ func (r *JobRepository) Create(ctx context.Context, tc, pn string, j job.Job) (u
 				FROM pipelines AS p
 				JOIN teams AS t
 					ON p.team_id = t.id
-				WHERE t.canonical = ? AND p.name = ?
+				WHERE t.canonical = ? AND p.canonical = ?
 			))`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, tc, pn)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
@@ -101,7 +101,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 				ON j.pipeline_id = p.id
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND j.name = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 		) AS jj
 		WHERE jj.id = j.id
 	`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, tc, pn, jn)
@@ -125,7 +125,7 @@ func (r *JobRepository) Find(ctx context.Context, tc, pn, jn string) (*job.Job, 
 			ON j.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ? AND j.name = ?
+		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 	`, tc, pn, jn)
 
 	j, err := scanJob(row)
@@ -144,7 +144,7 @@ func (r *JobRepository) Filter(ctx context.Context, tc, pn string) ([]*job.Job, 
 			ON j.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ?
+		WHERE t.canonical = ? AND p.canonical = ?
 	`, tc, pn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter jobs: %w", err)
@@ -169,7 +169,7 @@ func (r *JobRepository) Delete(ctx context.Context, tc, pn, jn string) error {
 				ON j.pipeline_id = p.id
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND j.name = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 		)
 	`, tc, pn, jn)
 	if err != nil {

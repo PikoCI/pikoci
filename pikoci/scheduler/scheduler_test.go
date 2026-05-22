@@ -55,8 +55,8 @@ func TestTickResources_ProcessesDueResources(t *testing.T) {
 				Canonical:     "cron.timer",
 				CheckInterval: "@every 30s",
 			},
-			TeamCanonical: "main",
-			PipelineName:  "my-pipeline",
+			TeamCanonical:     "main",
+			PipelineCanonical: "my-pipeline",
 		},
 	}
 
@@ -64,7 +64,7 @@ func TestTickResources_ProcessesDueResources(t *testing.T) {
 
 	expectedBody := queue.Body{
 		TeamCanonical:     "main",
-		PipelineName:      "my-pipeline",
+		PipelineCanonical: "my-pipeline",
 		ResourceCanonical: "cron.timer",
 	}
 	mb, _ := json.Marshal(expectedBody)
@@ -92,14 +92,14 @@ func TestTickResources_MultipleDueResources(t *testing.T) {
 
 	due := []*resource.ResourceWithPipeline{
 		{
-			Resource:      resource.Resource{ID: 1, Canonical: "cron.a", CheckInterval: "@every 1m"},
-			TeamCanonical: "main",
-			PipelineName:  "pp1",
+			Resource:          resource.Resource{ID: 1, Canonical: "cron.a", CheckInterval: "@every 1m"},
+			TeamCanonical:     "main",
+			PipelineCanonical: "pp1",
 		},
 		{
-			Resource:      resource.Resource{ID: 2, Canonical: "git.b", CheckInterval: "@every 5m"},
-			TeamCanonical: "team2",
-			PipelineName:  "pp2",
+			Resource:          resource.Resource{ID: 2, Canonical: "git.b", CheckInterval: "@every 5m"},
+			TeamCanonical:     "team2",
+			PipelineCanonical: "pp2",
 		},
 	}
 
@@ -119,9 +119,9 @@ func TestTickResources_DefaultCheckInterval(t *testing.T) {
 
 	due := []*resource.ResourceWithPipeline{
 		{
-			Resource:      resource.Resource{ID: 1, Canonical: "cron.x", CheckInterval: ""},
-			TeamCanonical: "main",
-			PipelineName:  "pp",
+			Resource:          resource.Resource{ID: 1, Canonical: "cron.x", CheckInterval: ""},
+			TeamCanonical:     "main",
+			PipelineCanonical: "pp",
 		},
 	}
 
@@ -162,9 +162,9 @@ func TestTickResources_SendErrorSkipsResource(t *testing.T) {
 
 	due := []*resource.ResourceWithPipeline{
 		{
-			Resource:      resource.Resource{ID: 1, Canonical: "cron.fail", CheckInterval: "@every 1m"},
-			TeamCanonical: "main",
-			PipelineName:  "pp",
+			Resource:          resource.Resource{ID: 1, Canonical: "cron.fail", CheckInterval: "@every 1m"},
+			TeamCanonical:     "main",
+			PipelineCanonical: "pp",
 		},
 	}
 
@@ -187,7 +187,7 @@ func TestTickJobs_TriggersWhenCommonVersionExists(t *testing.T) {
 	pps := []*pipeline.WithTeam{
 		{
 			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline",
+				Name: "my-pipeline", Canonical: "my-pipeline",
 				Jobs: []job.Job{
 					{Name: "lint"},
 					{Name: "test-mock"},
@@ -222,7 +222,7 @@ func TestTickJobs_TriggersWhenCommonVersionExists(t *testing.T) {
 		err := json.Unmarshal(msg.Body, &body)
 		require.NoError(t, err)
 		assert.Equal(t, "test-backends", body.JobName)
-		assert.Equal(t, "my-pipeline", body.PipelineName)
+		assert.Equal(t, "my-pipeline", body.PipelineCanonical)
 		assert.Equal(t, "main", body.TeamCanonical)
 		assert.Equal(t, uint32(42), body.VersionID)
 		return nil
@@ -240,7 +240,7 @@ func TestTickJobs_SkipsWhenNoCommonVersion(t *testing.T) {
 	pps := []*pipeline.WithTeam{
 		{
 			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline",
+				Name: "my-pipeline", Canonical: "my-pipeline",
 				Jobs: []job.Job{
 					{
 						Name: "downstream",
@@ -281,7 +281,7 @@ func TestTickJobs_SkipsWhenTriggerFalse(t *testing.T) {
 	pps := []*pipeline.WithTeam{
 		{
 			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline",
+				Name: "my-pipeline", Canonical: "my-pipeline",
 				Jobs: []job.Job{
 					{
 						Name: "downstream",
@@ -318,7 +318,7 @@ func TestTickJobs_SkipsJobsWithoutPassedConstraints(t *testing.T) {
 	pps := []*pipeline.WithTeam{
 		{
 			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline",
+				Name: "my-pipeline", Canonical: "my-pipeline",
 				Jobs: []job.Job{
 					{
 						Name: "simple-job",
@@ -354,7 +354,7 @@ func TestTickJobs_MultipleGetSteps_AllMustBeReady(t *testing.T) {
 	pps := []*pipeline.WithTeam{
 		{
 			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline",
+				Name: "my-pipeline", Canonical: "my-pipeline",
 				Jobs: []job.Job{
 					{
 						Name: "deploy",
@@ -411,7 +411,7 @@ func TestTickJobs_MultipleGetSteps_BothReady_TriggersOnce(t *testing.T) {
 	pps := []*pipeline.WithTeam{
 		{
 			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline",
+				Name: "my-pipeline", Canonical: "my-pipeline",
 				Jobs: []job.Job{
 					{
 						Name: "deploy",
@@ -475,7 +475,7 @@ func TestTickJobs_FindReadyError_SkipsJob(t *testing.T) {
 	pps := []*pipeline.WithTeam{
 		{
 			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline",
+				Name: "my-pipeline", Canonical: "my-pipeline",
 				Jobs: []job.Job{
 					{
 						Name: "downstream",

@@ -188,10 +188,10 @@ func pqQuoteIdentifier(s string) string {
 
 // Options list of options that can be assigned to the New function
 type Options struct {
-	DBName            string
-	ClientFoundRows   bool
-	ParseTime         bool
-	MultiStatements   bool
-	System            string
-	DBFile string
+	DBName          string
+	ClientFoundRows bool
+	ParseTime       bool
+	MultiStatements bool
+	System          string
+	DBFile          string
 }

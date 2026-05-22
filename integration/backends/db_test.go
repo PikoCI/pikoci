@@ -14,9 +14,9 @@ import (
 	"github.com/xescugc/pikoci/pikoci/pipeline"
 	"github.com/xescugc/pikoci/pikoci/resource"
 	"github.com/xescugc/pikoci/pikoci/sectype"
-	"github.com/xescugc/pikoci/pikoci/utils"
 	"github.com/xescugc/pikoci/pikoci/team"
 	"github.com/xescugc/pikoci/pikoci/user"
+	"github.com/xescugc/pikoci/pikoci/utils"
 )
 
 func TestDBBackends(t *testing.T) {
@@ -106,8 +106,9 @@ func TestDBBackends(t *testing.T) {
 
 				// Create a pipeline under default team
 				ppID, err := ppr.Create(ctx, "main", pipeline.Pipeline{
-					Name: "test-pipeline",
-					Raw:  []byte("raw config content"),
+					Name:      "test-pipeline",
+					Canonical: "test-pipeline",
+					Raw:       []byte("raw config content"),
 				})
 				require.NoError(t, err)
 				assert.NotZero(t, ppID)

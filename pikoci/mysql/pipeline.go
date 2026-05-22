@@ -20,40 +20,43 @@ func NewPipelineRepository(db sqlr.Querier) *PipelineRepository {
 }
 
 type dbPipeline struct {
-	ID     sql.NullInt64
-	Name   sql.NullString
-	Raw    sql.NullString
-	Public sql.NullBool
+	ID        sql.NullInt64
+	Name      sql.NullString
+	Canonical sql.NullString
+	Raw       sql.NullString
+	Public    sql.NullBool
 }
 
 func newDBPipeline(p pipeline.Pipeline) dbPipeline {
 	return dbPipeline{
-		Name:   toNullString(p.Name),
-		Raw:    toNullString(string(p.Raw)),
-		Public: sql.NullBool{Bool: p.Public, Valid: true},
+		Name:      toNullString(p.Name),
+		Canonical: toNullString(p.Canonical),
+		Raw:       toNullString(string(p.Raw)),
+		Public:    sql.NullBool{Bool: p.Public, Valid: true},
 	}
 }
 
 func (dbp *dbPipeline) toDomainEntity() *pipeline.Pipeline {
 	return &pipeline.Pipeline{
-		ID:     uint32(dbp.ID.Int64),
-		Name:   dbp.Name.String,
-		Raw:    []byte(dbp.Raw.String),
-		Public: dbp.Public.Bool,
+		ID:        uint32(dbp.ID.Int64),
+		Name:      dbp.Name.String,
+		Canonical: dbp.Canonical.String,
+		Raw:       []byte(dbp.Raw.String),
+		Public:    dbp.Public.Bool,
 	}
 }
 
 func (r *PipelineRepository) Create(ctx context.Context, tc string, p pipeline.Pipeline) (uint32, error) {
 	dbp := newDBPipeline(p)
 	res, err := r.querier.ExecContext(ctx, `
-		INSERT INTO pipelines(name, raw, public, team_id)
-		VALUES (?, ?, ?,
+		INSERT INTO pipelines(name, canonical, raw, public, team_id)
+		VALUES (?, ?, ?, ?,
 			-- pipeline_id
 			(
 				SELECT t.id
 				FROM teams AS t
 				WHERE t.canonical = ?
-			))`, dbp.Name, dbp.Raw, dbp.Public, tc)
+			))`, dbp.Name, dbp.Canonical, dbp.Raw, dbp.Public, tc)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -66,20 +69,20 @@ func (r *PipelineRepository) Create(ctx context.Context, tc string, p pipeline.P
 	return id, nil
 }
 
-func (r *PipelineRepository) Update(ctx context.Context, tc, pn string, p pipeline.Pipeline) error {
+func (r *PipelineRepository) Update(ctx context.Context, tc, pCan string, p pipeline.Pipeline) error {
 	dbp := newDBPipeline(p)
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE pipelines AS p
-		SET name = ?, raw = ?, public = ?
+		SET name = ?, canonical = ?, raw = ?, public = ?
 		FROM (
 			SELECT p.id
 			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ?
+			WHERE t.canonical = ? AND p.canonical = ?
 		) AS pp
 		WHERE p.id = pp.id
-	`, dbp.Name, dbp.Raw, dbp.Public, tc, pn)
+	`, dbp.Name, dbp.Canonical, dbp.Raw, dbp.Public, tc, pCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -92,10 +95,10 @@ func (r *PipelineRepository) Update(ctx context.Context, tc, pn string, p pipeli
 	return nil
 }
 
-func (r *PipelineRepository) Find(ctx context.Context, tc, pn string) (*pipeline.Pipeline, error) {
+func (r *PipelineRepository) Find(ctx context.Context, tc, pCan string) (*pipeline.Pipeline, error) {
 	rows, err := r.querier.QueryContext(ctx, pipelineQuery+`
-		WHERE t.canonical = ? AND p.name = ?
-	`, tc, pn)
+		WHERE t.canonical = ? AND p.canonical = ?
+	`, tc, pCan)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query Pipeline: %w", err)
 	}
@@ -112,10 +115,10 @@ func (r *PipelineRepository) Find(ctx context.Context, tc, pn string) (*pipeline
 	return pps[0], nil
 }
 
-func (r *PipelineRepository) FindPublic(ctx context.Context, tc, pn string) (*pipeline.Pipeline, error) {
+func (r *PipelineRepository) FindPublic(ctx context.Context, tc, pCan string) (*pipeline.Pipeline, error) {
 	rows, err := r.querier.QueryContext(ctx, pipelineQuery+`
-		WHERE t.canonical = ? AND p.name = ? AND p.public = TRUE
-	`, tc, pn)
+		WHERE t.canonical = ? AND p.canonical = ? AND p.public = TRUE
+	`, tc, pCan)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query Pipeline: %w", err)
 	}
@@ -132,7 +135,7 @@ func (r *PipelineRepository) FindPublic(ctx context.Context, tc, pn string) (*pi
 	return pps[0], nil
 }
 
-func (r *PipelineRepository) SetPublic(ctx context.Context, tc, pn string, public bool) error {
+func (r *PipelineRepository) SetPublic(ctx context.Context, tc, pCan string, public bool) error {
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE pipelines AS p
 		SET public = ?
@@ -141,10 +144,10 @@ func (r *PipelineRepository) SetPublic(ctx context.Context, tc, pn string, publi
 			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ?
+			WHERE t.canonical = ? AND p.canonical = ?
 		) AS pp
 		WHERE p.id = pp.id
-	`, public, tc, pn)
+	`, public, tc, pCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -177,7 +180,7 @@ func (r *PipelineRepository) FilterAll(ctx context.Context) ([]*pipeline.WithTea
 	rows, err := r.querier.QueryContext(ctx, `
 		SELECT
 			t.id, t.name, t.canonical,
-			p.id, p.name, p.raw, p.public,
+			p.id, p.name, p.canonical, p.raw, p.public,
 			j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure,
 			r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check,
 			rt.id, rt.name, rt.`+"`check`"+`, rt.pull, rt.push, rt.params,
@@ -216,18 +219,18 @@ func scanPipelinesWithTeam(rows *sql.Rows) ([]*pipeline.WithTeam, error) {
 
 	for rows.Next() {
 		var (
-			tt  dbTeam
-			pp  dbPipeline
-			j   dbJob
-			r   dbResource
-			rt  dbResourceType
-			ru  dbRunner
-			st  dbSecretType
+			tt dbTeam
+			pp dbPipeline
+			j  dbJob
+			r  dbResource
+			rt dbResourceType
+			ru dbRunner
+			st dbSecretType
 		)
 
 		err := rows.Scan(
 			&tt.ID, &tt.Name, &tt.Canonical,
-			&pp.ID, &pp.Name, &pp.Raw, &pp.Public,
+			&pp.ID, &pp.Name, &pp.Canonical, &pp.Raw, &pp.Public,
 			&j.ID, &j.Name, &j.Plan, &j.OnSuccess, &j.OnFailure, &j.OnCancel, &j.Ensure,
 			&r.ID, &r.Name, &r.Type, &r.Canonical, &r.Params, &r.CheckInterval, &r.Logs, &r.LastCheck, &r.NextCheck,
 			&rt.ID, &rt.Name, &rt.Check, &rt.Pull, &rt.Push, &rt.Params,
@@ -296,7 +299,7 @@ func scanPipelinesWithTeam(rows *sql.Rows) ([]*pipeline.WithTeam, error) {
 	return result, nil
 }
 
-func (r *PipelineRepository) Delete(ctx context.Context, tc, pn string) error {
+func (r *PipelineRepository) Delete(ctx context.Context, tc, pCan string) error {
 	// Use a two-step delete: first resolve the ID, then delete by ID.
 	// SQLite does not trigger ON DELETE CASCADE with subquery-based deletes.
 	var id uint32
@@ -304,8 +307,8 @@ func (r *PipelineRepository) Delete(ctx context.Context, tc, pn string) error {
 		SELECT p.id
 		FROM pipelines AS p
 		JOIN teams AS t ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ?
-	`, tc, pn).Scan(&id)
+		WHERE t.canonical = ? AND p.canonical = ?
+	`, tc, pCan).Scan(&id)
 	if err != nil {
 		return fmt.Errorf("failed to find pipeline for deletion: %w", err)
 	}
@@ -325,7 +328,7 @@ func (r *PipelineRepository) Delete(ctx context.Context, tc, pn string) error {
 
 const pipelineQuery = `
 	SELECT
-		p.id, p.name, p.raw, p.public,
+		p.id, p.name, p.canonical, p.raw, p.public,
 		j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure,
 		r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check,
 		rt.id, rt.name, rt.` + "`check`" + `, rt.pull, rt.push, rt.params,
@@ -354,16 +357,16 @@ func scanPipelines(rows *sql.Rows) ([]*pipeline.Pipeline, error) {
 
 	for rows.Next() {
 		var (
-			pp  dbPipeline
-			j   dbJob
-			r   dbResource
-			rt  dbResourceType
-			ru  dbRunner
-			st  dbSecretType
+			pp dbPipeline
+			j  dbJob
+			r  dbResource
+			rt dbResourceType
+			ru dbRunner
+			st dbSecretType
 		)
 
 		err := rows.Scan(
-			&pp.ID, &pp.Name, &pp.Raw, &pp.Public,
+			&pp.ID, &pp.Name, &pp.Canonical, &pp.Raw, &pp.Public,
 			&j.ID, &j.Name, &j.Plan, &j.OnSuccess, &j.OnFailure, &j.OnCancel, &j.Ensure,
 			&r.ID, &r.Name, &r.Type, &r.Canonical, &r.Params, &r.CheckInterval, &r.Logs, &r.LastCheck, &r.NextCheck,
 			&rt.ID, &rt.Name, &rt.Check, &rt.Pull, &rt.Push, &rt.Params,
@@ -428,4 +431,3 @@ func scanPipelines(rows *sql.Rows) ([]*pipeline.Pipeline, error) {
 	}
 	return result, nil
 }
-

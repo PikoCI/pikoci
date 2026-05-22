@@ -46,7 +46,6 @@ func newTestWorker(ctrl *gomock.Controller) (*Worker, *mock.Service, *mock.Topic
 	return w, svc, topic
 }
 
-
 func runnerHook(rc utils.RunnerCommand) job.HookStep {
 	return job.HookStep{Type: job.StepTypeRunner, Runner: &rc}
 }
@@ -86,7 +85,7 @@ func testPipeline() *pipeline.Pipeline {
 				Name:      "my-cron",
 				Type:      "cron",
 				Canonical: "cron.my-cron",
-				Params: &resource.Params{},
+				Params:    &resource.Params{},
 			},
 		},
 		ResourceTypes: []restype.ResourceType{
@@ -126,9 +125,9 @@ func TestProcessJob_Success_TaskOnly(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "echo-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "echo-job",
 	}
 	pp := &pipeline.Pipeline{
 		ID:   1,
@@ -160,13 +159,13 @@ func TestProcessJob_Success_TaskOnly(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 10, BuildNumber: "10"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// running step + after task step + after marking succeeded
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "10", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	w.processJob(ctx, m, cwd, pp)
@@ -178,10 +177,10 @@ func TestProcessJob_Success_WithGetAndTask(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "test-job",
-		VersionID:     1,
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		VersionID:         1,
 	}
 	pp := &pipeline.Pipeline{
 		ID:   1,
@@ -224,17 +223,17 @@ func TestProcessJob_Success_WithGetAndTask(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 10, BuildNumber: "10"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "cron.my-cron").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron").
 		Return([]*resource.Version{
 			{ID: 1, Version: map[string]interface{}{"date": "now"}},
 		}, nil).AnyTimes()
 
 	// running steps + after get step + after task step + after marking succeeded
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "10", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	w.processJob(ctx, m, cwd, pp)
@@ -250,10 +249,10 @@ func TestInsertBuildGetVersion_CalledWithCorrectArgs(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "test-job",
-		VersionID:     1,
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		VersionID:         1,
 	}
 	pp := &pipeline.Pipeline{
 		ID:   1,
@@ -320,9 +319,9 @@ func TestProcessJob_FailedPassedConstraint_NoBuilds(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "downstream-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "downstream-job",
 	}
 
 	pp := &pipeline.Pipeline{
@@ -350,17 +349,17 @@ func TestProcessJob_FailedPassedConstraint_NoBuilds(t *testing.T) {
 	cwd := t.TempDir()
 	createdBuild := &build.Build{ID: 20, BuildNumber: "20"}
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(createdBuild, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// Passed check: upstream-job has no builds
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineName, "upstream-job").
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "upstream-job").
 		Return([]*build.Build{}, nil)
 
 	// Build should be deleted (not failed)
-	svc.EXPECT().DeleteJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "20").
+	svc.EXPECT().DeleteJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "20").
 		Return(nil)
 
 	w.processJob(ctx, m, cwd, pp)
@@ -372,9 +371,9 @@ func TestProcessJob_FailedPassedConstraint_NotSucceeded(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "downstream-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "downstream-job",
 	}
 
 	pp := &pipeline.Pipeline{
@@ -402,17 +401,17 @@ func TestProcessJob_FailedPassedConstraint_NotSucceeded(t *testing.T) {
 	cwd := t.TempDir()
 	createdBuild := &build.Build{ID: 21, BuildNumber: "21"}
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(createdBuild, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// Passed check: upstream-job has a failed build
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineName, "upstream-job").
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "upstream-job").
 		Return([]*build.Build{{ID: 5, Status: build.Failed}}, nil)
 
 	// Build should be deleted
-	svc.EXPECT().DeleteJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "21").
+	svc.EXPECT().DeleteJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "21").
 		Return(nil)
 
 	w.processJob(ctx, m, cwd, pp)
@@ -424,10 +423,10 @@ func TestProcessJob_TaskFailure_RunsHooks(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "failing-job",
-		VersionID:     1,
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "failing-job",
+		VersionID:         1,
 	}
 
 	pp := &pipeline.Pipeline{
@@ -495,13 +494,13 @@ func TestProcessJob_TaskFailure_RunsHooks(t *testing.T) {
 	cwd := t.TempDir()
 	createdBuild := &build.Build{ID: 30, BuildNumber: "30"}
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(createdBuild, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// running steps + failBuild + hooks
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "30", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "30", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	w.processJob(ctx, m, cwd, pp)
@@ -515,10 +514,10 @@ func TestProcessJob_NoDownstreamTrigger(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "upstream-job",
-		VersionID:     1,
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "upstream-job",
+		VersionID:         1,
 	}
 
 	pp := &pipeline.Pipeline{
@@ -575,13 +574,13 @@ func TestProcessJob_NoDownstreamTrigger(t *testing.T) {
 	cwd := t.TempDir()
 	createdBuild := &build.Build{ID: 40, BuildNumber: "40"}
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(createdBuild, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// running step + after task step + after success mark
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "40", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "40", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	// No topic.Send expected — downstream is now scheduler-driven
@@ -596,7 +595,7 @@ func TestProcessResourceCheck_NewVersions(t *testing.T) {
 	ctx := context.Background()
 	m := queue.Body{
 		TeamCanonical:     "main",
-		PipelineName:      "test-pipeline",
+		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "cron.my-cron",
 	}
 	// Use a pipeline where the check command outputs valid JSON
@@ -637,11 +636,11 @@ func TestProcessResourceCheck_NewVersions(t *testing.T) {
 	cwd := t.TempDir()
 
 	// ListResourceVersions - no existing versions
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "cron.my-cron").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron").
 		Return([]*resource.Version{}, nil).AnyTimes()
 
 	// CreateResourceVersion for the new version found
-	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineName, "cron.my-cron", gomock.Any()).
+	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", gomock.Any()).
 		Return(&resource.Version{ID: 1, Version: map[string]interface{}{"date": "now"}}, nil)
 
 	// Should trigger the job that depends on this resource
@@ -665,7 +664,7 @@ func TestProcessResourceCheck_DuplicateVersionSkipped_NewVersionTriggered(t *tes
 	ctx := context.Background()
 	m := queue.Body{
 		TeamCanonical:     "main",
-		PipelineName:      "test-pipeline",
+		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "git.my-repo",
 	}
 	// Check script returns 2 versions: first already exists, second is new
@@ -713,15 +712,15 @@ func TestProcessResourceCheck_DuplicateVersionSkipped_NewVersionTriggered(t *tes
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "git.my-repo").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.my-repo").
 		Return([]*resource.Version{}, nil).AnyTimes()
 
 	// First version: duplicate error (already exists)
-	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineName, "git.my-repo", gomock.Any()).
+	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.my-repo", gomock.Any()).
 		Return(nil, fmt.Errorf("failed to Create Resource Version: failed to execute query: constraint failed: UNIQUE constraint failed: resource_versions.resource_id, resource_versions.version (2067)"))
 
 	// Second version: new, created successfully
-	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineName, "git.my-repo", gomock.Any()).
+	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.my-repo", gomock.Any()).
 		Return(&resource.Version{ID: 2, Version: map[string]interface{}{"ref": "new"}}, nil)
 
 	// Should trigger both jobs for the new version only
@@ -751,9 +750,9 @@ func TestCheckPassedConstraints_AllPassed(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "downstream-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "downstream-job",
 	}
 	b := build.Build{ID: 50, BuildNumber: "50"}
 	j := &job.Job{
@@ -770,11 +769,11 @@ func TestCheckPassedConstraints_AllPassed(t *testing.T) {
 		},
 	}
 
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineName, "job-a").
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "job-a").
 		Return([]*build.Build{{ID: 1, Status: build.Succeeded, Steps: []build.Step{
 			{Type: "get", Name: "my-cron", VersionID: 5},
 		}}}, nil)
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineName, "job-b").
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "job-b").
 		Return([]*build.Build{{ID: 2, Status: build.Succeeded, Steps: []build.Step{
 			{Type: "get", Name: "my-cron", VersionID: 5},
 		}}}, nil)
@@ -790,9 +789,9 @@ func TestCheckPassedConstraints_NoCommonVersion(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "downstream-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "downstream-job",
 	}
 	b := build.Build{ID: 51, BuildNumber: "51"}
 	j := &job.Job{
@@ -810,17 +809,17 @@ func TestCheckPassedConstraints_NoCommonVersion(t *testing.T) {
 	}
 
 	// lint succeeded with version 5, test succeeded with version 6
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineName, "lint").
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "lint").
 		Return([]*build.Build{{ID: 10, Status: build.Succeeded, Steps: []build.Step{
 			{Type: "get", Name: "my-repo", VersionID: 5},
 		}}}, nil)
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineName, "test").
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "test").
 		Return([]*build.Build{{ID: 11, Status: build.Succeeded, Steps: []build.Step{
 			{Type: "get", Name: "my-repo", VersionID: 6},
 		}}}, nil)
 
 	// Build should be deleted
-	svc.EXPECT().DeleteJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "51").
+	svc.EXPECT().DeleteJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "51").
 		Return(nil)
 
 	ok, resolved := w.checkPassedConstraints(ctx, m, &b, j)
@@ -834,9 +833,9 @@ func TestCheckPassedConstraints_PicksNewestCommon(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "deploy",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "deploy",
 	}
 	b := build.Build{ID: 52, BuildNumber: "52"}
 	j := &job.Job{
@@ -854,7 +853,7 @@ func TestCheckPassedConstraints_PicksNewestCommon(t *testing.T) {
 	}
 
 	// lint has builds with versions {3, 5}
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineName, "lint").
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "lint").
 		Return([]*build.Build{
 			{ID: 10, Status: build.Succeeded, Steps: []build.Step{
 				{Type: "get", Name: "my-repo", VersionID: 5},
@@ -864,7 +863,7 @@ func TestCheckPassedConstraints_PicksNewestCommon(t *testing.T) {
 			}},
 		}, nil)
 	// test has builds with versions {5, 7}
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineName, "test").
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "test").
 		Return([]*build.Build{
 			{ID: 12, Status: build.Succeeded, Steps: []build.Step{
 				{Type: "get", Name: "my-repo", VersionID: 7},
@@ -885,9 +884,9 @@ func TestCheckPassedConstraints_NoPassedField(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "simple-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "simple-job",
 	}
 	b := build.Build{ID: 53, BuildNumber: "53"}
 	j := &job.Job{
@@ -914,9 +913,9 @@ func TestRunHooks(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "test-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
 	}
 
 	pp := testPipeline()
@@ -935,7 +934,7 @@ func TestRunHooks(t *testing.T) {
 	}
 
 	// 2 hooks × (running step + final step) = multiple UpdateJobBuild calls
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "60", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "60", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "task-name", hooks, "on_success", nil)
@@ -951,9 +950,9 @@ func TestRunHooks_SingleHook_NoIndex(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "test-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
 	}
 
 	pp := testPipeline()
@@ -965,7 +964,7 @@ func TestRunHooks_SingleHook_NoIndex(t *testing.T) {
 		runnerHook(utils.RunnerCommand{Runner: "exec", Args: []string{"only"}, Params: map[string]string{"path": "echo"}}),
 	}
 
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "61", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "61", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "step", hooks, "ensure", nil)
@@ -980,9 +979,9 @@ func TestRunHooks_JobLevel_NoStepName(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "test-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
 	}
 
 	pp := testPipeline()
@@ -994,7 +993,7 @@ func TestRunHooks_JobLevel_NoStepName(t *testing.T) {
 		runnerHook(utils.RunnerCommand{Runner: "exec", Args: []string{"job-level"}, Params: map[string]string{"path": "echo"}}),
 	}
 
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "62", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "62", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", hooks, "on_failure", nil)
@@ -1009,26 +1008,26 @@ func TestProcessMessage_JobDispatch(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "test-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
 	}
 	cwd := t.TempDir()
 
 	// GetPipeline returns empty pipeline → CreateJobBuild will be called
-	svc.EXPECT().GetPipeline(gomock.Any(), m.TeamCanonical, m.PipelineName).
+	svc.EXPECT().GetPipeline(gomock.Any(), m.TeamCanonical, m.PipelineCanonical).
 		Return(&pipeline.Pipeline{Name: "test-pipeline"}, nil)
 
 	// CreateJobBuild
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 1, BuildNumber: "1"}, nil)
 
 	// GetPipelineJob — no plan steps
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&job.Job{Name: "test-job"}, nil)
 
 	// Succeeded → UpdateJobBuild
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "1", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "1", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			assert.Equal(t, build.Succeeded, b.Status)
 			return nil
@@ -1044,7 +1043,7 @@ func TestBuildPullParams_WithVersionID(t *testing.T) {
 	ctx := context.Background()
 	m := queue.Body{
 		TeamCanonical:     "main",
-		PipelineName:      "test-pipeline",
+		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
 		ResourceCanonical: "cron.my-cron",
 		VersionID:         5,
@@ -1065,7 +1064,7 @@ func TestBuildPullParams_WithVersionID(t *testing.T) {
 	}
 	g := job.GetStep{}
 
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "cron.my-cron").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron").
 		Return([]*resource.Version{
 			{ID: 3, Version: map[string]interface{}{"ref": "abc"}},
 			{ID: 5, Version: map[string]interface{}{"ref": "def"}},
@@ -1084,9 +1083,9 @@ func TestBuildPullParams_NoVersionID_UsesLatest(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "test-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
 	}
 	b := build.Build{ID: 71, BuildNumber: "71"}
 
@@ -1099,7 +1098,7 @@ func TestBuildPullParams_NoVersionID_UsesLatest(t *testing.T) {
 	g := job.GetStep{}
 
 	// Returns versions ordered by ID desc — after Reverse, last becomes first
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "cron.my-cron").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron").
 		Return([]*resource.Version{
 			{ID: 1, Version: map[string]interface{}{"ref": "old"}},
 			{ID: 2, Version: map[string]interface{}{"ref": "latest"}},
@@ -1117,9 +1116,9 @@ func TestBuildPullParams_NoVersions_Fails(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "test-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
 	}
 	b := build.Build{ID: 72, BuildNumber: "72"}
 
@@ -1129,11 +1128,11 @@ func TestBuildPullParams_NoVersions_Fails(t *testing.T) {
 	r := resource.Resource{Canonical: "cron.my-cron"}
 	g := job.GetStep{}
 
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "cron.my-cron").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron").
 		Return([]*resource.Version{}, nil).AnyTimes()
 
 	// Should call failBuild
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "72", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "72", gomock.Any()).
 		Return(nil)
 
 	params, _ := w.buildPullParams(ctx, m, &b, rt, r, g, 0)
@@ -1146,10 +1145,10 @@ func TestBuildPullParams_ResolvedVersionTakesPriority(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "test-job",
-		VersionID:     5, // queue says version 5
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		VersionID:         5, // queue says version 5
 	}
 	b := build.Build{ID: 73, BuildNumber: "73"}
 
@@ -1159,7 +1158,7 @@ func TestBuildPullParams_ResolvedVersionTakesPriority(t *testing.T) {
 	r := resource.Resource{Canonical: "git.my-repo"}
 	g := job.GetStep{}
 
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "git.my-repo").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.my-repo").
 		Return([]*resource.Version{
 			{ID: 5, Version: map[string]interface{}{"ref": "queue-ver"}},
 			{ID: 10, Version: map[string]interface{}{"ref": "resolved-ver"}},
@@ -1178,9 +1177,9 @@ func TestCheckVersionAvailability_NoVersions_DeletesBuild(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "test-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
 	}
 	b := build.Build{ID: 99, BuildNumber: "99"}
 
@@ -1206,11 +1205,11 @@ func TestCheckVersionAvailability_NoVersions_DeletesBuild(t *testing.T) {
 	}
 
 	// No versions available
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "cron.my-cron").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron").
 		Return([]*resource.Version{}, nil)
 
 	// Should delete build (not fail it)
-	svc.EXPECT().DeleteJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "99").
+	svc.EXPECT().DeleteJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "99").
 		Return(nil)
 
 	result := w.checkVersionAvailability(ctx, m, &b, j, pp)
@@ -1223,9 +1222,9 @@ func TestCheckVersionAvailability_VersionExists_Passes(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "test-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
 	}
 	b := build.Build{ID: 99, BuildNumber: "99"}
 
@@ -1246,7 +1245,7 @@ func TestCheckVersionAvailability_VersionExists_Passes(t *testing.T) {
 		},
 	}
 
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "cron.my-cron").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron").
 		Return([]*resource.Version{
 			{ID: 1, Version: map[string]interface{}{"date": "now"}},
 		}, nil)
@@ -1261,9 +1260,9 @@ func TestProcessJob_PutStep_Success(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "deploy-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "deploy-job",
 	}
 
 	pp := &pipeline.Pipeline{
@@ -1316,13 +1315,13 @@ func TestProcessJob_PutStep_Success(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 80, BuildNumber: "80"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// running steps + after task step + after put step + after marking succeeded
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "80", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "80", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	w.processJob(ctx, m, cwd, pp)
@@ -1334,10 +1333,10 @@ func TestProcessJob_OrderedPlan_GetTaskPut(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "ordered-job",
-		VersionID:     1,
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "ordered-job",
+		VersionID:         1,
 	}
 
 	pp := &pipeline.Pipeline{
@@ -1386,17 +1385,17 @@ func TestProcessJob_OrderedPlan_GetTaskPut(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 90, BuildNumber: "90"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "cron.my-cron").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron").
 		Return([]*resource.Version{
 			{ID: 1, Version: map[string]interface{}{"date": "now"}},
 		}, nil).AnyTimes()
 
 	// running steps + after get + after task + after put + after success
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "90", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "90", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	w.processJob(ctx, m, cwd, pp)
@@ -1408,9 +1407,9 @@ func TestProcessJob_TaskTimeout(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "timeout-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "timeout-job",
 	}
 
 	pp := &pipeline.Pipeline{
@@ -1458,14 +1457,14 @@ func TestProcessJob_TaskTimeout(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 100, BuildNumber: "100"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// running step + partial logs + failBuild + on_failure hook running + on_failure hook final + ensure hook running + ensure hook final
 	var capturedBuild build.Build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "100", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "100", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			capturedBuild = b
 			return nil
@@ -1485,10 +1484,10 @@ func TestProcessJob_GetTimeout(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "get-timeout-job",
-		VersionID:     1,
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "get-timeout-job",
+		VersionID:         1,
 	}
 
 	pp := &pipeline.Pipeline{
@@ -1526,18 +1525,18 @@ func TestProcessJob_GetTimeout(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 101, BuildNumber: "101"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "cron.my-cron").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron").
 		Return([]*resource.Version{
 			{ID: 1, Version: map[string]interface{}{"date": "now"}},
 		}, nil).AnyTimes()
 
 	// running step + partial logs + failBuild
 	var capturedBuild build.Build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "101", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "101", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			capturedBuild = b
 			return nil
@@ -1556,9 +1555,9 @@ func TestProcessJob_NoTimeout_Succeeds(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "no-timeout-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "no-timeout-job",
 	}
 	pp := &pipeline.Pipeline{
 		ID:   1,
@@ -1589,14 +1588,14 @@ func TestProcessJob_NoTimeout_Succeeds(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 102, BuildNumber: "102"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// running step + after task step + after marking succeeded
 	var lastBuild build.Build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "102", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "102", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			lastBuild = b
 			return nil
@@ -1614,9 +1613,9 @@ func TestProcessJob_TaskRetry_SucceedsOnSecondAttempt(t *testing.T) {
 	ctx := context.Background()
 	cwd := t.TempDir()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "retry-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "retry-job",
 	}
 
 	// Script that fails on first run (no marker file) and succeeds on second (marker exists).
@@ -1660,14 +1659,14 @@ fi
 		},
 	}
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 200, BuildNumber: "200"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// running step + after task step (success) + after marking succeeded
 	var capturedBuild build.Build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "200", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "200", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			capturedBuild = b
 			return nil
@@ -1688,9 +1687,9 @@ func TestProcessJob_TaskRetry_ExhaustsAttempts(t *testing.T) {
 	ctx := context.Background()
 	cwd := t.TempDir()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "exhaust-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "exhaust-job",
 	}
 
 	pp := &pipeline.Pipeline{
@@ -1727,14 +1726,14 @@ func TestProcessJob_TaskRetry_ExhaustsAttempts(t *testing.T) {
 		},
 	}
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 201, BuildNumber: "201"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// running step + failBuild + on_failure hook running step + on_failure hook final
 	var capturedBuild build.Build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "201", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "201", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			capturedBuild = b
 			return nil
@@ -1754,9 +1753,9 @@ func TestProcessJob_TaskRetry_WithTimeout(t *testing.T) {
 	ctx := context.Background()
 	cwd := t.TempDir()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "timeout-retry-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "timeout-retry-job",
 	}
 
 	pp := &pipeline.Pipeline{
@@ -1788,14 +1787,14 @@ func TestProcessJob_TaskRetry_WithTimeout(t *testing.T) {
 		},
 	}
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 202, BuildNumber: "202"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// running step + partial logs + failBuild
 	var capturedBuild build.Build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "202", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "202", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			capturedBuild = b
 			return nil
@@ -1843,7 +1842,7 @@ func TestProcessResourceCheck_WithSecretVars(t *testing.T) {
 	ctx := context.Background()
 	m := queue.Body{
 		TeamCanonical:     "main",
-		PipelineName:      "test-pipeline",
+		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "git.repo",
 	}
 
@@ -1911,11 +1910,11 @@ func TestProcessResourceCheck_WithSecretVars(t *testing.T) {
 	cwd := t.TempDir()
 
 	// No existing versions
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "git.repo").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.repo").
 		Return([]*resource.Version{}, nil).AnyTimes()
 
 	// CreateResourceVersion for the new version found
-	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineName, "git.repo", gomock.Any()).
+	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.repo", gomock.Any()).
 		Return(&resource.Version{ID: 1, Version: map[string]interface{}{"ref": "abc123"}}, nil)
 
 	// Trigger the job
@@ -2002,7 +2001,7 @@ func TestProcessResourceCheck_SecretResolutionError_UpdatesResourceLogs(t *testi
 	ctx := context.Background()
 	m := queue.Body{
 		TeamCanonical:     "main",
-		PipelineName:      "test-pipeline",
+		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "git.repo",
 	}
 
@@ -2050,11 +2049,11 @@ func TestProcessResourceCheck_SecretResolutionError_UpdatesResourceLogs(t *testi
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "git.repo").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.repo").
 		Return([]*resource.Version{}, nil)
 
 	// Expect the resource to be updated with error logs
-	svc.EXPECT().UpdatePipelineResource(gomock.Any(), m.TeamCanonical, m.PipelineName, "git.repo", gomock.Any()).
+	svc.EXPECT().UpdatePipelineResource(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.repo", gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, _, _ string, r resource.Resource) error {
 			assert.NotEmpty(t, r.Logs, "resource logs should contain the error")
 			assert.Contains(t, r.Logs, "failed to resolve secrets")
@@ -2157,7 +2156,7 @@ func TestProcessResourceCheck_RawSecretFormat(t *testing.T) {
 
 	m := queue.Body{
 		TeamCanonical:     "main",
-		PipelineName:      "test-pipeline",
+		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "cron.timer",
 	}
 
@@ -2214,9 +2213,9 @@ func TestProcessResourceCheck_RawSecretFormat(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "cron.timer").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.timer").
 		Return([]*resource.Version{}, nil)
-	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineName, "cron.timer", gomock.Any()).
+	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.timer", gomock.Any()).
 		Return(&resource.Version{ID: 1, Version: map[string]interface{}{"date": "now"}}, nil)
 	topic.EXPECT().Send(gomock.Any(), gomock.Any()).Return(nil)
 
@@ -2300,8 +2299,8 @@ func TestTriggerResourceJobs_MultipleJobsSameResource(t *testing.T) {
 	}
 
 	m := queue.Body{
-		TeamCanonical: "tc",
-		PipelineName:  "test-pipeline",
+		TeamCanonical:     "tc",
+		PipelineCanonical: "test-pipeline",
 	}
 
 	// Expect Send to be called 3 times, once for each job
@@ -2316,9 +2315,9 @@ func TestProcessJob_TaskInputMissing(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "input-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "input-job",
 	}
 
 	pp := &pipeline.Pipeline{
@@ -2352,13 +2351,13 @@ func TestProcessJob_TaskInputMissing(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 200, BuildNumber: "200"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	var capturedBuild build.Build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "200", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "200", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			capturedBuild = b
 			return nil
@@ -2377,9 +2376,9 @@ func TestProcessJob_TaskOutputMissing(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "output-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "output-job",
 	}
 
 	pp := &pipeline.Pipeline{
@@ -2413,13 +2412,13 @@ func TestProcessJob_TaskOutputMissing(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 300, BuildNumber: "300"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	var capturedBuild build.Build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "300", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "300", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			capturedBuild = b
 			return nil
@@ -2438,9 +2437,9 @@ func TestProcessJob_TaskInputsOutputs_Success(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "io-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "io-job",
 	}
 
 	cwd := t.TempDir()
@@ -2480,13 +2479,13 @@ func TestProcessJob_TaskInputsOutputs_Success(t *testing.T) {
 		},
 	}
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 400, BuildNumber: "400"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	var capturedBuild build.Build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "400", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "400", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			capturedBuild = b
 			return nil
@@ -2505,9 +2504,9 @@ func TestProcessJob_TaskMultipleInputs_FailsOnFirst(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "multi-input-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "multi-input-job",
 	}
 
 	cwd := t.TempDir()
@@ -2545,13 +2544,13 @@ func TestProcessJob_TaskMultipleInputs_FailsOnFirst(t *testing.T) {
 		},
 	}
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 500, BuildNumber: "500"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	var capturedBuild build.Build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "500", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "500", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			capturedBuild = b
 			return nil
@@ -2572,9 +2571,9 @@ func TestProcessJob_TaskMultipleOutputs_FailsOnFirst(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "multi-output-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "multi-output-job",
 	}
 
 	cwd := t.TempDir()
@@ -2609,13 +2608,13 @@ func TestProcessJob_TaskMultipleOutputs_FailsOnFirst(t *testing.T) {
 		},
 	}
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 600, BuildNumber: "600"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	var capturedBuild build.Build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "600", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "600", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			capturedBuild = b
 			return nil
@@ -2646,9 +2645,9 @@ func TestProcessJob_Cancellation(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "cancel-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "cancel-job",
 	}
 
 	pp := &pipeline.Pipeline{
@@ -2683,14 +2682,14 @@ func TestProcessJob_Cancellation(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 700, BuildNumber: "700"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// GetJobBuild: return Started first, then Cancelled on subsequent calls
 	callCount := 0
-	svc.EXPECT().GetJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "700").
+	svc.EXPECT().GetJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "700").
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string) (*build.Build, error) {
 			callCount++
 			if callCount <= 1 {
@@ -2700,7 +2699,7 @@ func TestProcessJob_Cancellation(t *testing.T) {
 		}).AnyTimes()
 
 	var capturedBuild build.Build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "700", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "700", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			capturedBuild = b
 			return nil
@@ -2728,11 +2727,11 @@ func TestProcessJob_Retry_UsesCreateRetryAndResolvedVersions(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical:    "main",
-		PipelineName:     "test-pipeline",
-		JobName:          "test-job",
-		RetryBuildNumber: "3",
-		RetryBuildID:     5,
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		RetryBuildNumber:  "3",
+		RetryBuildID:      5,
 	}
 	pp := &pipeline.Pipeline{
 		ID:   1,
@@ -2776,24 +2775,24 @@ func TestProcessJob_Retry_UsesCreateRetryAndResolvedVersions(t *testing.T) {
 	cwd := t.TempDir()
 
 	// Should use CreateRetryJobBuild instead of CreateJobBuild
-	svc.EXPECT().CreateRetryJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "3", gomock.Any()).
+	svc.EXPECT().CreateRetryJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "3", gomock.Any()).
 		Return(&build.Build{ID: 20, BuildNumber: "3.1"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// Should look up versions from the original build
-	svc.EXPECT().FindBuildGetVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, uint32(5)).
+	svc.EXPECT().FindBuildGetVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, uint32(5)).
 		Return(map[string]uint32{"my-cron": 42}, nil)
 
 	// ListResourceVersions should NOT be called (retries skip version availability check)
 	// The get step still runs with the resolved version
 
-	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, "cron.my-cron").
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron").
 		Return([]*resource.Version{
 			{ID: 42, Version: map[string]interface{}{"date": "now"}},
 		}, nil).AnyTimes()
 
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "3.1", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "3.1", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	w.processJob(ctx, m, cwd, pp)
@@ -2805,11 +2804,11 @@ func TestProcessJob_Retry_FailsOnVersionLookupError(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical:    "main",
-		PipelineName:     "test-pipeline",
-		JobName:          "test-job",
-		RetryBuildNumber: "3",
-		RetryBuildID:     5,
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		RetryBuildNumber:  "3",
+		RetryBuildID:      5,
 	}
 	pp := &pipeline.Pipeline{
 		ID:   1,
@@ -2832,15 +2831,15 @@ func TestProcessJob_Retry_FailsOnVersionLookupError(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().CreateRetryJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "3", gomock.Any()).
+	svc.EXPECT().CreateRetryJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "3", gomock.Any()).
 		Return(&build.Build{ID: 20, BuildNumber: "3.1"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
-	svc.EXPECT().FindBuildGetVersions(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, uint32(5)).
+	svc.EXPECT().FindBuildGetVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, uint32(5)).
 		Return(nil, fmt.Errorf("db error"))
 
 	// Should fail the build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "3.1", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "3.1", gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
 			assert.Equal(t, build.Failed, b.Status)
 			return nil
@@ -2864,9 +2863,9 @@ func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 
 	ctx := context.Background()
 	m := queue.Body{
-		TeamCanonical: "main",
-		PipelineName:  "test-pipeline",
-		JobName:       "cancel-hook-job",
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "cancel-hook-job",
 	}
 
 	cancelMarker := filepath.Join(t.TempDir(), "on_cancel_ran")
@@ -2921,14 +2920,14 @@ func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, gomock.Any()).
+	svc.EXPECT().CreateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, gomock.Any()).
 		Return(&build.Build{ID: 800, BuildNumber: "800"}, nil)
-	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName).
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
 		Return(&pp.Jobs[0], nil)
 
 	// GetJobBuild: return Started first, then Cancelled on subsequent calls
 	callCount := 0
-	svc.EXPECT().GetJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "800").
+	svc.EXPECT().GetJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "800").
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string) (*build.Build, error) {
 			callCount++
 			if callCount <= 1 {
@@ -2938,7 +2937,7 @@ func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 		}).AnyTimes()
 
 	var capturedBuild build.Build
-	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineName, m.JobName, "800", gomock.Any()).
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "800", gomock.Any()).
 		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
 			capturedBuild = b
 			return nil

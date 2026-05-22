@@ -8,11 +8,11 @@ import (
 
 type Repository interface {
 	Create(ctx context.Context, tc string, pp Pipeline) (uint32, error)
-	Update(ctx context.Context, tc, ppn string, pp Pipeline) error
-	Find(ctx context.Context, tc, pn string) (*Pipeline, error)
-	FindPublic(ctx context.Context, tc, pn string) (*Pipeline, error)
+	Update(ctx context.Context, tc, pCan string, pp Pipeline) error
+	Find(ctx context.Context, tc, pCan string) (*Pipeline, error)
+	FindPublic(ctx context.Context, tc, pCan string) (*Pipeline, error)
 	Filter(ctx context.Context, tc string) ([]*Pipeline, error)
 	FilterAll(ctx context.Context) ([]*WithTeam, error)
-	SetPublic(ctx context.Context, tc, pn string, public bool) error
-	Delete(ctx context.Context, tc, pn string) error
+	SetPublic(ctx context.Context, tc, pCan string, public bool) error
+	Delete(ctx context.Context, tc, pCan string) error
 }

@@ -84,7 +84,7 @@ func TestTriggerPipelineJob_PinsLatestVersion(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 	tc := "main"
-	ppn := "pp"
+	ppc := "pp"
 	jn := "jn"
 
 	j := &job.Job{
@@ -106,12 +106,12 @@ func TestTriggerPipelineJob_PinsLatestVersion(t *testing.T) {
 
 	rCan := j.GetSteps()[0].ResourceCanonical()
 
-	s.Jobs.EXPECT().Find(ctx, tc, ppn, jn).Return(j, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, tc, ppn, rCan).Return(versions, nil)
+	s.Jobs.EXPECT().Find(ctx, tc, ppc, jn).Return(j, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, tc, ppc, rCan).Return(versions, nil)
 
 	m := queue.Body{
 		TeamCanonical:     tc,
-		PipelineName:      ppn,
+		PipelineCanonical: ppc,
 		JobName:           jn,
 		ResourceCanonical: rCan,
 		VersionID:         30,
@@ -121,6 +121,6 @@ func TestTriggerPipelineJob_PinsLatestVersion(t *testing.T) {
 
 	s.Topic.EXPECT().Send(ctx, &pubsub.Message{Body: mb}).Return(nil)
 
-	err = s.S.TriggerPipelineJob(ctx, tc, ppn, jn)
+	err = s.S.TriggerPipelineJob(ctx, tc, ppc, jn)
 	require.NoError(t, err)
 }

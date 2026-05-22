@@ -33,6 +33,6 @@ func (u *noopUnitOfWork) Resources() resource.Repository { return u.repos.Resour
 func (u *noopUnitOfWork) ResourceTypes() restype.Repository {
 	return u.repos.ResourceTypesRepo
 }
-func (u *noopUnitOfWork) Builds() build.Repository     { return u.repos.BuildsRepo }
-func (u *noopUnitOfWork) Runners() runner.Repository   { return u.repos.RunnersRepo }
+func (u *noopUnitOfWork) Builds() build.Repository        { return u.repos.BuildsRepo }
+func (u *noopUnitOfWork) Runners() runner.Repository      { return u.repos.RunnersRepo }
 func (u *noopUnitOfWork) SecretTypes() sectype.Repository { return u.repos.SecretTypesRepo }

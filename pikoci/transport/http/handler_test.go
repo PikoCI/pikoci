@@ -280,4 +280,3 @@ func TestXRefreshTokenHeader(t *testing.T) {
 		assert.Empty(t, resp.Header.Get("X-Refresh-Token"))
 	})
 }
-

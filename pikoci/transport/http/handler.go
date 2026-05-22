@@ -19,8 +19,8 @@ import (
 type contextKey string
 
 const (
-	UsernameContextKey   contextKey = "username_context_key"
-	IsPublicAccessKey    contextKey = "is_public_access_key"
+	UsernameContextKey contextKey = "username_context_key"
+	IsPublicAccessKey  contextKey = "is_public_access_key"
 )
 
 var publicFallbackRoutes = map[RouteName]bool{
@@ -103,9 +103,9 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger) http.Handler {
 				if hasRouteName && publicFallbackRoutes[crn] {
 					vars := mux.Vars(rr)
 					tc := vars["team_canonical"]
-					pn := vars["pipeline_name"]
-					if tc != "" && pn != "" {
-						_, err := s.GetPublicPipeline(rr.Context(), tc, pn)
+					pc := vars["pipeline_canonical"]
+					if tc != "" && pc != "" {
+						_, err := s.GetPublicPipeline(rr.Context(), tc, pc)
 						if err == nil {
 							rr = rr.WithContext(context.WithValue(rr.Context(), IsPublicAccessKey, true))
 							h.ServeHTTP(rw, rr)
@@ -150,9 +150,9 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger) http.Handler {
 				if err != nil {
 					// If authorization fails but route supports public fallback, try it
 					if publicFallbackRoutes[crn] {
-						pn := vars["pipeline_name"]
-						if tc != "" && pn != "" {
-							_, perr := s.GetPublicPipeline(rr.Context(), tc, pn)
+						pc := vars["pipeline_canonical"]
+						if tc != "" && pc != "" {
+							_, perr := s.GetPublicPipeline(rr.Context(), tc, pc)
 							if perr == nil {
 								rr = rr.WithContext(context.WithValue(rr.Context(), IsPublicAccessKey, true))
 								h.ServeHTTP(rw, rr)
@@ -205,33 +205,33 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger) http.Handler {
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines").Name(CreatePipeline.String()).Handler(createPipeline(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines").Name(ListPipelines.String()).Handler(listPipelines(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/image{ext}").Name(CreatePipelineImage.String()).Handler(createPipelineImage(s))
-	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_name}").Name(GetPipeline.String()).Handler(getPipeline(s))
-	api.Methods(http.MethodPut).Path("/teams/{team_canonical}/pipelines/{pipeline_name}").Name(UpdatePipeline.String()).Handler(updatePipeline(s))
-	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/pipelines/{pipeline_name}").Name(DeletePipeline.String()).Handler(deletePipeline(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}").Name(GetPipeline.String()).Handler(getPipeline(s))
+	api.Methods(http.MethodPut).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}").Name(UpdatePipeline.String()).Handler(updatePipeline(s))
+	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}").Name(DeletePipeline.String()).Handler(deletePipeline(s))
 
-	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/jobs/{job_name}/trigger").Name(TriggerPipelineJob.String()).Handler(triggerPipelineJob(s))
-	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/jobs/{job_name}").Name(GetPipelineJob.String()).Handler(getPipelineJob(s))
-	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/jobs/{job_name}/builds").Name(ListJobBuilds.String()).Handler(listJobBuilds(s))
-	api.Methods(http.MethodPut).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/jobs/{job_name}/builds/{build_number}").Name(UpdateJobBuild.String()).Handler(updateJobBuild(s))
-	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/jobs/{job_name}/builds/{build_number}").Name(DeleteJobBuild.String()).Handler(deleteJobBuild(s))
-	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/jobs/{job_name}/builds/{build_number}").Name(GetJobBuild.String()).Handler(getJobBuild(s))
-	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/jobs/{job_name}/builds/{build_number}/cancel").Name(CancelJobBuild.String()).Handler(cancelJobBuild(s))
-	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/jobs/{job_name}/builds/{build_number}/retry").Name(RetryJobBuild.String()).Handler(retryJobBuild(s))
-	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/jobs/{job_name}/retry-builds").Name(CreateRetryJobBuild.String()).Handler(createRetryJobBuild(s))
-	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/jobs/{job_name}/builds-get-versions/{build_id}").Name(FindBuildGetVersions.String()).Handler(findBuildGetVersions(s))
-	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/jobs/{job_name}/builds/{build_id}/get-versions").Name(InsertBuildGetVersion.String()).Handler(insertBuildGetVersion(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/trigger").Name(TriggerPipelineJob.String()).Handler(triggerPipelineJob(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}").Name(GetPipelineJob.String()).Handler(getPipelineJob(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds").Name(ListJobBuilds.String()).Handler(listJobBuilds(s))
+	api.Methods(http.MethodPut).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_number}").Name(UpdateJobBuild.String()).Handler(updateJobBuild(s))
+	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_number}").Name(DeleteJobBuild.String()).Handler(deleteJobBuild(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_number}").Name(GetJobBuild.String()).Handler(getJobBuild(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_number}/cancel").Name(CancelJobBuild.String()).Handler(cancelJobBuild(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_number}/retry").Name(RetryJobBuild.String()).Handler(retryJobBuild(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/retry-builds").Name(CreateRetryJobBuild.String()).Handler(createRetryJobBuild(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds-get-versions/{build_id}").Name(FindBuildGetVersions.String()).Handler(findBuildGetVersions(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_id}/get-versions").Name(InsertBuildGetVersion.String()).Handler(insertBuildGetVersion(s))
 
-	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/resources/{resource_canonical}/versions").Name(CreateResourceVersion.String()).Handler(createResourceVersion(s))
-	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/resources/{resource_canonical}/versions").Name(ListResourceVersions.String()).Handler(listResourceVersions(s))
-	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/resources/{resource_canonical}").Name(GetPipelineResource.String()).Handler(getPipelineResource(s))
-	api.Methods(http.MethodPut).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/resources/{resource_canonical}").Name(UpdatePipelineResource.String()).Handler(updatePipelineResource(s))
-	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/resources/{resource_canonical}/trigger").Name(TriggerPipelineResource.String()).Handler(triggerPipelineResource(s))
-	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/resources/{resource_canonical}/webhook_token").Name(RegenerateWebhookToken.String()).Handler(regenerateWebhookToken(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/versions").Name(CreateResourceVersion.String()).Handler(createResourceVersion(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/versions").Name(ListResourceVersions.String()).Handler(listResourceVersions(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}").Name(GetPipelineResource.String()).Handler(getPipelineResource(s))
+	api.Methods(http.MethodPut).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}").Name(UpdatePipelineResource.String()).Handler(updatePipelineResource(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/trigger").Name(TriggerPipelineResource.String()).Handler(triggerPipelineResource(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/webhook_token").Name(RegenerateWebhookToken.String()).Handler(regenerateWebhookToken(s))
 
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/triggers/{trigger_name}").Name(CreateTrigger.String()).Handler(createTrigger(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/triggers/{trigger_name}").Name(ListTriggersAfter.String()).Handler(listTriggersAfter(s))
 
-	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_name}/image{ext}").Name(GetPipelineImage.String()).Handler(getPipelineImage(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/image{ext}").Name(GetPipelineImage.String()).Handler(getPipelineImage(s))
 
 	api.NotFoundHandler = http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {

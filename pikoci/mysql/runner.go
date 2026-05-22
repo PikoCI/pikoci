@@ -59,7 +59,7 @@ func (r *RunnerRepository) Create(ctx context.Context, tc, pn string, ru runner.
 				FROM pipelines AS p
 				JOIN teams AS t
 					ON p.team_id = t.id
-				WHERE t.canonical = ? AND p.name = ?
+				WHERE t.canonical = ? AND p.canonical = ?
 			))`, dbru.Name, dbru.Source, dbru.Run, tc, pn)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
@@ -85,7 +85,7 @@ func (r *RunnerRepository) Update(ctx context.Context, tc, pn, run string, ru ru
 				ON ru.pipeline_id = p.id
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND ru.name = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND ru.name = ?
 		) AS ruru
 		WHERE ruru.id = ru.id
 	`, dbru.Name, dbru.Source, dbru.Run, tc, pn, run)
@@ -109,7 +109,7 @@ func (r *RunnerRepository) Find(ctx context.Context, tc, pn, run string) (*runne
 			ON ru.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ? AND ru.name = ?
+		WHERE t.canonical = ? AND p.canonical = ? AND ru.name = ?
 	`, tc, pn, run)
 
 	ru, err := scanRunner(row)
@@ -128,7 +128,7 @@ func (r *RunnerRepository) Filter(ctx context.Context, tc, pn string) ([]*runner
 			ON ru.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ?
+		WHERE t.canonical = ? AND p.canonical = ?
 	`, tc, pn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter runners: %w", err)
@@ -153,7 +153,7 @@ func (r *RunnerRepository) Delete(ctx context.Context, tc, pn, run string) error
 				ON ru.pipeline_id = p.id
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND ru.name = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND ru.name = ?
 		)
 	`, tc, pn, run)
 	if err != nil {
