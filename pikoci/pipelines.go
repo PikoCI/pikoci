@@ -468,24 +468,39 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		slices.Reverse(builds)
 		color := colorDefault
 		borderColor := colorDefaultBorder
+
+		// cb: latest main build (no retry suffix) for fill color
+		// rb: any running build (including retries) for dashed outline
 		var (
 			cb *build.Build
-			pb *build.Build
+			rb *build.Build
 		)
-		if len(builds) != 0 {
-			cb = builds[0]
-			if len(builds) > 1 && cb.Status == build.Started {
-				pb = builds[1]
-				if c, ok := jobColors[pb.Status]; ok {
-					color = c
-				}
-				if c, ok := jobBorderColors[pb.Status]; ok {
-					borderColor = c
-				}
+		for _, b := range builds {
+			if b.Status == build.Started && rb == nil {
+				rb = b
+			}
+			if !strings.Contains(b.BuildNumber, ".") && cb == nil {
+				cb = b
+			}
+			if cb != nil && rb != nil {
+				break
 			}
 		}
 
-		if pb == nil && cb != nil && cb.Status != build.Started {
+		// If the latest main build is running, use the previous main build for color
+		if cb != nil && cb.Status == build.Started {
+			for _, b := range builds {
+				if b != cb && !strings.Contains(b.BuildNumber, ".") {
+					if c, ok := jobColors[b.Status]; ok {
+						color = c
+					}
+					if c, ok := jobBorderColors[b.Status]; ok {
+						borderColor = c
+					}
+					break
+				}
+			}
+		} else if cb != nil {
 			if c, ok := jobColors[cb.Status]; ok {
 				color = c
 			}
@@ -495,7 +510,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		}
 
 		style := "invis"
-		if cb != nil && cb.Status == build.Started {
+		if rb != nil {
 			style = `"dashed,bold"`
 		}
 
