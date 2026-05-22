@@ -3,6 +3,7 @@ package pikoci_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -116,6 +117,84 @@ func TestListPipelines_InvalidCanonical(t *testing.T) {
 
 	_, err := s.S.ListPipelines(ctx, "INVALID")
 	require.Error(t, err)
+}
+
+func TestUpdatePipeline_Rename(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	oldCan := "old-name"
+	newName := "New Name"
+	newCan := "new-name"
+
+	b, err := os.ReadFile("testdata/pipeline.hcl")
+	require.NoError(t, err)
+
+	mvars := map[string]interface{}{
+		"repo_name": "repo",
+	}
+
+	existing := &pipeline.Pipeline{
+		ID: 1, Name: "old-name", Canonical: oldCan,
+		Jobs:      []job.Job{{ID: 1, Name: "gen"}, {ID: 2, Name: "test"}, {ID: 3, Name: "build"}},
+		Resources: []resource.Resource{{ID: 1, Canonical: "git.qid", Name: "qid", Type: "git", Params: &resource.Params{Params: map[string]string{"url": "u", "name": "repo"}}}},
+	}
+
+	s.Pipelines.EXPECT().Find(ctx, tc, oldCan).Return(existing, nil)
+	s.Pipelines.EXPECT().Update(ctx, tc, oldCan, gomock.Any()).Return(nil)
+	// After update, Find uses new canonical (called twice: once to get dbpp, once at end of UoW)
+	renamed := &pipeline.Pipeline{
+		ID: 1, Name: newName, Canonical: newCan,
+		Jobs:      existing.Jobs,
+		Resources: existing.Resources,
+	}
+	s.Pipelines.EXPECT().Find(ctx, tc, newCan).Return(renamed, nil).Times(2)
+	// Jobs: update existing (3 jobs match)
+	s.Jobs.EXPECT().Update(ctx, tc, newCan, "gen", gomock.Any()).Return(nil)
+	s.Jobs.EXPECT().Update(ctx, tc, newCan, "test", gomock.Any()).Return(nil)
+	s.Jobs.EXPECT().Update(ctx, tc, newCan, "build", gomock.Any()).Return(nil)
+	// Resources: update existing (1 resource match)
+	s.Resources.EXPECT().Update(ctx, tc, newCan, "git.qid", gomock.Any()).Return(nil)
+
+	pp, err := s.S.UpdatePipeline(ctx, tc, oldCan, b, mvars, newName)
+	require.NoError(t, err)
+	assert.Equal(t, newName, pp.Name)
+	assert.Equal(t, newCan, pp.Canonical)
+}
+
+func TestUpdatePipeline_PreserveName(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	pCan := "my-pipeline"
+
+	b, err := os.ReadFile("testdata/pipeline.hcl")
+	require.NoError(t, err)
+
+	mvars := map[string]interface{}{
+		"repo_name": "repo",
+	}
+
+	existing := &pipeline.Pipeline{
+		ID: 1, Name: "My Pipeline", Canonical: pCan,
+		Jobs:      []job.Job{{ID: 1, Name: "gen"}, {ID: 2, Name: "test"}, {ID: 3, Name: "build"}},
+		Resources: []resource.Resource{{ID: 1, Canonical: "git.qid", Name: "qid", Type: "git", Params: &resource.Params{Params: map[string]string{"url": "u", "name": "repo"}}}},
+	}
+
+	s.Pipelines.EXPECT().Find(ctx, tc, pCan).Return(existing, nil).Times(3)
+	s.Pipelines.EXPECT().Update(ctx, tc, pCan, gomock.Any()).Return(nil)
+	s.Jobs.EXPECT().Update(ctx, tc, pCan, "gen", gomock.Any()).Return(nil)
+	s.Jobs.EXPECT().Update(ctx, tc, pCan, "test", gomock.Any()).Return(nil)
+	s.Jobs.EXPECT().Update(ctx, tc, pCan, "build", gomock.Any()).Return(nil)
+	s.Resources.EXPECT().Update(ctx, tc, pCan, "git.qid", gomock.Any()).Return(nil)
+
+	// No newName — should preserve existing name
+	pp, err := s.S.UpdatePipeline(ctx, tc, pCan, b, mvars)
+	require.NoError(t, err)
+	assert.Equal(t, "My Pipeline", pp.Name)
+	assert.Equal(t, pCan, pp.Canonical)
 }
 
 func TestDeletePipeline(t *testing.T) {

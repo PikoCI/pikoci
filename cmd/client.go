@@ -116,6 +116,7 @@ func init() {
 	pipelinesCmd.AddCommand(pipelinesGetCmd)
 	pipelinesCmd.AddCommand(pipelinesGraphCmd)
 	pipelinesCmd.AddCommand(pipelinesDeleteCmd)
+	pipelinesCmd.AddCommand(pipelinesRenameCmd)
 }
 
 var pipelinesCreateCmd = &cobra.Command{
@@ -332,6 +333,46 @@ var pipelinesDeleteCmd = &cobra.Command{
 func init() {
 	pipelinesDeleteCmd.Flags().StringP("name", "n", "", "Name of the Pipeline")
 	pipelinesDeleteCmd.MarkFlagRequired("name")
+}
+
+var pipelinesRenameCmd = &cobra.Command{
+	Use:   "rename",
+	Short: "Renames a PikoCI Pipeline",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url, _ := cmd.Flags().GetString("url")
+		jwt, _ := cmd.Flags().GetString("jwt")
+		tc, _ := cmd.Flags().GetString("team-canonical")
+		name, _ := cmd.Flags().GetString("name")
+		newName, _ := cmd.Flags().GetString("new-name")
+
+		pCan := utils.Canonicalize(name)
+
+		c, err := newClientWithConfig(url, jwt)
+		if err != nil {
+			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
+		}
+
+		// Get existing pipeline config, then update with new name
+		existing, err := c.GetPipeline(cmd.Context(), tc, pCan)
+		if err != nil {
+			return fmt.Errorf("failed to get Pipeline %q: %w", name, err)
+		}
+
+		pp, err := c.UpdatePipeline(cmd.Context(), tc, pCan, existing.Raw, nil, newName)
+		if err != nil {
+			return fmt.Errorf("failed to rename Pipeline %q: %w", name, err)
+		}
+
+		fmt.Printf("Pipeline renamed to %q (canonical: %s)\n", pp.Name, pp.Canonical)
+		return nil
+	},
+}
+
+func init() {
+	pipelinesRenameCmd.Flags().StringP("name", "n", "", "Current name of the Pipeline")
+	pipelinesRenameCmd.Flags().String("new-name", "", "New name for the Pipeline")
+	pipelinesRenameCmd.MarkFlagRequired("name")
+	pipelinesRenameCmd.MarkFlagRequired("new-name")
 }
 
 // jobs

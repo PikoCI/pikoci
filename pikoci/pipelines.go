@@ -121,7 +121,7 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 	return cp, nil
 }
 
-func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pCan string, rpp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error) {
+func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pCan string, rpp []byte, vars map[string]interface{}, newName ...string) (*pipeline.Pipeline, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
 	} else if !utils.ValidateCanonical(pCan) {
@@ -139,16 +139,28 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pCan string, rpp []byte
 		return nil, fmt.Errorf("failed to find Pipeline %q: %w", pCan, err)
 	}
 
-	pp.Name = existingPP.Name
-	pp.Canonical = pCan
+	if len(newName) > 0 && newName[0] != "" {
+		pp.Name = newName[0]
+		pp.Canonical = utils.Canonicalize(newName[0])
+		if !utils.ValidateCanonical(pp.Canonical) {
+			return nil, fmt.Errorf("invalid Pipeline Name format %q", newName[0])
+		}
+	} else {
+		pp.Name = existingPP.Name
+		pp.Canonical = pCan
+	}
 	pp.Raw = rpp
 
+	newCan := pp.Canonical
 	var up *pipeline.Pipeline
 	err = q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
 		err := uow.Pipelines().Update(ctx, tc, pCan, *pp)
 		if err != nil {
 			return fmt.Errorf("failed to update Pipeline %q: %w", pCan, err)
 		}
+
+		// After update, use the new canonical for all subsequent operations
+		pCan = newCan
 
 		dbpp, err := uow.Pipelines().Find(ctx, tc, pCan)
 		if err != nil {

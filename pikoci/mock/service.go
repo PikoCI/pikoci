@@ -668,18 +668,23 @@ func (mr *ServiceMockRecorder) UpdateJobBuild(ctx, tc, pn, jn, buildNumber, b an
 }
 
 // UpdatePipeline mocks base method.
-func (m *Service) UpdatePipeline(ctx context.Context, tc, pn string, pp []byte, vars map[string]any) (*pipeline.Pipeline, error) {
+func (m *Service) UpdatePipeline(ctx context.Context, tc, pCan string, pp []byte, vars map[string]any, newName ...string) (*pipeline.Pipeline, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdatePipeline", ctx, tc, pn, pp, vars)
+	varargs := []any{ctx, tc, pCan, pp, vars}
+	for _, a := range newName {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdatePipeline", varargs...)
 	ret0, _ := ret[0].(*pipeline.Pipeline)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdatePipeline indicates an expected call of UpdatePipeline.
-func (mr *ServiceMockRecorder) UpdatePipeline(ctx, tc, pn, pp, vars any) *gomock.Call {
+func (mr *ServiceMockRecorder) UpdatePipeline(ctx, tc, pCan, pp, vars any, newName ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePipeline", reflect.TypeOf((*Service)(nil).UpdatePipeline), ctx, tc, pn, pp, vars)
+	varargs := append([]any{ctx, tc, pCan, pp, vars}, newName...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePipeline", reflect.TypeOf((*Service)(nil).UpdatePipeline), varargs...)
 }
 
 // UpdatePipelineResource mocks base method.

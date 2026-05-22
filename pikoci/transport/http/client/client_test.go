@@ -267,6 +267,26 @@ func TestUpdatePipeline(t *testing.T) {
 	assert.Equal(t, "mypipe", p.Name)
 }
 
+func TestUpdatePipeline_WithRename(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/pipelines/{pn}", func(w http.ResponseWriter, req *http.Request) {
+		var body thttp.UpdatePipelineRequest
+		json.NewDecoder(req.Body).Decode(&body)
+		assert.Equal(t, "New Name", body.Name)
+		jsonHandler(w, thttp.UpdatePipelineResponse{Pipeline: &pipeline.Pipeline{Name: "New Name", Canonical: "new-name"}})
+	}).Methods("PUT")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	p, err := c.UpdatePipeline(context.Background(), "team", "old-name", []byte("config"), nil, "New Name")
+	require.NoError(t, err)
+	assert.Equal(t, "New Name", p.Name)
+	assert.Equal(t, "new-name", p.Canonical)
+}
+
 func TestGetPipeline(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/teams/{tc}/pipelines/{pn}", func(w http.ResponseWriter, req *http.Request) {

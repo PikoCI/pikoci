@@ -46,6 +46,7 @@ func createPipeline(s pikoci.Service) http.HandlerFunc {
 
 type UpdatePipelineRequest struct {
 	TeamCanonical string                 `json:"team_canonical"`
+	Name          string                 `json:"name,omitempty"`
 	Config        []byte                 `json:"config"`
 	Vars          map[string]interface{} `json:"vars"`
 	Public        *bool                  `json:"public,omitempty"`
@@ -73,20 +74,36 @@ func updatePipeline(s pikoci.Service) http.HandlerFunc {
 		}
 		var pp *pipeline.Pipeline
 		var errs string
+		newCan := pCan
 		if len(req.Config) > 0 {
-			pp, err = s.UpdatePipeline(ctx, req.TeamCanonical, pCan, req.Config, req.Vars)
+			pp, err = s.UpdatePipeline(ctx, req.TeamCanonical, pCan, req.Config, req.Vars, req.Name)
 			if err != nil {
 				errs = err.Error()
+			} else if pp != nil {
+				newCan = pp.Canonical
+			}
+		} else if req.Name != "" {
+			// Name-only update (no config change): re-send existing config
+			existing, gerr := s.GetPipeline(ctx, req.TeamCanonical, pCan)
+			if gerr != nil {
+				encodeResponse(UpdatePipelineResponse{Err: gerr.Error()}, w)
+				return
+			}
+			pp, err = s.UpdatePipeline(ctx, req.TeamCanonical, pCan, existing.Raw, nil, req.Name)
+			if err != nil {
+				errs = err.Error()
+			} else if pp != nil {
+				newCan = pp.Canonical
 			}
 		}
 		if err == nil && req.Public != nil {
-			err = s.SetPipelinePublic(ctx, req.TeamCanonical, pCan, *req.Public)
+			err = s.SetPipelinePublic(ctx, req.TeamCanonical, newCan, *req.Public)
 			if err != nil {
 				errs = err.Error()
 			}
 		}
 		if errs == "" && pp == nil {
-			pp, err = s.GetPipeline(ctx, req.TeamCanonical, pCan)
+			pp, err = s.GetPipeline(ctx, req.TeamCanonical, newCan)
 			if err != nil {
 				errs = err.Error()
 			}
