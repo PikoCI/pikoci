@@ -187,7 +187,8 @@ job "deploy" {
       args = [
         "-ec",
         <<-EOT
-        kill -QUIT $(pidof pikoci)
+        # Delay the restart so the build can finish updating its status
+        nohup sh -c 'sleep 5 && kill -QUIT $(pidof pikoci)' >/dev/null 2>&1 &
         EOT
       ]
     }
