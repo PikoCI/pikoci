@@ -457,11 +457,13 @@
               <button type="button" class="btn btn-sm btn-outline-info piko-follow-toggle" title="Auto-scroll logs">
                 <i class="bi bi-arrow-down-circle"></i> Follow
               </button>
+              <% if (!app.session.isEmpty()) { %>
               <button type="button" class="btn btn-sm btn-outline-danger piko-cancel-build" data-build-number="<%- build_number %>">
                 <i class="bi bi-x-circle"></i> Cancel
               </button>
+              <% } %>
             </span>
-          <% } else { %>
+          <% } else if (!app.session.isEmpty()) { %>
             <button type="button" class="btn btn-sm btn-outline-warning piko-retry-build" style="margin-left:auto;">
               <i class="bi bi-arrow-clockwise"></i> Retry
             </button>

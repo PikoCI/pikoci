@@ -779,6 +779,116 @@ job "gen" {
 			}, 5*time.Second)
 		})
 	})
+	t.Run("PublicPipeline", func(t *testing.T) {
+		// Pepito is logged in. Log out first.
+		navLink, err := wd.FindElement(selenium.ByCSSSelector, ".navbar .nav-link")
+		require.NoError(t, err)
+		err = navLink.Click()
+		require.NoError(t, err)
+		logoutBtn, err := wd.FindElement(selenium.ByCSSSelector, "#logout")
+		require.NoError(t, err)
+		err = logoutBtn.Click()
+		require.NoError(t, err)
+		waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Log In"), 5*time.Second)
+
+		// Set pipeline public via admin HTTP API
+		loginBody, _ := json.Marshal(thttp.UserLoginRequest{
+			Username: "admin",
+			Password: "admin123",
+		})
+		loginReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login.json", bytes.NewReader(loginBody))
+		require.NoError(t, err)
+		loginResp, err := http.DefaultClient.Do(loginReq)
+		require.NoError(t, err)
+		defer loginResp.Body.Close()
+		require.Equal(t, http.StatusOK, loginResp.StatusCode)
+		var lr thttp.UserLoginResponse
+		json.NewDecoder(loginResp.Body).Decode(&lr)
+		require.Empty(t, lr.Err)
+		adminJWT := lr.Data.JWT
+
+		pub := true
+		updateBody, _ := json.Marshal(struct {
+			Public *bool `json:"public"`
+		}{Public: &pub})
+		updateReq, err := http.NewRequest(http.MethodPut, pikoURL+"/teams/main/pipelines/cron.json", bytes.NewReader(updateBody))
+		require.NoError(t, err)
+		updateReq.Header.Set("Authorization", "Bearer "+adminJWT)
+		updateResp, err := http.DefaultClient.Do(updateReq)
+		require.NoError(t, err)
+		defer updateResp.Body.Close()
+		var updateResult thttp.UpdatePipelineResponse
+		json.NewDecoder(updateResp.Body).Decode(&updateResult)
+		require.Empty(t, updateResult.Err, "update pipeline error")
+		require.Equal(t, http.StatusOK, updateResp.StatusCode)
+
+		t.Run("CanViewPipeline", func(t *testing.T) {
+			// Navigate to public pipeline without being logged in
+			err := wd.Get(pikoURL + "/teams/main/pipelines/cron")
+			require.NoError(t, err)
+
+			// Pipeline graph should be visible
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				_, err := wd.FindElement(selenium.ByCSSSelector, "div#pipeline-graph>svg")
+				return err == nil
+			}, 5*time.Second)
+		})
+
+		t.Run("CanViewJobBuilds", func(t *testing.T) {
+			res, err := wd.FindElement(selenium.ByCSSSelector, "#a_node2>a")
+			require.NoError(t, err)
+
+			url, err := res.GetAttribute("xlink:href")
+			require.NoError(t, err)
+
+			err = wd.Get(pikoURL + url)
+			require.NoError(t, err)
+
+			// Builds should be visible
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				builds, err := wd.FindElements(selenium.ByCSSSelector, "#builds-tabs>.piko-build-tab")
+				if err != nil {
+					return false
+				}
+				return len(builds) > 0
+			}, 5*time.Second)
+		})
+
+		t.Run("NoRetryButton", func(t *testing.T) {
+			// Retry button should not be present for public viewers
+			_, err := wd.FindElement(selenium.ByCSSSelector, ".piko-retry-build")
+			require.Error(t, err, "retry button should not be visible on public pipeline view")
+		})
+
+		t.Run("NoCancelButton", func(t *testing.T) {
+			// Cancel button should not be present for public viewers
+			_, err := wd.FindElement(selenium.ByCSSSelector, ".piko-cancel-build")
+			require.Error(t, err, "cancel button should not be visible on public pipeline view")
+		})
+
+		t.Run("NoTriggerJobButton", func(t *testing.T) {
+			// Trigger job button should not be present for public viewers
+			_, err := wd.FindElement(selenium.ByCSSSelector, "#trigger-job")
+			require.Error(t, err, "trigger job button should not be visible on public pipeline view")
+		})
+
+		// Log back in as pepito for the RefreshToken test
+		err = wd.Get(pikoURL)
+		require.NoError(t, err)
+		waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Log In"), 5*time.Second)
+
+		username, err := wd.FindElement(selenium.ByCSSSelector, "#username")
+		require.NoError(t, err)
+		password, err := wd.FindElement(selenium.ByCSSSelector, "#password")
+		require.NoError(t, err)
+		username.SendKeys("pepito")
+		password.SendKeys("pepito")
+		login, err := wd.FindElement(selenium.ByCSSSelector, "#login")
+		require.NoError(t, err)
+		err = login.Click()
+		require.NoError(t, err)
+		waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 5*time.Second)
+	})
 	t.Run("RefreshToken", func(t *testing.T) {
 		// Pepito is still logged in as a non-admin member of "main".
 		// We promote pepito to team admin via a direct HTTP call (as admin),
