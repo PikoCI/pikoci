@@ -519,7 +519,6 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 	return &pp, nil
 }
 
-
 // jobHooks holds parsed hook steps for a job.
 type jobHooks struct {
 	OnSuccess []job.HookStep
@@ -597,7 +596,6 @@ func parseHooks(block *hclsyntax.Block, ectx *hcl.EvalContext, hookType string) 
 	}
 	return steps
 }
-
 
 // parseJobPlans walks the raw HCL AST to extract get/task/put blocks in source
 // order for each job, then builds ordered PlanStep slices using the decoded data.

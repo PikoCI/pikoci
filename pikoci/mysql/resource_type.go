@@ -71,7 +71,7 @@ func (r *ResourceTypeRepository) Create(ctx context.Context, tc, pn string, rt r
 				FROM pipelines AS p
 				JOIN teams AS t
 					ON p.team_id = t.id
-				WHERE t.canonical = ? AND p.name = ?
+				WHERE t.canonical = ? AND p.canonical = ?
 			))`, dbrt.Name, dbrt.Source, dbrt.Check, dbrt.Pull, dbrt.Push, dbrt.Params, tc, pn)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
@@ -97,7 +97,7 @@ func (r *ResourceTypeRepository) Update(ctx context.Context, tc, pn, rtn string,
 				ON rt.pipeline_id = p.id
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND rt.name = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND rt.name = ?
 		) AS rtt
 		WHERE rtt.id = rt.id
 	`, dbrt.Name, dbrt.Source, dbrt.Check, dbrt.Pull, dbrt.Push, dbrt.Params, tc, pn, rtn)
@@ -121,7 +121,7 @@ func (r *ResourceTypeRepository) Find(ctx context.Context, tc, pn, rtn string) (
 			ON rt.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ? AND rt.name = ?
+		WHERE t.canonical = ? AND p.canonical = ? AND rt.name = ?
 	`, tc, pn, rtn)
 
 	rt, err := scanResourceType(row)
@@ -140,7 +140,7 @@ func (r *ResourceTypeRepository) Filter(ctx context.Context, tc, pn string) ([]*
 			ON rt.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ?
+		WHERE t.canonical = ? AND p.canonical = ?
 	`, tc, pn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter ResourceTypes: %w", err)
@@ -165,7 +165,7 @@ func (r *ResourceTypeRepository) Delete(ctx context.Context, tc, pn, rtn string)
 				ON rt.pipeline_id = p.id
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND rt.name = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND rt.name = ?
 		)
 	`, tc, pn, rtn)
 	if err != nil {

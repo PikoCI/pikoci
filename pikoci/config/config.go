@@ -24,8 +24,8 @@ type Config struct {
 
 	LogLevel string `mapstructure:"log-level"`
 
-	TeamCanonical  string `mapstructure:"team-canonical"`
-	PipelineName   string `mapstructure:"pipeline-name"`
-	PipelineConfig string `mapstructure:"pipeline-config"`
-	PipelineVars   string `mapstructure:"pipeline-vars"`
+	TeamCanonical       string `mapstructure:"team-canonical"`
+	PipelineDisplayName string `mapstructure:"pipeline-name"`
+	PipelineConfig      string `mapstructure:"pipeline-config"`
+	PipelineVars        string `mapstructure:"pipeline-vars"`
 }

@@ -66,11 +66,11 @@ func (s *Scheduler) tickResources(ctx context.Context) {
 	}
 
 	for _, rwp := range due {
-		s.logger.Info("Checking resource ...", "Pipeline", rwp.PipelineName, "Resource", rwp.Canonical)
+		s.logger.Info("Checking resource ...", "Pipeline", rwp.PipelineCanonical, "Resource", rwp.Canonical)
 
 		m := queue.Body{
 			TeamCanonical:     rwp.TeamCanonical,
-			PipelineName:      rwp.PipelineName,
+			PipelineCanonical: rwp.PipelineCanonical,
 			ResourceCanonical: rwp.Canonical,
 		}
 		mb, err := json.Marshal(m)
@@ -100,7 +100,7 @@ func (s *Scheduler) tickResources(ctx context.Context) {
 		}
 		rwp.Resource.NextCheck = nextCheck
 
-		err = s.resources.Update(ctx, rwp.TeamCanonical, rwp.PipelineName, rwp.Canonical, rwp.Resource)
+		err = s.resources.Update(ctx, rwp.TeamCanonical, rwp.PipelineCanonical, rwp.Canonical, rwp.Resource)
 		if err != nil {
 			s.logger.Error("failed to update resource", "error", err)
 		}
@@ -144,12 +144,12 @@ func (s *Scheduler) evaluateJob(ctx context.Context, pwt *pipeline.WithTeam, j *
 		}
 
 		versionID, ready, err := s.builds.FindReadyDownstreamVersion(
-			ctx, pwt.Team.Canonical, pwt.Name,
+			ctx, pwt.Team.Canonical, pwt.Canonical,
 			g.Passed, j.Name, g.Name, len(g.Passed),
 		)
 		if err != nil {
 			s.logger.Error("failed to find ready downstream version",
-				"pipeline", pwt.Name, "job", j.Name, "error", err)
+				"pipeline", pwt.Canonical, "job", j.Name, "error", err)
 			return
 		}
 		if !ready {
@@ -166,14 +166,14 @@ func (s *Scheduler) evaluateJob(ctx context.Context, pwt *pipeline.WithTeam, j *
 	versionID := candidates[0].versionID
 
 	s.logger.Info("[debug-297] Triggering downstream job",
-		"pipeline", pwt.Name, "job", j.Name, "version_id", versionID,
+		"pipeline", pwt.Canonical, "job", j.Name, "version_id", versionID,
 		"candidates", fmt.Sprintf("%+v", candidates))
 
 	m := queue.Body{
-		TeamCanonical: pwt.Team.Canonical,
-		PipelineName:  pwt.Name,
-		JobName:       j.Name,
-		VersionID:     versionID,
+		TeamCanonical:     pwt.Team.Canonical,
+		PipelineCanonical: pwt.Canonical,
+		JobName:           j.Name,
+		VersionID:         versionID,
 	}
 	mb, err := json.Marshal(m)
 	if err != nil {

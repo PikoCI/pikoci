@@ -46,7 +46,6 @@ func createPipeline(s pikoci.Service) http.HandlerFunc {
 
 type UpdatePipelineRequest struct {
 	TeamCanonical string                 `json:"team_canonical"`
-	Name          string                 `json:"name"`
 	Config        []byte                 `json:"config"`
 	Vars          map[string]interface{} `json:"vars"`
 	Public        *bool                  `json:"public,omitempty"`
@@ -66,7 +65,7 @@ func updatePipeline(s pikoci.Service) http.HandlerFunc {
 		)
 		vars := mux.Vars(r)
 		req.TeamCanonical = vars["team_canonical"]
-		req.Name = vars["pipeline_name"]
+		pCan := vars["pipeline_canonical"]
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			encodeResponse(UpdatePipelineResponse{Err: err.Error()}, w)
@@ -75,19 +74,19 @@ func updatePipeline(s pikoci.Service) http.HandlerFunc {
 		var pp *pipeline.Pipeline
 		var errs string
 		if len(req.Config) > 0 {
-			pp, err = s.UpdatePipeline(ctx, req.TeamCanonical, req.Name, req.Config, req.Vars)
+			pp, err = s.UpdatePipeline(ctx, req.TeamCanonical, pCan, req.Config, req.Vars)
 			if err != nil {
 				errs = err.Error()
 			}
 		}
 		if err == nil && req.Public != nil {
-			err = s.SetPipelinePublic(ctx, req.TeamCanonical, req.Name, *req.Public)
+			err = s.SetPipelinePublic(ctx, req.TeamCanonical, pCan, *req.Public)
 			if err != nil {
 				errs = err.Error()
 			}
 		}
 		if errs == "" && pp == nil {
-			pp, err = s.GetPipeline(ctx, req.TeamCanonical, req.Name)
+			pp, err = s.GetPipeline(ctx, req.TeamCanonical, pCan)
 			if err != nil {
 				errs = err.Error()
 			}
@@ -141,7 +140,7 @@ func getPipeline(s pikoci.Service) http.HandlerFunc {
 			ctx = r.Context()
 		)
 		vars := mux.Vars(r)
-		req.Name = vars["pipeline_name"]
+		req.Name = vars["pipeline_canonical"]
 		req.TeamCanonical = vars["team_canonical"]
 		var pp *pipeline.Pipeline
 		var err error
@@ -175,7 +174,7 @@ func deletePipeline(s pikoci.Service) http.HandlerFunc {
 			ctx = r.Context()
 		)
 		vars := mux.Vars(r)
-		req.Name = vars["pipeline_name"]
+		req.Name = vars["pipeline_canonical"]
 		req.TeamCanonical = vars["team_canonical"]
 		err := s.DeletePipeline(ctx, req.TeamCanonical, req.Name)
 		var errs string
@@ -206,7 +205,7 @@ func getPipelineImage(s pikoci.Service) http.HandlerFunc {
 		)
 		vars := mux.Vars(r)
 		req.TeamCanonical = vars["team_canonical"]
-		req.Name = vars["pipeline_name"]
+		req.Name = vars["pipeline_canonical"]
 		req.Format = vars["format"]
 		var img []byte
 		var err error

@@ -29,7 +29,7 @@ type unitOfWork struct {
 	resourceTypes restype.Repository
 	builds        build.Repository
 	runners       runner.Repository
-	secretTypes sectype.Repository
+	secretTypes   sectype.Repository
 }
 
 func NewStartUnitOfWork(db *sql.DB, dbSystem string) StartUnitOfWork {
@@ -118,4 +118,3 @@ func (u *unitOfWork) SecretTypes() sectype.Repository {
 	}
 	return u.secretTypes
 }
-

@@ -97,17 +97,17 @@ func (j *Job) PlanGetSteps() []PlanStep {
 }
 
 type PlanStep struct {
-	Type      StepType              `json:"type"`
-	Timeout   time.Duration         `json:"timeout,omitempty"`
-	Attempts  int                   `json:"attempts,omitempty"`
-	Get       *GetStep              `json:"get,omitempty"`
-	Task      *TaskStep             `json:"task,omitempty"`
-	Put       *PutStep              `json:"put,omitempty"`
-	Service   *ServiceStep          `json:"service,omitempty"`
-	OnSuccess []HookStep `json:"on_success,omitempty"`
-	OnFailure []HookStep `json:"on_failure,omitempty"`
-	OnCancel  []HookStep `json:"on_cancel,omitempty"`
-	Ensure    []HookStep `json:"ensure,omitempty"`
+	Type      StepType      `json:"type"`
+	Timeout   time.Duration `json:"timeout,omitempty"`
+	Attempts  int           `json:"attempts,omitempty"`
+	Get       *GetStep      `json:"get,omitempty"`
+	Task      *TaskStep     `json:"task,omitempty"`
+	Put       *PutStep      `json:"put,omitempty"`
+	Service   *ServiceStep  `json:"service,omitempty"`
+	OnSuccess []HookStep    `json:"on_success,omitempty"`
+	OnFailure []HookStep    `json:"on_failure,omitempty"`
+	OnCancel  []HookStep    `json:"on_cancel,omitempty"`
+	Ensure    []HookStep    `json:"ensure,omitempty"`
 }
 
 type GetStep struct {

@@ -23,8 +23,11 @@ import (
 func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
-	} else if !utils.ValidateCanonical(pn) {
-		return nil, fmt.Errorf("invalid Pipeline Name format %q", pn)
+	}
+
+	pCan := utils.Canonicalize(pn)
+	if !utils.ValidateCanonical(pCan) {
+		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pn)
 	}
 
 	pp, err := q.readPipeline(ctx, rpp, vars)
@@ -33,6 +36,7 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 	}
 
 	pp.Name = pn
+	pp.Canonical = pCan
 	pp.Raw = rpp
 
 	var cp *pipeline.Pipeline
@@ -46,7 +50,7 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 			if !utils.ValidateCanonical(j.Name) {
 				return fmt.Errorf("invalid Job Name format %q", j.Name)
 			}
-			_, err = uow.Jobs().Create(ctx, tc, pn, j)
+			_, err = uow.Jobs().Create(ctx, tc, pCan, j)
 			if err != nil {
 				return fmt.Errorf("failed to create Job %q: %w", j.Name, err)
 			}
@@ -56,7 +60,7 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 			if !utils.ValidateCanonical(rt.Name) {
 				return fmt.Errorf("invalid ResourceType Name format %q", rt.Name)
 			}
-			_, err = uow.ResourceTypes().Create(ctx, tc, pn, rt)
+			_, err = uow.ResourceTypes().Create(ctx, tc, pCan, rt)
 			if err != nil {
 				return fmt.Errorf("failed to create ResourceType %q: %w", rt.Name, err)
 			}
@@ -79,7 +83,7 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 			}
 			r.NextCheck = nextCheck
 			r.WebhookToken = uuid.New().String()
-			_, err = uow.Resources().Create(ctx, tc, pn, r)
+			_, err = uow.Resources().Create(ctx, tc, pCan, r)
 			if err != nil {
 				return fmt.Errorf("failed to create Resource %q: %w", r.Name, err)
 			}
@@ -89,7 +93,7 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 			if !utils.ValidateCanonical(ru.Name) {
 				return fmt.Errorf("invalid Runner Name format %q", ru.Name)
 			}
-			_, err = uow.Runners().Create(ctx, tc, pn, ru)
+			_, err = uow.Runners().Create(ctx, tc, pCan, ru)
 			if err != nil {
 				return fmt.Errorf("failed to create Runner %q: %w", ru.Name, err)
 			}
@@ -99,13 +103,13 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 			if !utils.ValidateCanonical(st.Name) {
 				return fmt.Errorf("invalid SecretType Name format %q", st.Name)
 			}
-			_, err = uow.SecretTypes().Create(ctx, tc, pn, st)
+			_, err = uow.SecretTypes().Create(ctx, tc, pCan, st)
 			if err != nil {
 				return fmt.Errorf("failed to create SecretType %q: %w", st.Name, err)
 			}
 		}
 
-		cp, err = uow.Pipelines().Find(ctx, tc, pn)
+		cp, err = uow.Pipelines().Find(ctx, tc, pCan)
 		if err != nil {
 			return fmt.Errorf("failed to get Pipeline: %w", err)
 		}
@@ -117,11 +121,11 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 	return cp, nil
 }
 
-func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pn string, rpp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error) {
+func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pCan string, rpp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
-	} else if !utils.ValidateCanonical(pn) {
-		return nil, fmt.Errorf("invalid Pipeline Name format %q", pn)
+	} else if !utils.ValidateCanonical(pCan) {
+		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pCan)
 	}
 
 	pp, err := q.readPipeline(ctx, rpp, vars)
@@ -129,19 +133,26 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 		return nil, fmt.Errorf("failed to read Pipeline config: %w", err)
 	}
 
-	pp.Name = pn
+	// Fetch existing pipeline to preserve the display name
+	existingPP, err := q.Pipelines.Find(ctx, tc, pCan)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find Pipeline %q: %w", pCan, err)
+	}
+
+	pp.Name = existingPP.Name
+	pp.Canonical = pCan
 	pp.Raw = rpp
 
 	var up *pipeline.Pipeline
 	err = q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
-		err := uow.Pipelines().Update(ctx, tc, pn, *pp)
+		err := uow.Pipelines().Update(ctx, tc, pCan, *pp)
 		if err != nil {
-			return fmt.Errorf("failed to update Pipeline %q: %w", pn, err)
+			return fmt.Errorf("failed to update Pipeline %q: %w", pCan, err)
 		}
 
-		dbpp, err := uow.Pipelines().Find(ctx, tc, pn)
+		dbpp, err := uow.Pipelines().Find(ctx, tc, pCan)
 		if err != nil {
-			return fmt.Errorf("failed to get Pipeline %q: %w", pn, err)
+			return fmt.Errorf("failed to get Pipeline %q: %w", pCan, err)
 		}
 
 		dbjbs := make(map[string]struct{})
@@ -154,19 +165,19 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 			}
 			if _, ok := dbjbs[j.Name]; ok {
 				delete(dbjbs, j.Name)
-				err = uow.Jobs().Update(ctx, tc, pn, j.Name, j)
+				err = uow.Jobs().Update(ctx, tc, pCan, j.Name, j)
 				if err != nil {
 					return fmt.Errorf("failed to update Job %q: %w", j.Name, err)
 				}
 			} else {
-				_, err = uow.Jobs().Create(ctx, tc, pn, j)
+				_, err = uow.Jobs().Create(ctx, tc, pCan, j)
 				if err != nil {
 					return fmt.Errorf("failed to create Job %q: %w", j.Name, err)
 				}
 			}
 		}
 		for jn := range dbjbs {
-			err = uow.Jobs().Delete(ctx, tc, pn, jn)
+			err = uow.Jobs().Delete(ctx, tc, pCan, jn)
 			if err != nil {
 				return fmt.Errorf("failed to delete Job %q: %w", jn, err)
 			}
@@ -182,19 +193,19 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 			}
 			if _, ok := dbrts[rt.Name]; ok {
 				delete(dbrts, rt.Name)
-				err = uow.ResourceTypes().Update(ctx, tc, pn, rt.Name, rt)
+				err = uow.ResourceTypes().Update(ctx, tc, pCan, rt.Name, rt)
 				if err != nil {
 					return fmt.Errorf("failed to update ResourceType %q: %w", rt.Name, err)
 				}
 			} else {
-				_, err = uow.ResourceTypes().Create(ctx, tc, pn, rt)
+				_, err = uow.ResourceTypes().Create(ctx, tc, pCan, rt)
 				if err != nil {
 					return fmt.Errorf("failed to create ResourceType %q: %w", rt.Name, err)
 				}
 			}
 		}
 		for rt := range dbrts {
-			err = uow.ResourceTypes().Delete(ctx, tc, pn, rt)
+			err = uow.ResourceTypes().Delete(ctx, tc, pCan, rt)
 			if err != nil {
 				return fmt.Errorf("failed to delete ResourceType %q: %w", rt, err)
 			}
@@ -227,7 +238,7 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 					r.NextCheck = dbr.NextCheck
 				}
 				r.WebhookToken = dbr.WebhookToken
-				err = uow.Resources().Update(ctx, tc, pn, r.Canonical, r)
+				err = uow.Resources().Update(ctx, tc, pCan, r.Canonical, r)
 				if err != nil {
 					return fmt.Errorf("failed to update Resource %q: %w", r.Canonical, err)
 				}
@@ -238,14 +249,14 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 				}
 				r.NextCheck = nextCheck
 				r.WebhookToken = uuid.New().String()
-				_, err = uow.Resources().Create(ctx, tc, pn, r)
+				_, err = uow.Resources().Create(ctx, tc, pCan, r)
 				if err != nil {
 					return fmt.Errorf("failed to create Resource %q: %w", r.Canonical, err)
 				}
 			}
 		}
 		for rc := range dbrs {
-			err = uow.Resources().Delete(ctx, tc, pn, rc)
+			err = uow.Resources().Delete(ctx, tc, pCan, rc)
 			if err != nil {
 				return fmt.Errorf("failed to delete Resource %q: %w", rc, err)
 			}
@@ -261,19 +272,19 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 			}
 			if _, ok := dbru[ru.Name]; ok {
 				delete(dbru, ru.Name)
-				err = uow.Runners().Update(ctx, tc, pn, ru.Name, ru)
+				err = uow.Runners().Update(ctx, tc, pCan, ru.Name, ru)
 				if err != nil {
 					return fmt.Errorf("failed to update Runner %q: %w", ru.Name, err)
 				}
 			} else {
-				_, err = uow.Runners().Create(ctx, tc, pn, ru)
+				_, err = uow.Runners().Create(ctx, tc, pCan, ru)
 				if err != nil {
 					return fmt.Errorf("failed to create Runner %q: %w", ru.Name, err)
 				}
 			}
 		}
 		for run := range dbru {
-			err = uow.Runners().Delete(ctx, tc, pn, run)
+			err = uow.Runners().Delete(ctx, tc, pCan, run)
 			if err != nil {
 				return fmt.Errorf("failed to delete Runner %q: %w", run, err)
 			}
@@ -289,25 +300,25 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 			}
 			if _, ok := dbsts[st.Name]; ok {
 				delete(dbsts, st.Name)
-				err = uow.SecretTypes().Update(ctx, tc, pn, st.Name, st)
+				err = uow.SecretTypes().Update(ctx, tc, pCan, st.Name, st)
 				if err != nil {
 					return fmt.Errorf("failed to update SecretType %q: %w", st.Name, err)
 				}
 			} else {
-				_, err = uow.SecretTypes().Create(ctx, tc, pn, st)
+				_, err = uow.SecretTypes().Create(ctx, tc, pCan, st)
 				if err != nil {
 					return fmt.Errorf("failed to create SecretType %q: %w", st.Name, err)
 				}
 			}
 		}
 		for stn := range dbsts {
-			err = uow.SecretTypes().Delete(ctx, tc, pn, stn)
+			err = uow.SecretTypes().Delete(ctx, tc, pCan, stn)
 			if err != nil {
 				return fmt.Errorf("failed to delete SecretType %q: %w", stn, err)
 			}
 		}
 
-		up, err = uow.Pipelines().Find(ctx, tc, pn)
+		up, err = uow.Pipelines().Find(ctx, tc, pCan)
 		if err != nil {
 			return fmt.Errorf("failed to get Pipeline: %w", err)
 		}
@@ -346,16 +357,16 @@ func (q *PikoCI) ListPipelines(ctx context.Context, tc string) ([]*pipeline.Pipe
 	return pps, nil
 }
 
-func (q *PikoCI) GetPipeline(ctx context.Context, tc, pn string) (*pipeline.Pipeline, error) {
+func (q *PikoCI) GetPipeline(ctx context.Context, tc, pCan string) (*pipeline.Pipeline, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
-	} else if !utils.ValidateCanonical(pn) {
-		return nil, fmt.Errorf("invalid Pipeline Name format %q", pn)
+	} else if !utils.ValidateCanonical(pCan) {
+		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pCan)
 	}
 
-	pp, err := q.Pipelines.Find(ctx, tc, pn)
+	pp, err := q.Pipelines.Find(ctx, tc, pCan)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get Pipeline %q: %w", pn, err)
+		return nil, fmt.Errorf("failed to get Pipeline %q: %w", pCan, err)
 	}
 
 	return pp, nil
@@ -381,11 +392,11 @@ var (
 	colorError          = `"#FF004D"`
 )
 
-func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pn, format string) ([]byte, error) {
+func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string) ([]byte, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
-	} else if !utils.ValidateCanonical(pn) {
-		return nil, fmt.Errorf("invalid Pipeline Name format %q", pn)
+	} else if !utils.ValidateCanonical(pCan) {
+		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pCan)
 	}
 	if format == "" {
 		format = "dot"
@@ -394,15 +405,13 @@ func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pn, format string) ([
 		format = strings.Split(format, ".")[1]
 	}
 
-	if !utils.ValidateCanonical(pn) {
-		return nil, fmt.Errorf("invalid Pipeline Name format %q", pn)
-	} else if format != "dot" {
+	if format != "dot" {
 		return nil, fmt.Errorf("invalid image format %q", format)
 	}
 
-	pp, err := q.GetPipeline(ctx, tc, pn)
+	pp, err := q.GetPipeline(ctx, tc, pCan)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get Pipeline %q: %w", pn, err)
+		return nil, fmt.Errorf("failed to get Pipeline %q: %w", pCan, err)
 	}
 
 	img, err := q.generateImage(ctx, tc, pp)
@@ -415,7 +424,7 @@ func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pn, format string) ([
 
 func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipeline) ([]byte, error) {
 	var (
-		pn  = fmt.Sprintf(`"%s"`, pp.Name)
+		pn  = fmt.Sprintf(`"%s"`, pp.Canonical)
 		err error
 	)
 
@@ -443,7 +452,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		if !referencedResources[r.Canonical] {
 			continue
 		}
-		vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Name, r.Canonical)
+		vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Canonical, r.Canonical)
 		err = graph.AddNode(pn, fmt.Sprintf(`"%s"`, r.Canonical), map[string]string{
 			string(gographviz.Margin):    "0.2",
 			string(gographviz.Shape):     "cds",
@@ -460,8 +469,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 
 	// Print all the Jobs and the connection to resources
 	for i, j := range pp.Jobs {
-		jg := pn
-		builds, err := q.Builds.Filter(ctx, tc, pp.Name, j.Name)
+		builds, err := q.Builds.Filter(ctx, tc, pp.Canonical, j.Name)
 		if err != nil {
 			return nil, fmt.Errorf("failed to filter builds from Job %q: %w", j.Name, err)
 		}
@@ -514,13 +522,13 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 			style = `"dashed,bold"`
 		}
 
-		jg = fmt.Sprintf("cluster_%d", i)
+		jg := fmt.Sprintf("cluster_%d", i)
 		graph.AddSubGraph(pn, jg, map[string]string{
 			string(gographviz.Style): style,
 			string(gographviz.Color): jobBorderColors[build.Started],
 		})
 
-		burl := fmt.Sprintf(`"/teams/%s/pipelines/%s/jobs/%s/builds"`, tc, pp.Name, j.Name)
+		burl := fmt.Sprintf(`"/teams/%s/pipelines/%s/jobs/%s/builds"`, tc, pp.Canonical, j.Name)
 		quotedJobName := fmt.Sprintf(`"%s"`, j.Name)
 		err = graph.AddNode(jg, quotedJobName, map[string]string{
 			string(gographviz.Margin):    "0.5",
@@ -556,7 +564,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		for _, p := range j.AllPutSteps() {
 			rCan := fmt.Sprintf("%s.%s", p.Type, p.Name)
 			nn := fmt.Sprintf(`"%s-%s-out"`, j.Name, rCan)
-			vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Name, rCan)
+			vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Canonical, rCan)
 			border := resourceBorders[rCan]
 			err = graph.AddNode(pn, nn, map[string]string{
 				string(gographviz.Label):     fmt.Sprintf(`"%s"`, rCan),
@@ -588,7 +596,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 				for _, p := range g.Passed {
 					nn := fmt.Sprintf(`"%s-%s-%s"`, p, g.Name, j.Name)
 					rCan := fmt.Sprintf("%s.%s", g.Type, g.Name)
-					vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Name, rCan)
+					vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Canonical, rCan)
 					border := resourceBorders[rCan]
 					err = graph.AddNode(pn, nn, map[string]string{
 						string(gographviz.Label):     fmt.Sprintf(`"%s"`, rCan),
@@ -632,6 +640,7 @@ func (q *PikoCI) CreatePipelineImage(ctx context.Context, tc string, pipeline []
 	}
 
 	pp.Name = "pikoci"
+	pp.Canonical = "pikoci"
 
 	img, err := q.generateImage(ctx, tc, pp)
 	if err != nil {
@@ -677,26 +686,26 @@ func sanitizeResourceForPublic(r resource.Resource) resource.Resource {
 	return r
 }
 
-func (q *PikoCI) SetPipelinePublic(ctx context.Context, tc, pn string, public bool) error {
+func (q *PikoCI) SetPipelinePublic(ctx context.Context, tc, pCan string, public bool) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
-	} else if !utils.ValidateCanonical(pn) {
-		return fmt.Errorf("invalid Pipeline Name format %q", pn)
+	} else if !utils.ValidateCanonical(pCan) {
+		return fmt.Errorf("invalid Pipeline Canonical format %q", pCan)
 	}
 
-	return q.Pipelines.SetPublic(ctx, tc, pn, public)
+	return q.Pipelines.SetPublic(ctx, tc, pCan, public)
 }
 
-func (q *PikoCI) GetPublicPipeline(ctx context.Context, tc, pn string) (*pipeline.Pipeline, error) {
-	pp, err := q.Pipelines.FindPublic(ctx, tc, pn)
+func (q *PikoCI) GetPublicPipeline(ctx context.Context, tc, pCan string) (*pipeline.Pipeline, error) {
+	pp, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline not found or not public: %w", err)
 	}
 	return sanitizePipelineForPublic(pp), nil
 }
 
-func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pn, format string) ([]byte, error) {
-	pp, err := q.Pipelines.FindPublic(ctx, tc, pn)
+func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pCan, format string) ([]byte, error) {
+	pp, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline not found or not public: %w", err)
 	}
@@ -714,22 +723,22 @@ func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pn, format stri
 	return q.generateImage(ctx, tc, pp)
 }
 
-func (q *PikoCI) GetPublicPipelineJob(ctx context.Context, tc, pn, jn string) (*job.Job, error) {
-	_, err := q.Pipelines.FindPublic(ctx, tc, pn)
+func (q *PikoCI) GetPublicPipelineJob(ctx context.Context, tc, pCan, jn string) (*job.Job, error) {
+	_, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline not found or not public: %w", err)
 	}
 
-	return q.GetPipelineJob(ctx, tc, pn, jn)
+	return q.GetPipelineJob(ctx, tc, pCan, jn)
 }
 
-func (q *PikoCI) ListPublicJobBuilds(ctx context.Context, tc, pn, jn string) ([]*build.Build, error) {
-	_, err := q.Pipelines.FindPublic(ctx, tc, pn)
+func (q *PikoCI) ListPublicJobBuilds(ctx context.Context, tc, pCan, jn string) ([]*build.Build, error) {
+	_, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline not found or not public: %w", err)
 	}
 
-	builds, err := q.ListJobBuilds(ctx, tc, pn, jn)
+	builds, err := q.ListJobBuilds(ctx, tc, pCan, jn)
 	if err != nil {
 		return nil, err
 	}
@@ -743,13 +752,13 @@ func (q *PikoCI) ListPublicJobBuilds(ctx context.Context, tc, pn, jn string) ([]
 	return builds, nil
 }
 
-func (q *PikoCI) GetPublicPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error) {
-	_, err := q.Pipelines.FindPublic(ctx, tc, pn)
+func (q *PikoCI) GetPublicPipelineResource(ctx context.Context, tc, pCan, rCan string) (*resource.Resource, error) {
+	_, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline not found or not public: %w", err)
 	}
 
-	r, err := q.GetPipelineResource(ctx, tc, pn, rCan)
+	r, err := q.GetPipelineResource(ctx, tc, pCan, rCan)
 	if err != nil {
 		return nil, err
 	}
@@ -758,26 +767,26 @@ func (q *PikoCI) GetPublicPipelineResource(ctx context.Context, tc, pn, rCan str
 	return &sr, nil
 }
 
-func (q *PikoCI) ListPublicResourceVersions(ctx context.Context, tc, pn, rCan string) ([]*resource.Version, error) {
-	_, err := q.Pipelines.FindPublic(ctx, tc, pn)
+func (q *PikoCI) ListPublicResourceVersions(ctx context.Context, tc, pCan, rCan string) ([]*resource.Version, error) {
+	_, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline not found or not public: %w", err)
 	}
 
-	return q.ListResourceVersions(ctx, tc, pn, rCan)
+	return q.ListResourceVersions(ctx, tc, pCan, rCan)
 }
 
-func (q *PikoCI) DeletePipeline(ctx context.Context, tc, pn string) error {
+func (q *PikoCI) DeletePipeline(ctx context.Context, tc, pCan string) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
-	} else if !utils.ValidateCanonical(pn) {
-		return fmt.Errorf("invalid Pipeline Name format %q", pn)
+	} else if !utils.ValidateCanonical(pCan) {
+		return fmt.Errorf("invalid Pipeline Canonical format %q", pCan)
 	}
 
 	return q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
-		err := uow.Pipelines().Delete(ctx, tc, pn)
+		err := uow.Pipelines().Delete(ctx, tc, pCan)
 		if err != nil {
-			return fmt.Errorf("failed to delete Pipeline %q: %w", pn, err)
+			return fmt.Errorf("failed to delete Pipeline %q: %w", pCan, err)
 		}
 
 		return nil

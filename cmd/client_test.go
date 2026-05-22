@@ -83,10 +83,10 @@ func TestRequiredFlags(t *testing.T) {
 
 func TestPersistentFlags(t *testing.T) {
 	tests := []struct {
-		name    string
-		parent  *cobra.Command
-		child   *cobra.Command
-		flags   []string
+		name   string
+		parent *cobra.Command
+		child  *cobra.Command
+		flags  []string
 	}{
 		{"builds persistent flags", buildsCmd, buildsListCmd, []string{"team-canonical", "pipeline-name", "job-name"}},
 		{"resources persistent flags", resourcesCmd, resourcesGetCmd, []string{"team-canonical", "pipeline-name"}},

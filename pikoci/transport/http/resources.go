@@ -11,7 +11,7 @@ import (
 
 type CreateResourceVersionRequest struct {
 	TeamCanonical     string           `json:"team_canonical"`
-	PipelineName      string           `json:"pipeline_name"`
+	PipelineCanonical string           `json:"pipeline_canonical"`
 	ResourceCanonical string           `json:"resource_canonical"`
 	Version           resource.Version `json:"version"`
 }
@@ -30,14 +30,14 @@ func createResourceVersion(s pikoci.Service) http.HandlerFunc {
 		)
 		vars := mux.Vars(r)
 		req.TeamCanonical = vars["team_canonical"]
-		req.PipelineName = vars["pipeline_name"]
+		req.PipelineCanonical = vars["pipeline_canonical"]
 		req.ResourceCanonical = vars["resource_canonical"]
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			encodeResponse(CreateResourceVersionResponse{Err: err.Error()}, w)
 			return
 		}
-		ver, err := s.CreateResourceVersion(ctx, req.TeamCanonical, req.PipelineName, req.ResourceCanonical, req.Version)
+		ver, err := s.CreateResourceVersion(ctx, req.TeamCanonical, req.PipelineCanonical, req.ResourceCanonical, req.Version)
 		var errs string
 		if err != nil {
 			errs = err.Error()
@@ -48,7 +48,7 @@ func createResourceVersion(s pikoci.Service) http.HandlerFunc {
 
 type ListResourceVersionsRequest struct {
 	TeamCanonical     string `json:"team_canonical"`
-	PipelineName      string `json:"pipeline_name"`
+	PipelineCanonical string `json:"pipeline_canonical"`
 	ResourceCanonical string `json:"resource_canonical"`
 }
 type ListResourceVersionsResponse struct {
@@ -66,14 +66,14 @@ func listResourceVersions(s pikoci.Service) http.HandlerFunc {
 		)
 		vars := mux.Vars(r)
 		req.TeamCanonical = vars["team_canonical"]
-		req.PipelineName = vars["pipeline_name"]
+		req.PipelineCanonical = vars["pipeline_canonical"]
 		req.ResourceCanonical = vars["resource_canonical"]
 		var vers []*resource.Version
 		var err error
 		if isPublic, _ := ctx.Value(IsPublicAccessKey).(bool); isPublic {
-			vers, err = s.ListPublicResourceVersions(ctx, req.TeamCanonical, req.PipelineName, req.ResourceCanonical)
+			vers, err = s.ListPublicResourceVersions(ctx, req.TeamCanonical, req.PipelineCanonical, req.ResourceCanonical)
 		} else {
-			vers, err = s.ListResourceVersions(ctx, req.TeamCanonical, req.PipelineName, req.ResourceCanonical)
+			vers, err = s.ListResourceVersions(ctx, req.TeamCanonical, req.PipelineCanonical, req.ResourceCanonical)
 		}
 		var errs string
 		if err != nil {
@@ -85,7 +85,7 @@ func listResourceVersions(s pikoci.Service) http.HandlerFunc {
 
 type GetPipelineResourceRequest struct {
 	TeamCanonical     string `json:"team_canonical"`
-	PipelineName      string `json:"pipeline_name"`
+	PipelineCanonical string `json:"pipeline_canonical"`
 	ResourceCanonical string `json:"resource_canonical"`
 }
 type GetPipelineResourceResponse struct {
@@ -103,14 +103,14 @@ func getPipelineResource(s pikoci.Service) http.HandlerFunc {
 		)
 		vars := mux.Vars(r)
 		req.TeamCanonical = vars["team_canonical"]
-		req.PipelineName = vars["pipeline_name"]
+		req.PipelineCanonical = vars["pipeline_canonical"]
 		req.ResourceCanonical = vars["resource_canonical"]
 		var res *resource.Resource
 		var err error
 		if isPublic, _ := ctx.Value(IsPublicAccessKey).(bool); isPublic {
-			res, err = s.GetPublicPipelineResource(ctx, req.TeamCanonical, req.PipelineName, req.ResourceCanonical)
+			res, err = s.GetPublicPipelineResource(ctx, req.TeamCanonical, req.PipelineCanonical, req.ResourceCanonical)
 		} else {
-			res, err = s.GetPipelineResource(ctx, req.TeamCanonical, req.PipelineName, req.ResourceCanonical)
+			res, err = s.GetPipelineResource(ctx, req.TeamCanonical, req.PipelineCanonical, req.ResourceCanonical)
 			if res != nil {
 				un, _ := ctx.Value(UsernameContextKey).(string)
 				if un != "" {
@@ -133,7 +133,7 @@ func getPipelineResource(s pikoci.Service) http.HandlerFunc {
 
 type UpdatePipelineResourceRequest struct {
 	TeamCanonical     string            `json:"team_canonical"`
-	PipelineName      string            `json:"pipeline_name"`
+	PipelineCanonical string            `json:"pipeline_canonical"`
 	ResourceCanonical string            `json:"resource_canonical"`
 	Resource          resource.Resource `json:"resource"`
 }
@@ -151,14 +151,14 @@ func updatePipelineResource(s pikoci.Service) http.HandlerFunc {
 		)
 		vars := mux.Vars(r)
 		req.TeamCanonical = vars["team_canonical"]
-		req.PipelineName = vars["pipeline_name"]
+		req.PipelineCanonical = vars["pipeline_canonical"]
 		req.ResourceCanonical = vars["resource_canonical"]
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			encodeResponse(UpdatePipelineResourceResponse{Err: err.Error()}, w)
 			return
 		}
-		err = s.UpdatePipelineResource(ctx, req.TeamCanonical, req.PipelineName, req.ResourceCanonical, req.Resource)
+		err = s.UpdatePipelineResource(ctx, req.TeamCanonical, req.PipelineCanonical, req.ResourceCanonical, req.Resource)
 		var errs string
 		if err != nil {
 			errs = err.Error()
@@ -169,7 +169,7 @@ func updatePipelineResource(s pikoci.Service) http.HandlerFunc {
 
 type TriggerPipelineResourceRequest struct {
 	TeamCanonical     string `json:"team_canonical"`
-	PipelineName      string `json:"pipeline_name"`
+	PipelineCanonical string `json:"pipeline_canonical"`
 	ResourceCanonical string `json:"resource_canonical"`
 }
 type TriggerPipelineResourceResponse struct {
@@ -208,9 +208,9 @@ func regenerateWebhookToken(s pikoci.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		tc := vars["team_canonical"]
-		pn := vars["pipeline_name"]
+		pc := vars["pipeline_canonical"]
 		rCan := vars["resource_canonical"]
-		token, err := s.RegenerateWebhookToken(r.Context(), tc, pn, rCan)
+		token, err := s.RegenerateWebhookToken(r.Context(), tc, pc, rCan)
 		var errs string
 		if err != nil {
 			errs = err.Error()
@@ -227,9 +227,9 @@ func triggerPipelineResource(s pikoci.Service) http.HandlerFunc {
 		)
 		vars := mux.Vars(r)
 		req.TeamCanonical = vars["team_canonical"]
-		req.PipelineName = vars["pipeline_name"]
+		req.PipelineCanonical = vars["pipeline_canonical"]
 		req.ResourceCanonical = vars["resource_canonical"]
-		err := s.TriggerPipelineResource(ctx, req.TeamCanonical, req.PipelineName, req.ResourceCanonical)
+		err := s.TriggerPipelineResource(ctx, req.TeamCanonical, req.PipelineCanonical, req.ResourceCanonical)
 		var errs string
 		if err != nil {
 			errs = err.Error()

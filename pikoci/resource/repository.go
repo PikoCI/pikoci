@@ -19,6 +19,6 @@ type Repository interface {
 
 type ResourceWithPipeline struct {
 	Resource
-	TeamCanonical string
-	PipelineName  string
+	TeamCanonical     string
+	PipelineCanonical string
 }

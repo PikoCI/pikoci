@@ -15,16 +15,16 @@ import (
 	"gocloud.dev/pubsub"
 )
 
-func (q *PikoCI) CreateResourceVersion(ctx context.Context, tc, pn, rCan string, v resource.Version) (*resource.Version, error) {
+func (q *PikoCI) CreateResourceVersion(ctx context.Context, tc, pc, rCan string, v resource.Version) (*resource.Version, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
-	} else if !utils.ValidateCanonical(pn) {
-		return nil, fmt.Errorf("invalid Pipeline Name format %q", pn)
+	} else if !utils.ValidateCanonical(pc) {
+		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pc)
 	} else if !utils.ValidateResourceCanonical(rCan) {
 		return nil, fmt.Errorf("invalid Resource Canonical format %q", rCan)
 	}
 
-	id, err := q.Resources.CreateVersion(ctx, tc, pn, rCan, v)
+	id, err := q.Resources.CreateVersion(ctx, tc, pc, rCan, v)
 	if err != nil {
 		return nil, fmt.Errorf("failed to Create Resource Version: %w", err)
 	}
@@ -34,16 +34,16 @@ func (q *PikoCI) CreateResourceVersion(ctx context.Context, tc, pn, rCan string,
 	return &v, nil
 }
 
-func (q *PikoCI) ListResourceVersions(ctx context.Context, tc, pn, rCan string) ([]*resource.Version, error) {
+func (q *PikoCI) ListResourceVersions(ctx context.Context, tc, pc, rCan string) ([]*resource.Version, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
-	} else if !utils.ValidateCanonical(pn) {
-		return nil, fmt.Errorf("invalid Pipeline Name format %q", pn)
+	} else if !utils.ValidateCanonical(pc) {
+		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pc)
 	} else if !utils.ValidateResourceCanonical(rCan) {
 		return nil, fmt.Errorf("invalid Resource Canonical format %q", rCan)
 	}
 
-	rvers, err := q.Resources.FilterVersions(ctx, tc, pn, rCan)
+	rvers, err := q.Resources.FilterVersions(ctx, tc, pc, rCan)
 	if err != nil {
 		return nil, fmt.Errorf("failed to List Resource Version: %w", err)
 	}
@@ -53,16 +53,16 @@ func (q *PikoCI) ListResourceVersions(ctx context.Context, tc, pn, rCan string) 
 	return rvers, nil
 }
 
-func (q *PikoCI) GetPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error) {
+func (q *PikoCI) GetPipelineResource(ctx context.Context, tc, pc, rCan string) (*resource.Resource, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
-	} else if !utils.ValidateCanonical(pn) {
-		return nil, fmt.Errorf("invalid Pipeline Name format %q", pn)
+	} else if !utils.ValidateCanonical(pc) {
+		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pc)
 	} else if !utils.ValidateResourceCanonical(rCan) {
 		return nil, fmt.Errorf("invalid Resource Canonical format %q", rCan)
 	}
 
-	r, err := q.Resources.Find(ctx, tc, pn, rCan)
+	r, err := q.Resources.Find(ctx, tc, pc, rCan)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find Resource: %w", err)
 	}
@@ -70,16 +70,16 @@ func (q *PikoCI) GetPipelineResource(ctx context.Context, tc, pn, rCan string) (
 	return r, nil
 }
 
-func (q *PikoCI) UpdatePipelineResource(ctx context.Context, tc, pn, rCan string, r resource.Resource) error {
+func (q *PikoCI) UpdatePipelineResource(ctx context.Context, tc, pc, rCan string, r resource.Resource) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
-	} else if !utils.ValidateCanonical(pn) {
-		return fmt.Errorf("invalid Pipeline Name format %q", pn)
+	} else if !utils.ValidateCanonical(pc) {
+		return fmt.Errorf("invalid Pipeline Canonical format %q", pc)
 	} else if !utils.ValidateResourceCanonical(rCan) {
 		return fmt.Errorf("invalid Resource Canonical format %q", rCan)
 	}
 
-	err := q.Resources.Update(ctx, tc, pn, rCan, r)
+	err := q.Resources.Update(ctx, tc, pc, rCan, r)
 	if err != nil {
 		return fmt.Errorf("failed to update Resource: %w", err)
 	}
@@ -87,23 +87,23 @@ func (q *PikoCI) UpdatePipelineResource(ctx context.Context, tc, pn, rCan string
 	return nil
 }
 
-func (q *PikoCI) TriggerPipelineResource(ctx context.Context, tc, pn, rCan string) error {
+func (q *PikoCI) TriggerPipelineResource(ctx context.Context, tc, pc, rCan string) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
-	} else if !utils.ValidateCanonical(pn) {
-		return fmt.Errorf("invalid Pipeline Name format %q", pn)
+	} else if !utils.ValidateCanonical(pc) {
+		return fmt.Errorf("invalid Pipeline Canonical format %q", pc)
 	} else if !utils.ValidateResourceCanonical(rCan) {
 		return fmt.Errorf("invalid Resource Canonical format %q", rCan)
 	}
 
-	r, err := q.Resources.Find(ctx, tc, pn, rCan)
+	r, err := q.Resources.Find(ctx, tc, pc, rCan)
 	if err != nil {
 		return fmt.Errorf("failed to find Resource: %w", err)
 	}
 
 	m := queue.Body{
 		TeamCanonical:     tc,
-		PipelineName:      pn,
+		PipelineCanonical: pc,
 		ResourceCanonical: rCan,
 	}
 	mb, err := json.Marshal(m)
@@ -114,7 +114,7 @@ func (q *PikoCI) TriggerPipelineResource(ctx context.Context, tc, pn, rCan strin
 		Body: mb,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to Trigger Queue on Pipeline %q: %w", pn, err)
+		return fmt.Errorf("failed to Trigger Queue on Pipeline %q: %w", pc, err)
 	}
 	now := time.Now()
 	r.LastCheck = now
@@ -126,36 +126,36 @@ func (q *PikoCI) TriggerPipelineResource(ctx context.Context, tc, pn, rCan strin
 	if err == nil {
 		r.NextCheck = nextCheck
 	}
-	_ = q.UpdatePipelineResource(ctx, tc, pn, r.Canonical, *r)
+	_ = q.UpdatePipelineResource(ctx, tc, pc, r.Canonical, *r)
 
 	return nil
 }
 
 func (q *PikoCI) WebhookTrigger(ctx context.Context, token string) error {
-	r, tc, pn, err := q.Resources.FindByWebhookToken(ctx, token)
+	r, tc, pc, err := q.Resources.FindByWebhookToken(ctx, token)
 	if err != nil {
 		return fmt.Errorf("failed to find Resource by webhook token: %w", err)
 	}
 
-	return q.TriggerPipelineResource(ctx, tc, pn, r.Canonical)
+	return q.TriggerPipelineResource(ctx, tc, pc, r.Canonical)
 }
 
-func (q *PikoCI) RegenerateWebhookToken(ctx context.Context, tc, pn, rCan string) (string, error) {
+func (q *PikoCI) RegenerateWebhookToken(ctx context.Context, tc, pc, rCan string) (string, error) {
 	if !utils.ValidateCanonical(tc) {
 		return "", fmt.Errorf("invalid Team Canonical format %q", tc)
-	} else if !utils.ValidateCanonical(pn) {
-		return "", fmt.Errorf("invalid Pipeline Name format %q", pn)
+	} else if !utils.ValidateCanonical(pc) {
+		return "", fmt.Errorf("invalid Pipeline Canonical format %q", pc)
 	} else if !utils.ValidateResourceCanonical(rCan) {
 		return "", fmt.Errorf("invalid Resource Canonical format %q", rCan)
 	}
 
-	r, err := q.Resources.Find(ctx, tc, pn, rCan)
+	r, err := q.Resources.Find(ctx, tc, pc, rCan)
 	if err != nil {
 		return "", fmt.Errorf("failed to find Resource: %w", err)
 	}
 
 	r.WebhookToken = uuid.New().String()
-	err = q.UpdatePipelineResource(ctx, tc, pn, rCan, *r)
+	err = q.UpdatePipelineResource(ctx, tc, pc, rCan, *r)
 	if err != nil {
 		return "", fmt.Errorf("failed to update Resource: %w", err)
 	}

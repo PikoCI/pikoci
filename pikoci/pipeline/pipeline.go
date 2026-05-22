@@ -40,6 +40,7 @@ type WithTeam struct {
 type Pipeline struct {
 	ID            uint32                    `json:"id"`
 	Name          string                    `json:"name"`
+	Canonical     string                    `json:"canonical"`
 	Public        bool                      `json:"public"`
 	Jobs          []job.Job                 `json:"jobs" hcl:"job,block"`
 	Resources     []resource.Resource       `json:"resources" hcl:"resource,block"`
@@ -58,10 +59,10 @@ type Variables struct {
 	Remain    hcl.Body   `hcl:",remain"`
 }
 type Variable struct {
-	Name    string           `json:"name" hcl:"name,label"`
-	Type    string           `json:"type" hcl:"type"`
-	Default interface{}      `json:"default" hcl:"default,optional"`
-	Secret  *VariableSecret  `json:"secret,omitempty" hcl:"secret,block"`
+	Name    string          `json:"name" hcl:"name,label"`
+	Type    string          `json:"type" hcl:"type"`
+	Default interface{}     `json:"default" hcl:"default,optional"`
+	Secret  *VariableSecret `json:"secret,omitempty" hcl:"secret,block"`
 }
 
 type VariableSecret struct {
@@ -225,10 +226,10 @@ func convertHCLService(hs hclServiceRaw) service.Service {
 
 // hclVariableRaw is a minimal struct for parsing variable blocks from raw HCL.
 type hclVariableRaw struct {
-	Name   string           `hcl:"name,label"`
-	Type   string           `hcl:"type"`
-	Secret *VariableSecret  `hcl:"secret,block"`
-	Remain hcl.Body         `hcl:",remain"`
+	Name   string          `hcl:"name,label"`
+	Type   string          `hcl:"type"`
+	Secret *VariableSecret `hcl:"secret,block"`
+	Remain hcl.Body        `hcl:",remain"`
 }
 
 // hclPipelineVariables is a minimal struct for parsing only variable blocks from raw HCL.
@@ -324,4 +325,3 @@ func buildVarEvalContext(raw []byte) (*hcl.EvalContext, error) {
 		},
 	}, nil
 }
-

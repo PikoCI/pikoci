@@ -95,7 +95,7 @@ func TestTriggerPipelineResource(t *testing.T) {
 
 	expectedBody := queue.Body{
 		TeamCanonical:     "main",
-		PipelineName:      "my-pipeline",
+		PipelineCanonical: "my-pipeline",
 		ResourceCanonical: "git.repo",
 	}
 	mb, _ := json.Marshal(expectedBody)

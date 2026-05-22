@@ -15,6 +15,7 @@ import (
 	"github.com/xescugc/pikoci/pikoci/team"
 	"github.com/xescugc/pikoci/pikoci/transport/http/client"
 	"github.com/xescugc/pikoci/pikoci/user"
+	"github.com/xescugc/pikoci/pikoci/utils"
 )
 
 var (
@@ -186,17 +187,19 @@ var pipelinesUpdateCmd = &cobra.Command{
 		configPath, _ := cmd.Flags().GetString("config")
 		varsPath, _ := cmd.Flags().GetString("vars")
 
+		pCan := utils.Canonicalize(name)
+
 		c, err := newClientWithConfig(url, jwt)
 		if err != nil {
 			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
 		}
-		err = createPipeline(cmd.Context(), c, tc, name, configPath, varsPath)
+		err = createPipeline(cmd.Context(), c, tc, pCan, configPath, varsPath)
 		if err != nil {
 			return err
 		}
 		if cmd.Flags().Changed("public") {
 			public, _ := cmd.Flags().GetBool("public")
-			err = c.SetPipelinePublic(cmd.Context(), tc, name, public)
+			err = c.SetPipelinePublic(cmd.Context(), tc, pCan, public)
 			if err != nil {
 				return fmt.Errorf("failed to set pipeline public: %w", err)
 			}
@@ -246,12 +249,14 @@ var pipelinesGetCmd = &cobra.Command{
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		name, _ := cmd.Flags().GetString("name")
 
+		pCan := utils.Canonicalize(name)
+
 		c, err := newClientWithConfig(url, jwt)
 		if err != nil {
 			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
 		}
 
-		pp, err := c.GetPipeline(cmd.Context(), tc, name)
+		pp, err := c.GetPipeline(cmd.Context(), tc, pCan)
 		if err != nil {
 			return fmt.Errorf("failed to get Pipeline %q: %w", name, err)
 		}
@@ -276,12 +281,14 @@ var pipelinesGraphCmd = &cobra.Command{
 		name, _ := cmd.Flags().GetString("name")
 		format, _ := cmd.Flags().GetString("format")
 
+		pCan := utils.Canonicalize(name)
+
 		c, err := newClientWithConfig(url, jwt)
 		if err != nil {
 			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
 		}
 
-		image, err := c.GetPipelineImage(cmd.Context(), tc, name, format)
+		image, err := c.GetPipelineImage(cmd.Context(), tc, pCan, format)
 		if err != nil {
 			return fmt.Errorf("failed to get pipeline graph for %q: %w", name, err)
 		}
@@ -306,12 +313,14 @@ var pipelinesDeleteCmd = &cobra.Command{
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		name, _ := cmd.Flags().GetString("name")
 
+		pCan := utils.Canonicalize(name)
+
 		c, err := newClientWithConfig(url, jwt)
 		if err != nil {
 			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
 		}
 
-		err = c.DeletePipeline(cmd.Context(), tc, name)
+		err = c.DeletePipeline(cmd.Context(), tc, pCan)
 		if err != nil {
 			return fmt.Errorf("failed to delete Pipeline %q: %w", name, err)
 		}
@@ -349,6 +358,7 @@ var jobsGetCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
 		jn, _ := cmd.Flags().GetString("job-name")
 
 		c, err := newClientWithConfig(url, jwt)
@@ -379,6 +389,7 @@ var jobsTriggerCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
 		jn, _ := cmd.Flags().GetString("job-name")
 
 		c, err := newClientWithConfig(url, jwt)
@@ -806,6 +817,7 @@ var buildsListCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
 		jn, _ := cmd.Flags().GetString("job-name")
 
 		c, err := newClientWithConfig(url, jwt)
@@ -831,6 +843,7 @@ var buildsGetCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
 		jn, _ := cmd.Flags().GetString("job-name")
 		bn, _ := cmd.Flags().GetString("build-number")
 
@@ -862,6 +875,7 @@ var buildsDeleteCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
 		jn, _ := cmd.Flags().GetString("job-name")
 		bn, _ := cmd.Flags().GetString("build-number")
 
@@ -893,6 +907,7 @@ var buildsCancelCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
 		jn, _ := cmd.Flags().GetString("job-name")
 		bn, _ := cmd.Flags().GetString("build-number")
 
@@ -924,6 +939,7 @@ var buildsRetryCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
 		jn, _ := cmd.Flags().GetString("job-name")
 		bn, _ := cmd.Flags().GetString("build-number")
 
@@ -973,6 +989,7 @@ var resourcesGetCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
 		rCan, _ := cmd.Flags().GetString("resource-canonical")
 
 		c, err := newClientWithConfig(url, jwt)
@@ -1003,6 +1020,7 @@ var resourcesTriggerCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
 		rCan, _ := cmd.Flags().GetString("resource-canonical")
 
 		c, err := newClientWithConfig(url, jwt)
@@ -1033,6 +1051,7 @@ var resourcesVersionsCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
 		rCan, _ := cmd.Flags().GetString("resource-canonical")
 
 		c, err := newClientWithConfig(url, jwt)
@@ -1063,6 +1082,7 @@ var resourcesWebhookRegenerateCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
 		rCan, _ := cmd.Flags().GetString("resource-canonical")
 
 		c, err := newClientWithConfig(url, jwt)

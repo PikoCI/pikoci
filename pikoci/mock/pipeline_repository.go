@@ -57,17 +57,17 @@ func (mr *PipelineRepositoryMockRecorder) Create(ctx, tc, pp any) *gomock.Call {
 }
 
 // Delete mocks base method.
-func (m *PipelineRepository) Delete(ctx context.Context, tc, pn string) error {
+func (m *PipelineRepository) Delete(ctx context.Context, tc, pCan string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", ctx, tc, pn)
+	ret := m.ctrl.Call(m, "Delete", ctx, tc, pCan)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Delete indicates an expected call of Delete.
-func (mr *PipelineRepositoryMockRecorder) Delete(ctx, tc, pn any) *gomock.Call {
+func (mr *PipelineRepositoryMockRecorder) Delete(ctx, tc, pCan any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*PipelineRepository)(nil).Delete), ctx, tc, pn)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*PipelineRepository)(nil).Delete), ctx, tc, pCan)
 }
 
 // Filter mocks base method.
@@ -101,59 +101,59 @@ func (mr *PipelineRepositoryMockRecorder) FilterAll(ctx any) *gomock.Call {
 }
 
 // Find mocks base method.
-func (m *PipelineRepository) Find(ctx context.Context, tc, pn string) (*pipeline.Pipeline, error) {
+func (m *PipelineRepository) Find(ctx context.Context, tc, pCan string) (*pipeline.Pipeline, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Find", ctx, tc, pn)
+	ret := m.ctrl.Call(m, "Find", ctx, tc, pCan)
 	ret0, _ := ret[0].(*pipeline.Pipeline)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Find indicates an expected call of Find.
-func (mr *PipelineRepositoryMockRecorder) Find(ctx, tc, pn any) *gomock.Call {
+func (mr *PipelineRepositoryMockRecorder) Find(ctx, tc, pCan any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Find", reflect.TypeOf((*PipelineRepository)(nil).Find), ctx, tc, pn)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Find", reflect.TypeOf((*PipelineRepository)(nil).Find), ctx, tc, pCan)
 }
 
 // FindPublic mocks base method.
-func (m *PipelineRepository) FindPublic(ctx context.Context, tc, pn string) (*pipeline.Pipeline, error) {
+func (m *PipelineRepository) FindPublic(ctx context.Context, tc, pCan string) (*pipeline.Pipeline, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FindPublic", ctx, tc, pn)
+	ret := m.ctrl.Call(m, "FindPublic", ctx, tc, pCan)
 	ret0, _ := ret[0].(*pipeline.Pipeline)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FindPublic indicates an expected call of FindPublic.
-func (mr *PipelineRepositoryMockRecorder) FindPublic(ctx, tc, pn any) *gomock.Call {
+func (mr *PipelineRepositoryMockRecorder) FindPublic(ctx, tc, pCan any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindPublic", reflect.TypeOf((*PipelineRepository)(nil).FindPublic), ctx, tc, pn)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindPublic", reflect.TypeOf((*PipelineRepository)(nil).FindPublic), ctx, tc, pCan)
 }
 
 // SetPublic mocks base method.
-func (m *PipelineRepository) SetPublic(ctx context.Context, tc, pn string, public bool) error {
+func (m *PipelineRepository) SetPublic(ctx context.Context, tc, pCan string, public bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetPublic", ctx, tc, pn, public)
+	ret := m.ctrl.Call(m, "SetPublic", ctx, tc, pCan, public)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetPublic indicates an expected call of SetPublic.
-func (mr *PipelineRepositoryMockRecorder) SetPublic(ctx, tc, pn, public any) *gomock.Call {
+func (mr *PipelineRepositoryMockRecorder) SetPublic(ctx, tc, pCan, public any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPublic", reflect.TypeOf((*PipelineRepository)(nil).SetPublic), ctx, tc, pn, public)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPublic", reflect.TypeOf((*PipelineRepository)(nil).SetPublic), ctx, tc, pCan, public)
 }
 
 // Update mocks base method.
-func (m *PipelineRepository) Update(ctx context.Context, tc, ppn string, pp pipeline.Pipeline) error {
+func (m *PipelineRepository) Update(ctx context.Context, tc, pCan string, pp pipeline.Pipeline) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", ctx, tc, ppn, pp)
+	ret := m.ctrl.Call(m, "Update", ctx, tc, pCan, pp)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Update indicates an expected call of Update.
-func (mr *PipelineRepositoryMockRecorder) Update(ctx, tc, ppn, pp any) *gomock.Call {
+func (mr *PipelineRepositoryMockRecorder) Update(ctx, tc, pCan, pp any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*PipelineRepository)(nil).Update), ctx, tc, ppn, pp)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*PipelineRepository)(nil).Update), ctx, tc, pCan, pp)
 }

@@ -38,5 +38,5 @@ type Repositories struct {
 	ResourceTypesRepo restype.Repository
 	BuildsRepo        build.Repository
 	RunnersRepo       runner.Repository
-	SecretTypesRepo sectype.Repository
+	SecretTypesRepo   sectype.Repository
 }

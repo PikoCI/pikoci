@@ -408,7 +408,7 @@
           <% if (!job && !resource) { %>
             <li class="breadcrumb-item active"><%- pipeline.name %></li>
           <% }  else {%>
-            <li class="breadcrumb-item"><a href="/teams/<%- team.canonical %>/pipelines/<%- pipeline.name %>"><%- pipeline.name %></a></li>
+            <li class="breadcrumb-item"><a href="/teams/<%- team.canonical %>/pipelines/<%- pipeline.canonical %>"><%- pipeline.name %></a></li>
           <% } %>
         <% } %>
         <% if (job) { %>
@@ -788,11 +788,12 @@
         }
       })
       app.Pipeline = Backbone.Model.extend({
-        idAttribute: "name",
+        idAttribute: "canonical",
         defaults: {
           id: null,
           raw: null,
           name: null,
+          canonical: null,
           public: false,
         },
         parse: function(response) {
@@ -2101,7 +2102,7 @@
               var bid = that.collection.setActive(opts.currentBuildID)
               that.currentBuildID = bid
               var tc = that.collection.job.collection.pipeline.collection.team.get("canonical")
-              var url = new URL(location.origin+"/teams/"+tc+"/pipelines/"+that.pipeline.get("name")+"/jobs/"+that.job.get("name")+"/builds/"+bid)
+              var url = new URL(location.origin+"/teams/"+tc+"/pipelines/"+that.pipeline.get("canonical")+"/jobs/"+that.job.get("name")+"/builds/"+bid)
               app.router.navigate(url.pathname, { trigger: false, replace: true });
             },
           })
@@ -2164,7 +2165,7 @@
           this.collection.setActive(bid)
           this.currentBuildID = bid
           var tc = this.collection.job.collection.pipeline.collection.team.get("canonical")
-          var url = new URL(location.origin+"/teams/"+tc+"/pipelines/"+this.pipeline.get("name")+"/jobs/"+this.job.get("name")+"/builds/"+bid)
+          var url = new URL(location.origin+"/teams/"+tc+"/pipelines/"+this.pipeline.get("canonical")+"/jobs/"+this.job.get("name")+"/builds/"+bid)
           app.router.navigate(url.pathname, { trigger: false, replace: true });
         }
       })
@@ -2420,7 +2421,7 @@
           var that = this;
           var rs = this.collection.resource;
           var tc = rs.collection.pipeline.collection.team.get('canonical');
-          var pn = rs.collection.pipeline.get('name');
+          var pn = rs.collection.pipeline.get('canonical');
           var rCan = rs.get('canonical');
           $.ajax({
             url: '/teams/' + tc + '/pipelines/' + pn + '/resources/' + rCan + '/webhook_token.json',
@@ -2590,7 +2591,7 @@
             promises.push(t)
           }
           var pps = new app.Pipelines(null, {team: t})
-          var pp = new app.Pipeline({name: pn},{collection: pps})
+          var pp = new app.Pipeline({canonical: pn},{collection: pps})
           promises.push(pp)
           var complete = _.invoke(promises, 'fetch');
           var that = this
@@ -2616,7 +2617,7 @@
             }
           }
           var pps = new app.Pipelines(null, {team: t})
-          var pp = new app.Pipeline({name: pn},{collection: pps})
+          var pp = new app.Pipeline({canonical: pn},{collection: pps})
           promises.push(pp)
           var complete = _.invoke(promises, 'fetch');
           var that = this
@@ -2646,7 +2647,7 @@
             }
           }
           var pps = new app.Pipelines(null, {team: t})
-          var pp = new app.Pipeline({name: pn},{collection: pps})
+          var pp = new app.Pipeline({canonical: pn},{collection: pps})
           promises.push(pp)
           var jbs = new app.Jobs(null, {pipeline: pp})
           var jb = new app.Job({name: jn}, {collection: jbs})
@@ -2686,7 +2687,7 @@
             }
           }
           var pps = new app.Pipelines(null, {team: t})
-          var pp = new app.Pipeline({name: pn},{collection: pps})
+          var pp = new app.Pipeline({canonical: pn},{collection: pps})
           promises.push(pp)
           var rss = new app.Resources(null, {pipeline: pp})
           var rs = new app.Resource({canonical: rCan}, {collection: rss})

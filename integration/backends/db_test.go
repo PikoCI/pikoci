@@ -14,9 +14,9 @@ import (
 	"github.com/xescugc/pikoci/pikoci/pipeline"
 	"github.com/xescugc/pikoci/pikoci/resource"
 	"github.com/xescugc/pikoci/pikoci/sectype"
-	"github.com/xescugc/pikoci/pikoci/utils"
 	"github.com/xescugc/pikoci/pikoci/team"
 	"github.com/xescugc/pikoci/pikoci/user"
+	"github.com/xescugc/pikoci/pikoci/utils"
 )
 
 func TestDBBackends(t *testing.T) {

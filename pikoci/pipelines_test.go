@@ -23,9 +23,10 @@ func TestGetPipeline(t *testing.T) {
 	ctx := context.TODO()
 
 	expected := &pipeline.Pipeline{
-		ID:   1,
-		Name: "my-pipeline",
-		Jobs: []job.Job{{ID: 1, Name: "echo"}},
+		ID:        1,
+		Name:      "my-pipeline",
+		Canonical: "my-pipeline",
+		Jobs:      []job.Job{{ID: 1, Name: "echo"}},
 		Resources: []resource.Resource{{ID: 1, Canonical: "cron.my-cron"}},
 	}
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(expected, nil)
@@ -205,7 +206,7 @@ job "deploy" {
 		})
 	s.ResourceTypes.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
 	s.Resources.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil).Times(2)
-	s.Pipelines.EXPECT().Find(ctx, "main", "test-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "test-pipeline"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "test-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "test-pipeline", Canonical: "test-pipeline"}, nil)
 
 	_, err := s.S.CreatePipeline(ctx, "main", "test-pipeline", hclConfig, nil)
 	require.NoError(t, err)
@@ -244,7 +245,7 @@ job "test" {
 			return uint32(1), nil
 		})
 	s.Resources.EXPECT().Create(ctx, "main", "compat-pipeline", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "compat-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "compat-pipeline"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "compat-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "compat-pipeline", Canonical: "compat-pipeline"}, nil)
 
 	_, err := s.S.CreatePipeline(ctx, "main", "compat-pipeline", hclConfig, nil)
 	require.NoError(t, err)
@@ -289,7 +290,7 @@ job "test" {
 			return uint32(1), nil
 		})
 	s.Resources.EXPECT().Create(ctx, "main", "func-pipeline", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "func-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "func-pipeline"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "func-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "func-pipeline", Canonical: "func-pipeline"}, nil)
 
 	_, err := s.S.CreatePipeline(ctx, "main", "func-pipeline", hclConfig, nil)
 	require.NoError(t, err)
@@ -366,7 +367,7 @@ job "test" {
 			return uint32(1), nil
 		})
 	s.Resources.EXPECT().Create(ctx, "main", "timeout-pipeline", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "timeout-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "timeout-pipeline"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "timeout-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "timeout-pipeline", Canonical: "timeout-pipeline"}, nil)
 
 	_, err := s.S.CreatePipeline(ctx, "main", "timeout-pipeline", hclConfig, nil)
 	require.NoError(t, err)
@@ -435,7 +436,7 @@ job "test" {
 			return uint32(1), nil
 		})
 	s.Resources.EXPECT().Create(ctx, "main", "attempts-pipeline", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "attempts-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "attempts-pipeline"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "attempts-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "attempts-pipeline", Canonical: "attempts-pipeline"}, nil)
 
 	_, err := s.S.CreatePipeline(ctx, "main", "attempts-pipeline", hclConfig, nil)
 	require.NoError(t, err)
@@ -475,7 +476,7 @@ job "test" {
 			return uint32(1), nil
 		})
 	s.Resources.EXPECT().Create(ctx, "main", "inputs-outputs-pipeline", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "inputs-outputs-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "inputs-outputs-pipeline"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "inputs-outputs-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "inputs-outputs-pipeline", Canonical: "inputs-outputs-pipeline"}, nil)
 
 	_, err := s.S.CreatePipeline(ctx, "main", "inputs-outputs-pipeline", hclConfig, nil)
 	require.NoError(t, err)
@@ -513,7 +514,7 @@ job "test" {
 			return uint32(1), nil
 		})
 	s.Resources.EXPECT().Create(ctx, "main", "no-io-pipeline", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "no-io-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "no-io-pipeline"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "no-io-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "no-io-pipeline", Canonical: "no-io-pipeline"}, nil)
 
 	_, err := s.S.CreatePipeline(ctx, "main", "no-io-pipeline", hclConfig, nil)
 	require.NoError(t, err)
@@ -580,7 +581,7 @@ job "test" {
 			return uint32(1), nil
 		})
 	s.Resources.EXPECT().Create(ctx, "main", "source-pipeline", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "source-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "source-pipeline"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "source-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "source-pipeline", Canonical: "source-pipeline"}, nil)
 
 	_, err := s.S.CreatePipeline(ctx, "main", "source-pipeline", hclConfig, nil)
 	require.NoError(t, err)
@@ -636,7 +637,7 @@ job "deploy" {
 			assert.Equal(t, "exec", st.Get.Runner)
 			return uint32(1), nil
 		})
-	s.Pipelines.EXPECT().Find(ctx, "main", "secrets-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "secrets-pipeline"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "secrets-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "secrets-pipeline", Canonical: "secrets-pipeline"}, nil)
 
 	_, err := s.S.CreatePipeline(ctx, "main", "secrets-pipeline", hclConfig, nil)
 	require.NoError(t, err)
@@ -705,7 +706,7 @@ job "deploy" {
 	s.Jobs.EXPECT().Create(ctx, "main", "secret-var-pipeline", gomock.Any()).Return(uint32(1), nil)
 	s.Resources.EXPECT().Create(ctx, "main", "secret-var-pipeline", gomock.Any()).Return(uint32(1), nil)
 	s.SecretTypes.EXPECT().Create(ctx, "main", "secret-var-pipeline", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "secret-var-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "secret-var-pipeline"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "secret-var-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "secret-var-pipeline", Canonical: "secret-var-pipeline"}, nil)
 
 	_, err := s.S.CreatePipeline(ctx, "main", "secret-var-pipeline", hclConfig, nil)
 	require.NoError(t, err)
@@ -771,7 +772,7 @@ job "deploy" {
 	s.Jobs.EXPECT().Create(ctx, "main", "override-pipeline", gomock.Any()).Return(uint32(1), nil)
 	s.Resources.EXPECT().Create(ctx, "main", "override-pipeline", gomock.Any()).Return(uint32(1), nil)
 	s.SecretTypes.EXPECT().Create(ctx, "main", "override-pipeline", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "override-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "override-pipeline"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "override-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "override-pipeline", Canonical: "override-pipeline"}, nil)
 
 	_, err := s.S.CreatePipeline(ctx, "main", "override-pipeline", hclConfig, vars)
 	require.NoError(t, err)
@@ -872,7 +873,7 @@ job "deploy" {
 			return uint32(1), nil
 		})
 	s.Resources.EXPECT().Create(ctx, "main", "services-pipeline", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "services-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "services-pipeline"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "services-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "services-pipeline", Canonical: "services-pipeline"}, nil)
 
 	pp, err := s.S.CreatePipeline(ctx, "main", "services-pipeline", hclConfig, nil)
 	require.NoError(t, err)
@@ -1046,7 +1047,7 @@ job "deploy" {
 	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
 	s.Jobs.EXPECT().Create(ctx, "main", "hooks-labeled", gomock.Any()).Return(uint32(1), nil)
 	s.Resources.EXPECT().Create(ctx, "main", "hooks-labeled", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "hooks-labeled").Return(&pipeline.Pipeline{Name: "hooks-labeled"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "hooks-labeled").Return(&pipeline.Pipeline{Name: "hooks-labeled", Canonical: "hooks-labeled"}, nil)
 
 	pp, err := s.S.CreatePipeline(ctx, "main", "hooks-labeled", hclConfig, nil)
 	require.NoError(t, err)
@@ -1098,7 +1099,7 @@ job "deploy" {
 	s.Jobs.EXPECT().Create(ctx, "main", "hooks-unlabeled", gomock.Any()).Return(uint32(1), nil)
 	s.Resources.EXPECT().Create(ctx, "main", "hooks-unlabeled", gomock.Any()).Return(uint32(1), nil).Times(2)
 	s.ResourceTypes.EXPECT().Create(ctx, "main", "hooks-unlabeled", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "hooks-unlabeled").Return(&pipeline.Pipeline{Name: "hooks-unlabeled"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "hooks-unlabeled").Return(&pipeline.Pipeline{Name: "hooks-unlabeled", Canonical: "hooks-unlabeled"}, nil)
 
 	pp, err := s.S.CreatePipeline(ctx, "main", "hooks-unlabeled", hclConfig, nil)
 	require.NoError(t, err)
@@ -1159,7 +1160,7 @@ job "deploy" {
 	s.Jobs.EXPECT().Create(ctx, "main", "hooks-mixed", gomock.Any()).Return(uint32(1), nil)
 	s.Resources.EXPECT().Create(ctx, "main", "hooks-mixed", gomock.Any()).Return(uint32(1), nil).Times(2)
 	s.ResourceTypes.EXPECT().Create(ctx, "main", "hooks-mixed", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "hooks-mixed").Return(&pipeline.Pipeline{Name: "hooks-mixed"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "hooks-mixed").Return(&pipeline.Pipeline{Name: "hooks-mixed", Canonical: "hooks-mixed"}, nil)
 
 	pp, err := s.S.CreatePipeline(ctx, "main", "hooks-mixed", hclConfig, nil)
 	require.NoError(t, err)
@@ -1217,7 +1218,7 @@ job "deploy" {
 	s.Jobs.EXPECT().Create(ctx, "main", "hooks-on-put", gomock.Any()).Return(uint32(1), nil)
 	s.Resources.EXPECT().Create(ctx, "main", "hooks-on-put", gomock.Any()).Return(uint32(1), nil).Times(2)
 	s.ResourceTypes.EXPECT().Create(ctx, "main", "hooks-on-put", gomock.Any()).Return(uint32(1), nil)
-	s.Pipelines.EXPECT().Find(ctx, "main", "hooks-on-put").Return(&pipeline.Pipeline{Name: "hooks-on-put"}, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "hooks-on-put").Return(&pipeline.Pipeline{Name: "hooks-on-put", Canonical: "hooks-on-put"}, nil)
 
 	pp, err := s.S.CreatePipeline(ctx, "main", "hooks-on-put", hclConfig, nil)
 	require.NoError(t, err)
@@ -1231,7 +1232,8 @@ func TestGetPipelineImage_HidesUnlinkedResources(t *testing.T) {
 
 	// Pipeline with two resources: one used in a get step, one only in a hook put step.
 	pp := &pipeline.Pipeline{
-		Name: "my-pipeline",
+		Name:      "my-pipeline",
+		Canonical: "my-pipeline",
 		Resources: []resource.Resource{
 			{ID: 1, Canonical: "cron.timer"},
 			{ID: 2, Canonical: "github-check.ci"},
@@ -1289,7 +1291,8 @@ func TestGetPipelineImage_QuotesHyphenatedName(t *testing.T) {
 	ctx := context.TODO()
 
 	pp := &pipeline.Pipeline{
-		Name: "hello-world",
+		Name:      "hello-world",
+		Canonical: "hello-world",
 		Resources: []resource.Resource{
 			{ID: 1, Canonical: "cron.tick"},
 		},
@@ -1326,7 +1329,8 @@ func TestGetPipelineImage_ShowsLinkedResources(t *testing.T) {
 
 	// Both resources are used in get steps - both should appear.
 	pp := &pipeline.Pipeline{
-		Name: "my-pipeline",
+		Name:      "my-pipeline",
+		Canonical: "my-pipeline",
 		Resources: []resource.Resource{
 			{ID: 1, Canonical: "cron.timer"},
 			{ID: 2, Canonical: "git.repo"},
@@ -1364,7 +1368,8 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 	// Helper to build a simple pipeline with one job triggered by a cron resource.
 	makePipeline := func() *pipeline.Pipeline {
 		return &pipeline.Pipeline{
-			Name: "p",
+			Name:      "p",
+			Canonical: "p",
 			Resources: []resource.Resource{
 				{ID: 1, Canonical: "cron.tick"},
 			},

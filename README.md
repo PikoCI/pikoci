@@ -7,7 +7,7 @@
 
   [![Go Version](https://img.shields.io/badge/go-1.25+-blue)](https://golang.org)
   [![License](https://img.shields.io/badge/license-Apache%202.0-yellow)](LICENSE)
-  [![Go Report Card](https://goreportcard.com/badge/github.com/xescugc/pikoci)](https://goreportcard.com/report/github.com/xescugc/pikoci)
+  [![Go Report Card](https://goreportcard.com/badge/github.com/pikoci/pikoci)](https://goreportcard.com/report/github.com/pikoci/pikoci)
 
   [Documentation](https://github.com/xescugc/pikoci/wiki) · [Quick Start](#quick-start) · [Contributing](#contributing)
 </div>

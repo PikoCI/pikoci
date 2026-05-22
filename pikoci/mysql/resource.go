@@ -101,7 +101,7 @@ func (r *ResourceRepository) Create(ctx context.Context, tc, pn string, rs resou
 				FROM pipelines AS p
 				JOIN teams AS t
 					ON p.team_id = t.id
-				WHERE t.canonical = ? AND p.name = ?
+				WHERE t.canonical = ? AND p.canonical = ?
 			))`, dbrs.Name, dbrs.Type, dbrs.Canonical, dbrs.Params, dbrs.CheckInterval, dbrs.LastCheck, dbrs.NextCheck, dbrs.WebhookToken, tc, pn)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
@@ -127,7 +127,7 @@ func (r *ResourceRepository) Update(ctx context.Context, tc, pn, rCan string, rs
 				ON r.pipeline_id = p.id
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND r.canonical = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
 		) AS rr
 		WHERE rr.id = r.id
 	`, dbrs.Name, dbrs.Type, dbrs.Canonical, dbrs.Params, dbrs.CheckInterval, dbrs.Logs, dbrs.LastCheck, dbrs.NextCheck, dbrs.WebhookToken, tc, pn, rCan)
@@ -151,7 +151,7 @@ func (r *ResourceRepository) Find(ctx context.Context, tc, pn, rCan string) (*re
 			ON r.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ? AND r.canonical = ?
+		WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
 	`, tc, pn, rCan)
 
 	rs, err := scanResource(row)
@@ -166,7 +166,7 @@ func (r *ResourceRepository) FindByWebhookToken(ctx context.Context, token strin
 	var tc, pn sql.NullString
 	row := r.querier.QueryRowContext(ctx, `
 		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token,
-			t.canonical, p.name
+			t.canonical, p.canonical
 		FROM resources AS r
 		JOIN pipelines AS p
 			ON r.pipeline_id = p.id
@@ -208,7 +208,7 @@ func (r *ResourceRepository) Filter(ctx context.Context, tc, pn string) ([]*reso
 			ON r.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ?
+		WHERE t.canonical = ? AND p.canonical = ?
 	`, tc, pn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter Resources: %w", err)
@@ -225,7 +225,7 @@ func (r *ResourceRepository) Filter(ctx context.Context, tc, pn string) ([]*reso
 func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resource.ResourceWithPipeline, error) {
 	q := `
 		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token,
-			t.canonical, p.name
+			t.canonical, p.canonical
 		FROM resources AS r
 		JOIN pipelines AS p
 			ON r.pipeline_id = p.id
@@ -268,9 +268,9 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 			return nil, fmt.Errorf("failed to scan due resource: %w", err)
 		}
 		results = append(results, &resource.ResourceWithPipeline{
-			Resource:      *dbr.toDomainEntity(),
-			TeamCanonical: tc.String,
-			PipelineName:  pn.String,
+			Resource:          *dbr.toDomainEntity(),
+			TeamCanonical:     tc.String,
+			PipelineCanonical: pn.String,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -292,7 +292,7 @@ func (r *ResourceRepository) CreateVersion(ctx context.Context, tc, pn, rCan str
 					ON r.pipeline_id = p.id
 				JOIN teams AS t
 					ON p.team_id = t.id
-				WHERE t.canonical = ? AND p.name = ? AND r.canonical = ?
+				WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
 			))`, dbrv.Version, tc, pn, rCan)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
@@ -316,7 +316,7 @@ func (r *ResourceRepository) FilterVersions(ctx context.Context, tc, pn, rCan st
 			ON r.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.name = ? AND r.canonical = ?
+		WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
 		ORDER BY rv.id ASC
 	`, tc, pn, rCan)
 	if err != nil {
@@ -342,7 +342,7 @@ func (r *ResourceRepository) Delete(ctx context.Context, tc, pn, rCan string) er
 				ON r.pipeline_id = p.id
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.name = ? AND r.canonical = ?
+			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
 		)
 	`, tc, pn, rCan)
 	if err != nil {

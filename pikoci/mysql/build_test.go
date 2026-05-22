@@ -14,7 +14,7 @@ func TestFind(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name) VALUES (1, 'find-pipe')`)
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'find-pipe', 'find-pipe')`)
 	require.NoError(t, err)
 	ppID, _ := res.LastInsertId()
 
@@ -40,7 +40,7 @@ func TestInsertGetVersion(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name) VALUES (1, 'bgv-insert')`)
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'bgv-insert', 'bgv-insert')`)
 	require.NoError(t, err)
 	ppID, _ := res.LastInsertId()
 
@@ -76,11 +76,11 @@ func TestLastBuildAtByPipeline(t *testing.T) {
 	ctx := context.Background()
 
 	// Create two pipelines
-	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name) VALUES (1, 'lba-pipe-a')`)
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'lba-pipe-a', 'lba-pipe-a')`)
 	require.NoError(t, err)
 	ppAID, _ := res.LastInsertId()
 
-	res, err = db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name) VALUES (1, 'lba-pipe-b')`)
+	res, err = db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'lba-pipe-b', 'lba-pipe-b')`)
 	require.NoError(t, err)
 	ppBID, _ := res.LastInsertId()
 
@@ -117,7 +117,7 @@ func TestLastBuildAtByPipeline_GoMonotonicFormat(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name) VALUES (1, 'lba-mono')`)
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'lba-mono', 'lba-mono')`)
 	require.NoError(t, err)
 	ppID, _ := res.LastInsertId()
 
@@ -148,7 +148,7 @@ func TestLastBuildAtByPipeline_NoBuildsDifferentTeam(t *testing.T) {
 	require.NoError(t, err)
 	otherTeamID, _ := res.LastInsertId()
 
-	res, err = db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name) VALUES (?, 'lba-other')`, otherTeamID)
+	res, err = db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (?, 'lba-other', 'lba-other')`, otherTeamID)
 	require.NoError(t, err)
 	ppID, _ := res.LastInsertId()
 
@@ -171,7 +171,7 @@ func TestFindReadyDownstreamVersion_BasicCase(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name) VALUES (1, 'bgv-basic')`)
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'bgv-basic', 'bgv-basic')`)
 	require.NoError(t, err)
 	ppID, _ := res.LastInsertId()
 
@@ -213,7 +213,7 @@ func TestFindReadyDownstreamVersion_NotAllUpstreamsReady(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name) VALUES (1, 'bgv-partial')`)
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'bgv-partial', 'bgv-partial')`)
 	require.NoError(t, err)
 	ppID, _ := res.LastInsertId()
 
@@ -247,7 +247,7 @@ func TestFindReadyDownstreamVersion_AlreadyBuiltByDownstream(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name) VALUES (1, 'bgv-already')`)
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'bgv-already', 'bgv-already')`)
 	require.NoError(t, err)
 	ppID, _ := res.LastInsertId()
 
@@ -285,7 +285,7 @@ func TestFindReadyDownstreamVersion_FailedUpstreamIgnored(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name) VALUES (1, 'bgv-failed')`)
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'bgv-failed', 'bgv-failed')`)
 	require.NoError(t, err)
 	ppID, _ := res.LastInsertId()
 
@@ -315,7 +315,7 @@ func TestFindReadyDownstreamVersion_MismatchedVersions(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name) VALUES (1, 'bgv-mismatch')`)
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'bgv-mismatch', 'bgv-mismatch')`)
 	require.NoError(t, err)
 	ppID, _ := res.LastInsertId()
 
@@ -356,7 +356,7 @@ func TestFindReadyDownstreamVersion_PicksHighestVersion(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name) VALUES (1, 'bgv-highest')`)
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'bgv-highest', 'bgv-highest')`)
 	require.NoError(t, err)
 	ppID, _ := res.LastInsertId()
 
