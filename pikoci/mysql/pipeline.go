@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/cycloidio/sqlr"
-	"github.com/xescugc/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
 )
 
 type PipelineRepository struct {

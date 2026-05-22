@@ -9,7 +9,7 @@ Declares a pipeline variable. Variables can be referenced as `var.<name>` or `${
 ```hcl
 variable "repo_url" {
   type    = string
-  default = "https://github.com/xescugc/pikoci.git"
+  default = "https://github.com/pikoci/pikoci.git"
 }
 
 variable "repo_name" {
@@ -440,7 +440,7 @@ Using built-in `git` and `docker` (no inline resource_type or runner blocks need
 ```hcl
 variable "repo_url" {
   type    = string
-  default = "https://github.com/xescugc/pikoci.git"
+  default = "https://github.com/pikoci/pikoci.git"
 }
 
 variable "repo_name" {

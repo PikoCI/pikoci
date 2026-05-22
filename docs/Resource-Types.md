@@ -77,7 +77,7 @@ resource_type "my-git" {
 
 Two URL formats are supported:
 
-- **`pikoci://<name>`** resolves to the PikoCI registry. For shipped built-ins (`git`, `cron`), the embedded definition is used directly (no network call). For other names, fetches from `https://raw.githubusercontent.com/xescugc/pikoci/master/pikoci/builtin/resource_types/<name>.hcl`.
+- **`pikoci://<name>`** resolves to the PikoCI registry. For shipped built-ins (`git`, `cron`), the embedded definition is used directly (no network call). For other names, fetches from `https://raw.githubusercontent.com/pikoci/pikoci/master/pikoci/builtin/resource_types/<name>.hcl`.
 - **`https://...`** or **`http://...`** fetches HCL from any URL.
 
 When `source` is set, you must not define inline `check`, `pull`, or `push` blocks. PikoCI will error if both are present.
@@ -115,7 +115,7 @@ A resource is an instance of a resource type with concrete parameter values:
 ```hcl
 resource "git" "my_repo" {
   params {
-    url  = "https://github.com/xescugc/pikoci.git"
+    url  = "https://github.com/pikoci/pikoci.git"
     name = "pikoci"
   }
 }
@@ -176,7 +176,7 @@ The `git` resource type is built in with API-aware check support for GitHub and 
 ```hcl
 resource "git" "my-repo" {
   params {
-    url  = "https://github.com/xescugc/pikoci.git"
+    url  = "https://github.com/pikoci/pikoci.git"
     name = "pikoci"
   }
 }
@@ -266,7 +266,7 @@ Public repository:
 ```hcl
 resource "git" "my-repo" {
   params {
-    url  = "https://github.com/xescugc/pikoci.git"
+    url  = "https://github.com/pikoci/pikoci.git"
     name = "pikoci"
   }
 }

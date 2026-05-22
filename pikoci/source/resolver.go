@@ -8,17 +8,17 @@ import (
 	"strings"
 
 	"github.com/hashicorp/hcl/v2/hclsimple"
-	"github.com/xescugc/pikoci/pikoci/builtin"
-	"github.com/xescugc/pikoci/pikoci/restype"
-	"github.com/xescugc/pikoci/pikoci/runner"
-	"github.com/xescugc/pikoci/pikoci/sectype"
-	"github.com/xescugc/pikoci/pikoci/service"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/builtin"
+	"github.com/pikoci/pikoci/pikoci/restype"
+	"github.com/pikoci/pikoci/pikoci/runner"
+	"github.com/pikoci/pikoci/pikoci/sectype"
+	"github.com/pikoci/pikoci/pikoci/service"
+	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
 const (
 	pikoPrefix = "pikoci://"
-	baseURL    = "https://raw.githubusercontent.com/xescugc/pikoci/master/pikoci/builtin"
+	baseURL    = "https://raw.githubusercontent.com/pikoci/pikoci/master/pikoci/builtin"
 )
 
 type hclResourceType struct {

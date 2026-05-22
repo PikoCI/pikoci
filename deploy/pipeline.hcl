@@ -53,7 +53,7 @@ job "test-integration" {
   put "github-check" "ci" { status = "in_progress" }
   task "make" {
     run "docker" {
-      image = "ghcr.io/xescugc/pikoci-integration:latest"
+      image = "ghcr.io/pikoci/pikoci-integration:latest"
       cmd   = <<-EOT
         cd ${var.git_name}
         cp /usr/local/bin/geckodriver integration/vendor/geckodriver
@@ -143,10 +143,10 @@ job "build-latest" {
         <<-EOT
         cd ${var.git_name}
 
-        echo "${var.docker_password}" | docker login -u "${var.docker_username}" --password-stdin
+        echo "${var.ghcr_token}" | docker login ghcr.io -u "${var.ghcr_username}" --password-stdin
 
         docker buildx create --use --name pikoci-builder 2>/dev/null || docker buildx use pikoci-builder
-        docker buildx build --platform linux/amd64,linux/arm64 -t xescugc/pikoci:latest --push .
+        docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/pikoci/pikoci:latest --push .
         EOT
       ]
     }
@@ -207,10 +207,10 @@ job "build-release" {
         cd ${var.git_name}
         TAG=$(git describe --tags --exact-match)
 
-        echo "${var.docker_password}" | docker login -u "${var.docker_username}" --password-stdin
+        echo "${var.ghcr_token}" | docker login ghcr.io -u "${var.ghcr_username}" --password-stdin
 
         docker buildx create --use --name pikoci-builder 2>/dev/null || docker buildx use pikoci-builder
-        docker buildx build --platform linux/amd64,linux/arm64 -t xescugc/pikoci:$TAG --push .
+        docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/pikoci/pikoci:$TAG --push .
         EOT
       ]
     }
@@ -266,7 +266,7 @@ resource "github-check" "ci" {
     app_id          = var.github_app_id
     installation_id = var.github_app_installation_id
     private_key     = var.pikoci_github_app_pem
-    repository      = "xescugc/pikoci"
+    repository      = "pikoci/pikoci"
   }
 }
 
@@ -312,7 +312,7 @@ secret_type "pikoci_github_pem" {
 
 variable "git_url" {
   type    = string
-  default = "https://github.com/xescugc/pikoci"
+  default = "https://github.com/pikoci/pikoci"
 }
 
 variable "git_name" {
@@ -348,16 +348,16 @@ variable "pikoci_github_app_pem" {
   }
 }
 
-variable "docker_username" {
+variable "ghcr_username" {
   type = string
   secret "env" {
-    key = "DOCKER_USERNAME"
+    key = "GHCR_USERNAME"
   }
 }
 
-variable "docker_password" {
+variable "ghcr_token" {
   type = string
   secret "env" {
-    key = "DOCKER_PASSWORD"
+    key = "GHCR_TOKEN"
   }
 }

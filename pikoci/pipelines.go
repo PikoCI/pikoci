@@ -9,15 +9,15 @@ import (
 
 	"github.com/awalterschulze/gographviz"
 	"github.com/google/uuid"
-	"github.com/xescugc/pikoci/pikoci/build"
-	"github.com/xescugc/pikoci/pikoci/job"
-	"github.com/xescugc/pikoci/pikoci/pipeline"
-	"github.com/xescugc/pikoci/pikoci/resource"
-	"github.com/xescugc/pikoci/pikoci/restype"
-	"github.com/xescugc/pikoci/pikoci/scheduler"
-	"github.com/xescugc/pikoci/pikoci/sectype"
-	"github.com/xescugc/pikoci/pikoci/unitwork"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/build"
+	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/restype"
+	"github.com/pikoci/pikoci/pikoci/scheduler"
+	"github.com/pikoci/pikoci/pikoci/sectype"
+	"github.com/pikoci/pikoci/pikoci/unitwork"
+	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
 func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error) {

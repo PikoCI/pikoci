@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/xescugc/pikoci/pikoci"
-	"github.com/xescugc/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/job"
 )
 
 type TriggerPipelineJobRequest struct {

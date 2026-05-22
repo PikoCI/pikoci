@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/cycloidio/sqlr"
-	"github.com/xescugc/pikoci/pikoci/trigger"
+	"github.com/pikoci/pikoci/pikoci/trigger"
 )
 
 type TriggerRepository struct {

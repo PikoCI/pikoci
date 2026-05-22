@@ -11,10 +11,10 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/spf13/cobra"
-	"github.com/xescugc/pikoci/pikoci"
-	"github.com/xescugc/pikoci/pikoci/team"
-	"github.com/xescugc/pikoci/pikoci/transport/http/client"
-	"github.com/xescugc/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/team"
+	"github.com/pikoci/pikoci/pikoci/transport/http/client"
+	"github.com/pikoci/pikoci/pikoci/user"
 )
 
 var (

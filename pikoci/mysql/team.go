@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/cycloidio/sqlr"
-	"github.com/xescugc/pikoci/pikoci/team"
+	"github.com/pikoci/pikoci/pikoci/team"
 )
 
 type TeamRepository struct {

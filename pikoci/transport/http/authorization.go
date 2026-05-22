@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/xescugc/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci"
 )
 
 type authorizationFn func(ctx context.Context, s pikoci.Service, un, tc string) error

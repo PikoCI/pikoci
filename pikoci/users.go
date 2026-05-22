@@ -6,8 +6,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/xescugc/pikoci/pikoci/user"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
 func (q *PikoCI) UserLogin(ctx context.Context, un, pass string) (*user.WithMemberships, string, error) {

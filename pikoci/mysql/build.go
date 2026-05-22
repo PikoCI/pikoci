@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/cycloidio/sqlr"
-	"github.com/xescugc/pikoci/pikoci/build"
+	"github.com/pikoci/pikoci/pikoci/build"
 )
 
 type BuildRepository struct {

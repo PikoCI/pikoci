@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/cycloidio/sqlr"
-	"github.com/xescugc/pikoci/pikoci/restype"
+	"github.com/pikoci/pikoci/pikoci/restype"
 )
 
 type ResourceTypeRepository struct {

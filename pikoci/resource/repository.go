@@ -2,7 +2,7 @@ package resource
 
 import "context"
 
-//go:generate go tool mockgen -destination=../mock/resource_repository.go -mock_names=Repository=ResourceRepository -package mock github.com/xescugc/pikoci/pikoci/resource Repository
+//go:generate go tool mockgen -destination=../mock/resource_repository.go -mock_names=Repository=ResourceRepository -package mock github.com/pikoci/pikoci/pikoci/resource Repository
 
 type Repository interface {
 	Create(ctx context.Context, tc, pn string, r Resource) (uint32, error)

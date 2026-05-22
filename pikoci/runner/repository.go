@@ -2,7 +2,7 @@ package runner
 
 import "context"
 
-//go:generate go tool mockgen -destination=../mock/runner_repository.go -mock_names=Repository=RunnerRepository -package mock github.com/xescugc/pikoci/pikoci/runner Repository
+//go:generate go tool mockgen -destination=../mock/runner_repository.go -mock_names=Repository=RunnerRepository -package mock github.com/pikoci/pikoci/pikoci/runner Repository
 
 type Repository interface {
 	Create(ctx context.Context, tc, pn string, ru Runner) (uint32, error)

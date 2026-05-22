@@ -7,9 +7,9 @@
 
   [![Go Version](https://img.shields.io/badge/go-1.25+-blue)](https://golang.org)
   [![License](https://img.shields.io/badge/license-Apache%202.0-yellow)](LICENSE)
-  [![Go Report Card](https://goreportcard.com/badge/github.com/xescugc/pikoci)](https://goreportcard.com/report/github.com/xescugc/pikoci)
+  [![Go Report Card](https://goreportcard.com/badge/github.com/pikoci/pikoci)](https://goreportcard.com/report/github.com/pikoci/pikoci)
 
-  [Documentation](https://github.com/xescugc/pikoci/wiki) · [Quick Start](#quick-start) · [Contributing](#contributing)
+  [Documentation](https://github.com/pikoci/pikoci/wiki) · [Quick Start](#quick-start) · [Contributing](#contributing)
 </div>
 
 <!-- GIF goes here -->
@@ -30,14 +30,14 @@ Pipelines are defined in [HCL](https://github.com/hashicorp/hcl). The runner abs
 - **Truly portable**: bundle the binary with your pipeline config and SQLite file. Move it anywhere, run it instantly.
 - **In-memory mode**: run the entire system in memory for development and testing. Zero files, zero cleanup.
 - **Any SQL database**: SQLite (built-in), MySQL, PostgreSQL, and any other SQL-compatible backend.
-- **Any queue backend**: pluggable via [google/go-cloud](https://gocloud.dev/howto/pubsub/), including NATS, Kafka, and RabbitMQ. [AWS SQS and GCP Pub/Sub planned (#209)](https://github.com/xescugc/pikoci/issues/209).
+- **Any queue backend**: pluggable via [google/go-cloud](https://gocloud.dev/howto/pubsub/), including NATS, Kafka, and RabbitMQ. [AWS SQS and GCP Pub/Sub planned (#209)](https://github.com/pikoci/pikoci/issues/209).
 - **Resource model**: pipelines built from resources and resource types. Clean, composable, reusable.
 - **HCL pipelines**: more expressive and readable than YAML. Familiar to anyone who has used Terraform.
-- **Flexible runners**: run jobs on the host machine or define your own runner. [Docker runner planned (#206)](https://github.com/xescugc/pikoci/issues/206).
+- **Flexible runners**: run jobs on the host machine or define your own runner. [Docker runner planned (#206)](https://github.com/pikoci/pikoci/issues/206).
 - **Pipelines at startup**: pass a pipeline config at launch and it's ready the moment the server starts. No CLI or UI step required.
 - **Public pipelines**: mark a pipeline as public so anyone can view its status without an account. Perfect for open source projects.
 - **Built-in UI**: visualize pipeline state, stream build logs, manage pipelines from a web interface.
-- **Teams and users**: multi-user support with team-based access control. [Granular role management planned (#207)](https://github.com/xescugc/pikoci/issues/207).
+- **Teams and users**: multi-user support with team-based access control. [Granular role management planned (#207)](https://github.com/pikoci/pikoci/issues/207).
 - **DOT graph output**: export pipeline state as a DOT graph and pipe it to Graphviz for terminal-native visualization.
 
 
@@ -47,18 +47,18 @@ Pipelines are defined in [HCL](https://github.com/hashicorp/hcl). The runner abs
 
 ```bash
 # Linux (amd64)
-curl -L https://github.com/xescugc/pikoci/releases/latest/download/linux-amd64 -o pikoci
+curl -L https://github.com/pikoci/pikoci/releases/latest/download/linux-amd64 -o pikoci
 chmod +x pikoci
 
 # macOS (amd64)
-curl -L https://github.com/xescugc/pikoci/releases/latest/download/darwin-amd64 -o pikoci
+curl -L https://github.com/pikoci/pikoci/releases/latest/download/darwin-amd64 -o pikoci
 chmod +x pikoci
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/xescugc/pikoci.git
+git clone https://github.com/pikoci/pikoci.git
 cd pikoci
 go build -o pikoci .
 ```
@@ -137,12 +137,12 @@ For production setups, run the server and workers as separate processes on diffe
 ./pikoci worker --pikoci-url http://your-server:8080 --pubsub-system nats --worker-token <token>
 ```
 
-Full server and worker configuration options are covered in the [documentation](https://github.com/xescugc/pikoci/wiki/Server).
+Full server and worker configuration options are covered in the [documentation](https://github.com/pikoci/pikoci/wiki/Server).
 
 
 ## Dogfooding: PikoCI runs its own CI
 
-PikoCI uses itself for CI. See it live at [pikoci.com/teams/main/pipelines/pr_test](https://pikoci.com/teams/main/pipelines/pr_test). The [full pipeline](deploy/pipeline.hcl) runs lint, unit tests, integration tests, and backend tests with services — all defined in HCL:
+PikoCI uses itself for CI. See it live at [ci.pikoci.com/teams/main/pipelines/pr_test](https://ci.pikoci.com/teams/main/pipelines/pr_test). The [full pipeline](deploy/pipeline.hcl) runs lint, unit tests, integration tests, and backend tests with services — all defined in HCL:
 
 ```hcl
 resource_type "git" {
@@ -211,7 +211,7 @@ job "test-backends" {
 }
 ```
 
-The `test-backends` job uses [service types](https://github.com/xescugc/pikoci/wiki/Services) to spin up MariaDB, PostgreSQL, NATS, RabbitMQ, Kafka, and Vault as Docker containers, runs the backend integration tests against them, then tears everything down. See the [full pipeline](deploy/pipeline.hcl) for secrets, variables, and service definitions.
+The `test-backends` job uses [service types](https://github.com/pikoci/pikoci/wiki/Services) to spin up MariaDB, PostgreSQL, NATS, RabbitMQ, Kafka, and Vault as Docker containers, runs the backend integration tests against them, then tears everything down. See the [full pipeline](deploy/pipeline.hcl) for secrets, variables, and service definitions.
 
 
 ## Coming from Concourse?
@@ -222,26 +222,26 @@ PikoCI's resource model is directly inspired by Concourse. The main differences:
 - **Deployment** is a single binary instead of a multi-service setup requiring PostgreSQL
 - **Secrets** use `secret_type` blocks with secret-backed variables. Built-in support for Vault and file-based secrets (JSON, env, raw)
 
-[Concourse pipeline importer planned (#210)](https://github.com/xescugc/pikoci/issues/210).
+[Concourse pipeline importer planned (#210)](https://github.com/pikoci/pikoci/issues/210).
 
 
 ## Documentation
 
-Full documentation is in the [wiki](https://github.com/xescugc/pikoci/wiki):
+Full documentation is in the [wiki](https://github.com/pikoci/pikoci/wiki):
 
-- [Pipeline configuration reference](https://github.com/xescugc/pikoci/wiki/Pipeline)
-- [Resource types](https://github.com/xescugc/pikoci/wiki/Resource-Types)
-- [Runners](https://github.com/xescugc/pikoci/wiki/Runners)
-- [Server configuration](https://github.com/xescugc/pikoci/wiki/Server)
-- [Variables and secrets](https://github.com/xescugc/pikoci/wiki/Variables)
-- [Database backends](https://github.com/xescugc/pikoci/wiki/Database)
-- [Queue backends](https://github.com/xescugc/pikoci/wiki/Queue)
-- [CLI reference](https://github.com/xescugc/pikoci/wiki/CLI)
-- [Public pipelines](https://github.com/xescugc/pikoci/wiki/Public-Pipelines)
-- [Running workers separately](https://github.com/xescugc/pikoci/wiki/Workers)
-- [Deployment](https://github.com/xescugc/pikoci/wiki/Deployment)
-- [Portability and bundling](https://github.com/xescugc/pikoci/wiki/Portability)
-- [Coming from Concourse](https://github.com/xescugc/pikoci/wiki/Concourse)
+- [Pipeline configuration reference](https://github.com/pikoci/pikoci/wiki/Pipeline)
+- [Resource types](https://github.com/pikoci/pikoci/wiki/Resource-Types)
+- [Runners](https://github.com/pikoci/pikoci/wiki/Runners)
+- [Server configuration](https://github.com/pikoci/pikoci/wiki/Server)
+- [Variables and secrets](https://github.com/pikoci/pikoci/wiki/Variables)
+- [Database backends](https://github.com/pikoci/pikoci/wiki/Database)
+- [Queue backends](https://github.com/pikoci/pikoci/wiki/Queue)
+- [CLI reference](https://github.com/pikoci/pikoci/wiki/CLI)
+- [Public pipelines](https://github.com/pikoci/pikoci/wiki/Public-Pipelines)
+- [Running workers separately](https://github.com/pikoci/pikoci/wiki/Workers)
+- [Deployment](https://github.com/pikoci/pikoci/wiki/Deployment)
+- [Portability and bundling](https://github.com/pikoci/pikoci/wiki/Portability)
+- [Coming from Concourse](https://github.com/pikoci/pikoci/wiki/Concourse)
 
 
 ## Contributing
@@ -249,7 +249,7 @@ Full documentation is in the [wiki](https://github.com/xescugc/pikoci/wiki):
 PikoCI is open source and contributions are welcome. Please open an issue before starting work on a large feature so we can discuss the approach.
 
 ```bash
-git clone https://github.com/xescugc/pikoci.git
+git clone https://github.com/pikoci/pikoci.git
 cd pikoci
 make test
 ```

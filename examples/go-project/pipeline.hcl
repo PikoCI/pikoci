@@ -44,7 +44,7 @@ job "build" {
 
 variable "repo_url" {
   type    = string
-  default = "https://github.com/xescugc/pikoci"
+  default = "https://github.com/pikoci/pikoci"
 }
 
 variable "repo_name" {

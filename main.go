@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/xescugc/pikoci/cmd"
+	"github.com/pikoci/pikoci/cmd"
 )
 
 func main() {

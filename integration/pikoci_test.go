@@ -16,7 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tebeka/selenium"
-	thttp "github.com/xescugc/pikoci/pikoci/transport/http"
+	thttp "github.com/pikoci/pikoci/pikoci/transport/http"
 )
 
 func TestPikoCI(t *testing.T) {

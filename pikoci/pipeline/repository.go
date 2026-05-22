@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-//go:generate go tool mockgen -destination=../mock/pipeline_repository.go -mock_names=Repository=PipelineRepository -package mock github.com/xescugc/pikoci/pikoci/pipeline Repository
+//go:generate go tool mockgen -destination=../mock/pipeline_repository.go -mock_names=Repository=PipelineRepository -package mock github.com/pikoci/pikoci/pikoci/pipeline Repository
 
 type Repository interface {
 	Create(ctx context.Context, tc string, pp Pipeline) (uint32, error)

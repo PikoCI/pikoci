@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-//go:generate go tool mockgen -destination=../mock/build_repository.go -mock_names=Repository=BuildRepository -package mock github.com/xescugc/pikoci/pikoci/build Repository
+//go:generate go tool mockgen -destination=../mock/build_repository.go -mock_names=Repository=BuildRepository -package mock github.com/pikoci/pikoci/pikoci/build Repository
 
 type Repository interface {
 	Create(ctx context.Context, tc, pn, jn string, b Build) (uint32, string, error)

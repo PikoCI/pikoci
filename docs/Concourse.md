@@ -130,4 +130,4 @@ Pipelines use HCL syntax, which supports variables, string interpolation, and is
 3. Convert your pipeline YAML to HCL, mapping `get`/`task`/`put` steps
 4. Use `variable` blocks for values that were in your Concourse credential manager
 
-A [Concourse pipeline importer](https://github.com/xescugc/pikoci/issues/210) is planned.
+A [Concourse pipeline importer](https://github.com/pikoci/pikoci/issues/210) is planned.

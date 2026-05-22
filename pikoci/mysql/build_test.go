@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/xescugc/pikoci/pikoci/mysql"
+	"github.com/pikoci/pikoci/pikoci/mysql"
 )
 
 func TestFind(t *testing.T) {

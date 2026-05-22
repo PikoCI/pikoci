@@ -3,7 +3,7 @@ package job
 import (
 	"time"
 
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
 type StepType string

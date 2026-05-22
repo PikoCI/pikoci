@@ -1,4 +1,4 @@
-module github.com/xescugc/pikoci
+module github.com/pikoci/pikoci
 
 go 1.25.1
 

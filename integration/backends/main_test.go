@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/cycloidio/sqlr"
-	"github.com/xescugc/pikoci/pikoci/mysql"
-	"github.com/xescugc/pikoci/pikoci/mysql/migrate"
+	"github.com/pikoci/pikoci/pikoci/mysql"
+	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
 
 	_ "gocloud.dev/pubsub/kafkapubsub"
 	_ "gocloud.dev/pubsub/mempubsub"

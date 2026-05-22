@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/cycloidio/sqlr"
-	"github.com/xescugc/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/job"
 )
 
 type JobRepository struct {

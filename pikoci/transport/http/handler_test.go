@@ -10,8 +10,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/xescugc/pikoci/pikoci/mock"
-	"github.com/xescugc/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/mock"
+	"github.com/pikoci/pikoci/pikoci/user"
 	"go.uber.org/mock/gomock"
 )
 

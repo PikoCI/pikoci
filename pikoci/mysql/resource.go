@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/cycloidio/sqlr"
-	"github.com/xescugc/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/resource"
 )
 
 type ResourceRepository struct {
