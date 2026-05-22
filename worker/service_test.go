@@ -2966,5 +2966,83 @@ func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "on_failure hook should NOT run on cancellation (marker file should not exist)")
 }
 
+func TestRunGetStepLocal_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	dir := t.TempDir()
+	// Create a local resource directory
+	resDir := filepath.Join(dir, "my-resource")
+	require.NoError(t, os.MkdirAll(resDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(resDir, "test.txt"), []byte("content"), 0644))
+
+	cwd := filepath.Join(dir, "workdir")
+	require.NoError(t, os.MkdirAll(cwd, 0755))
+
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+	}
+	b := build.Build{
+		ID:          1,
+		BuildNumber: "1",
+		Status:      build.Started,
+		Steps:       []build.Step{},
+	}
+	g := job.GetStep{Type: "git", Name: "my-repo"}
+	ps := job.PlanStep{Type: job.StepTypeGet, Get: &g}
+
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), "main", "test-pipeline", "test-job", "1", gomock.Any()).Return(nil).AnyTimes()
+
+	failed := w.runGetStepLocal(context.Background(), m, &b, cwd, nil, g, ps, resDir)
+	assert.False(t, failed)
+	assert.Equal(t, 1, len(b.Steps))
+	assert.Equal(t, build.Succeeded, b.Steps[0].Status)
+	assert.Contains(t, b.Steps[0].Logs, "using local resource override")
+
+	// Verify directory was copied
+	dst := filepath.Join(cwd, "my-repo")
+	info, err := os.Stat(dst)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir(), "expected directory")
+	// Verify file contents were copied
+	content, err := os.ReadFile(filepath.Join(dst, "test.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "content", string(content))
+}
+
+func TestRunGetStepLocal_MissingPath(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	dir := t.TempDir()
+	cwd := filepath.Join(dir, "workdir")
+	require.NoError(t, os.MkdirAll(cwd, 0755))
+
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+	}
+	b := build.Build{
+		ID:          1,
+		BuildNumber: "1",
+		Status:      build.Started,
+		Steps:       []build.Step{},
+	}
+	g := job.GetStep{Type: "git", Name: "my-repo"}
+	ps := job.PlanStep{Type: job.StepTypeGet, Get: &g}
+
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), "main", "test-pipeline", "test-job", "1", gomock.Any()).Return(nil).AnyTimes()
+
+	missingPath := filepath.Join(dir, "does-not-exist")
+	failed := w.runGetStepLocal(context.Background(), m, &b, cwd, nil, g, ps, missingPath)
+	assert.True(t, failed)
+	assert.Equal(t, 1, len(b.Steps))
+	assert.Equal(t, build.Failed, b.Steps[0].Status)
+	assert.Contains(t, b.Steps[0].Logs, "does not exist")
+}
+
 // Silence the unused import warnings
 var _ = time.Now

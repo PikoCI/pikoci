@@ -11,7 +11,7 @@ import (
 )
 
 // Migrate runs the migrations on the provided db
-func Migrate(db *sql.DB, system string) error {
+func Migrate(db *sql.DB, system string, opts ...migrator.Option) error {
 	ms := make([]interface{}, 0, len(migrations.Migrations))
 	for _, m := range migrations.Migrations {
 		val := m
@@ -27,7 +27,10 @@ func Migrate(db *sql.DB, system string) error {
 		})
 	}
 
-	m, err := migrator.New(migrator.Migrations(ms...))
+	allOpts := []migrator.Option{migrator.Migrations(ms...)}
+	allOpts = append(allOpts, opts...)
+
+	m, err := migrator.New(allOpts...)
 	if err != nil {
 		return fmt.Errorf("error while creating the migration: %w", err)
 	}

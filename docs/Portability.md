@@ -59,7 +59,7 @@ pikoci.db
   --db-name pikoci.db \
   --pipeline-name my-pipeline \
   --pipeline-config pipeline.hcl \
-  --pipeline-vars vars.json
+  --vars vars.json
 ```
 
 ## Cross-platform builds

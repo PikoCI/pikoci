@@ -28,7 +28,7 @@ pikoci server [flags]
 | `--config` | `-c` | | no | Path to a config file |
 | `--team-canonical` | | `main` | no | Team to use for `--pipeline-*` flags |
 | `--pipeline-config` | | | no | Load a pipeline config file at startup |
-| `--pipeline-vars` | `-v` | | no | Path to a JSON vars file for the startup pipeline |
+| `--vars` | `-v` | | no | Path to a JSON vars file for the startup pipeline |
 | `--pipeline-name` | `-n` | | no | Name for the startup pipeline |
 
 ## Environment variables
@@ -106,7 +106,7 @@ pikoci server \
   --jwt-secret my-secret \
   --pipeline-name my-pipeline \
   --pipeline-config pipeline.hcl \
-  --pipeline-vars vars.json
+  --vars vars.json
 ```
 
 ## Horizontal scaling

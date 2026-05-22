@@ -104,6 +104,29 @@ job "gen" {
 ```
 
 
+## Local Execution
+
+Run a single pipeline job locally without starting a server. PikoCI spins up an in-memory database, pubsub, and worker in a single process, executes the job, streams the output, and exits with an appropriate exit code.
+
+```bash
+# Run a job from a pipeline file
+pikoci run -p pipeline.hcl -j my-job
+
+# Override variables
+pikoci run -p pipeline.hcl -j my-job --var db_password=local
+
+# Use a local directory instead of pulling a resource (type.name format)
+pikoci run -p pipeline.hcl -j test --resource git.my-repo=./my-repo
+
+# Load variables from a JSON file
+pikoci run -p pipeline.hcl -j my-job -v vars.json
+```
+
+Resource overrides (`--resource name=path`) copy the local directory into the working directory, skipping the resource type's pull command entirely. This is useful for testing pipeline changes against local code.
+
+See [#161](https://github.com/xescugc/pikoci/issues/161) for more details.
+
+
 ## Examples
 
 The [`examples/`](examples/) folder contains ready-to-run pipelines and a Docker Compose file for one-command evaluation. See the [examples README](examples/README.md) for details.

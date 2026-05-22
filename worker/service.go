@@ -42,6 +42,14 @@ type Worker struct {
 
 	draining atomic.Bool
 	logger   *slog.Logger
+
+	// ResourceOverrides maps resource canonical names to local directory paths.
+	// When set, get steps for these resources will copy the local directory
+	// instead of running the resource type's pull command.
+	ResourceOverrides map[string]string
+	// LocalMode enables local execution behavior: skips passed-constraints,
+	// version-availability checks, put steps, and secret resolution.
+	LocalMode bool
 }
 
 func New(s pikoci.Service, t queue.Topic, ss queue.Subscription, l *slog.Logger) *Worker {
@@ -197,7 +205,9 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 	}
 
 	var resolvedVersions map[string]uint32
-	if m.RetryBuildNumber != "" && m.RetryBuildID != 0 {
+	if w.LocalMode {
+		resolvedVersions = make(map[string]uint32)
+	} else if m.RetryBuildNumber != "" && m.RetryBuildID != 0 {
 		// Look up versions from the retried build
 		stepVersions, err := w.pikoci.FindBuildGetVersions(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, m.RetryBuildID)
 		if err != nil {
@@ -250,6 +260,12 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 		}
 		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnSuccess, "on_success", resolved, "succeeded")
 	} else {
+		// Ensure local b reflects the Failed status set by failBuild (which
+		// operates on a copy) so that any subsequent updateBuild calls from
+		// hooks don't overwrite the DB status back to Started.
+		if b.Status != build.Failed {
+			b.Status = build.Failed
+		}
 		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnFailure, "on_failure", resolved, "failed")
 	}
 	status := "succeeded"
@@ -438,6 +454,12 @@ func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, c
 		secretResolved = resolved[0]
 	}
 	rCan := g.ResourceCanonical()
+
+	if w.ResourceOverrides != nil {
+		if localPath, ok := w.ResourceOverrides[rCan]; ok {
+			return w.runGetStepLocal(ctx, m, b, cwd, pp, g, ps, localPath)
+		}
+	}
 	r, ok := pp.Resource(rCan)
 	if !ok {
 		return false
@@ -562,6 +584,60 @@ func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, c
 	return false
 }
 
+// runGetStepLocal handles a get step by copying a local directory into the
+// working directory instead of running the resource type's pull command. This
+// is used for local execution with --resource overrides. A real copy is used
+// instead of a symlink because symlinks break with Docker volume mounts (the
+// container can't resolve host-side symlink targets).
+// Returns true if the step failed.
+func (w *Worker) runGetStepLocal(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, g job.GetStep, ps job.PlanStep, localPath string) bool {
+	absPath, err := filepath.Abs(localPath)
+	if err != nil {
+		b.Steps = append(b.Steps, build.Step{Type: "get", Name: g.Name, Logs: fmt.Sprintf("failed to resolve path %q: %s", localPath, err), Status: build.Failed})
+		b.Status = build.Failed
+		w.failBuild(ctx, m, *b, nil)
+		return true
+	}
+
+	if _, err := os.Stat(absPath); os.IsNotExist(err) {
+		b.Steps = append(b.Steps, build.Step{Type: "get", Name: g.Name, Logs: fmt.Sprintf("local resource override path does not exist: %s", absPath), Status: build.Failed})
+		b.Status = build.Failed
+		w.failBuild(ctx, m, *b, nil)
+		return true
+	}
+
+	// Use the resource's "name" param as the directory name if available,
+	// matching the behavior of resource type pull commands (e.g. git clone
+	// into $param_name). Fall back to the step name.
+	dirName := g.Name
+	if pp != nil {
+		rCan := g.ResourceCanonical()
+		if r, ok := pp.Resource(rCan); ok && r.Params != nil {
+			if n, ok := r.Params.Params["name"]; ok && n != "" {
+				dirName = n
+			}
+		}
+	}
+
+	dst := filepath.Join(cwd, dirName)
+	// Use cp -a to copy preserving permissions. This works with all runners
+	// including Docker, unlike symlinks which break across mount boundaries.
+	cpCmd := exec.CommandContext(ctx, "cp", "-a", absPath, dst)
+	if out, err := cpCmd.CombinedOutput(); err != nil {
+		b.Steps = append(b.Steps, build.Step{Type: "get", Name: g.Name, Logs: fmt.Sprintf("failed to copy %s -> %s: %s\n%s", absPath, dst, err, string(out)), Status: build.Failed})
+		b.Status = build.Failed
+		w.failBuild(ctx, m, *b, nil)
+		return true
+	}
+
+	logMsg := fmt.Sprintf("using local resource override: %s -> %s", absPath, dirName)
+	b.Steps = append(b.Steps, build.Step{Type: "get", Name: g.Name, Logs: logMsg, Status: build.Succeeded})
+	w.updateBuild(ctx, m, *b)
+	w.runHooks(ctx, m, b, &b.Steps, cwd, nil, g.Name, ps.OnSuccess, "on_success", nil)
+	w.runHooks(ctx, m, b, &b.Steps, cwd, nil, g.Name, ps.Ensure, "ensure", nil)
+	return false
+}
+
 // runTaskStep runs a single task step.
 // Returns true if the step failed.
 func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, t job.TaskStep, ps job.PlanStep, resolved ...map[string]string) bool {
@@ -679,6 +755,14 @@ func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, 
 // runPutStep runs a single put step (resource push).
 // Returns true if the step failed.
 func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, p job.PutStep, ps job.PlanStep, resolved ...map[string]string) bool {
+	if w.LocalMode {
+		rCan := utils.ResourceCanonical(p.Type, p.Name)
+		logMsg := fmt.Sprintf("skipping put step (local execution): %s", rCan)
+		b.Steps = append(b.Steps, build.Step{Type: "put", Name: p.Name, Logs: logMsg, Status: build.Succeeded})
+		w.updateBuild(ctx, m, *b)
+		return false
+	}
+
 	var secretResolved map[string]string
 	if len(resolved) > 0 {
 		secretResolved = resolved[0]
@@ -1716,6 +1800,9 @@ func (w *Worker) stopServices(m queue.Body, b *build.Build, cwd string, pp *pipe
 // the same secret type and path are batched into a single fetch call.
 func (w *Worker) resolveSecretVars(ctx context.Context, cwd string, pp *pipeline.Pipeline) (map[string]string, error) {
 	if len(pp.SecretVars) == 0 {
+		return nil, nil
+	}
+	if w.LocalMode {
 		return nil, nil
 	}
 
