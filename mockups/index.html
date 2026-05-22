@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PikoCI - Pipeline Editor Mockups</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; background: #1a1a2e; color: #fff; }
+  .selector { display: flex; align-items: center; gap: 16px; padding: 10px 20px; background: #16213e; border-bottom: 2px solid #0f3460; }
+  .selector h3 { font-size: 0.85rem; opacity: 0.6; font-weight: 400; }
+  .selector button {
+    padding: 8px 20px; border: 2px solid #0f3460; background: transparent; color: #fff;
+    border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all 0.15s;
+  }
+  .selector button:hover { border-color: #29ADFF; color: #29ADFF; }
+  .selector button.active { background: #29ADFF; border-color: #29ADFF; color: #000; }
+  iframe { flex: 1; border: none; width: 100%; }
+</style>
+</head>
+<body>
+  <div class="selector">
+    <h3>Select mockup:</h3>
+    <button onclick="load('pipeline-editor-A.html', this)">A — IDE Panel Layout</button>
+    <button onclick="load('pipeline-editor-B.html', this)">B — Card Layout</button>
+    <button onclick="load('pipeline-editor-C.html', this)">C — Card + Outline + Tabs</button>
+    <button onclick="load('pipeline-editor-D.html', this)">D — Fullscreen + Blocks + Errors</button>
+    <button class="active" onclick="load('pipeline-editor-E.html', this)">E — Navbar + Graph Panel</button>
+  </div>
+  <iframe id="frame" src="pipeline-editor-E.html"></iframe>
+  <script>
+    function load(src, btn) {
+      document.getElementById('frame').src = src;
+      document.querySelectorAll('.selector button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+  </script>
+</body>
+</html>

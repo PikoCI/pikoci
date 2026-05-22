@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PikoCI - Pipeline Editor - Option A: IDE Panel Layout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+/*
+  OPTION A — "IDE Panel Layout"
+
+  Concept: The editor IS the page. A full-width IDE-style workspace with
+  the editor as the dominant element and the graph preview as a toggleable
+  right panel. The toolbar sits directly on the editor chrome like a real
+  code editor. Settings (name, vars, public) live in a compact top bar.
+
+  Key ideas:
+  - Editor fills available vertical space (no scrolling the page itself)
+  - Graph preview is a resizable right panel (like a file tree in an IDE)
+  - Toolbar icons sit on the editor's own title bar
+  - Settings collapse into a slim horizontal strip above the workspace
+*/
+
+:root {
+  --bg-body:       #FAFAFA;
+  --bg-surface:    #FFFFFF;
+  --bg-muted:      #F0F0F2;
+  --bg-navbar:     #1D2B53;
+  --text-primary:  #1D2B53;
+  --text-secondary:#5F574F;
+  --text-muted:    #83769C;
+  --text-on-dark:  #ffffff;
+  --border:        #d0ccc6;
+  --border-strong: #a8a4a0;
+  --primary:       #29ADFF;
+  --primary-hover: #1D8BD1;
+  --primary-light: rgba(41, 173, 255, 0.08);
+  --success:       #00A83A;
+  --danger:        #FF004D;
+  --warning:       #FFA300;
+  --font-body:     'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono:     'JetBrains Mono', monospace;
+  --radius:        6px;
+  --shadow-sm:     0 1px 2px rgba(29, 43, 83, 0.05);
+  --shadow-md:     0 2px 8px rgba(29, 43, 83, 0.08);
+}
+
+[data-theme="dark"] {
+  --bg-body:       #000000;
+  --bg-surface:    #1D2B53;
+  --bg-muted:      #0d1a38;
+  --bg-navbar:     #0d1a38;
+  --text-primary:  #FFF1E8;
+  --text-secondary:#C2C3C7;
+  --text-muted:    #83769C;
+  --border:        #2a3a65;
+  --border-strong: #3a4a78;
+  --primary-light: rgba(41, 173, 255, 0.12);
+  --shadow-sm:     0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md:     0 2px 8px rgba(0,0,0,0.4);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg-body);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---- Navbar (mockup) ---- */
+.navbar {
+  background: var(--bg-navbar);
+  padding: 0.55rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.navbar-brand {
+  color: var(--text-on-dark);
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 1px;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.navbar-brand:hover { color: #FFA300; }
+.navbar-right { display: flex; align-items: center; gap: 12px; }
+.navbar-right a { color: var(--text-on-dark); text-decoration: none; font-size: 0.85rem; }
+.navbar-right a:hover { color: #FFA300; }
+
+/* ---- Breadcrumb strip ---- */
+.breadcrumb-strip {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 1.5rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.breadcrumb-strip a { color: var(--primary); text-decoration: none; }
+.breadcrumb-strip span { margin: 0 6px; color: var(--border-strong); }
+
+/* ---- Settings bar (compact horizontal) ---- */
+.settings-bar {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.settings-bar label {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.settings-bar input[type="text"] {
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 10px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  width: 240px;
+}
+.settings-bar input[type="text"]:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+.settings-bar input[type="text"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-muted);
+}
+[data-theme="dark"] .settings-bar input[type="text"] {
+  background: #0d1a38;
+  border-color: #2a3a65;
+  color: #FFF1E8;
+}
+[data-theme="dark"] .settings-bar input[type="text"]:disabled {
+  background: #000;
+  color: #83769C;
+}
+.settings-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+.checkbox-group input { accent-color: var(--primary); }
+.settings-bar .btn-submit {
+  margin-left: auto;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 6px 20px;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.settings-bar .btn-submit:hover { background: var(--primary-hover); }
+[data-theme="dark"] .settings-bar .btn-submit { color: #000; }
+
+/* ---- Workspace (editor + graph panel) ---- */
+.workspace {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---- Editor panel ---- */
+.editor-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.editor-toolbar {
+  background: var(--bg-muted);
+  border-bottom: 1px solid var(--border);
+  padding: 4px 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.editor-toolbar .tab {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 5px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-bottom: 1px solid var(--bg-surface);
+  border-radius: var(--radius) var(--radius) 0 0;
+  margin-bottom: -1px;
+  position: relative;
+}
+.editor-toolbar .tab-inactive {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 5px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.editor-toolbar .tab-inactive:hover { color: var(--text-primary); background: var(--primary-light); }
+.editor-toolbar .toolbar-spacer { flex: 1; }
+.editor-toolbar .toolbar-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.editor-toolbar .toolbar-btn:hover {
+  color: var(--primary);
+  background: var(--primary-light);
+}
+.editor-toolbar .toolbar-btn.active {
+  color: var(--primary);
+  background: var(--primary-light);
+}
+.toolbar-separator {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 4px;
+}
+[data-theme="dark"] .editor-toolbar { background: #0a1228; }
+[data-theme="dark"] .editor-toolbar .tab { background: var(--bg-surface); border-color: var(--border); border-bottom-color: var(--bg-surface); }
+
+/* ---- Code area (fake editor) ---- */
+.code-area {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-surface);
+  position: relative;
+}
+.fake-editor {
+  display: flex;
+  min-height: 100%;
+}
+.line-numbers {
+  background: var(--bg-muted);
+  border-right: 1px solid var(--border);
+  padding: 12px 0;
+  text-align: right;
+  user-select: none;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  min-width: 48px;
+}
+.line-numbers div { padding: 0 12px 0 8px; line-height: 1.65; }
+.line-numbers div.active { color: var(--text-primary); background: var(--primary-light); }
+.code-content {
+  flex: 1;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.65;
+  white-space: pre;
+  overflow-x: auto;
+}
+.code-content .kw { color: #7B2FBE; font-weight: 500; }
+.code-content .str { color: #00A83A; }
+.code-content .cmt { color: #83769C; font-style: italic; }
+.code-content .attr { color: #1D2B53; }
+.code-content .err-line {
+  background: rgba(255, 0, 77, 0.08);
+  display: inline-block;
+  width: 100%;
+  border-left: 2px solid var(--danger);
+  margin-left: -16px;
+  padding-left: 14px;
+}
+[data-theme="dark"] .code-content .kw { color: #FF77A8; }
+[data-theme="dark"] .code-content .str { color: #00E756; }
+[data-theme="dark"] .code-content .attr { color: #FFF1E8; }
+
+.active-line {
+  background: var(--primary-light);
+  display: inline-block;
+  width: 100%;
+  margin-left: -16px;
+  padding-left: 16px;
+}
+
+/* ---- Graph panel (right sidebar) ---- */
+.graph-panel {
+  width: 380px;
+  background: var(--bg-muted);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: width 0.2s ease;
+}
+.graph-panel.collapsed {
+  width: 0;
+  overflow: hidden;
+  border-left: none;
+}
+.graph-panel-header {
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-muted);
+  flex-shrink: 0;
+}
+.graph-panel-header span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.graph-panel-header button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.graph-panel-header button:hover { color: var(--text-primary); background: var(--primary-light); }
+[data-theme="dark"] .graph-panel { background: #0a1228; }
+[data-theme="dark"] .graph-panel-header { background: #0a1228; }
+
+.graph-content {
+  flex: 1;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+.graph-placeholder {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.graph-placeholder .graph-mockup {
+  width: 100%;
+  padding: 20px;
+}
+/* Fake graph nodes */
+.graph-node {
+  background: var(--bg-surface);
+  border: 2px solid var(--primary);
+  border-radius: 8px;
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s;
+  width: fit-content;
+  margin: 0 auto;
+}
+.graph-node:hover {
+  border-color: var(--primary-hover);
+  box-shadow: 0 0 0 3px var(--primary-light);
+  transform: translateY(-1px);
+}
+.graph-node.resource { border-color: var(--success); }
+.graph-node.resource:hover { border-color: var(--success); box-shadow: 0 0 0 3px rgba(0,168,58,0.1); }
+.graph-arrow {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  padding: 4px 0;
+}
+
+/* ---- Status bar (bottom) ---- */
+.status-bar {
+  background: var(--bg-navbar);
+  color: var(--text-on-dark);
+  font-size: 0.72rem;
+  padding: 3px 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.status-bar .status-item { opacity: 0.7; }
+.status-bar .status-item.right { margin-left: auto; }
+
+/* ---- Error tooltip ---- */
+.error-tooltip {
+  position: absolute;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 4px;
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  z-index: 10;
+  white-space: nowrap;
+}
+.error-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 12px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 5px solid var(--danger);
+}
+
+/* ---- Theme toggle ---- */
+.theme-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--text-on-dark);
+  cursor: pointer;
+  font-size: 1rem;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.theme-toggle-btn:hover { opacity: 1; color: #FFA300; }
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar">
+  <a class="navbar-brand" href="#">
+    <svg width="22" height="22" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#29ADFF"/><text x="16" y="22" text-anchor="middle" fill="#fff" font-size="18" font-weight="bold" font-family="monospace">P</text></svg>
+    PikoCI
+  </a>
+  <div class="navbar-right">
+    <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme"><i class="bi bi-moon-stars"></i></button>
+    <a href="#">xescugc</a>
+  </div>
+</nav>
+
+<!-- Breadcrumb -->
+<div class="breadcrumb-strip">
+  <a href="#">my-team</a>
+  <span>/</span>
+  <a href="#">deploy-production</a>
+  <span>/</span>
+  Edit
+</div>
+
+<!-- Settings bar (compact) -->
+<div class="settings-bar">
+  <div class="settings-group">
+    <label>Name</label>
+    <input type="text" value="deploy-production" disabled>
+  </div>
+  <div class="checkbox-group">
+    <input type="checkbox" id="public" checked>
+    <label for="public" style="font-size:0.82rem; color:var(--text-secondary)">Public</label>
+  </div>
+  <button class="btn-submit" type="button">Update Pipeline</button>
+</div>
+
+<!-- Workspace -->
+<div class="workspace">
+  <!-- Editor Panel -->
+  <div class="editor-panel">
+    <div class="editor-toolbar">
+      <div class="tab">pipeline.hcl</div>
+      <div class="tab-inactive" onclick="toggleVarsTab(this)">vars.json</div>
+      <div class="toolbar-spacer"></div>
+      <button class="toolbar-btn" title="HCL Reference"><i class="bi bi-book"></i></button>
+      <div class="toolbar-separator"></div>
+      <button class="toolbar-btn active" title="Toggle Graph Preview" onclick="toggleGraph()"><i class="bi bi-diagram-3"></i></button>
+    </div>
+    <div class="code-area">
+      <div class="fake-editor">
+        <div class="line-numbers">
+          <div>1</div><div>2</div><div>3</div><div class="active">4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>10</div><div>11</div><div>12</div><div>13</div><div>14</div><div>15</div><div>16</div><div>17</div><div>18</div><div>19</div><div>20</div><div>21</div><div>22</div><div>23</div><div>24</div><div>25</div><div>26</div><div>27</div>
+        </div>
+        <div class="code-content">
+<span class="cmt"># Deploy pipeline</span>
+
+<span class="kw">resource_type</span> <span class="str">"git"</span> {
+<span class="active-line">  <span class="attr">source</span> = <span class="str">"github.com/xescugc/pikoci/resource_types/git.hcl"</span></span>
+}
+
+<span class="kw">resource</span> <span class="str">"repo"</span> {
+  <span class="attr">type</span> = <span class="str">"git"</span>
+  <span class="attr">source</span> = {
+    <span class="attr">uri</span> = <span class="str">"https://github.com/xescugc/pikoci.git"</span>
+  }
+}
+
+<span class="kw">job</span> <span class="str">"build"</span> {
+  <span class="kw">get</span> <span class="str">"repo"</span> {}
+  <span class="kw">task</span> <span class="str">"compile"</span> {
+    <span class="attr">config</span> = {
+      <span class="attr">image</span> = <span class="str">"golang:1.22"</span>
+      <span class="attr">run</span>   = <span class="str">"cd repo &amp;&amp; make build"</span>
+    }
+  }
+}
+
+<span class="kw">job</span> <span class="str">"deploy"</span> {
+  <span class="kw">get</span> <span class="str">"repo"</span> { <span class="attr">passed</span> = [<span class="str">"build"</span>] }
+<span class="err-line">  <span class="kw">task</span> <span class="str">"push"</span> {</span>
+    <div class="error-tooltip" style="top: calc(1.65em * 25 + 18px); left: 56px;">Invalid block definition: expected "{"</div>
+    <span class="attr">config</span> = {
+      <span class="attr">image</span> = <span class="str">"alpine"</span>
+    }
+  }
+}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Graph Panel (right sidebar) -->
+  <div class="graph-panel" id="graphPanel">
+    <div class="graph-panel-header">
+      <span>Graph Preview</span>
+      <button onclick="toggleGraph()" title="Close panel"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="graph-content">
+      <div class="graph-placeholder">
+        <div class="graph-mockup">
+          <div class="graph-node resource">repo (git)</div>
+          <div class="graph-arrow"><i class="bi bi-arrow-down"></i></div>
+          <div class="graph-node">build</div>
+          <div class="graph-arrow"><i class="bi bi-arrow-down"></i></div>
+          <div class="graph-node" style="border-color: var(--danger);">deploy</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar">
+  <span class="status-item"><i class="bi bi-exclamation-triangle" style="color:#FFA300"></i> 1 error</span>
+  <span class="status-item">Ln 4, Col 12</span>
+  <span class="status-item right">HCL</span>
+  <span class="status-item">UTF-8</span>
+</div>
+
+<script>
+function toggleTheme() {
+  var d = document.documentElement;
+  if (d.getAttribute('data-theme') === 'dark') {
+    d.removeAttribute('data-theme');
+  } else {
+    d.setAttribute('data-theme', 'dark');
+  }
+}
+function toggleGraph() {
+  document.getElementById('graphPanel').classList.toggle('collapsed');
+  var btn = document.querySelector('.toolbar-btn[title="Toggle Graph Preview"]');
+  btn.classList.toggle('active');
+}
+function toggleVarsTab(el) {
+  // Visual toggle only for mockup
+  el.classList.toggle('tab');
+  el.classList.toggle('tab-inactive');
+}
+</script>
+</body>
+</html>

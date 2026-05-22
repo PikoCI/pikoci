@@ -26,8 +26,10 @@ import (
 
 // TestConcurrentBuildCreation verifies that when a resource triggers multiple
 // jobs simultaneously, all builds are created successfully without SQLITE_BUSY
-// errors. This reproduces the issue where concurrent workers contend on the
-// SQLite write lock and only one build gets created.
+// errors. This reproduces the production scenario where concurrent workers
+// contend on the SQLite write lock. Without _txlock=immediate on the SQLite
+// DSN, this test may intermittently fail on slower I/O (e.g. ARM64 servers)
+// with only 1 of 3 builds being created due to SQLITE_BUSY.
 func TestConcurrentBuildCreation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
