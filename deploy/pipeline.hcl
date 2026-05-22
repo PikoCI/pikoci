@@ -143,7 +143,7 @@ job "build-latest" {
         <<-EOT
         cd ${var.git_name}
 
-        echo "${var.docker_password}" | docker login -u "${var.docker_username}" --password-stdin
+        echo "${var.ghcr_token}" | docker login -u "${var.ghcr_username}" --password-stdin
 
         docker buildx create --use --name pikoci-builder 2>/dev/null || docker buildx use pikoci-builder
         docker buildx build --platform linux/amd64,linux/arm64 -t xescugc/pikoci:latest --push .
@@ -225,7 +225,7 @@ job "build-release" {
         cd ${var.git_name}
         TAG=$(git describe --tags --exact-match)
 
-        echo "${var.docker_password}" | docker login -u "${var.docker_username}" --password-stdin
+        echo "${var.ghcr_token}" | docker login -u "${var.ghcr_username}" --password-stdin
 
         docker buildx create --use --name pikoci-builder 2>/dev/null || docker buildx use pikoci-builder
         docker buildx build --platform linux/amd64,linux/arm64 -t xescugc/pikoci:$TAG --push .
@@ -374,16 +374,16 @@ variable "pikoci_github_app_pem" {
   }
 }
 
-variable "docker_username" {
+variable "ghcr_username" {
   type = string
   secret "env" {
-    key = "DOCKER_USERNAME"
+    key = "GHCR_USERNAME"
   }
 }
 
-variable "docker_password" {
+variable "ghcr_token" {
   type = string
   secret "env" {
-    key = "DOCKER_PASSWORD"
+    key = "GHCR_TOKEN"
   }
 }
