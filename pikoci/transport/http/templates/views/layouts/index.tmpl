@@ -1796,6 +1796,8 @@
             }),
             parent: this.$el.find('#pipeline-editor')[0],
           })
+          // Expose editor for integration tests
+          window._pikoEditor = this.editor
           this._themeObserver = new MutationObserver(function() {
             var dark = document.documentElement.getAttribute('data-theme') === 'dark'
             that.editor.dispatch({

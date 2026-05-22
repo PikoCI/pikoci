@@ -906,11 +906,13 @@ func containsString(s, substr string) bool {
 func setEditorContent(t *testing.T, wd selenium.WebDriver, content string) {
 	t.Helper()
 	_, err := wd.ExecuteScript(`
-		var editor = document.querySelector('.cm-content');
-		if (editor && editor.cmView && editor.cmView.view) {
-			var view = editor.cmView.view;
+		var view = window._pikoEditor;
+		if (view) {
 			view.dispatch({changes: {from: 0, to: view.state.doc.length, insert: arguments[0]}});
 		}
+		// Also sync hidden textarea as fallback
+		var ta = document.getElementById('pipeline');
+		if (ta) { ta.value = arguments[0]; }
 	`, []interface{}{content})
 	require.NoError(t, err)
 }
