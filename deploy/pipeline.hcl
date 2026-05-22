@@ -205,7 +205,7 @@ job "deploy-website" {
         "-ec",
         <<-EOT
         mkdir -p /var/www/pikoci.com
-        cp pikoci.com/index.html /var/www/pikoci.com/index.html
+        cp -a pikoci.com/. /var/www/pikoci.com/
         EOT
       ]
     }
