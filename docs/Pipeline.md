@@ -23,7 +23,7 @@ variable "repo_name" {
 | `type`    | yes      | `string`                           |
 | `default` | no       | Default value if not set via vars file |
 
-Variables without a default must be provided via a JSON vars file (`--vars` / `--pipeline-vars`).
+Variables without a default must be provided via a JSON vars file (`--vars` / `-v`).
 
 ## resource_type
 

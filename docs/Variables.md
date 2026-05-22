@@ -38,7 +38,7 @@ Pass the file when creating or updating a pipeline:
 pikoci client pipelines create -n my-pipeline -c pipeline.hcl -v vars.json
 
 # At server startup
-pikoci server --pipeline-name my-pipeline --pipeline-config pipeline.hcl --pipeline-vars vars.json
+pikoci server --pipeline-name my-pipeline --pipeline-config pipeline.hcl --vars vars.json
 ```
 
 ## Using variables
@@ -98,7 +98,7 @@ At **runtime** (every resource check, get, task, or put execution), the worker r
 ### Precedence
 
 ```
-vars file (--pipeline-vars) > secret block > default
+vars file (--vars) > secret block > default
 ```
 
 - If the variable is provided via vars file → use it, skip secret resolution

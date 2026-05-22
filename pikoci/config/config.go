@@ -27,5 +27,5 @@ type Config struct {
 	TeamCanonical       string `mapstructure:"team-canonical"`
 	PipelineDisplayName string `mapstructure:"pipeline-name"`
 	PipelineConfig      string `mapstructure:"pipeline-config"`
-	PipelineVars        string `mapstructure:"pipeline-vars"`
+	PipelineVars        string `mapstructure:"vars"`
 }

@@ -190,7 +190,7 @@ var serverCmd = &cobra.Command{
 		pipelineName := serverViper.GetString("pipeline-name")
 		if pipelineName != "" {
 			pipelineConfig := serverViper.GetString("pipeline-config")
-			pipelineVars := serverViper.GetString("pipeline-vars")
+			pipelineVars := serverViper.GetString("vars")
 			teamCanonical := serverViper.GetString("team-canonical")
 			err = createPipeline(ctx, svc, teamCanonical, pipelineName, pipelineConfig, pipelineVars)
 			if err != nil {
@@ -281,7 +281,7 @@ func init() {
 	serverCmd.Flags().String("log-level", "info", "Sets the log level ('debug', 'info', 'warn', 'error')")
 	serverCmd.Flags().String("team-canonical", mainTeamCanonical, "Team Canonical to scope the action")
 	serverCmd.Flags().String("pipeline-config", "", "Path to the Pipeline config file")
-	serverCmd.Flags().StringP("pipeline-vars", "v", "", "Path to the Pipeline var file (JSON)")
+	serverCmd.Flags().StringP("vars", "v", "", "Path to the Pipeline var file (JSON)")
 	serverCmd.Flags().StringP("pipeline-name", "n", "", "Name of the Pipeline")
 
 	// Bind all flags to viper
