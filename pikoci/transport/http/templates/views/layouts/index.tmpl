@@ -20,6 +20,7 @@
     <script type = "text/javascript" src="/js/backbonejs.min.js"></script>
     <script type = "text/javascript" src="/js/bootstrap.bundle.min.js"></script>
     <script type = "text/javascript" src="/js/viz-global.js"></script>
+    <script type = "text/javascript" src="/js/codemirror-hcl.min.js"></script>
 
     <script type="text/template" id="main-view">
       <header>
@@ -294,34 +295,81 @@
     </script>
 
     <script type="text/template" id="pipelines-new-view">
-      <div class="mb-3">
-        <h1 class="h4 fw-bold"><%- id ? "Update Pipeline":"New Pipeline" %></h1>
+      <div class="piko-page-header mb-3">
+        <h1 class="h4 fw-bold mb-0"><%- id ? "Update Pipeline":"New Pipeline" %></h1>
       </div>
       <form>
-        <div class="mb-3" style="max-width:480px;">
-          <label for="name" class="form-label">Name</label>
-          <input type="text" class="form-control" id="name" value="<%- name %>" placeholder="e.g. deploy-production" <%- id ? "disabled" : ""%>>
+        <div class="piko-settings-row mb-3">
+          <div class="piko-field">
+            <label class="form-label">Name</label>
+            <input type="text" class="form-control" id="name" value="<%- name %>" placeholder="e.g. deploy-production" style="width:280px" <%- id ? "disabled" : ""%>>
+          </div>
+          <div class="piko-checkbox-inline">
+            <input type="checkbox" class="form-check-input" id="public" <%- public ? "checked" : "" %>>
+            <label class="form-check-label" for="public">Public</label>
+          </div>
         </div>
-        <div class="row g-4">
-          <div class="col-md-6">
-            <div class="mb-3">
-              <label for="pipeline" class="form-label">Pipeline Definition</label>
-              <textarea type="text" rows="20" class="form-control" id="pipeline"><%- raw %></textarea>
+        <div class="piko-editor-card" id="editor-card">
+          <div class="piko-editor-toolbar">
+            <div class="piko-tab active" id="tab-hcl">pipeline.hcl</div>
+            <div class="piko-tab" id="tab-vars">vars.json</div>
+            <div class="piko-toolbar-spacer"></div>
+            <div class="piko-docs-dropdown" id="docs-dropdown">
+              <button type="button" class="piko-tbtn" id="docs-btn" title="Pipeline documentation">
+                <i class="bi bi-book"></i> <span class="piko-tbtn-label">Docs</span> <i class="bi bi-chevron-down" style="font-size:0.6rem;margin-left:2px"></i>
+              </button>
+              <div class="piko-docs-menu" id="docs-menu">
+                <a href="https://github.com/xescugc/pikoci/wiki/Pipeline" target="_blank" rel="noopener"><i class="bi bi-file-text"></i> Pipeline overview</a>
+                <div class="piko-docs-divider"></div>
+                <div class="piko-docs-label">Blocks</div>
+                <a href="https://github.com/xescugc/pikoci/wiki/Pipeline#job" target="_blank" rel="noopener"><span class="piko-block-icon jb">J</span> job</a>
+                <a href="https://github.com/xescugc/pikoci/wiki/Pipeline#resource" target="_blank" rel="noopener"><span class="piko-block-icon rs">R</span> resource</a>
+                <a href="https://github.com/xescugc/pikoci/wiki/Pipeline#resource_type" target="_blank" rel="noopener"><span class="piko-block-icon rt">R</span> resource_type</a>
+                <a href="https://github.com/xescugc/pikoci/wiki/Pipeline#runner_type" target="_blank" rel="noopener"><span class="piko-block-icon rn">R</span> runner_type</a>
+                <a href="https://github.com/xescugc/pikoci/wiki/Pipeline#secret_type" target="_blank" rel="noopener"><span class="piko-block-icon st">S</span> secret_type</a>
+                <a href="https://github.com/xescugc/pikoci/wiki/Pipeline#service_type" target="_blank" rel="noopener"><span class="piko-block-icon sv">S</span> service_type</a>
+                <a href="https://github.com/xescugc/pikoci/wiki/Pipeline#variable" target="_blank" rel="noopener"><span class="piko-block-icon vr">V</span> variable</a>
+              </div>
             </div>
-            <div class="mb-3">
-              <label for="vars" class="form-label">Vars</label>
-              <textarea type="text" rows="10" class="form-control" id="vars"></textarea>
+            <div class="piko-toolbar-sep"></div>
+            <button type="button" class="piko-tbtn active" id="blocks-btn" title="Toggle blocks panel">
+              <i class="bi bi-list-nested"></i> <span class="piko-tbtn-label">Blocks</span>
+              <span class="piko-error-badge"></span>
+            </button>
+            <div class="piko-toolbar-sep"></div>
+            <button type="button" class="piko-tbtn" id="graph-btn" title="Toggle graph preview">
+              <i class="bi bi-diagram-3"></i>
+            </button>
+            <div class="piko-toolbar-sep"></div>
+            <button type="button" class="piko-tbtn" id="fullscreen-btn" title="Fullscreen (Esc to exit)">
+              <i class="bi bi-arrows-fullscreen"></i>
+            </button>
+          </div>
+          <div class="piko-editor-body">
+            <div class="piko-blocks-panel" id="blocks-panel"></div>
+            <div class="piko-code-area" id="code-area">
+              <div id="pipeline-editor"></div>
+              <textarea id="pipeline" style="display:none"><%- raw %></textarea>
             </div>
-            <div class="mb-3 form-check">
-              <input type="checkbox" class="form-check-input" id="public" <%- public ? "checked" : "" %>>
-              <label class="form-check-label" for="public">Public</label>
-              <div class="form-text">Allow unauthenticated users to view this pipeline, builds, and logs.</div>
+            <div class="piko-vars-area" id="vars-area">
+              <textarea type="text" rows="10" class="form-control" id="vars" placeholder='{"key": "value"}'></textarea>
+              <div class="piko-vars-hint">JSON object passed as variables to the pipeline definition.</div>
             </div>
           </div>
-          <div class="col-md-6">
-            <label class="form-label">Graph Preview</label>
-            <div id="graph" style="background: var(--bg-muted); border: 1px solid var(--border); border-radius: var(--radius); min-height: 200px;">
+          <div class="piko-graph-bottom" id="graph-bottom-panel">
+            <div class="piko-graph-bottom-header">
+              <span><i class="bi bi-diagram-3"></i> Graph Preview</span>
+              <button type="button" id="graph-bottom-close" title="Close"><i class="bi bi-x-lg"></i></button>
             </div>
+            <div class="piko-graph-bottom-body" id="graph-fullscreen"></div>
+          </div>
+        </div>
+        <div class="piko-graph-strip" id="graph-strip">
+          <div class="piko-graph-strip-header" id="graph-strip-header">
+            <span><i class="bi bi-diagram-3"></i> Graph Preview</span>
+            <i class="bi bi-chevron-right piko-graph-chev"></i>
+          </div>
+          <div class="piko-graph-strip-body" id="graph">
           </div>
         </div>
         <button type="submit" class="btn btn-primary mt-2"><%- id ? "Update":"Create" %></button>
@@ -1498,6 +1546,10 @@
               svg.querySelectorAll('text').forEach(function(t) {
                 t.style.fontFamily = "'Plus Jakarta Sans', system-ui, sans-serif"
               })
+              // Make graph nodes look clickable
+              svg.querySelectorAll('g.node').forEach(function(g) {
+                g.style.cursor = 'pointer'
+              })
               this.$el.html(this.template());
               this.$el.find("#pipeline-graph").html(svg);
               if (this.noLinks) {
@@ -1510,13 +1562,174 @@
           return this
         },
       })
+
+      // HCL stream language for CodeMirror
+      app.hclLanguage = function() {
+        var CM = window.PikoCM
+        var keywords = 'job resource resource_type runner_type secret_type service_type variable get put task service plan params start stop ready_check secret on_success on_failure ensure concurrency'
+        var keywordSet = {}
+        keywords.split(' ').forEach(function(k){ keywordSet[k] = true })
+        var atoms = {true:true, false:true, null:true}
+        return CM.StreamLanguage.define({
+          startState: function() { return {inString: false, inComment: false} },
+          token: function(stream, state) {
+            if (state.inComment) {
+              var end = stream.match(/.*?\*\//)
+              if (end) { state.inComment = false }
+              else { stream.skipToEnd() }
+              return 'comment'
+            }
+            if (state.inString) {
+              while (!stream.eol()) {
+                var ch = stream.next()
+                if (ch === '\\') { stream.next() }
+                else if (ch === '"') { state.inString = false; break }
+              }
+              return 'string'
+            }
+            if (stream.match(/\/\*/)) { state.inComment = true; return 'comment' }
+            if (stream.match(/\/\//) || stream.match(/#/)) { stream.skipToEnd(); return 'comment' }
+            if (stream.match(/"/)) { state.inString = true; return 'string' }
+            if (stream.match(/\d+(\.\d+)?/)) { return 'number' }
+            if (stream.match(/[{}\[\]()]/)) { return 'bracket' }
+            if (stream.match(/[=:]/)) { return 'operator' }
+            if (stream.match(/[a-zA-Z_][a-zA-Z0-9_]*/)) {
+              var w = stream.current()
+              if (keywordSet[w]) return 'keyword'
+              if (atoms[w]) return 'atom'
+              return 'variableName'
+            }
+            stream.next()
+            return null
+          }
+        })
+      }
+
+      // CodeMirror themes using PikoCI CSS variables
+      app.cmLightTheme = function() {
+        var CM = window.PikoCM
+        return CM.EditorView.theme({
+          '&': { backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' },
+          '.cm-content': { caretColor: 'var(--text-primary)' },
+          '.cm-gutters': { backgroundColor: 'var(--bg-muted)', color: 'var(--text-muted)', borderRight: '1px solid var(--border)' },
+          '.cm-activeLineGutter': { backgroundColor: 'var(--primary-light)' },
+          '.cm-activeLine': { backgroundColor: 'var(--primary-light)' },
+          '.cm-selectionBackground': { backgroundColor: 'rgba(41,173,255,0.2) !important' },
+          '.cm-cursor': { borderLeftColor: 'var(--text-primary)' },
+          '.cm-matchingBracket': { backgroundColor: 'rgba(41,173,255,0.3)', outline: 'none' },
+        }, {dark: false})
+      }
+
+      app.cmDarkTheme = function() {
+        var CM = window.PikoCM
+        return CM.EditorView.theme({
+          '&': { backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' },
+          '.cm-content': { caretColor: 'var(--text-primary)' },
+          '.cm-gutters': { backgroundColor: 'var(--bg-muted)', color: 'var(--text-muted)', borderRight: '1px solid var(--border)' },
+          '.cm-activeLineGutter': { backgroundColor: 'rgba(41,173,255,0.15)' },
+          '.cm-activeLine': { backgroundColor: 'rgba(41,173,255,0.1)' },
+          '.cm-selectionBackground': { backgroundColor: 'rgba(41,173,255,0.3) !important' },
+          '.cm-cursor': { borderLeftColor: 'var(--text-primary)' },
+          '.cm-matchingBracket': { backgroundColor: 'rgba(41,173,255,0.4)', outline: 'none' },
+        }, {dark: true})
+      }
+
+      app.cmHighlightLight = function() {
+        var t = window.PikoCM.tags
+        return window.PikoCM.HighlightStyle.define([
+          {tag: t.keyword, color: '#7B2FBE'},
+          {tag: t.atom, color: '#AB5236'},
+          {tag: t.string, color: '#00A83A'},
+          {tag: t.comment, color: '#83769C', fontStyle: 'italic'},
+          {tag: t.number, color: '#FF004D'},
+          {tag: t.bracket, color: '#5F574F'},
+          {tag: t.operator, color: '#5F574F'},
+          {tag: t.variableName, color: '#1D2B53'},
+        ])
+      }
+
+      app.cmHighlightDark = function() {
+        var t = window.PikoCM.tags
+        return window.PikoCM.HighlightStyle.define([
+          {tag: t.keyword, color: '#FF77A8'},
+          {tag: t.atom, color: '#FFA300'},
+          {tag: t.string, color: '#00E756'},
+          {tag: t.comment, color: '#83769C', fontStyle: 'italic'},
+          {tag: t.number, color: '#FF004D'},
+          {tag: t.bracket, color: '#C2C3C7'},
+          {tag: t.operator, color: '#C2C3C7'},
+          {tag: t.variableName, color: '#FFF1E8'},
+        ])
+      }
+
+      // Parse HCL error strings into diagnostics
+      // HCL errors: pipeline.hcl:8,20-9,1: Message; Detail
+      // or:         pipeline.hcl:5,3-15: Message; Detail
+      // Source errors: failed to resolve source for secret_type "name": ...
+      app.parseHCLErrors = function(errorStr) {
+        var results = []
+        // 1. Line/col based HCL errors
+        var parts = errorStr.split(/((?:pipeline\.hcl|<stdin>):\d+,\d+-(?:\d+,)?\d+:\s*)/)
+        for (var i = 1; i < parts.length; i += 2) {
+          var header = parts[i]
+          var body = (parts[i + 1] || '').trim()
+          var hm = header.match(/(\d+),(\d+)-(?:(\d+),)?(\d+)/)
+          if (!hm) continue
+          var msg = body.replace(/[;\s]+$/, '').trim()
+          if (!msg) continue
+          results.push({
+            line: parseInt(hm[1], 10),
+            colStart: parseInt(hm[2], 10),
+            colEnd: hm[3] ? parseInt(hm[4], 10) : parseInt(hm[4], 10),
+            message: msg
+          })
+        }
+        // 2. Source resolution errors: "failed to resolve source for <type> "<name>": <detail>"
+        var srcRe = /failed to resolve source for (\w+)\s+"([^"]+)":\s*(.+?)(?=failed to resolve source for|$)/g
+        var sm
+        while ((sm = srcRe.exec(errorStr)) !== null) {
+          results.push({
+            blockType: sm[1],
+            blockName: sm[2],
+            attribute: 'source',
+            message: sm[3].replace(/[;\s]+$/, '').trim()
+          })
+        }
+        // Fallback: if no structured errors found, show full error on line 1
+        if (results.length === 0 && errorStr && errorStr.trim()) {
+          results.push({line: 1, colStart: 1, colEnd: 2, message: errorStr.trim()})
+        }
+        return results
+      }
+
+      // Block type metadata for the blocks panel
+      app.blockTypes = [
+        {type: 'resource_type', label: 'Resource Types', icon: 'rt', letter: 'R'},
+        {type: 'resource',      label: 'Resources',      icon: 'rs', letter: 'R'},
+        {type: 'job',           label: 'Jobs',            icon: 'jb', letter: 'J'},
+        {type: 'secret_type',   label: 'Secret Types',    icon: 'st', letter: 'S'},
+        {type: 'runner_type',   label: 'Runner Types',    icon: 'rn', letter: 'R'},
+        {type: 'service_type',  label: 'Service Types',   icon: 'sv', letter: 'S'},
+        {type: 'variable',      label: 'Variables',       icon: 'vr', letter: 'V'},
+      ]
+
       app.PipelinesNewView = Backbone.View.extend({
         template: _.template($('#pipelines-new-view').html()),
         events: {
           'click #create': 'clickCreate',
           'submit form':   'clickCreate',
-          'change textarea#pipeline': 'changePipeline',
           'change textarea#vars': 'changePipeline',
+          'click #graph g.node': 'clickGraphNode',
+          'click #graph-fullscreen g.node': 'clickGraphNode',
+          'click #tab-hcl': 'showHclTab',
+          'click #tab-vars': 'showVarsTab',
+          'click #docs-btn': 'toggleDocs',
+          'click #blocks-btn': 'toggleBlocks',
+          'click #graph-btn': 'toggleGraphPanel',
+          'click #graph-bottom-close': 'toggleGraphPanel',
+          'click #fullscreen-btn': 'toggleFullscreen',
+          'click #graph-strip-header': 'toggleGraphStrip',
+          'click .piko-blocks-item': 'clickBlock',
         },
         render: function () {
           var data = this.model.toJSON()
@@ -1525,16 +1738,278 @@
           }
           this.$el.html(this.template(data));
           this.image = new app.PipelineImage()
-          this.$el.find("#graph").html(new app.PipelineGraphView({model: this.image, noLinks: true}).render().el)
+          this.graphView = new app.PipelineGraphView({model: this.image, noLinks: true})
+          this.$el.find("#graph").html(this.graphView.render().el)
+          // Second graph view for fullscreen bottom panel
+          this.graphViewFs = new app.PipelineGraphView({model: this.image, noLinks: true})
+          this.$el.find("#graph-fullscreen").html(this.graphViewFs.render().el)
+          this.initEditor(data.raw || '')
+          this._graphStripOpen = true
+          this.$el.find('#graph-strip-header').addClass('open')
           if (data.raw) {
-            this.changePipeline(new Event("fake"))
+            this.changePipeline()
           }
-          return this; // enable chained calls
+          this.updateBlocksPanel()
+          return this;
+        },
+        initEditor: function(initialValue) {
+          var CM = window.PikoCM
+          var that = this
+          this._themeCompartment = new CM.Compartment()
+          this._highlightCompartment = new CM.Compartment()
+          var isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+          var theme = isDark ? app.cmDarkTheme() : app.cmLightTheme()
+          var highlight = isDark ? app.cmHighlightDark() : app.cmHighlightLight()
+          this.editor = new CM.EditorView({
+            state: CM.EditorState.create({
+              doc: initialValue,
+              extensions: [
+                CM.lineNumbers(),
+                CM.highlightActiveLine(),
+                CM.drawSelection(),
+                CM.history(),
+                CM.bracketMatching(),
+                CM.closeBrackets(),
+                CM.indentOnInput(),
+                CM.foldGutter(),
+                CM.lintGutter(),
+                this._themeCompartment.of(theme),
+                this._highlightCompartment.of(CM.syntaxHighlighting(highlight)),
+                app.hclLanguage(),
+                CM.keymap.of([
+                  ...CM.closeBracketsKeymap,
+                  ...CM.defaultKeymap,
+                  ...CM.searchKeymap,
+                  ...CM.historyKeymap,
+                  CM.indentWithTab,
+                ]),
+                CM.EditorView.updateListener.of(function(update) {
+                  if (update.docChanged) {
+                    that.$el.find('#pipeline').val(that.editor.state.doc.toString())
+                    clearTimeout(that._previewTimer)
+                    that._previewTimer = setTimeout(function() {
+                      that.changePipeline()
+                      that.updateBlocksPanel()
+                    }, 500)
+                  }
+                }),
+              ],
+            }),
+            parent: this.$el.find('#pipeline-editor')[0],
+          })
+          this._themeObserver = new MutationObserver(function() {
+            var dark = document.documentElement.getAttribute('data-theme') === 'dark'
+            that.editor.dispatch({
+              effects: [
+                that._themeCompartment.reconfigure(dark ? app.cmDarkTheme() : app.cmLightTheme()),
+                that._highlightCompartment.reconfigure(CM.syntaxHighlighting(dark ? app.cmHighlightDark() : app.cmHighlightLight())),
+              ]
+            })
+          })
+          this._themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']})
+          // Esc exits fullscreen
+          this._escHandler = function(e) {
+            if (e.key === 'Escape' && that.$el.find('#editor-card').hasClass('fullscreen')) {
+              that.toggleFullscreen(e)
+            }
+          }
+          $(document).on('keydown', this._escHandler)
+          // Click outside closes docs
+          this._docClickHandler = function(e) {
+            if (!$(e.target).closest('.piko-docs-dropdown').length) {
+              that.$el.find('#docs-menu').removeClass('open')
+            }
+          }
+          $(document).on('click', this._docClickHandler)
+        },
+        // Tabs
+        showHclTab: function() {
+          this.$el.find('#tab-hcl').addClass('active')
+          this.$el.find('#tab-vars').removeClass('active')
+          this.$el.find('#code-area').show()
+          this.$el.find('#vars-area').removeClass('visible')
+          this.$el.find('#blocks-panel').show()
+        },
+        showVarsTab: function() {
+          this.$el.find('#tab-vars').addClass('active')
+          this.$el.find('#tab-hcl').removeClass('active')
+          this.$el.find('#code-area').hide()
+          this.$el.find('#vars-area').addClass('visible')
+          this.$el.find('#blocks-panel').hide()
+        },
+        // Docs dropdown
+        toggleDocs: function(e) {
+          e.stopPropagation()
+          this.$el.find('#docs-menu').toggleClass('open')
+        },
+        // Blocks panel
+        toggleBlocks: function() {
+          this.$el.find('#blocks-panel').toggleClass('collapsed')
+          this.$el.find('#blocks-btn').toggleClass('active')
+        },
+        updateBlocksPanel: function() {
+          if (!this.editor) return
+          var doc = this.editor.state.doc.toString()
+          var panel = this.$el.find('#blocks-panel')
+          var html = ''
+          var errorLines = this._errorLines || {}
+          app.blockTypes.forEach(function(bt) {
+            var re = new RegExp(bt.type + '\\s+"([^"]+)"', 'g')
+            var matches = []
+            var m
+            while ((m = re.exec(doc)) !== null) {
+              matches.push({name: m[1], pos: m.index})
+            }
+            if (matches.length === 0) return
+            html += '<div class="piko-blocks-section">'
+            html += '<div class="piko-blocks-section-title">' + bt.label + '</div>'
+            matches.forEach(function(match) {
+              var hasErr = errorLines[bt.type + ':"' + match.name + '"']
+              html += '<div class="piko-blocks-item' + (hasErr ? ' has-error' : '') + '" data-pos="' + match.pos + '">'
+              html += '<span class="piko-block-icon ' + bt.icon + '">' + bt.letter + '</span> '
+              html += _.escape(match.name)
+              if (hasErr) html += '<span class="piko-error-dot"></span>'
+              html += '</div>'
+            })
+            html += '</div>'
+          })
+          panel.html(html || '<div style="padding:12px;color:var(--text-muted);font-size:0.78rem">No blocks found</div>')
+        },
+        clickBlock: function(e) {
+          var pos = parseInt($(e.currentTarget).attr('data-pos'), 10)
+          if (isNaN(pos) || !this.editor) return
+          this.$el.find('.piko-blocks-item').removeClass('active')
+          $(e.currentTarget).addClass('active')
+          this.editor.dispatch({
+            selection: {anchor: pos},
+            scrollIntoView: true,
+          })
+          this.editor.focus()
+        },
+        // Graph panel (fullscreen bottom)
+        toggleGraphPanel: function() {
+          this.$el.find('#graph-bottom-panel').toggleClass('visible')
+          this.$el.find('#graph-btn').toggleClass('active')
+        },
+        // Fullscreen
+        toggleFullscreen: function(e) {
+          if (e && e.preventDefault) e.preventDefault()
+          var card = this.$el.find('#editor-card')
+          card.toggleClass('fullscreen')
+          var isFs = card.hasClass('fullscreen')
+          var icon = this.$el.find('#fullscreen-btn i')
+          icon.attr('class', isFs ? 'bi bi-fullscreen-exit' : 'bi bi-arrows-fullscreen')
+          $('body').toggleClass('piko-fullscreen', isFs)
+        },
+        // Graph strip (normal mode)
+        toggleGraphStrip: function() {
+          this.$el.find('#graph-strip-header').toggleClass('open')
+        },
+        // Click graph node to jump
+        clickGraphNode: function(event) {
+          var g = $(event.currentTarget)
+          var textEl = g.find('text').last()
+          if (!textEl.length || !this.editor) return
+          var name = textEl.text().trim()
+          if (!name) return
+          var doc = this.editor.state.doc.toString()
+          var re = new RegExp('(?:job|resource|resource_type|runner_type|secret_type|service_type)\\s+"' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"')
+          var match = re.exec(doc)
+          if (match) {
+            this.editor.dispatch({
+              selection: {anchor: match.index, head: match.index + match[0].length},
+              scrollIntoView: true,
+            })
+            this.editor.focus()
+          }
+        },
+        // Error handling
+        showEditorErrors: function(errorStr) {
+          if (!this.editor) return
+          var CM = window.PikoCM
+          var diags = app.parseHCLErrors(errorStr)
+          var doc = this.editor.state.doc
+          var docText = doc.toString()
+          var diagnostics = []
+          var errorLines = {}
+          for (var i = 0; i < diags.length; i++) {
+            var d = diags[i]
+            if (d.blockType) {
+              errorLines[d.blockType + ':"' + d.blockName + '"'] = true
+              var pos = this._findBlockAttribute(docText, d.blockType, d.blockName, d.attribute)
+              if (pos) {
+                diagnostics.push({from: pos.from, to: pos.to, severity: 'error', message: d.message})
+              } else {
+                var esc = d.blockName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                var headerRe = new RegExp(d.blockType + '\\s+"' + esc + '"')
+                var hm = headerRe.exec(docText)
+                if (hm) {
+                  diagnostics.push({from: hm.index, to: hm.index + hm[0].length, severity: 'error', message: d.message})
+                }
+              }
+            } else {
+              if (d.line < 1 || d.line > doc.lines) continue
+              // Find which block this line belongs to for error dots
+              var lineOffset = doc.line(d.line).from
+              var blockRe = /(?:job|resource|resource_type|runner_type|secret_type|service_type|variable)\s+"([^"]+)"/g
+              var bm, lastBlock = null
+              while ((bm = blockRe.exec(docText)) !== null) {
+                if (bm.index <= lineOffset) lastBlock = bm
+                else break
+              }
+              if (lastBlock) {
+                var btMatch = lastBlock[0].match(/^(\w+)/)
+                if (btMatch) errorLines[btMatch[1] + ':"' + lastBlock[1] + '"'] = true
+              }
+              var line = doc.line(d.line)
+              var from = line.from + Math.max(0, d.colStart - 1)
+              var to = line.from + Math.min(line.length, d.colEnd - 1)
+              if (from > doc.length) from = doc.length
+              if (to > doc.length) to = doc.length
+              if (from >= to) to = from + 1
+              if (to > doc.length) to = doc.length
+              diagnostics.push({from: from, to: to, severity: 'error', message: d.message})
+            }
+          }
+          this._errorLines = errorLines
+          this.editor.dispatch(CM.setDiagnostics(this.editor.state, diagnostics))
+          this.updateBlocksPanel()
+          // Show/hide error badge on blocks button
+          var hasErrors = Object.keys(errorLines).length > 0
+          this.$el.find('#blocks-btn .piko-error-badge').toggleClass('visible', hasErrors)
+        },
+        _findBlockAttribute: function(docText, blockType, blockName, attribute) {
+          var esc = blockName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          var blockRe = new RegExp(blockType + '\\s+"' + esc + '"\\s*\\{')
+          var bm = blockRe.exec(docText)
+          if (!bm) return null
+          var start = bm.index + bm[0].length
+          var depth = 1
+          var blockEnd = docText.length
+          for (var j = start; j < docText.length; j++) {
+            if (docText[j] === '{') depth++
+            else if (docText[j] === '}') { depth--; if (depth === 0) { blockEnd = j; break } }
+          }
+          var blockContent = docText.substring(start, blockEnd)
+          var attrRe = new RegExp('(^|\\n)(\\s*)' + attribute + '\\s*=\\s*("(?:[^"\\\\]|\\\\.)*"|[^\\n]+)')
+          var am = attrRe.exec(blockContent)
+          if (!am) return null
+          var attrStart = start + am.index + am[1].length + am[2].length
+          var attrEnd = attrStart + am[0].length - am[1].length - am[2].length
+          return {from: attrStart, to: attrEnd}
+        },
+        clearEditorErrors: function() {
+          if (!this.editor) return
+          var CM = window.PikoCM
+          this._errorLines = {}
+          this.editor.dispatch(CM.setDiagnostics(this.editor.state, []))
+          this.updateBlocksPanel()
+          this.$el.find('#blocks-btn .piko-error-badge').removeClass('visible')
         },
         clickCreate: function(event) {
           event.preventDefault();
           var name = this.$el.find("#name").get(0).value
-          var pp = this.$el.find("#pipeline").get(0).value
+          var pp = this.editor ? this.editor.state.doc.toString() : this.$el.find("#pipeline").get(0).value
           var rvars = this.$el.find("#vars").get(0).value||"{}"
           var isPublic = this.$el.find("#public").is(":checked")
           try{
@@ -1543,7 +2018,6 @@
             app.apiError.set({error: "Error parsing Vars: "+error})
             return
           }
-
           var data = [];
           for (var i = 0; i < pp.length; i++){
             data.push(pp.charCodeAt(i));
@@ -1557,12 +2031,9 @@
               },
             })
           } else {
-            var that = this
             this.collection.create({name: name, config: data, vars: vars}, {
               wait: true,
               type: "POST",
-              // TODO: Try to find a way to create a model with the idAttribute
-              // set with POST
               url: this.collection.url(),
               success: function(m) {
                 app.router.navigate(m.url(), { trigger: true });
@@ -1570,22 +2041,45 @@
             })
           }
         },
-        changePipeline: function(event) {
-          event.preventDefault();
-          var pp = this.$el.find("#pipeline").get(0).value
+        changePipeline: function() {
+          var pp = this.editor ? this.editor.state.doc.toString() : this.$el.find("#pipeline").get(0).value
           var rvars = this.$el.find("#vars").get(0).value||"{}"
+          var that = this
           try{
             var vars = JSON.parse(rvars)
           } catch (error){
             app.apiError.set({error: "Error parsing Vars: "+error})
             return
           }
-
           var data = [];
           for (var i = 0; i < pp.length; i++){
             data.push(pp.charCodeAt(i));
           }
-          this.image.save({config: data, vars: vars}, {url: this.collection.url()+"/image.dot"})
+          this.image.save({config: data, vars: vars}, {
+            url: this.collection.url()+"/image.dot",
+            success: function(model, response) {
+              that.clearEditorErrors()
+            },
+            error: function(model, xhr) {
+              try {
+                var resp = JSON.parse(xhr.responseText)
+                if (resp && resp.error) {
+                  that.showEditorErrors(resp.error)
+                }
+              } catch(e) {
+                that.showEditorErrors(xhr.responseText || 'Unknown error')
+              }
+            },
+          })
+        },
+        remove: function() {
+          clearTimeout(this._previewTimer)
+          if (this._themeObserver) { this._themeObserver.disconnect() }
+          if (this.editor) { this.editor.destroy() }
+          if (this._escHandler) { $(document).off('keydown', this._escHandler) }
+          if (this._docClickHandler) { $(document).off('click', this._docClickHandler) }
+          $('body').removeClass('piko-fullscreen')
+          Backbone.View.prototype.remove.call(this)
         },
       })
       app.JobBuildsView = Backbone.View.extend({

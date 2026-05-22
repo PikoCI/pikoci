@@ -228,8 +228,10 @@ a:hover { color: var(--primary-hover); }
   color: var(--text-primary) !important;
 }
 .form-control:disabled {
-  background: var(--bg-muted);
-  color: var(--text-muted);
+  background: var(--bg-muted) !important;
+  color: var(--text-muted) !important;
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 .form-control::placeholder { color: var(--text-muted); }
 textarea.form-control {
@@ -255,7 +257,7 @@ textarea.form-control {
 [data-theme="dark"] .form-control { background: #0d1a38; border-color: #2a3a65; color: #FFF1E8; }
 [data-theme="dark"] .form-control::placeholder { color: #83769C; }
 [data-theme="dark"] .form-control:focus { background: #0d1a38; border-color: #29ADFF; color: #FFF1E8; box-shadow: 0 0 0 3px rgba(41,173,255,0.15); }
-[data-theme="dark"] .form-control:disabled { background: #000; color: #83769C; border-color: #1D2B53; }
+[data-theme="dark"] .form-control:disabled { background: #000 !important; color: #83769C !important; border-color: #1D2B53 !important; }
 [data-theme="dark"] .form-select { background-color: #0d1a38; border-color: #2a3a65; color: #FFF1E8; }
 [data-theme="dark"] .form-select:focus { box-shadow: 0 0 0 3px rgba(41,173,255,0.15); }
 [data-theme="dark"] .form-check-input { background-color: #0d1a38; border-color: #2a3a65; }
@@ -759,3 +761,209 @@ textarea.form-control {
   background: #0d1a38;
   border-color: #2a3a65;
 }
+
+/* ============================================================
+   PIPELINE EDITOR — Option E layout
+   ============================================================ */
+.piko-settings-row { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
+.piko-field { display: flex; flex-direction: column; gap: 4px; }
+.piko-checkbox-inline { display: flex; align-items: center; gap: 6px; padding-bottom: 4px; }
+
+/* Editor card */
+.piko-editor-card {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-surface); box-shadow: var(--shadow-sm);
+  overflow: hidden; margin-bottom: 16px;
+}
+
+/* Fullscreen */
+.piko-editor-card.fullscreen {
+  position: fixed; top: 46px; left: 0; right: 0; bottom: 0;
+  z-index: 9999; border-radius: 0; border: none; margin: 0;
+  box-shadow: none; display: flex; flex-direction: column;
+}
+.piko-editor-card.fullscreen .piko-editor-body { flex: 1; max-height: none; min-height: 0; overflow: hidden; }
+body.piko-fullscreen .piko-graph-strip,
+body.piko-fullscreen .piko-settings-row,
+body.piko-fullscreen .piko-page-header,
+body.piko-fullscreen .btn-primary { display: none; }
+
+/* Toolbar */
+.piko-editor-toolbar {
+  background: var(--bg-muted); border-bottom: 1px solid var(--border);
+  padding: 0 8px; display: flex; align-items: center; height: 36px; gap: 2px;
+}
+[data-theme="dark"] .piko-editor-toolbar { background: #0a1228; }
+
+.piko-tab {
+  font-size: 0.76rem; font-weight: 500; color: var(--text-muted);
+  padding: 6px 14px; border: none; background: transparent;
+  cursor: pointer; border-radius: var(--radius) var(--radius) 0 0; user-select: none;
+}
+.piko-tab:hover { color: var(--text-primary); background: var(--primary-light); }
+.piko-tab.active {
+  font-weight: 600; color: var(--text-primary); background: var(--bg-surface);
+  border: 1px solid var(--border); border-bottom: 1px solid var(--bg-surface);
+  margin-bottom: -1px;
+}
+[data-theme="dark"] .piko-tab.active { background: var(--bg-surface); border-color: var(--border); border-bottom-color: var(--bg-surface); }
+
+.piko-toolbar-spacer { flex: 1; }
+.piko-toolbar-sep { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
+.piko-tbtn {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 0.85rem; padding: 4px 8px; cursor: pointer;
+  border-radius: 4px; display: flex; align-items: center; gap: 4px;
+  transition: all 0.15s; position: relative; text-decoration: none;
+}
+.piko-tbtn:hover { color: var(--primary); background: var(--primary-light); text-decoration: none; }
+.piko-tbtn.active { color: var(--primary); background: var(--primary-light); }
+.piko-tbtn-label { font-size: 0.72rem; font-weight: 500; }
+.piko-tbtn .piko-error-badge {
+  position: absolute; top: 0; right: 0;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--danger); border: 1.5px solid var(--bg-muted); display: none;
+}
+.piko-tbtn .piko-error-badge.visible { display: block; }
+[data-theme="dark"] .piko-tbtn .piko-error-badge { border-color: #0a1228; }
+
+/* Docs dropdown */
+.piko-docs-dropdown { position: relative; }
+.piko-docs-menu {
+  display: none; position: absolute; top: 100%; left: 0; margin-top: 4px;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-lg);
+  min-width: 200px; z-index: 100; padding: 4px 0;
+}
+.piko-docs-menu.open { display: block; }
+.piko-docs-menu a {
+  display: flex; align-items: center; gap: 8px; padding: 6px 14px;
+  font-size: 0.78rem; color: var(--text-primary); text-decoration: none;
+  transition: background 0.1s; font-family: var(--font-mono);
+}
+.piko-docs-menu a:hover { background: var(--primary-light); color: var(--primary); }
+.piko-docs-menu a i { color: var(--text-muted); font-size: 0.8rem; }
+.piko-docs-divider { height: 1px; background: var(--border); margin: 4px 0; }
+.piko-docs-label {
+  font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.6px; color: var(--text-muted); padding: 6px 14px 2px;
+  font-family: var(--font-body);
+}
+[data-theme="dark"] .piko-docs-menu { background: var(--bg-surface); border-color: var(--border); }
+[data-theme="dark"] .piko-docs-menu a { color: var(--text-primary); }
+
+/* Block icons (PICO-8 palette) */
+.piko-block-icon {
+  font-size: 0.65rem; width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px; font-weight: 700; font-family: var(--font-mono);
+  color: #fff; flex-shrink: 0;
+}
+.piko-block-icon.jb { background: var(--primary); }
+.piko-block-icon.rs { background: var(--success); }
+.piko-block-icon.rt { background: var(--success); }
+.piko-block-icon.st { background: var(--warning); }
+.piko-block-icon.rn { background: #AB5236; }
+.piko-block-icon.sv { background: #FF77A8; }
+.piko-block-icon.vr { background: var(--text-muted); }
+
+/* Editor body */
+.piko-editor-body { display: flex; max-height: 460px; overflow: auto; }
+
+/* Blocks panel */
+.piko-blocks-panel {
+  width: 200px; flex-shrink: 0;
+  border-right: 1px solid var(--border); background: var(--bg-muted);
+  overflow-y: auto; transition: width 0.15s;
+}
+.piko-blocks-panel.collapsed { width: 0; overflow: hidden; border-right: none; }
+[data-theme="dark"] .piko-blocks-panel { background: #0a1228; }
+
+.piko-blocks-section { padding: 6px 0; }
+.piko-blocks-section:not(:last-child) { border-bottom: 1px solid var(--border); }
+.piko-blocks-section-title {
+  font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.6px; color: var(--text-muted); padding: 4px 12px 2px;
+}
+.piko-blocks-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px 4px 16px; font-size: 0.76rem;
+  font-family: var(--font-mono); color: var(--text-secondary);
+  cursor: pointer; transition: all 0.1s; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; position: relative;
+}
+.piko-blocks-item:hover { background: var(--primary-light); color: var(--primary); }
+.piko-blocks-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+.piko-blocks-item.has-error { color: var(--danger); }
+.piko-blocks-item.has-error:hover { background: rgba(255, 0, 77, 0.06); color: var(--danger); }
+.piko-blocks-item .piko-error-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--danger); flex-shrink: 0; margin-left: auto;
+}
+
+/* Code area */
+.piko-code-area { flex: 1; overflow: auto; min-width: 0; }
+.piko-code-area .cm-editor { min-height: 300px; }
+.piko-code-area .cm-scroller { overflow: auto; min-height: 300px; }
+.piko-code-area .cm-editor.cm-focused { outline: 2px solid var(--primary); outline-offset: -1px; }
+
+/* Vars area */
+.piko-vars-area { display: none; flex: 1; padding: 16px; }
+.piko-vars-area.visible { display: block; }
+.piko-vars-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; }
+
+/* Graph bottom panel (fullscreen) */
+.piko-graph-bottom {
+  display: none; flex-direction: column; flex-shrink: 0;
+  border-top: 1px solid var(--border); background: var(--bg-muted);
+  width: 100%;
+}
+.piko-editor-card.fullscreen .piko-graph-bottom.visible { display: flex; }
+[data-theme="dark"] .piko-graph-bottom { background: #0a1228; }
+.piko-graph-bottom-header {
+  padding: 6px 12px; display: flex; align-items: center;
+  justify-content: space-between; border-bottom: 1px solid var(--border);
+}
+.piko-graph-bottom-header span {
+  font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  display: flex; align-items: center; gap: 6px;
+}
+.piko-graph-bottom-header button {
+  background: none; border: none; color: var(--text-muted);
+  cursor: pointer; font-size: 0.85rem; padding: 2px 6px; border-radius: 4px;
+}
+.piko-graph-bottom-header button:hover { color: var(--text-primary); background: var(--primary-light); }
+.piko-graph-bottom-body {
+  padding: 16px 24px; display: flex; align-items: center;
+  justify-content: center; overflow: auto; min-height: 80px;
+}
+
+/* Graph strip (normal mode) */
+.piko-graph-strip {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-surface); box-shadow: var(--shadow-sm);
+  overflow: hidden; margin-bottom: 16px;
+}
+.piko-graph-strip-header {
+  padding: 8px 14px; display: flex; align-items: center;
+  justify-content: space-between; cursor: pointer; user-select: none;
+  background: var(--bg-muted); border-bottom: 1px solid transparent;
+  transition: background 0.15s;
+}
+.piko-graph-strip-header:hover { background: var(--primary-light); }
+.piko-graph-strip-header.open { border-bottom-color: var(--border); }
+[data-theme="dark"] .piko-graph-strip-header { background: #0a1228; }
+[data-theme="dark"] .piko-graph-strip-header:hover { background: rgba(41,173,255,0.08); }
+.piko-graph-strip-header span {
+  font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);
+  display: flex; align-items: center; gap: 8px;
+}
+.piko-graph-chev { color: var(--text-muted); font-size: 0.75rem; transition: transform 0.15s; }
+.piko-graph-strip-header.open .piko-graph-chev { transform: rotate(90deg); }
+.piko-graph-strip-body {
+  display: none; padding: 24px; min-height: 120px; justify-content: center;
+}
+.piko-graph-strip-header.open + .piko-graph-strip-body { display: flex; }
+/* Graph nodes clickable */
+.piko-graph-strip-body svg g.node { cursor: pointer; }
