@@ -165,7 +165,7 @@ Full server and worker configuration options are covered in the [documentation](
 
 ## Dogfooding: PikoCI runs its own CI
 
-PikoCI uses itself for CI. See it live at [pikoci.com/teams/main/pipelines/pr_test](https://pikoci.com/teams/main/pipelines/pr_test). The [full pipeline](deploy/pipeline.hcl) runs lint, unit tests, integration tests, and backend tests with services — all defined in HCL:
+PikoCI uses itself for CI. See it live at [pikoci.com/teams/main/pipelines/pikoci](https://pikoci.com/teams/main/pipelines/pikoci). The [full pipeline](deploy/pipeline.hcl) runs lint, unit tests, integration tests, and backend tests with services — all defined in HCL:
 
 ```hcl
 resource_type "git" {
