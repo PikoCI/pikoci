@@ -254,7 +254,7 @@ func TestPikoCI(t *testing.T) {
 			name, err := wd.FindElement(selenium.ByCSSSelector, "#name")
 			require.NoError(t, err)
 
-			pipeline, err := wd.FindElement(selenium.ByCSSSelector, "#pipeline")
+			pipeline, err := wd.FindElement(selenium.ByCSSSelector, ".cm-content")
 			require.NoError(t, err)
 
 			pipeline.SendKeys(`
@@ -281,7 +281,7 @@ job "gen" {
 				return err == nil
 			}, 5*time.Second)
 
-			cpBtn, err := wd.FindElement(selenium.ByCSSSelector, "form button")
+			cpBtn, err := wd.FindElement(selenium.ByCSSSelector, "form button[type='submit']")
 			require.NoError(t, err)
 
 			err = cpBtn.Click()
@@ -298,9 +298,11 @@ job "gen" {
 
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Update Pipeline"), 5*time.Second)
 
-			pipeline, err := wd.FindElement(selenium.ByCSSSelector, "#pipeline")
+			pipeline, err := wd.FindElement(selenium.ByCSSSelector, ".cm-content")
 			require.NoError(t, err)
-			pipeline.Clear()
+			// Select all and delete to clear CodeMirror editor
+			pipeline.SendKeys(selenium.ControlKey + "a")
+			pipeline.SendKeys(selenium.DeleteKey)
 
 			pipeline.SendKeys(`
 resource "cron" "my_cron_edit" {
@@ -319,7 +321,7 @@ job "gen" {
   }
 }`)
 
-			upBtn, err := wd.FindElement(selenium.ByCSSSelector, "form button")
+			upBtn, err := wd.FindElement(selenium.ByCSSSelector, "form button[type='submit']")
 			require.NoError(t, err)
 
 			err = upBtn.Click()
@@ -464,7 +466,7 @@ job "gen" {
 				name, err := wd.FindElement(selenium.ByCSSSelector, "#name")
 				require.NoError(t, err)
 
-				pipeline, err := wd.FindElement(selenium.ByCSSSelector, "#pipeline")
+				pipeline, err := wd.FindElement(selenium.ByCSSSelector, ".cm-content")
 				require.NoError(t, err)
 
 				pipeline.SendKeys(`
@@ -491,7 +493,7 @@ job "gen" {
 					return err == nil
 				}, 5*time.Second)
 
-				cpBtn, err := wd.FindElement(selenium.ByCSSSelector, "form button")
+				cpBtn, err := wd.FindElement(selenium.ByCSSSelector, "form button[type='submit']")
 				require.NoError(t, err)
 
 				err = cpBtn.Click()
