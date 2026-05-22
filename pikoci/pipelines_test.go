@@ -1443,12 +1443,12 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 			wantDashedStyle: true,
 		},
 		{
-			name: "retry succeeded - latest main build color unchanged",
+			name: "retry succeeded - color reflects retry success",
 			builds: []*build.Build{
 				{ID: 1, BuildNumber: "1", Status: build.Failed},
 				{ID: 2, BuildNumber: "1.1", Status: build.Succeeded},
 			},
-			wantFillColor:   colorFailed,
+			wantFillColor:   colorSucceeded,
 			wantDashedStyle: false,
 		},
 		{
