@@ -292,7 +292,7 @@ resource "github-check" "ci" {
     app_id          = var.github_app_id
     installation_id = var.github_app_installation_id
     private_key     = var.pikoci_github_app_pem
-    repository      = "xescugc/pikoci"
+    repository      = "PikoCI/pikoci"
   }
 }
 
@@ -338,7 +338,7 @@ secret_type "pikoci_github_pem" {
 
 variable "git_url" {
   type    = string
-  default = "https://github.com/xescugc/pikoci"
+  default = "https://github.com/PikoCI/pikoci"
 }
 
 variable "git_name" {
