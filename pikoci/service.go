@@ -41,7 +41,7 @@ type Service interface {
 	DeleteTeamMember(ctx context.Context, tc, mc string) error
 
 	CreatePipeline(ctx context.Context, tc, pn string, pp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error)
-	UpdatePipeline(ctx context.Context, tc, pn string, pp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error)
+	UpdatePipeline(ctx context.Context, tc, pCan string, pp []byte, vars map[string]interface{}, newName ...string) (*pipeline.Pipeline, error)
 	GetPipeline(ctx context.Context, tc, pn string) (*pipeline.Pipeline, error)
 	DeletePipeline(ctx context.Context, tc, pn string) error
 	ListPipelines(ctx context.Context, tc string) ([]*pipeline.Pipeline, error)

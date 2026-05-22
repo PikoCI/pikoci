@@ -308,13 +308,17 @@ func (cl *Client) ListPublicResourceVersions(ctx context.Context, tc, pn, rCan s
 	return cl.ListResourceVersions(ctx, tc, pn, rCan)
 }
 
-func (cl *Client) UpdatePipeline(ctx context.Context, tc, pn string, pp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error) {
+func (cl *Client) UpdatePipeline(ctx context.Context, tc, pn string, pp []byte, vars map[string]interface{}, newName ...string) (*pipeline.Pipeline, error) {
 	var resp thttp.UpdatePipelineResponse
 
-	err := cl.Request(ctx, http.MethodPut, fmt.Sprintf("%s/teams/%s/pipelines/%s", cl.url, tc, pn), thttp.UpdatePipelineRequest{
+	req := thttp.UpdatePipelineRequest{
 		Config: pp,
 		Vars:   vars,
-	}, &resp)
+	}
+	if len(newName) > 0 && newName[0] != "" {
+		req.Name = newName[0]
+	}
+	err := cl.Request(ctx, http.MethodPut, fmt.Sprintf("%s/teams/%s/pipelines/%s", cl.url, tc, pn), req, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
