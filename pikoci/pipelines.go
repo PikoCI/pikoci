@@ -477,38 +477,46 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		color := colorDefault
 		borderColor := colorDefaultBorder
 
-		// cb: latest main build (no retry suffix) for fill color
+		// cb: latest completed build (including retries) for fill color.
+		//     For the most recent main build number, if a retry succeeded
+		//     the color should reflect that success, not the original failure.
 		// rb: any running build (including retries) for dashed outline
 		var (
 			cb *build.Build
 			rb *build.Build
 		)
+		// Find the latest main build number first
+		var latestMain string
 		for _, b := range builds {
 			if b.Status == build.Started && rb == nil {
 				rb = b
 			}
-			if !strings.Contains(b.BuildNumber, ".") && cb == nil {
-				cb = b
+			if !strings.Contains(b.BuildNumber, ".") && latestMain == "" {
+				latestMain = b.BuildNumber
 			}
-			if cb != nil && rb != nil {
-				break
+		}
+		// Find the latest terminal build in that group (main + retries)
+		if latestMain != "" {
+			for _, b := range builds {
+				if b.BuildNumber == latestMain || strings.HasPrefix(b.BuildNumber, latestMain+".") {
+					if b.Status != build.Started {
+						cb = b
+						break
+					}
+				}
+			}
+			// If all builds in the group are running, fall back to previous main build
+			if cb == nil {
+				for _, b := range builds {
+					if b.Status != build.Started && !strings.Contains(b.BuildNumber, ".") && b.BuildNumber != latestMain {
+						cb = b
+						break
+					}
+				}
 			}
 		}
 
-		// If the latest main build is running, use the previous main build for color
-		if cb != nil && cb.Status == build.Started {
-			for _, b := range builds {
-				if b != cb && !strings.Contains(b.BuildNumber, ".") {
-					if c, ok := jobColors[b.Status]; ok {
-						color = c
-					}
-					if c, ok := jobBorderColors[b.Status]; ok {
-						borderColor = c
-					}
-					break
-				}
-			}
-		} else if cb != nil {
+		if cb != nil {
 			if c, ok := jobColors[cb.Status]; ok {
 				color = c
 			}
