@@ -7,7 +7,7 @@ job "lint" {
   put "github-check" "ci" { status = "in_progress" }
   task "make" {
     run "docker" {
-      image = "golang:1.25.1"
+      image = var.go_image
       cmd   = "cd ${var.git_name} && make lint"
       args  = [
         "-v", "pikoci-go-mod:/go/pkg/mod",
@@ -30,7 +30,7 @@ job "test-mock" {
   put "github-check" "ci" { status = "in_progress" }
   task "make" {
     run "docker" {
-      image = "golang:1.25.1"
+      image = var.go_image
       cmd   = "cd ${var.git_name} && make test-mock"
       args  = [
         "-v", "pikoci-go-mod:/go/pkg/mod",
@@ -111,7 +111,7 @@ job "test-backends" {
 
   task "make" {
     run "docker" {
-      image = "golang:1.25.1"
+      image = var.go_image
       cmd   = "cd ${var.git_name} && make test-backends"
       args  = [
         "--network=host",
@@ -168,7 +168,7 @@ job "deploy" {
   }
   task "build-and-replace" {
     run "docker" {
-      image = "golang:1.25.1"
+      image = var.go_image
       cmd   = <<-EOT
         cd ${var.git_name}
         GOOS=linux GOARCH=arm64 go build -buildvcs=false -o /tmp/pikoci-new .
@@ -181,16 +181,9 @@ job "deploy" {
       ]
     }
   }
-  task "restart" {
-    run "exec" {
-      path = "/bin/sh"
-      args = [
-        "-ec",
-        <<-EOT
-        kill -QUIT $(pidof pikoci)
-        EOT
-      ]
-    }
+  on_success "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "kill $(pidof pikoci)"]
   }
 }
 
@@ -239,6 +232,37 @@ job "build-release" {
         path = "/bin/sh"
         args = ["-ec", "docker buildx prune -f && docker image prune -f"]
       }
+    }
+  }
+}
+
+job "gh-release" {
+  get "git" "pikoci_tag" {
+    trigger = true
+    passed  = ["build-release"]
+  }
+  task "build-and-upload" {
+    run "docker" {
+      image = var.go_image
+      cmd   = <<-EOT
+        cd ${var.git_name}
+        TAG=$(git describe --tags --exact-match)
+
+        # Build all platforms
+        make release
+
+        # Install gh CLI
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
+        apt-get update -qq && apt-get install -qq -y gh
+
+        # Upload binaries to existing release
+        GH_TOKEN="${var.github_token}" gh release upload $TAG builds/linux-amd64 builds/linux-arm64 builds/darwin-amd64 builds/darwin-arm64 builds/windows-amd64 --clobber --repo PikoCI/pikoci
+      EOT
+      args = [
+        "-v", "pikoci-go-mod:/go/pkg/mod",
+        "-v", "pikoci-build:/root/.cache/go-build",
+      ]
     }
   }
 }
@@ -334,6 +358,11 @@ secret_type "pikoci_github_pem" {
   source = "pikoci://file"
   format = "raw"
   path   = "/etc/pikoci/pikoci_github_app.pem"
+}
+
+variable "go_image" {
+  type    = string
+  default = "golang:1.25.1"
 }
 
 variable "git_url" {

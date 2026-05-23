@@ -7,7 +7,7 @@ runner_type "docker" {
       "-w", "/workdir",
       "$args",
       "$image",
-      "/bin/sh", "-ec", "$cmd",
+      "/bin/sh", "-ec", "command -v git >/dev/null && git config --global --add safe.directory '*'; $cmd",
     ]
   }
 }
