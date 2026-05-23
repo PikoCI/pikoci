@@ -719,11 +719,13 @@ textarea.form-control {
    LOGIN PAGE
    ============================================================ */
 .piko-login-wrapper {
-  min-height: 100vh;
+  height: calc(100vh - 60px);
+  height: calc(100dvh - 60px);
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--bg-body);
+  overflow: hidden;
 }
 .piko-login-box {
   background: var(--bg-surface);
@@ -967,3 +969,141 @@ body.piko-fullscreen .btn-primary { display: none; }
 .piko-graph-strip-header.open + .piko-graph-strip-body { display: flex; }
 /* Graph nodes clickable */
 .piko-graph-strip-body svg g.node { cursor: pointer; }
+
+/* ===== MOBILE ===== */
+@media (max-width: 767.98px) {
+  /* 3a. Navbar toggler */
+  .navbar-toggler {
+    border-color: rgba(255,255,255,0.25);
+    padding: 0.25rem 0.5rem;
+  }
+  .navbar-toggler-icon {
+    filter: invert(1);
+  }
+  .navbar-collapse {
+    margin-top: 0.5rem;
+  }
+  .navbar .dropdown {
+    width: 100%;
+  }
+
+  /* 3b. Breadcrumbs — horizontal scroll */
+  .breadcrumb {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 3c. Pipeline graph — horizontal scroll */
+  .piko-graph-container {
+    padding: 0.75rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .piko-graph-container svg {
+    min-width: 500px;
+  }
+
+  /* 3d. Build logs — wrap lines + larger touch targets */
+  .piko-step-row-body pre {
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-size: 0.7rem;
+    max-height: 50vh;
+  }
+  .piko-step-row-header {
+    min-height: 44px;
+  }
+  .piko-copy-logs-header-btn {
+    min-height: 32px;
+    min-width: 32px;
+    padding: 4px 10px;
+  }
+  .piko-goto-bottom-btn {
+    min-height: 36px;
+    padding: 6px 12px;
+  }
+
+  /* 3e. Build meta — flex-wrap */
+  .piko-build-meta {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  /* 3f. Tables — responsive overflow */
+  .table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 3g. Action buttons — touch targets */
+  .btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .piko-team-actions .btn {
+    min-height: 36px;
+  }
+
+  /* 3h. Page headers — stack vertically */
+  .d-flex.justify-content-between.mb-3 {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  /* 3i. Team rows — stack */
+  .piko-team-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  .piko-team-actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  /* 3j. Version rows — adjust padding */
+  .piko-version-row-header {
+    padding: 0.5rem 0.75rem;
+    flex-wrap: wrap;
+  }
+  .piko-version-kv {
+    word-break: break-all;
+  }
+
+  /* 3k. Build tabs — smooth scroll */
+  .piko-build-tabs {
+    -webkit-overflow-scrolling: touch;
+  }
+  .piko-build-tab {
+    padding: 0.4rem 0.75rem;
+  }
+
+  /* 3l. Misc spacing */
+  .container {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .navbar {
+    padding: 0.55rem 0.75rem;
+  }
+  .piko-build-content {
+    padding: 0.75rem;
+  }
+  .piko-graph-legend {
+    gap: 0.75rem;
+    font-size: 0.7rem;
+  }
+  .piko-login-wrapper {
+    height: calc(100vh - 52px);
+    height: calc(100dvh - 52px);
+  }
+  .piko-login-box {
+    padding: 1.5rem 1.25rem;
+    margin: 0 12px;
+  }
+}
