@@ -66,7 +66,7 @@ The initial database migration seeds a default user: `admin` / `admin123`. On fi
 ./pikoci server --jwt-secret my-secret --users 'admin:$2a$10$...' --users 'deploy:$2a$10$...'
 ```
 
-The `--users` flag is safe to pass on every restart. It will set the password for users that still have the default `admin123` password, but will not overwrite passwords that have been changed via the UI or CLI.
+The `--users` flag is safe to pass on every restart. It will set the password for the `admin` user if it still has the default `admin` / `admin123` credentials, but will not overwrite passwords that have been changed via the UI or CLI.
 
 ## Examples
 
