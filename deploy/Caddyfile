@@ -12,4 +12,9 @@
 {$PIKOCI_WWW_DOMAIN} {
 	root * /var/www/pikoci.com
 	file_server
+	encode gzip
+}
+
+www.{$PIKOCI_WWW_DOMAIN} {
+	redir https://{$PIKOCI_WWW_DOMAIN}{uri} permanent
 }
