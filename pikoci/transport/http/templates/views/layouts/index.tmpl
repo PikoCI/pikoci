@@ -447,7 +447,7 @@
           </div>
         <% } %>
         <div class="piko-build-meta">
-          <span><span class="piko-build-label">Started</span> <%- new Date(started_at).toLocaleString() %></span>
+          <span><span class="piko-build-label">Started</span> <span class="piko-time-ago" data-time="<%= started_at %>" title="<%= new Date(started_at).toLocaleString() %>"><%= pikoTimeAgo(started_at) %></span></span>
           <% if (status === "started" && duration === 0) { %>
             <span><span class="piko-build-label">Duration</span> <span class="piko-elapsed" data-started="<%= started_at %>"></span></span>
           <% } else if (duration !== 0) { %>
@@ -586,7 +586,7 @@
         </div>
       </div>
       <div class="piko-resource-info">
-        <span class="piko-build-label">Last checked</span> (<%- resource.check_interval||"@every 1m" %>) at: <span style="color: var(--text-primary);"><%- new Date(resource.last_check).toLocaleString() %></span>
+        <span class="piko-build-label">Last checked</span> (<%- resource.check_interval||"@every 1m" %>) at: <span class="piko-time-ago" data-time="<%= resource.last_check %>" title="<%= new Date(resource.last_check).toLocaleString() %>" style="color: var(--text-primary);"><%= pikoTimeAgo(resource.last_check) %></span>
       </div>
       <div id="resource-versions">
       </div>
@@ -772,6 +772,15 @@
       var app = {};
       var fetchInterval = 2000
       var isLogin = true
+
+      function pikoTimeAgo(dateStr) {
+        if (!dateStr) return ''
+        var seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000)
+        if (seconds < 60) return 'just now'
+        if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago'
+        if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago'
+        return Math.floor(seconds / 86400) + 'd ago'
+      }
 
       var durationToString = function(duration) {
         if (duration === 0) {
@@ -1860,11 +1869,7 @@
             var timeAgo = ''
             var lastBuildAt = that.model.get('last_build_at')
             if (lastBuildAt) {
-              var seconds = Math.floor((Date.now() - new Date(lastBuildAt).getTime()) / 1000)
-              if (seconds < 60) timeAgo = ' · just now'
-              else if (seconds < 3600) timeAgo = ' · ' + Math.floor(seconds / 60) + 'm ago'
-              else if (seconds < 86400) timeAgo = ' · ' + Math.floor(seconds / 3600) + 'h ago'
-              else timeAgo = ' · ' + Math.floor(seconds / 86400) + 'd ago'
+              timeAgo = ' · ' + pikoTimeAgo(lastBuildAt)
             }
             if (hasFailed) {
               html = '<span class="piko-card-status-dot" style="background:#FF004D;"></span> Last build failed' + timeAgo
@@ -2694,6 +2699,11 @@
               if (m > 0 || h > 0) text += m + 'm ';
               text += s + 's';
               $(this).text('(' + text + ')');
+            });
+            that.$el.find('.piko-time-ago').each(function() {
+              var t = $(this).data('time');
+              if (!t) return;
+              $(this).text(pikoTimeAgo(t));
             });
           };
           update();
