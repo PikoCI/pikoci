@@ -84,8 +84,22 @@ func (cl *Client) RefreshToken(ctx context.Context, un string) (*user.WithMember
 }
 
 func (cl *Client) GetUser(ctx context.Context, un string) (*user.WithMemberships, error) {
-	// No server-side endpoint for GetUser; it's only used internally for authorization
-	return nil, fmt.Errorf("GetUser is not exposed via HTTP")
+	var resp thttp.GetUserResponse
+
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/users/%s", cl.url, un), nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	if resp.User == nil {
+		return nil, fmt.Errorf("user not found")
+	}
+
+	return &user.WithMemberships{User: *resp.User}, nil
 }
 
 func (cl *Client) CreateUser(ctx context.Context, u user.User, isHash bool) (*user.User, error) {
@@ -120,6 +134,78 @@ func (cl *Client) ListUsers(ctx context.Context) ([]*user.User, error) {
 	}
 
 	return resp.Users, nil
+}
+
+func (cl *Client) UpdateUser(ctx context.Context, un string, u user.User, isHash bool) (*user.User, error) {
+	var resp thttp.UpdateUserResponse
+
+	err := cl.Request(ctx, http.MethodPut, fmt.Sprintf("%s/users/%s", cl.url, un), thttp.UpdateUserRequest{
+		FullName: u.FullName,
+		Username: u.Username,
+		Password: u.Password,
+		Admin:    u.Admin,
+		IsHash:   isHash,
+	}, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return resp.User, nil
+}
+
+func (cl *Client) DeleteUser(ctx context.Context, un string) error {
+	var resp thttp.DeleteUserResponse
+
+	err := cl.Request(ctx, http.MethodDelete, fmt.Sprintf("%s/users/%s", cl.url, un), nil, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return nil
+}
+
+func (cl *Client) ChangePassword(ctx context.Context, un, oldPassword, newPassword string) error {
+	var resp thttp.ChangePasswordResponse
+
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/users/change-password", cl.url), thttp.ChangePasswordRequest{
+		OldPassword: oldPassword,
+		NewPassword: newPassword,
+	}, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return nil
+}
+
+func (cl *Client) UpdateProfile(ctx context.Context, un string, fullName, newUsername string) (*user.User, error) {
+	var resp thttp.UpdateProfileResponse
+
+	err := cl.Request(ctx, http.MethodPut, fmt.Sprintf("%s/profile", cl.url), thttp.UpdateProfileRequest{
+		FullName: fullName,
+		Username: newUsername,
+	}, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return resp.User, nil
 }
 
 func (cl *Client) CreateTeam(ctx context.Context, un string, t team.Team) (*team.WithMembers, error) {

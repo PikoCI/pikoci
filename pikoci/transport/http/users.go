@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/gorilla/mux"
 	"github.com/xescugc/pikoci/pikoci"
 	"github.com/xescugc/pikoci/pikoci/user"
 )
@@ -123,6 +124,8 @@ func listUsers(s pikoci.Service) http.HandlerFunc {
 type CreateUserRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+	FullName string `json:"full_name"`
+	Admin    bool   `json:"admin"`
 	IsHash   bool   `json:"is_hash"`
 }
 type CreateUserResponse struct {
@@ -145,11 +148,183 @@ func createUser(s pikoci.Service) http.HandlerFunc {
 			encodeResponse(CreateUserResponse{Err: err.Error()}, w)
 			return
 		}
-		u, err := s.CreateUser(ctx, user.User{Username: req.Username, Password: req.Password}, req.IsHash)
+		u, err := s.CreateUser(ctx, user.User{Username: req.Username, Password: req.Password, FullName: req.FullName, Admin: req.Admin}, req.IsHash)
 		var errs string
 		if err != nil {
 			errs = err.Error()
 		}
 		encodeResponse(CreateUserResponse{User: u, Err: errs}, w)
+	}
+}
+
+type GetUserResponse struct {
+	User *user.User `json:"data,omitempty"`
+	Err  string     `json:"error,omitempty"`
+}
+
+func (r GetUserResponse) Error() string {
+	return r.Err
+}
+
+func getUser(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		vars := mux.Vars(r)
+		un := vars["username"]
+
+		um, err := s.GetUser(ctx, un)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+			encodeResponse(GetUserResponse{Err: errs}, w)
+			return
+		}
+		encodeResponse(GetUserResponse{User: &um.User, Err: errs}, w)
+	}
+}
+
+type UpdateUserRequest struct {
+	FullName string `json:"full_name"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Admin    bool   `json:"admin"`
+	IsHash   bool   `json:"is_hash"`
+}
+type UpdateUserResponse struct {
+	User *user.User `json:"data,omitempty"`
+	Err  string     `json:"error,omitempty"`
+}
+
+func (r UpdateUserResponse) Error() string {
+	return r.Err
+}
+
+func updateUser(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var (
+			req UpdateUserRequest
+			ctx = r.Context()
+		)
+		vars := mux.Vars(r)
+		un := vars["username"]
+
+		err := json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			encodeResponse(UpdateUserResponse{Err: err.Error()}, w)
+			return
+		}
+		u, err := s.UpdateUser(ctx, un, user.User{
+			FullName: req.FullName,
+			Username: req.Username,
+			Password: req.Password,
+			Admin:    req.Admin,
+		}, req.IsHash)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(UpdateUserResponse{User: u, Err: errs}, w)
+	}
+}
+
+type DeleteUserResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r DeleteUserResponse) Error() string {
+	return r.Err
+}
+
+func deleteUser(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		vars := mux.Vars(r)
+		un := vars["username"]
+
+		err := s.DeleteUser(ctx, un)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(DeleteUserResponse{Err: errs}, w)
+	}
+}
+
+type ChangePasswordRequest struct {
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}
+type ChangePasswordResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r ChangePasswordResponse) Error() string {
+	return r.Err
+}
+
+func changePassword(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var (
+			req ChangePasswordRequest
+			ctx = r.Context()
+		)
+		un, _ := ctx.Value(UsernameContextKey).(string)
+		if un == "" {
+			encodeResponse(ChangePasswordResponse{Err: "missing username"}, w)
+			return
+		}
+
+		err := json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			encodeResponse(ChangePasswordResponse{Err: err.Error()}, w)
+			return
+		}
+
+		err = s.ChangePassword(ctx, un, req.OldPassword, req.NewPassword)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(ChangePasswordResponse{Err: errs}, w)
+	}
+}
+
+type UpdateProfileRequest struct {
+	FullName string `json:"full_name"`
+	Username string `json:"username"`
+}
+type UpdateProfileResponse struct {
+	User *user.User `json:"data,omitempty"`
+	Err  string     `json:"error,omitempty"`
+}
+
+func (r UpdateProfileResponse) Error() string {
+	return r.Err
+}
+
+func updateProfile(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var (
+			req UpdateProfileRequest
+			ctx = r.Context()
+		)
+		un, _ := ctx.Value(UsernameContextKey).(string)
+		if un == "" {
+			encodeResponse(UpdateProfileResponse{Err: "missing username"}, w)
+			return
+		}
+
+		err := json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			encodeResponse(UpdateProfileResponse{Err: err.Error()}, w)
+			return
+		}
+
+		u, err := s.UpdateProfile(ctx, un, req.FullName, req.Username)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(UpdateProfileResponse{User: u, Err: errs}, w)
 	}
 }

@@ -26,7 +26,7 @@
       <header>
       </header>
       <main class="container">
-        <div id="error"></div>
+        <div id="notice"></div>
         <div id="breadcrumb"></div>
         <div id="main"></div>
       </main>
@@ -56,6 +56,11 @@
                   </a>
                 </li>
                 <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" id="nav-profile" href="/profile"><i class="bi bi-person"></i> Profile</a></li>
+                <% if (session.user.admin) { %>
+                  <li><a class="dropdown-item" id="nav-users" href="/users"><i class="bi bi-people"></i> Users <span class="badge bg-secondary ms-1">Admin</span></a></li>
+                <% } %>
+                <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" id="logout" href="/logout"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
               </ul>
             </div>
@@ -64,11 +69,16 @@
       </nav>
     </script>
 
-    <script type="text/template" id="error-view">
+    <script type="text/template" id="notice-view">
       <div>
         <% if (error) { %>
           <div class="alert alert-danger" role="alert">
             <%- error %>
+          </div>
+        <% } %>
+        <% if (success) { %>
+          <div class="alert alert-success" role="alert">
+            <%- success %>
           </div>
         <% } %>
       </div>
@@ -607,6 +617,126 @@
       </div>
     </script>
 
+    <script type="text/template" id="users-list-view">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h1 class="h4 fw-bold mb-0">Users</h1>
+        <a type="button" id="user-new" class="btn btn-success" href="/users/new"><i class="bi bi-plus"></i> New User</a>
+      </div>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Full Name</th>
+            <th>Role</th>
+          </tr>
+        </thead>
+        <tbody id="users-table-body">
+        </tbody>
+      </table>
+    </script>
+
+    <script type="text/template" id="users-row-view">
+      <td><a href="/users/<%- username %>"><%- username %></a></td>
+      <td><%- full_name %></td>
+      <td><% if (admin) { %><span class="badge bg-primary">Admin</span><% } else { %><span class="badge bg-secondary">Member</span><% } %></td>
+    </script>
+
+    <script type="text/template" id="user-show-view">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h1 class="h4 fw-bold mb-0">Edit User: <%- username %></h1>
+      </div>
+      <form id="user-form">
+        <div class="mb-3">
+          <label for="full_name" class="form-label">Full Name</label>
+          <input type="text" class="form-control" id="full_name" value="<%- full_name %>">
+        </div>
+        <div class="mb-3">
+          <label for="username" class="form-label">Username</label>
+          <input type="text" class="form-control" id="username" value="<%- username %>">
+        </div>
+        <div class="mb-3 form-check">
+          <input type="checkbox" class="form-check-input" id="admin" <% if (admin) { %>checked<% } %>>
+          <label class="form-check-label" for="admin">Admin</label>
+        </div>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </form>
+      <hr style="border-color: var(--border); margin: 1.5rem 0;">
+      <h3 class="h5 fw-bold mb-3">Reset Password</h3>
+      <form id="reset-password-form">
+        <div class="mb-3">
+          <label for="new_password" class="form-label">New Password</label>
+          <input type="password" class="form-control" id="new_password" placeholder="Enter new password">
+        </div>
+        <button type="submit" class="btn btn-warning">Reset Password</button>
+      </form>
+      <hr style="border-color: var(--border); margin: 1.5rem 0;">
+      <button type="button" id="delete-user" class="btn btn-danger"><i class="bi bi-trash"></i> Delete User</button>
+    </script>
+
+    <script type="text/template" id="users-new-view">
+      <div class="mb-3">
+        <h1 class="h4 fw-bold">New User</h1>
+      </div>
+      <form id="user-create-form">
+        <div class="mb-3">
+          <label for="username" class="form-label">Username</label>
+          <input type="text" class="form-control" id="username" placeholder="Enter username">
+        </div>
+        <div class="mb-3">
+          <label for="full_name" class="form-label">Full Name</label>
+          <input type="text" class="form-control" id="full_name" placeholder="Enter full name">
+        </div>
+        <div class="mb-3">
+          <label for="password" class="form-label">Password</label>
+          <input type="password" class="form-control" id="password" placeholder="Enter password">
+        </div>
+        <div class="mb-3 form-check">
+          <input type="checkbox" class="form-check-input" id="admin">
+          <label class="form-check-label" for="admin">Admin</label>
+        </div>
+        <button type="submit" class="btn btn-primary">Create User</button>
+      </form>
+    </script>
+
+    <script type="text/template" id="profile-view">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h1 class="h4 fw-bold mb-0">Profile</h1>
+      </div>
+      <% if (mustChangePassword) { %>
+        <div class="alert alert-warning" id="must-change-password-banner" role="alert">
+          <i class="bi bi-exclamation-triangle"></i> Please change your default password before continuing.
+        </div>
+      <% } %>
+      <form id="profile-form">
+        <div class="mb-3">
+          <label for="full_name" class="form-label">Full Name</label>
+          <input type="text" class="form-control" id="full_name" value="<%- fullName %>">
+        </div>
+        <div class="mb-3">
+          <label for="username" class="form-label">Username</label>
+          <input type="text" class="form-control" id="username" value="<%- currentUsername %>">
+        </div>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </form>
+      <hr style="border-color: var(--border); margin: 1.5rem 0;">
+      <h3 class="h5 fw-bold mb-3">Change Password</h3>
+      <form id="change-password-form">
+        <div class="mb-3">
+          <label for="current_password" class="form-label">Current Password</label>
+          <input type="password" class="form-control" id="current_password" placeholder="Enter current password">
+        </div>
+        <div class="mb-3">
+          <label for="new_password" class="form-label">New Password</label>
+          <input type="password" class="form-control" id="new_password" placeholder="Enter new password">
+        </div>
+        <div class="mb-3">
+          <label for="confirm_password" class="form-label">Confirm New Password</label>
+          <input type="password" class="form-control" id="confirm_password" placeholder="Confirm new password">
+        </div>
+        <button type="submit" class="btn btn-warning">Change Password</button>
+      </form>
+    </script>
+
     <script type = "text/javascript">
       'use strict';
 
@@ -748,9 +878,25 @@
           id: null,
           full_name: null,
           username: null,
-          admin: null,
+          admin: false,
         },
         idAttribute: "username",
+        url: function() {
+          return "/users/" + this.get("username")
+        },
+        parse: function(response) {
+          if (response.data) {
+            return response.data
+          }
+          return response
+        },
+      });
+      app.UsersCollection = Backbone.Collection.extend({
+        model: app.User,
+        url: "/users",
+        parse: function(response) {
+          return response.data
+        },
       });
       app.Team = Backbone.Model.extend({
         idAttribute: "canonical",
@@ -851,12 +997,25 @@
           return response;
         }
       });
-      app.APIError = Backbone.Model.extend({
+      app.APINotice = Backbone.Model.extend({
+        defaults: {
+          error: "",
+          success: "",
+        },
         clear: function(){
-          this.set({error: ""})
+          Backbone.Model.prototype.set.call(this, {error: "", success: ""})
+        },
+        set: function(attrs, options) {
+          if (attrs.error && attrs.error !== "") {
+            attrs.success = ""
+          }
+          return Backbone.Model.prototype.set.call(this, attrs, options)
+        },
+        setSuccess: function(msg){
+          this.set({error: "", success: msg})
         }
       })
-      app.apiError = new app.APIError()
+      app.apiNotice = new app.APINotice()
 
       //--------------
       // Collections
@@ -994,7 +1153,7 @@
         initialize: function () {
           this.render();
           this.header = new app.HeaderView({ el: 'header' });
-          this.error = new app.ErrorView({ el: '#error', model: app.apiError });
+          this.notice = new app.NoticeView({ el: '#notice', model: app.apiNotice });
         },
         render: function () {
           this.$el.html(this.template());
@@ -1010,6 +1169,8 @@
         events: {
           'click a#logo': 'clickLogo',
           'click a#logout': 'clickLogout',
+          'click a#nav-profile': 'clickNavLink',
+          'click a#nav-users': 'clickNavLink',
         },
         clickLogo: function(event) {
           event.preventDefault();
@@ -1024,6 +1185,12 @@
           var url = new URL(event.target.href)
           app.router.navigate(url.pathname, { trigger: true });
         },
+        clickNavLink: function(event) {
+          event.preventDefault();
+          var target = event.target.closest('a');
+          var url = new URL(target.href)
+          app.router.navigate(url.pathname, { trigger: true });
+        },
         render: function () {
           var sjson 
           if (!app.session.isEmpty()) {
@@ -1034,8 +1201,8 @@
           return this; // enable chained calls
         }
       })
-      app.ErrorView = Backbone.View.extend({
-        template: _.template($('#error-view').html()),
+      app.NoticeView = Backbone.View.extend({
+        template: _.template($('#notice-view').html()),
         initialize: function() {
           this.listenTo(this.model, "change", this.render)
         },
@@ -1097,9 +1264,277 @@
               app.session.unset("password")
               app.session.unset("username")
               window.localStorage.setItem(userSessionKey, JSON.stringify(app.session.toJSON()))
-              app.router.navigate('', { trigger: true });
+              var u = app.session.get("user");
+              if (u && u.must_change_password) {
+                app.router.navigate('profile', { trigger: true });
+              } else {
+                app.router.navigate('', { trigger: true });
+              }
             },
           })
+        },
+      })
+      app.UsersListView = Backbone.View.extend({
+        template: _.template($('#users-list-view').html()),
+        initialize: function() {
+          this.listenTo(this.collection, "add", this.addUser)
+          this.listenTo(this.collection, "destroy", this.render)
+          this.collection.fetch()
+        },
+        events: {
+          'click a': 'clickLink',
+        },
+        render: function() {
+          this.$el.html(this.template());
+          var that = this
+          this.collection.each(function(m) {
+            that.addUser(m)
+          })
+          return this;
+        },
+        addUser: function(m) {
+          var view = new app.UsersRowView({model: m});
+          this.$('#users-table-body').append(view.render().el);
+        },
+        clickLink: function(event) {
+          event.preventDefault();
+          var target = event.target.closest('a');
+          var url = new URL(target.href)
+          app.router.navigate(url.pathname, { trigger: true });
+        },
+      })
+      app.UsersRowView = Backbone.View.extend({
+        template: _.template($('#users-row-view').html()),
+        tagName: "tr",
+        events: {
+          'click a': 'clickLink',
+        },
+        render: function() {
+          this.$el.html(this.template(this.model.toJSON()));
+          return this;
+        },
+        clickLink: function(event) {
+          event.preventDefault();
+          var url = new URL(event.target.href)
+          app.router.navigate(url.pathname, { trigger: true });
+        },
+      })
+      app.UserShowView = Backbone.View.extend({
+        template: _.template($('#user-show-view').html()),
+        events: {
+          'submit #user-form': 'submitForm',
+          'submit #reset-password-form': 'resetPassword',
+          'click #delete-user': 'deleteUser',
+        },
+        render: function() {
+          this.$el.html(this.template(this.model.toJSON()));
+          return this;
+        },
+        submitForm: function(event) {
+          event.preventDefault();
+          var fullName = this.$('#full_name').val();
+          var username = this.$('#username').val();
+          var admin = this.$('#admin').is(':checked');
+          var originalUsername = this.model.get("username");
+          var that = this;
+
+          $.ajax({
+            url: '/users/' + originalUsername + '.json',
+            type: 'PUT',
+            headers: {
+              'Authorization': 'Bearer ' + app.session.get("jwt"),
+              'Content-Type': 'application/json',
+            },
+            data: JSON.stringify({full_name: fullName, username: username, admin: admin}),
+            success: function(resp) {
+              if (resp.error) {
+                app.apiNotice.set({error: resp.error});
+                return;
+              }
+              if (username !== originalUsername) {
+                app.router.navigate('users/' + username, { trigger: true });
+              } else {
+                that.model.set(resp.data);
+                that.render();
+              }
+            },
+          });
+        },
+        resetPassword: function(event) {
+          event.preventDefault();
+          var newPassword = this.$('#new_password').val();
+          if (!newPassword) return;
+          var username = this.model.get("username");
+
+          $.ajax({
+            url: '/users/' + username + '.json',
+            type: 'PUT',
+            headers: {
+              'Authorization': 'Bearer ' + app.session.get("jwt"),
+              'Content-Type': 'application/json',
+            },
+            data: JSON.stringify({password: newPassword, admin: this.model.get("admin")}),
+            success: function(resp) {
+              if (resp.error) {
+                app.apiNotice.set({error: resp.error});
+                return;
+              }
+              app.apiNotice.setSuccess("Password reset successfully");
+            },
+          });
+        },
+        deleteUser: function(event) {
+          event.preventDefault();
+          var username = this.model.get("username");
+          if (!confirm("Are you sure you want to delete user '" + username + "'?")) return;
+
+          $.ajax({
+            url: '/users/' + username + '.json',
+            type: 'DELETE',
+            headers: {
+              'Authorization': 'Bearer ' + app.session.get("jwt"),
+              'Content-Type': 'application/json',
+            },
+            success: function(resp) {
+              if (resp.error) {
+                app.apiNotice.set({error: resp.error});
+                return;
+              }
+              app.router.navigate('users', { trigger: true });
+            },
+          });
+        },
+      })
+      app.UsersNewView = Backbone.View.extend({
+        template: _.template($('#users-new-view').html()),
+        events: {
+          'submit #user-create-form': 'submitForm',
+        },
+        render: function() {
+          this.$el.html(this.template());
+          return this;
+        },
+        submitForm: function(event) {
+          event.preventDefault();
+          var username = this.$('#username').val();
+          var fullName = this.$('#full_name').val();
+          var password = this.$('#password').val();
+          var admin = this.$('#admin').is(':checked');
+
+          $.ajax({
+            url: '/users.json',
+            type: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + app.session.get("jwt"),
+              'Content-Type': 'application/json',
+            },
+            data: JSON.stringify({username: username, password: password, full_name: fullName, admin: admin}),
+            success: function(resp) {
+              if (resp.error) {
+                app.apiNotice.set({error: resp.error});
+                return;
+              }
+              app.router.navigate('users/' + username, { trigger: true });
+            },
+          });
+        },
+      })
+      app.ProfileView = Backbone.View.extend({
+        template: _.template($('#profile-view').html()),
+        initialize: function(opts) {
+          this.mustChangePassword = opts.mustChangePassword || false;
+        },
+        events: {
+          'submit #profile-form': 'submitProfile',
+          'submit #change-password-form': 'changePassword',
+        },
+        render: function() {
+          var u = app.session.get("user");
+          this.$el.html(this.template({
+            fullName: u.full_name || '',
+            currentUsername: u.username || '',
+            mustChangePassword: this.mustChangePassword,
+          }));
+          return this;
+        },
+        submitProfile: function(event) {
+          event.preventDefault();
+          var fullName = this.$('#full_name').val();
+          var username = this.$('#username').val();
+
+          $.ajax({
+            url: '/profile.json',
+            type: 'PUT',
+            headers: {
+              'Authorization': 'Bearer ' + app.session.get("jwt"),
+              'Content-Type': 'application/json',
+            },
+            data: JSON.stringify({full_name: fullName, username: username}),
+            success: function(resp) {
+              if (resp.error) {
+                app.apiNotice.set({error: resp.error});
+                return;
+              }
+              // Refresh token to get updated user info
+              $.ajax({
+                url: '/refresh-token.json',
+                type: 'POST',
+                headers: {
+                  'Authorization': 'Bearer ' + app.session.get("jwt"),
+                  'Content-Type': 'application/json',
+                },
+                success: function(refreshResp) {
+                  if (refreshResp.data && refreshResp.data.jwt) {
+                    app.session.set({jwt: refreshResp.data.jwt, user: refreshResp.data.user});
+                    window.localStorage.setItem(userSessionKey, JSON.stringify(app.session.toJSON()));
+                  }
+                },
+              });
+              app.apiNotice.setSuccess("Profile updated successfully");
+            },
+          });
+        },
+        changePassword: function(event) {
+          event.preventDefault();
+          var currentPassword = this.$('#current_password').val();
+          var newPassword = this.$('#new_password').val();
+          var confirmPassword = this.$('#confirm_password').val();
+
+          if (newPassword !== confirmPassword) {
+            app.apiNotice.set({error: "New passwords do not match"});
+            return;
+          }
+
+          var that = this;
+          $.ajax({
+            url: '/users/change-password.json',
+            type: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + app.session.get("jwt"),
+              'Content-Type': 'application/json',
+            },
+            data: JSON.stringify({old_password: currentPassword, new_password: newPassword}),
+            success: function(resp) {
+              if (resp.error) {
+                app.apiNotice.set({error: resp.error});
+                return;
+              }
+              that.mustChangePassword = false;
+              that.$('#must-change-password-banner').remove();
+              // Clear the must_change_password flag from session
+              var u = app.session.get("user");
+              if (u) {
+                u.must_change_password = false;
+                app.session.set({user: u});
+                window.localStorage.setItem(userSessionKey, JSON.stringify(app.session.toJSON()));
+              }
+              app.apiNotice.setSuccess("Password changed successfully");
+            },
+            error: function(response) {
+              var msg = (response.responseJSON && response.responseJSON.error) || response.statusText || "Unknown error";
+              app.apiNotice.set({error: msg});
+            },
+          });
         },
       })
       app.TeamsView = Backbone.View.extend({
@@ -2019,7 +2454,7 @@
           try{
             var vars = JSON.parse(rvars)
           } catch (error){
-            app.apiError.set({error: "Error parsing Vars: "+error})
+            app.apiNotice.set({error: "Error parsing Vars: "+error})
             return
           }
           var data = [];
@@ -2052,7 +2487,7 @@
           try{
             var vars = JSON.parse(rvars)
           } catch (error){
-            app.apiError.set({error: "Error parsing Vars: "+error})
+            app.apiNotice.set({error: "Error parsing Vars: "+error})
             return
           }
           var data = [];
@@ -2474,6 +2909,12 @@
           'teams/:tc/pipelines/:pn/jobs/:jn/builds/:bid':   'jobBuilds',
 
           'teams/:tn/pipelines/:pn/resources/:rCan/versions': 'resourceVersions',
+
+          'users':          'usersIndex',
+          'users/new':      'usersNew',
+          'users/:username': 'usersShow',
+          'profile':        'profile',
+
           '*notFound': 'notFound',
         },
         sessionNew: function() {
@@ -2713,10 +3154,63 @@
             }
           })
         },
+        usersIndex: function() {
+          if (!this.setup(!isLogin)) {
+            return
+          }
+          if (!app.session.isAdmin()) {
+            app.router.navigate('', { trigger: true });
+            return
+          }
+          var users = new app.UsersCollection();
+          this.contentView = new app.UsersListView({collection: users});
+          $('#main').html(this.contentView.render().el)
+          $('#breadcrumb').html(new app.BreadcrumbView().render().el)
+        },
+        usersNew: function() {
+          if (!this.setup(!isLogin)) {
+            return
+          }
+          if (!app.session.isAdmin()) {
+            app.router.navigate('', { trigger: true });
+            return
+          }
+          this.contentView = new app.UsersNewView();
+          $('#main').html(this.contentView.render().el)
+          $('#breadcrumb').html(new app.BreadcrumbView().render().el)
+        },
+        usersShow: function(username) {
+          if (!this.setup(!isLogin)) {
+            return
+          }
+          if (!app.session.isAdmin()) {
+            app.router.navigate('', { trigger: true });
+            return
+          }
+          var u = new app.User({username: username});
+          var that = this;
+          u.fetch({
+            success: function() {
+              that.contentView = new app.UserShowView({model: u});
+              $('#main').html(that.contentView.render().el)
+              $('#breadcrumb').html(new app.BreadcrumbView().render().el)
+            },
+          });
+        },
+        profile: function() {
+          if (!this.setup(!isLogin, false, true)) {
+            return
+          }
+          var u = app.session.get("user");
+          var mustChange = u && u.must_change_password;
+          this.contentView = new app.ProfileView({mustChangePassword: mustChange});
+          $('#main').html(this.contentView.render().el)
+          $('#breadcrumb').html(new app.BreadcrumbView().render().el)
+        },
         notFound: function() {
           app.router.navigate('', { trigger: true });
         },
-        setup: function(isLogin, allowPublic) {
+        setup: function(isLogin, allowPublic, isProfile) {
           if (!this.mainView) {
             this.mainView = new app.MainView({ el: '#app' });
           }
@@ -2725,8 +3219,17 @@
             return false
           } else if (!app.session.isEmpty() && isLogin) {
             app.router.navigate("", { trigger: true });
-            return true 
-          } else if (this.contentView) {
+            return true
+          }
+          // Force redirect to profile if user must change their default password
+          if (!isProfile && !app.session.isEmpty()) {
+            var u = app.session.get("user");
+            if (u && u.must_change_password) {
+              app.router.navigate("profile", { trigger: true });
+              return false
+            }
+          }
+          if (this.contentView) {
             // TODO: Recheck this
             //// COMPLETELY UNBIND THE VIEW
             this.contentView.undelegateEvents();
@@ -2756,7 +3259,7 @@
         var optError = options.error
         options.error = function(response){
           var msg = (response.responseJSON && response.responseJSON.error) || response.statusText || "Unknown error";
-          app.apiError.set({error: msg})
+          app.apiNotice.set({error: msg})
           if (optError) {
             optError(response)
           }
@@ -2764,7 +3267,7 @@
         var optSuccess = options.success
         options.success = function(response, textStatus, jqXHR){
           if (!options.isInterval) {
-            app.apiError.clear()
+            app.apiNotice.clear()
           }
           if (jqXHR && jqXHR.getResponseHeader('X-Refresh-Token') === 'true') {
             $.ajax({

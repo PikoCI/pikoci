@@ -51,6 +51,30 @@ func TestPikoCI(t *testing.T) {
 			err = login.Click()
 			require.NoError(t, err)
 
+			// Default admin123 triggers forced password change — handle it
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Profile"), 10*time.Second)
+
+			curPass, err := wd.FindElement(selenium.ByCSSSelector, "#current_password")
+			require.NoError(t, err)
+			curPass.SendKeys("admin123")
+
+			newPass, err := wd.FindElement(selenium.ByCSSSelector, "#new_password")
+			require.NoError(t, err)
+			newPass.SendKeys("newadmin123")
+
+			confirmPass, err := wd.FindElement(selenium.ByCSSSelector, "#confirm_password")
+			require.NoError(t, err)
+			confirmPass.SendKeys("newadmin123")
+
+			changeBtn, err := wd.FindElement(selenium.ByCSSSelector, "#change-password-form button[type=submit]")
+			require.NoError(t, err)
+			err = changeBtn.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, ".alert-success", "Password changed successfully"), 15*time.Second)
+
+			// Navigate to teams
+			wd.Get(pikoURL + "/")
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 5*time.Second)
 		})
 
@@ -794,7 +818,7 @@ job "gen" {
 		// Set pipeline public via admin HTTP API
 		loginBody, _ := json.Marshal(thttp.UserLoginRequest{
 			Username: "admin",
-			Password: "admin123",
+			Password: "newadmin123",
 		})
 		loginReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login.json", bytes.NewReader(loginBody))
 		require.NoError(t, err)
@@ -899,7 +923,7 @@ job "gen" {
 		// Step 1: Get admin JWT via HTTP
 		loginBody, _ := json.Marshal(thttp.UserLoginRequest{
 			Username: "admin",
-			Password: "admin123",
+			Password: "newadmin123",
 		})
 		loginReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login.json", bytes.NewReader(loginBody))
 		require.NoError(t, err)

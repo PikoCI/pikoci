@@ -24,7 +24,7 @@ func TestCommandTree(t *testing.T) {
 		subcommands []string
 	}{
 		{clientCmd, "client", []string{"login", "pipelines", "jobs", "users", "teams", "builds", "resources", "triggers"}},
-		{usersCmd, "users", []string{"create", "list"}},
+		{usersCmd, "users", []string{"create", "list", "update", "delete", "change-password"}},
 		{teamsCmd, "teams", []string{"create", "list", "get", "update", "delete", "members"}},
 		{teamsMembersCmd, "members", []string{"create", "update", "delete"}},
 		{buildsCmd, "builds", []string{"list", "get", "delete", "cancel", "retry"}},
@@ -49,6 +49,9 @@ func TestRequiredFlags(t *testing.T) {
 		required []string
 	}{
 		{"users create", usersCreateCmd, []string{"username", "password"}},
+		{"users update", usersUpdateCmd, []string{"username"}},
+		{"users delete", usersDeleteCmd, []string{"username"}},
+		{"users change-password", usersChangePasswordCmd, []string{"old-password", "new-password"}},
 		{"teams create", teamsCreateCmd, []string{"name"}},
 		{"teams get", teamsGetCmd, []string{"canonical"}},
 		{"teams update", teamsUpdateCmd, []string{"canonical", "name"}},

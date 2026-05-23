@@ -10,6 +10,11 @@ import (
 	"github.com/xescugc/pikoci/pikoci/utils"
 )
 
+// defaultAdminUsername and defaultAdmin123Hash identify the migration-seeded
+// default user (admin / admin123). Both must match to trigger force-password-change.
+const defaultAdminUsername = "admin"
+const defaultAdmin123Hash = "$2a$14$FoV/2Z0CRgQyiDJLMcErd.cC/DtWCKMWtxZEaL6HQd/rrtU2DZpAu"
+
 func (q *PikoCI) UserLogin(ctx context.Context, un, pass string) (*user.WithMemberships, string, error) {
 	if !utils.ValidateCanonical(un) {
 		return nil, "", fmt.Errorf("invalid Username format %q", un)
@@ -22,6 +27,11 @@ func (q *PikoCI) UserLogin(ctx context.Context, un, pass string) (*user.WithMemb
 	ok := utils.CheckPasswordHash(pass, um.Password)
 	if !ok {
 		return nil, "", fmt.Errorf("username or password is wrong")
+	}
+
+	// Flag if user is the migration-seeded admin with the default password
+	if um.Username == defaultAdminUsername && um.Password == defaultAdmin123Hash {
+		um.MustChangePassword = true
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -92,9 +102,10 @@ func (q *PikoCI) CreateUser(ctx context.Context, u user.User, isHash bool) (*use
 	return &u, nil
 }
 
-// CreateOrUpdateUser finds a user by username and updates their password if they exist,
-// or creates them if they don't. This is only intended for startup user seeding (--users flag),
-// not for the HTTP API.
+// CreateOrUpdateUser creates a user if they don't exist, or updates their password
+// only if they still have the migration-seeded default password (admin123).
+// This is only intended for startup user seeding (--users flag), not for the HTTP API.
+// Users who have already changed their password via the UI/CLI are not modified.
 func (q *PikoCI) CreateOrUpdateUser(ctx context.Context, u user.User, isHash bool) (*user.User, error) {
 	if !utils.ValidateCanonical(u.Username) {
 		return nil, fmt.Errorf("invalid Username format %q", u.Username)
@@ -112,6 +123,12 @@ func (q *PikoCI) CreateOrUpdateUser(ctx context.Context, u user.User, isHash boo
 
 	existing, err := q.Users.Find(ctx, u.Username)
 	if err == nil && existing != nil {
+		// Only update if this is the migration-seeded admin with the default password.
+		// This allows --users to set the admin password on first setup but
+		// won't overwrite passwords changed via the UI/CLI.
+		if !(existing.Username == defaultAdminUsername && existing.Password == defaultAdmin123Hash) {
+			return existing, nil
+		}
 		existing.Password = u.Password
 		if u.FullName != "" {
 			existing.FullName = u.FullName
@@ -139,4 +156,151 @@ func (q *PikoCI) ListUsers(ctx context.Context) ([]*user.User, error) {
 	}
 
 	return us, nil
+}
+
+func (q *PikoCI) UpdateUser(ctx context.Context, un string, u user.User, isHash bool) (*user.User, error) {
+	existing, err := q.Users.Find(ctx, un)
+	if err != nil {
+		return nil, fmt.Errorf("failed to Find User: %w", err)
+	}
+
+	if u.FullName != "" {
+		existing.FullName = u.FullName
+	}
+	if u.Username != "" && u.Username != un {
+		if !utils.ValidateCanonical(u.Username) {
+			return nil, fmt.Errorf("invalid Username format %q", u.Username)
+		}
+		existing.Username = u.Username
+	}
+	if u.Password != "" {
+		if !isHash {
+			hash, err := utils.HashPassword(u.Password)
+			if err != nil {
+				return nil, fmt.Errorf("failed to hash Password: %w", err)
+			}
+			existing.Password = hash
+		} else {
+			existing.Password = u.Password
+		}
+	}
+
+	// Prevent demoting the last admin
+	if existing.Admin && !u.Admin {
+		all, err := q.Users.Filter(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list users: %w", err)
+		}
+		adminCount := 0
+		for _, a := range all {
+			if a.Admin {
+				adminCount++
+			}
+		}
+		if adminCount <= 1 {
+			return nil, fmt.Errorf("cannot demote the last admin user")
+		}
+	}
+	existing.Admin = u.Admin
+
+	err = q.Users.Update(ctx, un, *existing)
+	if err != nil {
+		return nil, fmt.Errorf("failed to Update User: %w", err)
+	}
+
+	return existing, nil
+}
+
+func (q *PikoCI) DeleteUser(ctx context.Context, un string) error {
+	if !utils.ValidateCanonical(un) {
+		return fmt.Errorf("invalid Username format %q", un)
+	}
+
+	existing, err := q.Users.Find(ctx, un)
+	if err != nil {
+		return fmt.Errorf("failed to Find User: %w", err)
+	}
+
+	if existing.Admin {
+		all, err := q.Users.Filter(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to list users: %w", err)
+		}
+		adminCount := 0
+		for _, a := range all {
+			if a.Admin {
+				adminCount++
+			}
+		}
+		if adminCount <= 1 {
+			return fmt.Errorf("cannot delete the last admin user")
+		}
+	}
+
+	err = q.Users.Delete(ctx, un)
+	if err != nil {
+		return fmt.Errorf("failed to Delete User: %w", err)
+	}
+
+	return nil
+}
+
+func (q *PikoCI) ChangePassword(ctx context.Context, un, oldPassword, newPassword string) error {
+	if !utils.ValidateCanonical(un) {
+		return fmt.Errorf("invalid Username format %q", un)
+	}
+
+	existing, err := q.Users.Find(ctx, un)
+	if err != nil {
+		return fmt.Errorf("failed to Find User: %w", err)
+	}
+
+	if !utils.CheckPasswordHash(oldPassword, existing.Password) {
+		return fmt.Errorf("current password is incorrect")
+	}
+
+	if newPassword == "" {
+		return fmt.Errorf("new password cannot be empty")
+	}
+
+	hash, err := utils.HashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("failed to hash Password: %w", err)
+	}
+	existing.Password = hash
+
+	err = q.Users.Update(ctx, un, *existing)
+	if err != nil {
+		return fmt.Errorf("failed to Update User: %w", err)
+	}
+
+	return nil
+}
+
+func (q *PikoCI) UpdateProfile(ctx context.Context, un string, fullName, newUsername string) (*user.User, error) {
+	if !utils.ValidateCanonical(un) {
+		return nil, fmt.Errorf("invalid Username format %q", un)
+	}
+
+	existing, err := q.Users.Find(ctx, un)
+	if err != nil {
+		return nil, fmt.Errorf("failed to Find User: %w", err)
+	}
+
+	if fullName != "" {
+		existing.FullName = fullName
+	}
+	if newUsername != "" && newUsername != un {
+		if !utils.ValidateCanonical(newUsername) {
+			return nil, fmt.Errorf("invalid Username format %q", newUsername)
+		}
+		existing.Username = newUsername
+	}
+
+	err = q.Users.Update(ctx, un, *existing)
+	if err != nil {
+		return nil, fmt.Errorf("failed to Update User: %w", err)
+	}
+
+	return existing, nil
 }

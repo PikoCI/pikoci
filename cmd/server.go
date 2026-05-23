@@ -266,7 +266,7 @@ func init() {
 
 	serverCmd.Flags().IntP("port", "p", 8080, "Port in which to start the server")
 	serverCmd.Flags().String("jwt-secret", "", "Declares the Secret used to sign the JWT when user login")
-	serverCmd.Flags().StringSlice("users", nil, "List of Users which will have 'USERNAME:HASH-PASSWORD', you can use the 'user-password' command to help you")
+	serverCmd.Flags().StringSlice("users", nil, "List of Users as 'USERNAME:HASH-PASSWORD' to create at startup or override default passwords. Use the 'user-password' command to generate hashes")
 	serverCmd.Flags().String("db-system", mysql.Mem, "Which DB system to use (mem, sqlite, mysql, postgresql)")
 	serverCmd.Flags().String("db-host", "", "Database Host")
 	serverCmd.Flags().Int("db-port", 0, "Database Port")

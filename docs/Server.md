@@ -50,10 +50,10 @@ export PUBSUB_SYSTEM=nats
 
 ## Default user
 
-The initial database migration seeds a default user: `admin` / `admin123`. Use the `--users` flag to add new users or update existing users' passwords. If a user already exists, their password is updated; otherwise a new user is created.
+The initial database migration seeds a default user: `admin` / `admin123`. On first login with the default password, the UI will redirect to the Profile page and require a password change before continuing. Use the `--users` flag to create users or override the default password at startup.
 
 ```bash
-# Change the default admin password
+# Override the default admin password
 ./pikoci user-password -u admin -p new-secure-password
 # Output: admin:$2a$10$...
 
@@ -66,7 +66,7 @@ The initial database migration seeds a default user: `admin` / `admin123`. Use t
 ./pikoci server --jwt-secret my-secret --users 'admin:$2a$10$...' --users 'deploy:$2a$10$...'
 ```
 
-The `--users` flag is idempotent and safe to pass on every restart.
+The `--users` flag is safe to pass on every restart. It will set the password for the `admin` user if it still has the default `admin` / `admin123` credentials, but will not overwrite passwords that have been changed via the UI or CLI.
 
 ## Examples
 

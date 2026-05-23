@@ -108,6 +108,94 @@ func TestListUsers(t *testing.T) {
 	assert.Len(t, users, 2)
 }
 
+func TestGetUser(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/users/{username}", func(w http.ResponseWriter, req *http.Request) {
+		vars := mux.Vars(req)
+		jsonHandler(w, thttp.GetUserResponse{User: &user.User{Username: vars["username"], FullName: "Admin"}})
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	u, err := c.GetUser(context.Background(), "admin")
+	require.NoError(t, err)
+	assert.Equal(t, "admin", u.Username)
+	assert.Equal(t, "Admin", u.FullName)
+}
+
+func TestUpdateUser(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/users/{username}", func(w http.ResponseWriter, req *http.Request) {
+		var ur thttp.UpdateUserRequest
+		json.NewDecoder(req.Body).Decode(&ur)
+		vars := mux.Vars(req)
+		jsonHandler(w, thttp.UpdateUserResponse{User: &user.User{Username: vars["username"], FullName: ur.FullName, Admin: ur.Admin}})
+	}).Methods("PUT")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	u, err := c.UpdateUser(context.Background(), "admin", user.User{FullName: "New Name", Admin: true}, false)
+	require.NoError(t, err)
+	assert.Equal(t, "admin", u.Username)
+	assert.Equal(t, "New Name", u.FullName)
+	assert.True(t, u.Admin)
+}
+
+func TestDeleteUser(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/users/{username}", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.DeleteUserResponse{})
+	}).Methods("DELETE")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	err = c.DeleteUser(context.Background(), "pepito")
+	require.NoError(t, err)
+}
+
+func TestChangePassword(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/users/change-password", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.ChangePasswordResponse{})
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	err = c.ChangePassword(context.Background(), "admin", "oldpass", "newpass")
+	require.NoError(t, err)
+}
+
+func TestUpdateProfile(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/profile", func(w http.ResponseWriter, req *http.Request) {
+		var pr thttp.UpdateProfileRequest
+		json.NewDecoder(req.Body).Decode(&pr)
+		jsonHandler(w, thttp.UpdateProfileResponse{User: &user.User{Username: pr.Username, FullName: pr.FullName}})
+	}).Methods("PUT")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	u, err := c.UpdateProfile(context.Background(), "admin", "New Name", "admin")
+	require.NoError(t, err)
+	assert.Equal(t, "admin", u.Username)
+	assert.Equal(t, "New Name", u.FullName)
+}
+
 func TestCreateTeam(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/teams", func(w http.ResponseWriter, req *http.Request) {

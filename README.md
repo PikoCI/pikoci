@@ -77,9 +77,9 @@ The fastest way to get started. Pass a pipeline config directly at launch. When 
   --pipeline-config pipeline.hcl
 ```
 
-Open [http://localhost:8080](http://localhost:8080) and log in with the default user `admin` and password `admin123`.
+Open [http://localhost:8080](http://localhost:8080) and log in with the default user `admin` and password `admin123`. On first login with the default password, you will be redirected to the Profile page to set a new password.
 
-> **Users:** pass `--users 'username:hashed-password'` to add or update users at startup. If a user already exists, their password is updated. Use `pikoci user-password` to generate password hashes.
+> **Users:** pass `--users 'username:hashed-password'` to create users or override the default password at startup. Users who have changed their password via the UI/CLI are not affected. Use `pikoci user-password` to generate password hashes.
 
 ### Example pipeline
 

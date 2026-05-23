@@ -61,6 +61,20 @@ func (mr *ServiceMockRecorder) CancelJobBuild(ctx, tc, pn, jn, buildNumber any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelJobBuild", reflect.TypeOf((*Service)(nil).CancelJobBuild), ctx, tc, pn, jn, buildNumber)
 }
 
+// ChangePassword mocks base method.
+func (m *Service) ChangePassword(ctx context.Context, un, oldPassword, newPassword string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChangePassword", ctx, un, oldPassword, newPassword)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ChangePassword indicates an expected call of ChangePassword.
+func (mr *ServiceMockRecorder) ChangePassword(ctx, un, oldPassword, newPassword any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChangePassword", reflect.TypeOf((*Service)(nil).ChangePassword), ctx, un, oldPassword, newPassword)
+}
+
 // CreateJobBuild mocks base method.
 func (m *Service) CreateJobBuild(ctx context.Context, tc, pn, jn string, b build.Build) (*build.Build, error) {
 	m.ctrl.T.Helper()
@@ -250,6 +264,20 @@ func (m *Service) DeleteTeamMember(ctx context.Context, tc, mc string) error {
 func (mr *ServiceMockRecorder) DeleteTeamMember(ctx, tc, mc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTeamMember", reflect.TypeOf((*Service)(nil).DeleteTeamMember), ctx, tc, mc)
+}
+
+// DeleteUser mocks base method.
+func (m *Service) DeleteUser(ctx context.Context, un string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteUser", ctx, un)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteUser indicates an expected call of DeleteUser.
+func (mr *ServiceMockRecorder) DeleteUser(ctx, un any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUser", reflect.TypeOf((*Service)(nil).DeleteUser), ctx, un)
 }
 
 // FindBuildGetVersions mocks base method.
@@ -701,6 +729,21 @@ func (mr *ServiceMockRecorder) UpdatePipelineResource(ctx, tc, pn, rCan, r any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePipelineResource", reflect.TypeOf((*Service)(nil).UpdatePipelineResource), ctx, tc, pn, rCan, r)
 }
 
+// UpdateProfile mocks base method.
+func (m *Service) UpdateProfile(ctx context.Context, un, fullName, newUsername string) (*user.User, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateProfile", ctx, un, fullName, newUsername)
+	ret0, _ := ret[0].(*user.User)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateProfile indicates an expected call of UpdateProfile.
+func (mr *ServiceMockRecorder) UpdateProfile(ctx, un, fullName, newUsername any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProfile", reflect.TypeOf((*Service)(nil).UpdateProfile), ctx, un, fullName, newUsername)
+}
+
 // UpdateTeam mocks base method.
 func (m *Service) UpdateTeam(ctx context.Context, tc string, t team.Team) (*team.WithMembers, error) {
 	m.ctrl.T.Helper()
@@ -729,6 +772,21 @@ func (m *Service) UpdateTeamMember(ctx context.Context, tc, mc string, tm team.M
 func (mr *ServiceMockRecorder) UpdateTeamMember(ctx, tc, mc, tm any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTeamMember", reflect.TypeOf((*Service)(nil).UpdateTeamMember), ctx, tc, mc, tm)
+}
+
+// UpdateUser mocks base method.
+func (m *Service) UpdateUser(ctx context.Context, un string, u user.User, isHash bool) (*user.User, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateUser", ctx, un, u, isHash)
+	ret0, _ := ret[0].(*user.User)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateUser indicates an expected call of UpdateUser.
+func (mr *ServiceMockRecorder) UpdateUser(ctx, un, u, isHash any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUser", reflect.TypeOf((*Service)(nil).UpdateUser), ctx, un, u, isHash)
 }
 
 // UserLogin mocks base method.
