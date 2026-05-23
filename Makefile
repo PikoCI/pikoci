@@ -82,6 +82,34 @@ test-backends: ## Runs integration tests with all backends (requires test-servic
 	KAFKA_BROKERS=127.0.0.1:9092 \
 	go test -tags integration ./integration/backends/...
 
+.PHONY: tag
+tag: ## Tag a release: make tag SEMVER=major|minor|patch
+ifndef SEMVER
+	$(error SEMVER is required. Usage: make tag SEMVER=major|minor|patch)
+endif
+ifeq ($(filter $(SEMVER),major minor patch),)
+	$(error SEMVER must be one of: major, minor, patch)
+endif
+	$(eval CURRENT := $(shell git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0))
+	$(eval MAJOR := $(shell echo $(CURRENT) | sed 's/^v//' | cut -d. -f1))
+	$(eval MINOR := $(shell echo $(CURRENT) | sed 's/^v//' | cut -d. -f2))
+	$(eval PATCH := $(shell echo $(CURRENT) | sed 's/^v//' | cut -d. -f3))
+ifeq ($(SEMVER),major)
+	$(eval NEXT := v$(shell echo $$(($(MAJOR)+1))).0.0)
+else ifeq ($(SEMVER),minor)
+	$(eval NEXT := v$(MAJOR).$(shell echo $$(($(MINOR)+1))).0)
+else ifeq ($(SEMVER),patch)
+	$(eval NEXT := v$(MAJOR).$(MINOR).$(shell echo $$(($(PATCH)+1))))
+endif
+	$(eval NEXT_BARE := $(shell echo $(NEXT) | sed 's/^v//'))
+	sed -i 's/^## \[Unreleased\]$$/## [Unreleased]\n\n## [$(NEXT_BARE)] - $(shell date +%Y-%m-%d)/' CHANGELOG.md
+	git add CHANGELOG.md
+	git commit -m "Release $(NEXT)"
+	git tag -a $(NEXT) -m "Release $(NEXT)"
+	git push origin master $(NEXT)
+	@echo ""
+	@echo "===== Released $(NEXT) ====="
+
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
 temp = $(subst /, ,$@)

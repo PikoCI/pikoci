@@ -256,8 +256,16 @@ job "gh-release" {
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
         apt-get update -qq && apt-get install -qq -y gh
 
-        # Upload binaries to existing release
-        GH_TOKEN="${var.github_token}" gh release upload $TAG builds/linux-amd64 builds/linux-arm64 builds/darwin-amd64 builds/darwin-arm64 builds/windows-amd64 --clobber --repo PikoCI/pikoci
+        # Extract changelog for this version
+        VERSION=$${TAG#v}
+        BODY=$(sed -n "/^## \[$VERSION\]/,/^## \[/{/^## \[$VERSION\]/d;/^## \[/d;p;}" CHANGELOG.md)
+
+        # Create release with changelog body and upload binaries
+        GH_TOKEN="${var.github_token}" gh release create $TAG \
+          --title "$TAG" \
+          --notes "$BODY" \
+          --repo PikoCI/pikoci \
+          builds/linux-amd64 builds/linux-arm64 builds/darwin-amd64 builds/darwin-arm64 builds/windows-amd64
       EOT
       args = [
         "-v", "pikoci-go-mod:/go/pkg/mod",
