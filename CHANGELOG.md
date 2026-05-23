@@ -1,50 +1,83 @@
 # Changelog
 
-## Unreleased
+All notable changes to this project will be documented in this file.
 
-- Add job build retry: re-run a completed build (succeeded, failed, or cancelled) via a "Retry" button in the UI or `POST .../builds/{build_number}/retry` API. Retry builds use `PARENT.N` numbering (e.g. "3.1", "3.2") and re-execute the same job with the same resource versions as the original build. Retrying a retry uses the same parent: retrying "3.1" produces "3.2", not "3.1.1". Build tabs are sorted by build number ([#149](https://github.com/xescugc/pikoci/issues/149))
-- Add sequential build numbers per job: builds now display as `#1`, `#2`, `#3` per job instead of global DB IDs. Build numbers are stored as strings to support future retry notation (`123.1`, `123.2`). URLs, API endpoints, and the `BUILD_NUMBER` env var (renamed from `BUILD_ID`) all use the new sequential number ([#15](https://github.com/xescugc/pikoci/issues/15))
-- Add `pikoci worker-token` subcommand and `--worker-token` flag on the worker so standalone workers no longer need the raw JWT secret. The server logs a pre-generated worker token on startup when `--run-worker=false`. The `--jwt-secret` flag has been removed from the worker command ([#270](https://github.com/xescugc/pikoci/issues/270))
-- Add job cancellation via DB polling: cancel running builds from the UI or API with `POST .../builds/{build_number}/cancel`. The worker polls every 5s and cancels the Go context, killing child processes. on_failure and ensure hooks still run after cancellation ([#271](https://github.com/xescugc/pikoci/issues/271))
-- Add `inputs` and `outputs` on task steps: declarative filesystem checks that validate required paths exist before a task runs (inputs) and after it finishes (outputs), providing clear error messages instead of confusing script failures ([#177](https://github.com/xescugc/pikoci/issues/177))
-- Add live status toggle on pipelines list view: a "Live" toggle next to the heading enables periodic polling of pipeline graph images so status dots update without reloading the page. Toggle state persists via localStorage ([#282](https://github.com/xescugc/pikoci/issues/282))
-- Add "Pipelines" link button to the team manage/edit page heading for quick navigation to the team's pipelines ([#265](https://github.com/xescugc/pikoci/issues/265))
-- Add Bootstrap Icons library and icons across the UI (buttons, navigation, step type labels) with a copy-to-clipboard button on build step logs ([#254](https://github.com/xescugc/pikoci/issues/254))
-- Fix accordion closing on live updates: preserve user-expanded/collapsed state across poll-driven re-renders for both build steps and resource versions, so manually opened rows stay open while the page polls for updates ([#289](https://github.com/xescugc/pikoci/issues/289))
-- Add graceful shutdown with `SIGQUIT`: stops accepting new jobs, waits for in-flight jobs to finish, then exits cleanly. `SIGTERM`/`SIGINT` still exit immediately. Enables zero-downtime self-deploy via systemd `Restart=always` and a deploy pipeline job ([#281](https://github.com/xescugc/pikoci/issues/281))
-- Fix browser back navigation from build page: use `replace: true` when updating the URL on build tab clicks and auto-selection so the history stack doesn't accumulate build IDs ([#263](https://github.com/xescugc/pikoci/issues/263))
-- Fix secret fetch commands running from build temp directory instead of server working directory, causing relative file paths in secret type configs to fail
-- Stream build logs live: switch from `CombinedOutput()` to streaming stdout/stderr with periodic 2s DB flushes, so the frontend shows incremental output while steps are running. Running steps auto-expand and auto-scroll in the UI ([#13](https://github.com/xescugc/pikoci/issues/13))
-- Passed constraints now require a common resource version across all upstream jobs. Previously `passed = ["lint", "test"]` only checked that each job succeeded; now it verifies that both jobs used the same version of the resource, picking the newest common version ([#253](https://github.com/xescugc/pikoci/issues/253))
-- Hide unlinked resources from pipeline graph: resources only used in hook-level `put` steps (on_success/on_failure/ensure) no longer appear as disconnected nodes ([#256](https://github.com/xescugc/pikoci/issues/256))
-- Add `raw` format support to the built-in `file` secret type via `format = "raw"`. Returns the entire file content under a single `content` key, useful for PEM keys and other non-structured files
-- Add `.env` format support to the built-in `file` secret type via `format = "env"` config attribute. The default format remains `json` (backwards compatible)
-- Add secret-backed variables: variables can declare a `secret` block to resolve their value lazily from a secret type at runtime. This gives secrets universal reach through the existing `var.<name>` syntax — resource params, task args, etc. Vars file overrides take precedence for local development. Deprecates step-level `secrets = {}` on get/task/put steps in favor of the simpler declare-once-use-everywhere variable approach
-- Replace `urfave/cli` + `koanf` with `cobra` + `viper` for CLI and config management. Environment variables now use simple uppercase names (e.g., `JWT_SECRET`, `DB_SYSTEM`) ([#238](https://github.com/xescugc/pikoci/issues/238))
-- Replace `mattn/go-sqlite3` (CGO) with `modernc.org/sqlite` (pure Go) to enable cross-compilation without a C compiler
-- Add deployment infrastructure: systemd unit, Docker Compose for supporting services (Caddy, Prometheus, Grafana, Node Exporter), deploy script, and deployment documentation
-- Add `/metrics` endpoint for Prometheus scraping with Go runtime metrics, HTTP request counts by status/method, and request duration histograms ([#234](https://github.com/xescugc/pikoci/issues/234))
-- Make `--users` flag idempotent: existing users get their password updated instead of failing. Adds `CreateOrUpdateUser` (startup only, not exposed via HTTP API) so production deployments can override the default admin password via environment config ([#232](https://github.com/xescugc/pikoci/issues/232))
-- Add GitHub Checks support: `github-check` resource type for reporting build status via GitHub App, `put` steps in hooks (`on_success`, `on_failure`, `ensure`), build metadata env vars (`BUILD_NUMBER`, `BUILD_JOB_NAME`, `BUILD_PIPELINE_NAME`, `BUILD_TEAM_NAME`, `BUILD_STATUS`) in all step types, and optional `check`/`pull`/`push` blocks on resource types ([#179](https://github.com/xescugc/pikoci/issues/179))
-- Add `service` blocks for ephemeral per-job processes. Services are started before tasks and stopped unconditionally after, with optional ready_check polling. Supports top-level definitions with per-job param overrides and `source` for URL-based definitions. Services use any runner (exec, docker, etc.) ([#227](https://github.com/xescugc/pikoci/issues/227))
-- Add `secret_type` and `secret` blocks for injecting secrets into pipeline steps. Secret types define how to fetch secrets via a `get` command, and secrets declare which secret to fetch with specific params. Steps declare `secrets = ["type.name"]` to have secret values injected as `secret_<key>` environment variables before execution. Includes built-in `pikoci://vault` and `pikoci://file` secret types. Supports `source` for remote secret type definitions. Also fixes PostgreSQL/MySQL migration issues, drops CockroachDB/TiDB support, and refactors test infrastructure ([#12](https://github.com/xescugc/pikoci/issues/12))
-- Add dedicated Secret Types documentation page with built-in vault/file reference and custom secret type examples ([#223](https://github.com/xescugc/pikoci/issues/223))
-- Redesign secrets: remove `secret` block, move connection config to `secret_type`, steps reference secret_type name + path inline via `secrets = {"vault" = "secret/data/db"}`. Vault built-in accepts address/token as config. Secrets render as note-shaped nodes in pipeline graph. Public pipeline responses sanitized ([#225](https://github.com/xescugc/pikoci/issues/225))
-- Add optional `attempts` field on get, task, and put plan steps for automatic retry on failure. When set, the step is retried up to the specified number of times before being marked as failed. Each attempt gets a fresh timeout, and hooks only run after the final attempt ([#174](https://github.com/xescugc/pikoci/issues/174))
-- Add optional `timeout` field on get, task, and put plan steps. When set, the step's runner execution is cancelled after the specified duration, the step is marked as failed with a timeout message, and on_failure/ensure hooks still run normally ([#173](https://github.com/xescugc/pikoci/issues/173))
-- Replace in-memory cron scheduler with database-polling scheduler for horizontal scaling support. Multiple server instances can now run concurrently with PostgreSQL or MySQL. Minimum check_interval is now 10 seconds. Manual and webhook triggers reset the check interval timer ([#213](https://github.com/xescugc/pikoci/issues/213), [#215](https://github.com/xescugc/pikoci/issues/215))
-- Add `source` field on `resource_type` and `runner` blocks for URL-based definition sharing (`pikoci://` and `https://` schemes), built-in `git` resource type with API-aware check for GitHub/GitLab, built-in `docker` runner, HCL standard functions (string, collection, numeric, encoding, regex), and optional `params` on resource types ([#11](https://github.com/xescugc/pikoci/issues/11), [#143](https://github.com/xescugc/pikoci/issues/143), [#206](https://github.com/xescugc/pikoci/issues/206), [#104](https://github.com/xescugc/pikoci/issues/104))
-- Add `docs/` folder with GitHub Actions workflow to sync wiki on push ([#211](https://github.com/xescugc/pikoci/issues/211))
-- Add public pipelines support: pipelines can be marked public, exposing read-only views of the graph, jobs, builds, and resources without authentication ([#100](https://github.com/xescugc/pikoci/issues/100))
-- Add webhook triggers for resources: each resource gets a webhook token for external trigger via `POST /webhooks/<token>`, with token regeneration endpoint ([#144](https://github.com/xescugc/pikoci/issues/144), [#181](https://github.com/xescugc/pikoci/issues/181))
-- Replace shellquote splitting with native HCL list args for runner command arguments ([#201](https://github.com/xescugc/pikoci/issues/201))
-- Replace pixel-art PNG logo/favicon with new hexagonal SVG logo using PICO-8 brand colors, remove old `aseprite/` folder ([#202](https://github.com/xescugc/pikoci/issues/202))
-- Add ordered plan execution and `put` step support: jobs now execute `get`, `task`, and `put` steps in the order they appear in HCL, enabling CD workflows like build, push, deploy. The `put` step invokes `resource_type.push` to push content to resources ([#169](https://github.com/xescugc/pikoci/issues/169), [#72](https://github.com/xescugc/pikoci/issues/72))
-- Fix SPA catch-all intercepting API requests ([#140](https://github.com/xescugc/pikoci/issues/140))
-- Rename QID to PikoCI ([#136](https://github.com/xescugc/pikoci/issues/136))
-- Redesign UI with PICO-8 color palette, Plus Jakarta Sans / JetBrains Mono fonts, dark mode toggle, improved pipeline graph styling, and modernized layout for all views ([#133](https://github.com/xescugc/pikoci/issues/133))
-- CLI auto-refreshes stale JWT when backend returns `X-Refresh-Token` header, persisting the new token to disk ([#130](https://github.com/xescugc/pikoci/issues/130))
-- Add PostgreSQL, RabbitMQ, and Kafka backend support with integration tests ([#128](https://github.com/xescugc/pikoci/pull/128))
-- Fix entity still shown in collection when backend creation fails: add Unit of Work (transaction) pattern for multi-step DB operations and `wait: true` to frontend `collection.create()` calls ([#123](https://github.com/xescugc/pikoci/issues/123))
-- Fix user permission changes not reflected until re-login: backend signals stale JWT via `X-Refresh-Token` header, frontend auto-refreshes session ([#126](https://github.com/xescugc/pikoci/pull/126))
-- Add users and teams with role-based access control, refactor HTTP transport from go-kit to direct handlers ([#124](https://github.com/xescugc/pikoci/pull/124))
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0] - 2026-05-23
+
+### Added
+
+- Local pipeline execution: `pikoci run -p pipeline.hcl -j test` runs any job locally without a server. Supports `--resource type.name=path` overrides and `--var key=value` ([#161](https://github.com/PikoCI/pikoci/issues/161))
+- Pipeline rename via UI and CLI through the existing `UpdatePipeline` flow ([#337](https://github.com/PikoCI/pikoci/issues/337))
+- Pipeline names with spaces and special characters, auto-slugified for URLs ([#333](https://github.com/PikoCI/pikoci/issues/333))
+- Full CLI for all API operations: pipelines, jobs, builds, resources, teams, users, triggers ([#327](https://github.com/PikoCI/pikoci/issues/327))
+- CodeMirror HCL editor for pipeline create/edit with syntax highlighting, block panel, and graph preview ([#320](https://github.com/PikoCI/pikoci/issues/320))
+- Job concurrency limits ([#319](https://github.com/PikoCI/pikoci/issues/319))
+- Job build retry: re-run builds with `PARENT.N` numbering (e.g. "3.1", "3.2") via UI or API ([#312](https://github.com/PikoCI/pikoci/issues/312))
+- Job cancellation with `on_cancel` hook via DB polling ([#321](https://github.com/PikoCI/pikoci/issues/321))
+- Built-in trigger resource type for manual triggers ([#326](https://github.com/PikoCI/pikoci/issues/326))
+- Worker authentication via `--worker-token` for distributed deployments ([#309](https://github.com/PikoCI/pikoci/issues/309))
+- Sequential build numbers per job instead of global DB IDs ([#310](https://github.com/PikoCI/pikoci/issues/310))
+- `inputs` and `outputs` on task steps for declarative filesystem checks ([#177](https://github.com/PikoCI/pikoci/issues/177))
+- Live status toggle on pipelines list for auto-refreshing graph images ([#282](https://github.com/PikoCI/pikoci/issues/282))
+- Graceful shutdown with `SIGQUIT`: drains in-flight jobs before exiting ([#281](https://github.com/PikoCI/pikoci/issues/281))
+- Live build log streaming with 2s DB flushes and auto-scroll ([#13](https://github.com/PikoCI/pikoci/issues/13))
+- Sticky step header and auto-scroll for long build logs ([#318](https://github.com/PikoCI/pikoci/issues/318))
+- Secret-backed variables: `secret` block on variables for lazy runtime resolution from secret types
+- GitHub Checks support via `github-check` resource type and build metadata env vars ([#179](https://github.com/PikoCI/pikoci/issues/179))
+- `service_type` blocks for ephemeral per-job processes (databases, caches) with ready_check polling ([#227](https://github.com/PikoCI/pikoci/issues/227))
+- `secret_type` and `secret` blocks with built-in `pikoci://vault` and `pikoci://file` types ([#12](https://github.com/PikoCI/pikoci/issues/12))
+- `raw` and `env` format support for the built-in `file` secret type
+- `attempts` field on steps for automatic retry on failure ([#174](https://github.com/PikoCI/pikoci/issues/174))
+- `timeout` field on steps for execution time limits ([#173](https://github.com/PikoCI/pikoci/issues/173))
+- `source` field on `resource_type`, `runner_type`, and `service_type` for URL-based definitions ([#11](https://github.com/PikoCI/pikoci/issues/11))
+- Built-in `git` resource type with API-aware check for GitHub/GitLab
+- Built-in `docker` runner ([#206](https://github.com/PikoCI/pikoci/issues/206))
+- HCL standard functions (string, collection, numeric, encoding, regex) ([#104](https://github.com/PikoCI/pikoci/issues/104))
+- Public pipelines: read-only views of graph, jobs, builds, and resources without authentication ([#100](https://github.com/PikoCI/pikoci/issues/100))
+- Webhook triggers for resources with token regeneration ([#144](https://github.com/PikoCI/pikoci/issues/144))
+- Ordered plan execution and `put` step support for CD workflows ([#169](https://github.com/PikoCI/pikoci/issues/169))
+- Users and teams with role-based access control ([#124](https://github.com/PikoCI/pikoci/pull/124))
+- PostgreSQL, RabbitMQ, and Kafka backend support ([#128](https://github.com/PikoCI/pikoci/pull/128))
+- `/metrics` endpoint for Prometheus scraping ([#234](https://github.com/PikoCI/pikoci/issues/234))
+- Database-polling scheduler for horizontal scaling with PostgreSQL/MySQL ([#213](https://github.com/PikoCI/pikoci/issues/213))
+- Documentation wiki with GitHub Actions sync ([#211](https://github.com/PikoCI/pikoci/issues/211))
+- Deployment infrastructure: systemd unit, Docker Compose, Caddy reverse proxy, deploy script
+- Bootstrap Icons across the UI with copy-to-clipboard on build logs ([#254](https://github.com/PikoCI/pikoci/issues/254))
+- pikoci.com landing page with automated deploys
+
+### Changed
+
+- Unified `--pipeline-vars` to `--vars`/`-v` across server, client, and run commands
+- Replaced `urfave/cli` + `koanf` with `cobra` + `viper` for CLI and config ([#238](https://github.com/PikoCI/pikoci/issues/238))
+- Replaced `mattn/go-sqlite3` (CGO) with `modernc.org/sqlite` (pure Go) for cross-compilation
+- Replaced shellquote splitting with native HCL list args for runner commands ([#201](https://github.com/PikoCI/pikoci/issues/201))
+- Passed constraints now require a common resource version across all upstream jobs ([#253](https://github.com/PikoCI/pikoci/issues/253))
+- `--users` flag is idempotent: existing users get password updated ([#232](https://github.com/PikoCI/pikoci/issues/232))
+- Redesigned UI with PICO-8 color palette, dark mode, and modernized layout ([#133](https://github.com/PikoCI/pikoci/issues/133))
+- Replaced pixel-art logo with hexagonal SVG logo ([#202](https://github.com/PikoCI/pikoci/issues/202))
+- Migrated Docker images from Docker Hub to GHCR (`ghcr.io/pikoci/pikoci`)
+- Renamed QID to PikoCI ([#136](https://github.com/PikoCI/pikoci/issues/136))
+
+### Fixed
+
+- Pipeline graph shows retry status instead of original build status ([#334](https://github.com/PikoCI/pikoci/issues/334))
+- Job status display on pipeline view ([#325](https://github.com/PikoCI/pikoci/issues/325))
+- Duplicate resource version rows on poll refresh ([#315](https://github.com/PikoCI/pikoci/issues/315))
+- Hide retry and cancel buttons on public pipeline views ([#331](https://github.com/PikoCI/pikoci/issues/331))
+- Hide unlinked resources from pipeline graph ([#256](https://github.com/PikoCI/pikoci/issues/256))
+- Browser back navigation from build page ([#263](https://github.com/PikoCI/pikoci/issues/263))
+- Accordion closing on live updates ([#289](https://github.com/PikoCI/pikoci/issues/289))
+- Secret fetch commands running from wrong directory
+- SPA catch-all intercepting API requests ([#140](https://github.com/PikoCI/pikoci/issues/140))
+- Entity still shown in collection when backend creation fails ([#123](https://github.com/PikoCI/pikoci/issues/123))
+- User permission changes not reflected until re-login ([#126](https://github.com/PikoCI/pikoci/pull/126))
+- CLI `pipelines update` using POST instead of PUT ([#339](https://github.com/PikoCI/pikoci/issues/339))
+- Update handler preserving `team_canonical` from URL after JSON decode
+
+[unreleased]: https://github.com/PikoCI/pikoci/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/PikoCI/pikoci/releases/tag/v0.1.0
