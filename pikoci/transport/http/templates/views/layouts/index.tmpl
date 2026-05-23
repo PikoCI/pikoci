@@ -2298,11 +2298,14 @@
           var html = ''
           var errorLines = this._errorLines || {}
           app.blockTypes.forEach(function(bt) {
-            var re = new RegExp(bt.type + '\\s+"([^"]+)"', 'g')
+            var re = bt.type === 'resource'
+              ? new RegExp(bt.type + '\\s+"([^"]+)"\\s+"([^"]+)"', 'g')
+              : new RegExp(bt.type + '\\s+"([^"]+)"', 'g')
             var matches = []
             var m
             while ((m = re.exec(doc)) !== null) {
-              matches.push({name: m[1], pos: m.index})
+              var displayName = bt.type === 'resource' ? m[1] + '.' + m[2] : m[1]
+              matches.push({name: displayName, pos: m.index})
             }
             if (matches.length === 0) return
             html += '<div class="piko-blocks-section">'
@@ -2324,9 +2327,10 @@
           if (isNaN(pos) || !this.editor) return
           this.$el.find('.piko-blocks-item').removeClass('active')
           $(e.currentTarget).addClass('active')
+          var CM = window.PikoCM
           this.editor.dispatch({
             selection: {anchor: pos},
-            scrollIntoView: true,
+            effects: CM.EditorView.scrollIntoView(pos, {y: 'start'}),
           })
           this.editor.focus()
         },
@@ -2357,12 +2361,22 @@
           var name = textEl.text().trim()
           if (!name) return
           var doc = this.editor.state.doc.toString()
-          var re = new RegExp('(?:job|resource|resource_type|runner_type|secret_type|service_type)\\s+"' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"')
+          // Resource nodes use "type.label" format in the graph; split and match both quoted strings
+          var dotIdx = name.indexOf('.')
+          var re
+          if (dotIdx !== -1) {
+            var rType = name.substring(0, dotIdx).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            var rLabel = name.substring(dotIdx + 1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            re = new RegExp('resource\\s+"' + rType + '"\\s+"' + rLabel + '"')
+          } else {
+            re = new RegExp('(?:job|resource|resource_type|runner_type|secret_type|service_type)\\s+"' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"')
+          }
           var match = re.exec(doc)
           if (match) {
+            var CM = window.PikoCM
             this.editor.dispatch({
               selection: {anchor: match.index, head: match.index + match[0].length},
-              scrollIntoView: true,
+              effects: CM.EditorView.scrollIntoView(match.index, {y: 'start'}),
             })
             this.editor.focus()
           }
