@@ -194,10 +194,37 @@ var pipelinesUpdateCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
 		}
-		err = createPipeline(cmd.Context(), c, tc, pCan, configPath, varsPath)
+
+		f, err := os.Open(configPath)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to open config file at %q: %w", configPath, err)
 		}
+		defer f.Close()
+
+		b, err := io.ReadAll(f)
+		if err != nil {
+			return fmt.Errorf("failed to read config file at %q: %w", configPath, err)
+		}
+
+		var vars map[string]interface{}
+		if varsPath != "" {
+			vf, err := os.Open(varsPath)
+			if err != nil {
+				return fmt.Errorf("failed to open vars file at %q: %w", varsPath, err)
+			}
+			defer vf.Close()
+
+			err = json.NewDecoder(vf).Decode(&vars)
+			if err != nil {
+				return fmt.Errorf("failed to decode vars file at %q: %w", varsPath, err)
+			}
+		}
+
+		_, err = c.UpdatePipeline(cmd.Context(), tc, pCan, b, vars)
+		if err != nil {
+			return fmt.Errorf("failed to update Pipeline %q: %w", name, err)
+		}
+
 		if cmd.Flags().Changed("public") {
 			public, _ := cmd.Flags().GetBool("public")
 			err = c.SetPipelinePublic(cmd.Context(), tc, pCan, public)

@@ -5,12 +5,14 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/xescugc/pikoci/pikoci/mock"
+	"github.com/xescugc/pikoci/pikoci/pipeline"
 	"github.com/xescugc/pikoci/pikoci/user"
 	"go.uber.org/mock/gomock"
 )
@@ -144,6 +146,46 @@ func signJWT(t *testing.T, secret []byte, um *user.WithMemberships) string {
 	s, err := token.SignedString(secret)
 	require.NoError(t, err)
 	return s
+}
+
+func TestUpdatePipeline_TeamCanonicalFromURL(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	// The handler should use team_canonical from the URL path, not from the
+	// request body. json.Decode used to overwrite the URL value with an empty
+	// string from the body.
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+	s.EXPECT().GetPipeline(gomock.Any(), "main", "my-pipeline").Return(&pipeline.Pipeline{
+		Name: "my-pipeline", Canonical: "my-pipeline",
+	}, nil)
+
+	body := `{}`
+	req, err := http.NewRequest(http.MethodPut, server.URL+"/teams/main/pipelines/my-pipeline", strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// Should not get "invalid Team Canonical format" error
+	var result UpdatePipelineResponse
+	json.NewDecoder(resp.Body).Decode(&result)
+	assert.NotContains(t, result.Err, "invalid Team Canonical format")
 }
 
 func TestRefreshTokenEndpoint(t *testing.T) {

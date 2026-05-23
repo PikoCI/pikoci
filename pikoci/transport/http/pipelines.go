@@ -65,13 +65,14 @@ func updatePipeline(s pikoci.Service) http.HandlerFunc {
 			ctx = r.Context()
 		)
 		vars := mux.Vars(r)
-		req.TeamCanonical = vars["team_canonical"]
+		tc := vars["team_canonical"]
 		pCan := vars["pipeline_canonical"]
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			encodeResponse(UpdatePipelineResponse{Err: err.Error()}, w)
 			return
 		}
+		req.TeamCanonical = tc
 		var pp *pipeline.Pipeline
 		var errs string
 		newCan := pCan
