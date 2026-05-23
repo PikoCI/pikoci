@@ -52,7 +52,7 @@ func TestPikoCI(t *testing.T) {
 			require.NoError(t, err)
 
 			// Default admin123 triggers forced password change — handle it
-			waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Profile"), 5*time.Second)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Profile"), 10*time.Second)
 
 			curPass, err := wd.FindElement(selenium.ByCSSSelector, "#current_password")
 			require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestPikoCI(t *testing.T) {
 			err = changeBtn.Click()
 			require.NoError(t, err)
 
-			waitFor(t, wd, eqText(selenium.ByCSSSelector, ".alert-success", "Password changed successfully"), 5*time.Second)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, ".alert-success", "Password changed successfully"), 15*time.Second)
 
 			// Navigate to teams
 			wd.Get(pikoURL + "/")

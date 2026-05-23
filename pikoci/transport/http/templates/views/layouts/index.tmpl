@@ -1530,6 +1530,10 @@
               }
               app.apiNotice.setSuccess("Password changed successfully");
             },
+            error: function(response) {
+              var msg = (response.responseJSON && response.responseJSON.error) || response.statusText || "Unknown error";
+              app.apiNotice.set({error: msg});
+            },
           });
         },
       })
