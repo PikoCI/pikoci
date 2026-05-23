@@ -82,7 +82,7 @@ test-backends: ## Runs integration tests with all backends (requires test-servic
 	KAFKA_BROKERS=127.0.0.1:9092 \
 	go test -tags integration ./integration/backends/...
 
-PLATFORMS := linux/amd64 windows/amd64 darwin/amd64
+PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
 temp = $(subst /, ,$@)
 os = $(word 1, $(temp))
