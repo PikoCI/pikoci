@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - User management: Profile page, admin Users page, CLI commands, force password change on default `admin/admin123`, and `--users` flag preserves UI/CLI password changes ([#237](https://github.com/PikoCI/pikoci/issues/237))
 
+### Changed
+
+- Build detail and resource views now show relative timestamps ("5m ago") with absolute time on hover ([#344](https://github.com/PikoCI/pikoci/issues/344))
+
 ## [0.1.0] - 2026-05-23
 
 ### Added
