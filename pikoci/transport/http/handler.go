@@ -192,6 +192,11 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger) http.Handler {
 
 	api.Methods(http.MethodGet).Path("/users").Name(ListUsers.String()).Handler(listUsers(s))
 	api.Methods(http.MethodPost).Path("/users").Name(CreateUser.String()).Handler(createUser(s))
+	api.Methods(http.MethodPost).Path("/users/change-password").Name(ChangePassword.String()).Handler(changePassword(s))
+	api.Methods(http.MethodGet).Path("/users/{username}").Name(GetUser.String()).Handler(getUser(s))
+	api.Methods(http.MethodPut).Path("/users/{username}").Name(UpdateUser.String()).Handler(updateUser(s))
+	api.Methods(http.MethodDelete).Path("/users/{username}").Name(DeleteUser.String()).Handler(deleteUser(s))
+	api.Methods(http.MethodPut).Path("/profile").Name(UpdateProfile.String()).Handler(updateProfile(s))
 	api.Methods(http.MethodPost).Path("/teams").Name(CreateTeam.String()).Handler(createTeam(s))
 
 	api.Methods(http.MethodGet).Path("/teams").Name(ListTeams.String()).Handler(listTeams(s))

@@ -10,6 +10,11 @@ const (
 
 	CreateUser
 	ListUsers
+	GetUser
+	UpdateUser
+	DeleteUser
+	ChangePassword
+	UpdateProfile
 
 	CreateTeam
 	ListTeams

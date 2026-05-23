@@ -11,7 +11,8 @@ type User struct {
 type WithMemberships struct {
 	User
 
-	Memberships []Member `json:"memberships"`
+	Memberships        []Member `json:"memberships"`
+	MustChangePassword bool     `json:"must_change_password,omitempty"`
 }
 
 type Member struct {

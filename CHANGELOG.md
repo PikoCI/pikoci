@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- User management: Profile page, admin Users page, CLI commands, force password change on default `admin/admin123`, and `--users` flag preserves UI/CLI password changes ([#237](https://github.com/PikoCI/pikoci/issues/237))
+
 ## [0.1.0] - 2026-05-23
 
 ### Added

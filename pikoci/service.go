@@ -29,6 +29,10 @@ type Service interface {
 	GetUser(ctx context.Context, un string) (*user.WithMemberships, error)
 	CreateUser(ctx context.Context, u user.User, isHash bool) (*user.User, error)
 	ListUsers(ctx context.Context) ([]*user.User, error)
+	UpdateUser(ctx context.Context, un string, u user.User, isHash bool) (*user.User, error)
+	DeleteUser(ctx context.Context, un string) error
+	ChangePassword(ctx context.Context, un, oldPassword, newPassword string) error
+	UpdateProfile(ctx context.Context, un string, fullName, newUsername string) (*user.User, error)
 
 	CreateTeam(ctx context.Context, un string, t team.Team) (*team.WithMembers, error)
 	ListTeams(ctx context.Context, un string) ([]*team.WithMembers, error)

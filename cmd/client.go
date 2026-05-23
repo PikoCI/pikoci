@@ -534,6 +534,9 @@ var usersCmd = &cobra.Command{
 func init() {
 	usersCmd.AddCommand(usersCreateCmd)
 	usersCmd.AddCommand(usersListCmd)
+	usersCmd.AddCommand(usersUpdateCmd)
+	usersCmd.AddCommand(usersDeleteCmd)
+	usersCmd.AddCommand(usersChangePasswordCmd)
 }
 
 var usersCreateCmd = &cobra.Command{
@@ -591,6 +594,104 @@ var usersListCmd = &cobra.Command{
 		spew.Dump(users)
 		return nil
 	},
+}
+
+var usersUpdateCmd = &cobra.Command{
+	Use:   "update",
+	Short: "Updates an existing User",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url, _ := cmd.Flags().GetString("url")
+		jwt, _ := cmd.Flags().GetString("jwt")
+		username, _ := cmd.Flags().GetString("username")
+		password, _ := cmd.Flags().GetString("password")
+		fullName, _ := cmd.Flags().GetString("full-name")
+		admin, _ := cmd.Flags().GetBool("admin")
+
+		c, err := newClientWithConfig(url, jwt)
+		if err != nil {
+			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
+		}
+
+		u, err := c.UpdateUser(cmd.Context(), username, user.User{
+			FullName: fullName,
+			Username: username,
+			Password: password,
+			Admin:    admin,
+		}, false)
+		if err != nil {
+			return fmt.Errorf("failed to update User %q: %w", username, err)
+		}
+
+		spew.Dump(u)
+		return nil
+	},
+}
+
+func init() {
+	usersUpdateCmd.Flags().String("username", "", "Username of the User to update")
+	usersUpdateCmd.Flags().String("password", "", "New password for the User")
+	usersUpdateCmd.Flags().String("full-name", "", "Full name for the User")
+	usersUpdateCmd.Flags().Bool("admin", false, "Whether the User is an admin")
+	usersUpdateCmd.MarkFlagRequired("username")
+}
+
+var usersDeleteCmd = &cobra.Command{
+	Use:   "delete",
+	Short: "Deletes a User",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url, _ := cmd.Flags().GetString("url")
+		jwt, _ := cmd.Flags().GetString("jwt")
+		username, _ := cmd.Flags().GetString("username")
+
+		c, err := newClientWithConfig(url, jwt)
+		if err != nil {
+			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
+		}
+
+		err = c.DeleteUser(cmd.Context(), username)
+		if err != nil {
+			return fmt.Errorf("failed to delete User %q: %w", username, err)
+		}
+
+		fmt.Printf("User %q deleted successfully\n", username)
+		return nil
+	},
+}
+
+func init() {
+	usersDeleteCmd.Flags().String("username", "", "Username of the User to delete")
+	usersDeleteCmd.MarkFlagRequired("username")
+}
+
+var usersChangePasswordCmd = &cobra.Command{
+	Use:   "change-password",
+	Short: "Changes the password of the current User",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url, _ := cmd.Flags().GetString("url")
+		jwt, _ := cmd.Flags().GetString("jwt")
+		oldPassword, _ := cmd.Flags().GetString("old-password")
+		newPassword, _ := cmd.Flags().GetString("new-password")
+
+		c, err := newClientWithConfig(url, jwt)
+		if err != nil {
+			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
+		}
+
+		err = c.ChangePassword(cmd.Context(), "", oldPassword, newPassword)
+		if err != nil {
+			return fmt.Errorf("failed to change password: %w", err)
+		}
+
+		fmt.Println("Password changed successfully")
+		return nil
+	},
+}
+
+func init() {
+	usersChangePasswordCmd.Flags().String("old-password", "", "Current password")
+	usersChangePasswordCmd.Flags().String("new-password", "", "New password")
+	usersChangePasswordCmd.MarkFlagRequired("old-password")
+	usersChangePasswordCmd.MarkFlagRequired("new-password")
 }
 
 // teams

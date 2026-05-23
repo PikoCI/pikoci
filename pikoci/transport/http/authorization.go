@@ -16,6 +16,11 @@ var (
 
 		CreateUser: admin,
 		ListUsers:  admin,
+		GetUser:    admin,
+		UpdateUser: admin,
+		DeleteUser: admin,
+		ChangePassword: member,
+		UpdateProfile:  member,
 
 		CreateTeam: admin,
 		ListTeams:  member,

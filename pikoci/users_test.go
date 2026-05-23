@@ -59,12 +59,13 @@ func TestCreateOrUpdateUser_CreatesNew(t *testing.T) {
 	assert.True(t, utils.CheckPasswordHash("secret", u.Password))
 }
 
-func TestCreateOrUpdateUser_UpdatesExisting(t *testing.T) {
+func TestCreateOrUpdateUser_UpdatesExistingWithDefaultPassword(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	existing := &user.User{ID: 1, Username: "admin", Password: "old-hash", FullName: "Admin", Admin: true}
+	// User still has the default admin123 hash — should be updated
+	existing := &user.User{ID: 1, Username: "admin", Password: "$2a$14$FoV/2Z0CRgQyiDJLMcErd.cC/DtWCKMWtxZEaL6HQd/rrtU2DZpAu", FullName: "Admin", Admin: true}
 	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
 	s.Users.EXPECT().Update(ctx, "admin", gomock.Any()).Return(nil)
 
@@ -75,6 +76,23 @@ func TestCreateOrUpdateUser_UpdatesExisting(t *testing.T) {
 	assert.Equal(t, newHash, u.Password)
 	assert.True(t, u.Admin)
 	assert.Equal(t, "Admin", u.FullName)
+}
+
+func TestCreateOrUpdateUser_SkipsExistingWithChangedPassword(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// User already changed their password — should NOT be updated
+	customHash, _ := utils.HashPassword("custom-password")
+	existing := &user.User{ID: 1, Username: "admin", Password: customHash, FullName: "Admin", Admin: true}
+	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
+
+	newHash, _ := utils.HashPassword("newsecret")
+	u, err := s.P.CreateOrUpdateUser(ctx, user.User{Username: "admin", Password: newHash}, true)
+	require.NoError(t, err)
+	// Password should NOT be changed
+	assert.Equal(t, customHash, u.Password)
 }
 
 func TestCreateUser_InvalidUsername(t *testing.T) {
@@ -166,4 +184,145 @@ func TestUserLogin_WrongPassword(t *testing.T) {
 	_, _, err := s.S.UserLogin(ctx, "admin", "wrong")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "wrong")
+}
+
+func TestUserLogin_DefaultPassword(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// Use the actual default admin123 hash from migration
+	um := &user.WithMemberships{
+		User: user.User{ID: 1, Username: "admin", Password: "$2a$14$FoV/2Z0CRgQyiDJLMcErd.cC/DtWCKMWtxZEaL6HQd/rrtU2DZpAu"},
+	}
+	s.Users.EXPECT().FindWithMemberships(ctx, "admin").Return(um, nil)
+
+	u, jwt, err := s.S.UserLogin(ctx, "admin", "admin123")
+	require.NoError(t, err)
+	require.NotNil(t, u)
+	assert.NotEmpty(t, jwt)
+	assert.True(t, u.MustChangePassword)
+}
+
+func TestUserLogin_DefaultPassword_OtherUser(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// A non-admin user with the same hash should NOT be flagged
+	um := &user.WithMemberships{
+		User: user.User{ID: 2, Username: "pepito", Password: "$2a$14$FoV/2Z0CRgQyiDJLMcErd.cC/DtWCKMWtxZEaL6HQd/rrtU2DZpAu"},
+	}
+	s.Users.EXPECT().FindWithMemberships(ctx, "pepito").Return(um, nil)
+
+	u, jwt, err := s.S.UserLogin(ctx, "pepito", "admin123")
+	require.NoError(t, err)
+	require.NotNil(t, u)
+	assert.NotEmpty(t, jwt)
+	assert.False(t, u.MustChangePassword)
+}
+
+func TestUpdateUser(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	existing := &user.User{ID: 1, Username: "admin", FullName: "Admin", Admin: true, Password: "old-hash"}
+	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
+	s.Users.EXPECT().Update(ctx, "admin", gomock.Any()).Return(nil)
+
+	u, err := s.S.UpdateUser(ctx, "admin", user.User{
+		FullName: "New Name",
+		Admin:    true,
+	}, false)
+	require.NoError(t, err)
+	assert.Equal(t, "New Name", u.FullName)
+	assert.True(t, u.Admin)
+}
+
+func TestUpdateUser_LastAdmin(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	existing := &user.User{ID: 1, Username: "admin", Admin: true, Password: "hash"}
+	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
+	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
+		{ID: 1, Username: "admin", Admin: true},
+	}, nil)
+
+	_, err := s.S.UpdateUser(ctx, "admin", user.User{Admin: false}, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot demote the last admin")
+}
+
+func TestDeleteUser(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	existing := &user.User{ID: 2, Username: "pepito", Admin: false}
+	s.Users.EXPECT().Find(ctx, "pepito").Return(existing, nil)
+	s.Users.EXPECT().Delete(ctx, "pepito").Return(nil)
+
+	err := s.S.DeleteUser(ctx, "pepito")
+	require.NoError(t, err)
+}
+
+func TestDeleteUser_LastAdmin(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	existing := &user.User{ID: 1, Username: "admin", Admin: true}
+	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
+	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
+		{ID: 1, Username: "admin", Admin: true},
+	}, nil)
+
+	err := s.S.DeleteUser(ctx, "admin")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot delete the last admin")
+}
+
+func TestChangePassword(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hash, _ := utils.HashPassword("oldpass")
+	existing := &user.User{ID: 1, Username: "admin", Password: hash}
+	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
+	s.Users.EXPECT().Update(ctx, "admin", gomock.Any()).Return(nil)
+
+	err := s.S.ChangePassword(ctx, "admin", "oldpass", "newpass")
+	require.NoError(t, err)
+}
+
+func TestChangePassword_WrongOld(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hash, _ := utils.HashPassword("oldpass")
+	existing := &user.User{ID: 1, Username: "admin", Password: hash}
+	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
+
+	err := s.S.ChangePassword(ctx, "admin", "wrongpass", "newpass")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "current password is incorrect")
+}
+
+func TestUpdateProfile(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	existing := &user.User{ID: 1, Username: "admin", FullName: "Admin", Password: "hash"}
+	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
+	s.Users.EXPECT().Update(ctx, "admin", gomock.Any()).Return(nil)
+
+	u, err := s.S.UpdateProfile(ctx, "admin", "New Name", "admin")
+	require.NoError(t, err)
+	assert.Equal(t, "New Name", u.FullName)
 }
