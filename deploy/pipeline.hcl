@@ -74,6 +74,7 @@ job "test-integration" {
 }
 
 job "test-backends" {
+  concurrency = 1
   get "git" "pikoci_pr" {
     trigger = true
     passed  = ["lint", "test-mock", "test-integration"]
@@ -162,6 +163,7 @@ job "build-latest" {
 }
 
 job "deploy" {
+  concurrency = 1
   get "git" "pikoci_master" {
     trigger = true
     passed  = ["build-latest"]
