@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Make web UI mobile-friendly: viewport meta tag, hamburger menu, responsive CSS for graphs, logs, tables, and touch targets; login page centered without scroll ([#350](https://github.com/PikoCI/pikoci/issues/350))
 - Build detail and resource views now show relative timestamps ("5m ago") with absolute time on hover ([#344](https://github.com/PikoCI/pikoci/issues/344))
 - Pipeline editor: clicking a block or graph node now scrolls it to the top of the viewport, and resource blocks in the sidebar show `type.label` (e.g., `git.pikoci_pr`) instead of just the type ([#336](https://github.com/PikoCI/pikoci/issues/336))
 

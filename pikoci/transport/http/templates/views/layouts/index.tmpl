@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <title>PikoCI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -35,34 +36,39 @@
     </script>
 
     <script type="text/template" id="header-view">
-      <nav class="navbar">
+      <nav class="navbar navbar-expand-md">
         <div class="container-fluid">
           <a class="navbar-brand" id="logo" href="/">
             <img src="/images/logo.svg" alt="PikoCI" width="25" height="25" class="d-inline-block align-text-top">
             PikoCI
           </a>
           <% if (session) { %>
-            <div class="dropdown">
-              <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
-                <%- session.user.full_name %>
-              </a>
-              <ul class="dropdown-menu dropdown-menu-end">
-                <li>
-                  <a class="dropdown-item d-flex align-items-center justify-content-between" href="#" onclick="event.preventDefault(); event.stopPropagation(); toggleTheme();">
-                    <span>Dark Mode</span>
-                    <span class="piko-toggle" id="theme-toggle">
-                      <span class="piko-toggle-thumb"></span>
-                    </span>
-                  </a>
-                </li>
-                <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" id="nav-profile" href="/profile"><i class="bi bi-person"></i> Profile</a></li>
-                <% if (session.user.admin) { %>
-                  <li><a class="dropdown-item" id="nav-users" href="/users"><i class="bi bi-people"></i> Users <span class="badge bg-secondary ms-1">Admin</span></a></li>
-                <% } %>
-                <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" id="logout" href="/logout"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
-              </ul>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
+              <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse justify-content-end" id="navbarContent">
+              <div class="dropdown">
+                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                  <%- session.user.full_name %>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li>
+                    <a class="dropdown-item d-flex align-items-center justify-content-between" href="#" onclick="event.preventDefault(); event.stopPropagation(); toggleTheme();">
+                      <span>Dark Mode</span>
+                      <span class="piko-toggle" id="theme-toggle">
+                        <span class="piko-toggle-thumb"></span>
+                      </span>
+                    </a>
+                  </li>
+                  <li><hr class="dropdown-divider"></li>
+                  <li><a class="dropdown-item" id="nav-profile" href="/profile"><i class="bi bi-person"></i> Profile</a></li>
+                  <% if (session.user.admin) { %>
+                    <li><a class="dropdown-item" id="nav-users" href="/users"><i class="bi bi-people"></i> Users <span class="badge bg-secondary ms-1">Admin</span></a></li>
+                  <% } %>
+                  <li><hr class="dropdown-divider"></li>
+                  <li><a class="dropdown-item" id="logout" href="/logout"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
+                </ul>
+              </div>
             </div>
           <% } %>
         </div>
