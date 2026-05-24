@@ -56,7 +56,7 @@ resource_type "git" {
 | `source` | no       | URL to fetch definition (e.g. `pikoci://git`)       |
 | `params` | no       | List of parameter names                             |
 
-When `source` is set, inline commands are not needed.
+When `source` is set, inline commands are not needed. The source is resolved once when the pipeline is created or updated — if the remote definition changes, you must re-set the pipeline to pick up the new version. This applies to all block types that support `source` (`resource_type`, `runner_type`, `secret_type`, `service_type`).
 
 ## resource
 

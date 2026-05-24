@@ -82,6 +82,8 @@ Two URL formats are supported:
 
 When `source` is set, you must not define inline `check`, `pull`, or `push` blocks. PikoCI will error if both are present.
 
+> **Note:** The source is resolved once when the pipeline is created or updated. If the remote HCL file changes, you must re-set the pipeline to pick up the new definition.
+
 ## Overriding built-ins
 
 All built-in resource types (`cron`, `git`) can be overridden by defining a `resource_type` block with the same name in your pipeline. Inline definitions always take precedence over built-ins.

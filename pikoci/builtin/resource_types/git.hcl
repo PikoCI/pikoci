@@ -126,7 +126,7 @@ resource_type "git" {
 
       # Inject token into HTTPS URL if provided
       if [ -n "$TOKEN" ]; then
-        URL=$(echo "$URL" | sed -E "s|https://|https://oauth2:$${TOKEN}@|")
+        URL=$(echo "$URL" | sed -E "s|https://|https://oauth2:$TOKEN@|")
       fi
 
       if [ "$TAG" = "true" ] && [ -n "$version_tag" ]; then
@@ -160,7 +160,7 @@ resource_type "git" {
 
       cd "$param_name"
       if [ -n "$TOKEN" ]; then
-        REMOTE_URL=$(echo "$URL" | sed -E "s|https://|https://oauth2:$${TOKEN}@|")
+        REMOTE_URL=$(echo "$URL" | sed -E "s|https://|https://oauth2:$TOKEN@|")
         git remote set-url origin "$REMOTE_URL"
       fi
       git push

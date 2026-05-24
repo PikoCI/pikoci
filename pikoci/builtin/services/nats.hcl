@@ -4,18 +4,18 @@ service_type "nats" {
   start "exec" {
     path = "/bin/sh"
     args = ["-ec", <<-EOT
-      NAME="pikoci-$${BUILD_PIPELINE_NAME}-$${BUILD_JOB_NAME}-nats"
+      NAME="pikoci-$BUILD_PIPELINE_NAME-$BUILD_JOB_NAME-nats"
       docker rm -f $NAME 2>/dev/null || true
       docker run -d --name $NAME \
-        -p $${param_port}:4222 \
-        nats:$${param_version}
+        -p $param_port:4222 \
+        nats:$param_version
     EOT
     ]
   }
 
   ready_check "exec" {
     path     = "/bin/sh"
-    args     = ["-ec", "nc -z localhost $${param_port}"]
+    args     = ["-ec", "nc -z localhost $param_port"]
     interval = "1s"
     timeout  = "60s"
   }
@@ -23,7 +23,7 @@ service_type "nats" {
   stop "exec" {
     path = "/bin/sh"
     args = ["-ec", <<-EOT
-      NAME="pikoci-$${BUILD_PIPELINE_NAME}-$${BUILD_JOB_NAME}-nats"
+      NAME="pikoci-$BUILD_PIPELINE_NAME-$BUILD_JOB_NAME-nats"
       docker rm -f $NAME 2>/dev/null || true
     EOT
     ]
