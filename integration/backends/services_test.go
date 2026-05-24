@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/xescugc/pikoci/pikoci"
 	"github.com/xescugc/pikoci/pikoci/build"
+	"github.com/xescugc/pikoci/pikoci/resource"
 	"github.com/xescugc/pikoci/pikoci/mysql"
 	"github.com/xescugc/pikoci/pikoci/mysql/migrate"
 	"github.com/xescugc/pikoci/pikoci/unitwork"
@@ -125,13 +126,23 @@ job "use-service" {
 		require.NoError(t, err)
 		require.NotNil(t, pp)
 
+		// Seed a version so the trigger is not a first check
+		_, err = svc.CreateResourceVersion(ctx, "main", "svc-start-stop-e2e", "cron.timer", resource.Version{
+			Version: map[string]interface{}{"date": "seed"},
+		})
+		require.NoError(t, err)
+
 		err = svc.TriggerPipelineResource(ctx, "main", "svc-start-stop-e2e", "cron.timer")
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
 			vers, err := svc.ListResourceVersions(ctx, "main", "svc-start-stop-e2e", "cron.timer")
-			return err == nil && len(vers) > 0
+			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
+
+		// Second trigger sees existing versions and triggers builds
+		err = svc.TriggerPipelineResource(ctx, "main", "svc-start-stop-e2e", "cron.timer")
+		require.NoError(t, err)
 
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
@@ -208,13 +219,23 @@ job "use-slow-service" {
 		_, err := svc.CreatePipeline(ctx, "main", "svc-timeout-e2e", hclConfig, nil)
 		require.NoError(t, err)
 
+		// Seed a version so the trigger is not a first check
+		_, err = svc.CreateResourceVersion(ctx, "main", "svc-timeout-e2e", "cron.timer", resource.Version{
+			Version: map[string]interface{}{"date": "seed"},
+		})
+		require.NoError(t, err)
+
 		err = svc.TriggerPipelineResource(ctx, "main", "svc-timeout-e2e", "cron.timer")
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
 			vers, err := svc.ListResourceVersions(ctx, "main", "svc-timeout-e2e", "cron.timer")
-			return err == nil && len(vers) > 0
+			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
+
+		// Second trigger sees existing versions and triggers builds
+		err = svc.TriggerPipelineResource(ctx, "main", "svc-timeout-e2e", "cron.timer")
+		require.NoError(t, err)
 
 		// Wait until the build completes AND the stop step is present
 		// (stop runs via defer after failBuild, so there's a brief window)
@@ -293,13 +314,23 @@ job "use-param-service" {
 		_, err := svc.CreatePipeline(ctx, "main", "svc-params-e2e", hclConfig, nil)
 		require.NoError(t, err)
 
+		// Seed a version so the trigger is not a first check
+		_, err = svc.CreateResourceVersion(ctx, "main", "svc-params-e2e", "cron.timer", resource.Version{
+			Version: map[string]interface{}{"date": "seed"},
+		})
+		require.NoError(t, err)
+
 		err = svc.TriggerPipelineResource(ctx, "main", "svc-params-e2e", "cron.timer")
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
 			vers, err := svc.ListResourceVersions(ctx, "main", "svc-params-e2e", "cron.timer")
-			return err == nil && len(vers) > 0
+			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
+
+		// Second trigger sees existing versions and triggers builds
+		err = svc.TriggerPipelineResource(ctx, "main", "svc-params-e2e", "cron.timer")
+		require.NoError(t, err)
 
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
@@ -362,13 +393,23 @@ job "will-fail" {
 		_, err := svc.CreatePipeline(ctx, "main", "svc-stop-fail-e2e", hclConfig, nil)
 		require.NoError(t, err)
 
+		// Seed a version so the trigger is not a first check
+		_, err = svc.CreateResourceVersion(ctx, "main", "svc-stop-fail-e2e", "cron.timer", resource.Version{
+			Version: map[string]interface{}{"date": "seed"},
+		})
+		require.NoError(t, err)
+
 		err = svc.TriggerPipelineResource(ctx, "main", "svc-stop-fail-e2e", "cron.timer")
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
 			vers, err := svc.ListResourceVersions(ctx, "main", "svc-stop-fail-e2e", "cron.timer")
-			return err == nil && len(vers) > 0
+			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
+
+		// Second trigger sees existing versions and triggers builds
+		err = svc.TriggerPipelineResource(ctx, "main", "svc-stop-fail-e2e", "cron.timer")
+		require.NoError(t, err)
 
 		// Wait until the build completes AND the stop step is present
 		var builds []*build.Build

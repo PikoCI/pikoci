@@ -406,13 +406,22 @@ job "gen" {
 
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain\nPipelines\ncron\nJobs\ngen\nBuilds"), 5*time.Second)
 
-			builds, err := wd.FindElements(selenium.ByCSSSelector, "#builds-tabs>.piko-build-tab")
-			require.NoError(t, err)
-			require.Equal(t, 1, len(builds))
-
+			// The first resource check stores versions without triggering
+			// builds, so trigger the job manually to get the first build.
 			tjBtn, err := wd.FindElement(selenium.ByCSSSelector, "#trigger-job")
 			require.NoError(t, err)
 
+			err = tjBtn.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				builds, err := wd.FindElements(selenium.ByCSSSelector, "#builds-tabs>.piko-build-tab")
+				require.NoError(t, err)
+
+				return len(builds) == 1
+			}, 5*time.Second)
+
+			// Trigger a second build
 			err = tjBtn.Click()
 			require.NoError(t, err)
 
