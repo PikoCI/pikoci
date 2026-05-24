@@ -63,6 +63,8 @@ Two URL formats are supported:
 
 When `source` is set, you must not define an inline `get` block. PikoCI will error if both are present. Config attributes (like `address`, `token`) are still set on the block and merged with the resolved definition.
 
+> **Note:** The source is resolved once when the pipeline is created or updated. If the remote HCL file changes, you must re-set the pipeline to pick up the new definition.
+
 ## Using secrets via variables
 
 Secrets are consumed through **secret-backed variables**. Declare a variable with a `secret` block referencing a secret type, then use `var.<name>` anywhere in your pipeline:

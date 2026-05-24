@@ -73,6 +73,8 @@ Two URL formats are supported:
 
 When `source` is set, you must not define inline `start`, `stop`, or `ready_check` blocks. PikoCI will error if both are present.
 
+> **Note:** The source is resolved once when the pipeline is created or updated. If the remote HCL file changes, you must re-set the pipeline to pick up the new definition.
+
 ## Referencing service types in jobs
 
 Reference a top-level service type by name in a job:
