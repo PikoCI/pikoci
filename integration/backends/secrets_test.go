@@ -132,15 +132,18 @@ job "deploy" {
 		assert.Len(t, pp.SecretTypes, 1)
 		assert.Equal(t, "mock-vault", pp.SecretTypes[0].Name)
 
-		// Trigger resource check to create a version (required by the get step)
+		// First trigger seeds the cursor (first check stores versions without triggering)
 		err = svc.TriggerPipelineResource(ctx, "main", "secrets-e2e", "cron.timer")
 		require.NoError(t, err)
 
-		// Wait for the resource version to be created
 		require.Eventually(t, func() bool {
 			vers, err := svc.ListResourceVersions(ctx, "main", "secrets-e2e", "cron.timer")
 			return err == nil && len(vers) > 0
 		}, 10*time.Second, 200*time.Millisecond)
+
+		// Second trigger sees existing versions and triggers builds
+		err = svc.TriggerPipelineResource(ctx, "main", "secrets-e2e", "cron.timer")
+		require.NoError(t, err)
 
 		// Wait for the build triggered by the resource to finish
 		var builds []*build.Build
@@ -220,7 +223,7 @@ job "deploy" {
 		assert.Equal(t, "my-file", pp.SecretTypes[0].Name)
 		assert.Equal(t, "pikoci://file", pp.SecretTypes[0].Source)
 
-		// Trigger resource check to create a version
+		// First trigger seeds the cursor
 		err = svc.TriggerPipelineResource(ctx, "main", "secrets-file-e2e", "cron.timer")
 		require.NoError(t, err)
 
@@ -228,6 +231,10 @@ job "deploy" {
 			vers, err := svc.ListResourceVersions(ctx, "main", "secrets-file-e2e", "cron.timer")
 			return err == nil && len(vers) > 0
 		}, 10*time.Second, 200*time.Millisecond)
+
+		// Second trigger sees existing versions and triggers builds
+		err = svc.TriggerPipelineResource(ctx, "main", "secrets-file-e2e", "cron.timer")
+		require.NoError(t, err)
 
 		// Wait for the build triggered by the resource to finish
 		var builds []*build.Build
@@ -324,7 +331,7 @@ job "deploy" {
 		assert.Equal(t, "env-file", pp.SecretTypes[0].Name)
 		assert.Equal(t, "pikoci://file", pp.SecretTypes[0].Source)
 
-		// Trigger resource check to create a version
+		// First trigger seeds the cursor
 		err = svc.TriggerPipelineResource(ctx, "main", "secrets-env-file-e2e", "cron.timer")
 		require.NoError(t, err)
 
@@ -332,6 +339,10 @@ job "deploy" {
 			vers, err := svc.ListResourceVersions(ctx, "main", "secrets-env-file-e2e", "cron.timer")
 			return err == nil && len(vers) > 0
 		}, 10*time.Second, 200*time.Millisecond)
+
+		// Second trigger sees existing versions and triggers builds
+		err = svc.TriggerPipelineResource(ctx, "main", "secrets-env-file-e2e", "cron.timer")
+		require.NoError(t, err)
 
 		// Wait for the build triggered by the resource to finish
 		var builds []*build.Build

@@ -133,6 +133,10 @@ job "use-service" {
 			return err == nil && len(vers) > 0
 		}, 10*time.Second, 200*time.Millisecond)
 
+		// Second trigger sees existing versions and triggers builds
+		err = svc.TriggerPipelineResource(ctx, "main", "svc-start-stop-e2e", "cron.timer")
+		require.NoError(t, err)
+
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
 			builds, err = svc.ListJobBuilds(ctx, "main", "svc-start-stop-e2e", "use-service")
@@ -215,6 +219,10 @@ job "use-slow-service" {
 			vers, err := svc.ListResourceVersions(ctx, "main", "svc-timeout-e2e", "cron.timer")
 			return err == nil && len(vers) > 0
 		}, 10*time.Second, 200*time.Millisecond)
+
+		// Second trigger sees existing versions and triggers builds
+		err = svc.TriggerPipelineResource(ctx, "main", "svc-timeout-e2e", "cron.timer")
+		require.NoError(t, err)
 
 		// Wait until the build completes AND the stop step is present
 		// (stop runs via defer after failBuild, so there's a brief window)
@@ -301,6 +309,10 @@ job "use-param-service" {
 			return err == nil && len(vers) > 0
 		}, 10*time.Second, 200*time.Millisecond)
 
+		// Second trigger sees existing versions and triggers builds
+		err = svc.TriggerPipelineResource(ctx, "main", "svc-params-e2e", "cron.timer")
+		require.NoError(t, err)
+
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
 			builds, err = svc.ListJobBuilds(ctx, "main", "svc-params-e2e", "use-param-service")
@@ -369,6 +381,10 @@ job "will-fail" {
 			vers, err := svc.ListResourceVersions(ctx, "main", "svc-stop-fail-e2e", "cron.timer")
 			return err == nil && len(vers) > 0
 		}, 10*time.Second, 200*time.Millisecond)
+
+		// Second trigger sees existing versions and triggers builds
+		err = svc.TriggerPipelineResource(ctx, "main", "svc-stop-fail-e2e", "cron.timer")
+		require.NoError(t, err)
 
 		// Wait until the build completes AND the stop step is present
 		var builds []*build.Build
