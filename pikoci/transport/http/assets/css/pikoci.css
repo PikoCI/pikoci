@@ -529,7 +529,55 @@ textarea.form-control {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.5rem;
-  overflow: auto;
+  overflow: hidden;
+  position: relative;
+  cursor: grab;
+  /* Fill remaining viewport height */
+  min-height: calc(100vh - 200px);
+}
+.piko-graph-container.panning { cursor: grabbing; }
+
+/* Graph zoom controls */
+.piko-graph-controls {
+  position: absolute; top: 8px; right: 8px;
+  display: flex; gap: 4px; z-index: 10;
+}
+.piko-graph-controls button {
+  width: 28px; height: 28px; border: none; border-radius: 4px;
+  background: var(--primary); color: #fff; cursor: pointer;
+  font-size: 14px; display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+.piko-graph-controls button:hover { background: var(--primary-hover); }
+
+/* Graph fullscreen overlay */
+.piko-graph-fullscreen {
+  position: fixed; top: 46px; left: 0; right: 0; bottom: 0;
+  z-index: 9999;
+  background: var(--bg-surface);
+  display: flex; flex-direction: column;
+}
+.piko-graph-fullscreen-hint {
+  position: absolute; top: 10px; left: 14px;
+  font-size: 0.75rem; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.piko-graph-fullscreen-close {
+  position: absolute; top: 8px; right: 8px; z-index: 1;
+}
+.piko-graph-fullscreen-body {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  overflow: hidden; padding: 48px 16px 16px;
+  cursor: grab;
+}
+.piko-graph-fullscreen-body.panning { cursor: grabbing; }
+.piko-graph-container #pipeline-graph {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .piko-graph-container svg {
   display: block;
@@ -938,8 +986,10 @@ body.piko-fullscreen .btn-primary { display: none; }
 .piko-graph-bottom-header button:hover { color: var(--text-primary); background: var(--primary-light); }
 .piko-graph-bottom-body {
   padding: 16px 24px; display: flex; align-items: center;
-  justify-content: center; overflow: auto; min-height: 80px;
+  justify-content: center; overflow: hidden; min-height: 80px;
+  position: relative; cursor: grab;
 }
+.piko-graph-bottom-body.panning { cursor: grabbing; }
 
 /* Graph strip (normal mode) */
 .piko-graph-strip {
@@ -965,7 +1015,9 @@ body.piko-fullscreen .btn-primary { display: none; }
 .piko-graph-strip-header.open .piko-graph-chev { transform: rotate(90deg); }
 .piko-graph-strip-body {
   display: none; padding: 24px; min-height: 120px; justify-content: center;
+  position: relative; overflow: hidden; cursor: grab;
 }
+.piko-graph-strip-body.panning { cursor: grabbing; }
 .piko-graph-strip-header.open + .piko-graph-strip-body { display: flex; }
 /* Graph nodes clickable */
 .piko-graph-strip-body svg g.node { cursor: pointer; }
@@ -995,14 +1047,14 @@ body.piko-fullscreen .btn-primary { display: none; }
     -webkit-overflow-scrolling: touch;
   }
 
-  /* 3c. Pipeline graph — horizontal scroll */
+  /* 3c. Pipeline graph — touch-friendly */
   .piko-graph-container {
     padding: 0.75rem;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    min-height: 300px;
   }
-  .piko-graph-container svg {
-    min-width: 500px;
+  .piko-graph-controls button {
+    min-width: 36px; min-height: 36px;
+    width: 36px; height: 36px;
   }
 
   /* 3d. Build logs — wrap lines + larger touch targets */
