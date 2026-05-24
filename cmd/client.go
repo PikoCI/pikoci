@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/adrg/xdg"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/spf13/cobra"
 	"github.com/xescugc/pikoci/pikoci"
 	"github.com/xescugc/pikoci/pikoci/team"
@@ -17,6 +17,14 @@ import (
 	"github.com/xescugc/pikoci/pikoci/user"
 	"github.com/xescugc/pikoci/pikoci/utils"
 )
+
+func printJSON(v interface{}) {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(b))
+}
 
 var (
 	configAuthenticationPath = "pikoci/authentication"
@@ -263,7 +271,7 @@ var pipelinesListCmd = &cobra.Command{
 			return fmt.Errorf("failed to list Pipelines: %w", err)
 		}
 
-		spew.Dump(pps)
+		printJSON(pps)
 		return nil
 	},
 }
@@ -289,7 +297,7 @@ var pipelinesGetCmd = &cobra.Command{
 			return fmt.Errorf("failed to get Pipeline %q: %w", name, err)
 		}
 
-		spew.Dump(pp)
+		printJSON(pp)
 		return nil
 	},
 }
@@ -439,7 +447,7 @@ var jobsGetCmd = &cobra.Command{
 			return fmt.Errorf("failed to get Job %q from Pipeline %q: %w", jn, pn, err)
 		}
 
-		spew.Dump(j)
+		printJSON(j)
 		return nil
 	},
 }
@@ -562,7 +570,7 @@ var usersCreateCmd = &cobra.Command{
 			return fmt.Errorf("failed to create User %q: %w", username, err)
 		}
 
-		spew.Dump(u)
+		printJSON(u)
 		return nil
 	},
 }
@@ -591,7 +599,7 @@ var usersListCmd = &cobra.Command{
 			return fmt.Errorf("failed to list Users: %w", err)
 		}
 
-		spew.Dump(users)
+		printJSON(users)
 		return nil
 	},
 }
@@ -622,7 +630,7 @@ var usersUpdateCmd = &cobra.Command{
 			return fmt.Errorf("failed to update User %q: %w", username, err)
 		}
 
-		spew.Dump(u)
+		printJSON(u)
 		return nil
 	},
 }
@@ -727,7 +735,7 @@ var teamsCreateCmd = &cobra.Command{
 			return fmt.Errorf("failed to create Team %q: %w", name, err)
 		}
 
-		spew.Dump(t)
+		printJSON(t)
 		return nil
 	},
 }
@@ -754,7 +762,7 @@ var teamsListCmd = &cobra.Command{
 			return fmt.Errorf("failed to list Teams: %w", err)
 		}
 
-		spew.Dump(teams)
+		printJSON(teams)
 		return nil
 	},
 }
@@ -777,7 +785,7 @@ var teamsGetCmd = &cobra.Command{
 			return fmt.Errorf("failed to get Team %q: %w", canonical, err)
 		}
 
-		spew.Dump(t)
+		printJSON(t)
 		return nil
 	},
 }
@@ -806,7 +814,7 @@ var teamsUpdateCmd = &cobra.Command{
 			return fmt.Errorf("failed to update Team %q: %w", canonical, err)
 		}
 
-		spew.Dump(t)
+		printJSON(t)
 		return nil
 	},
 }
@@ -884,7 +892,7 @@ var teamsMembersCreateCmd = &cobra.Command{
 			return fmt.Errorf("failed to add member %q to team %q: %w", username, tc, err)
 		}
 
-		spew.Dump(m)
+		printJSON(m)
 		return nil
 	},
 }
@@ -917,7 +925,7 @@ var teamsMembersUpdateCmd = &cobra.Command{
 			return fmt.Errorf("failed to update member %q in team %q: %w", username, tc, err)
 		}
 
-		spew.Dump(m)
+		printJSON(m)
 		return nil
 	},
 }
@@ -999,7 +1007,7 @@ var buildsListCmd = &cobra.Command{
 			return fmt.Errorf("failed to list builds for job %q: %w", jn, err)
 		}
 
-		spew.Dump(builds)
+		printJSON(builds)
 		return nil
 	},
 }
@@ -1026,7 +1034,7 @@ var buildsGetCmd = &cobra.Command{
 			return fmt.Errorf("failed to get build %q: %w", bn, err)
 		}
 
-		spew.Dump(b)
+		printJSON(b)
 		return nil
 	},
 }
@@ -1171,7 +1179,7 @@ var resourcesGetCmd = &cobra.Command{
 			return fmt.Errorf("failed to get resource %q: %w", rCan, err)
 		}
 
-		spew.Dump(r)
+		printJSON(r)
 		return nil
 	},
 }
@@ -1233,7 +1241,7 @@ var resourcesVersionsCmd = &cobra.Command{
 			return fmt.Errorf("failed to list versions for resource %q: %w", rCan, err)
 		}
 
-		spew.Dump(versions)
+		printJSON(versions)
 		return nil
 	},
 }
@@ -1313,7 +1321,7 @@ var triggersCreateCmd = &cobra.Command{
 			return fmt.Errorf("failed to create trigger %q: %w", name, err)
 		}
 
-		spew.Dump(t)
+		printJSON(t)
 		return nil
 	},
 }
@@ -1345,7 +1353,7 @@ var triggersListCmd = &cobra.Command{
 			return fmt.Errorf("failed to list triggers %q: %w", name, err)
 		}
 
-		spew.Dump(triggers)
+		printJSON(triggers)
 		return nil
 	},
 }

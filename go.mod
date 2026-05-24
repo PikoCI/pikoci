@@ -7,7 +7,6 @@ require (
 	github.com/adrg/xdg v0.5.3
 	github.com/awalterschulze/gographviz v2.0.3+incompatible
 	github.com/cycloidio/sqlr v1.0.0
-	github.com/davecgh/go-spew v1.1.1
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
@@ -44,6 +43,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dmarkham/enumer v1.6.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/eapache/go-resiliency v1.7.0 // indirect
