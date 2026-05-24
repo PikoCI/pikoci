@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/xescugc/pikoci/pikoci"
 	"github.com/xescugc/pikoci/pikoci/build"
+	"github.com/xescugc/pikoci/pikoci/resource"
 	"github.com/xescugc/pikoci/pikoci/mysql"
 	"github.com/xescugc/pikoci/pikoci/mysql/migrate"
 	"github.com/xescugc/pikoci/pikoci/unitwork"
@@ -137,16 +138,14 @@ job "job-c" {
 	require.NoError(t, err)
 	require.NotNil(t, pp)
 
-	// First trigger seeds the cursor (first check stores versions without triggering)
-	err = svc.TriggerPipelineResource(ctx, "main", "concurrent-test", "cron.trigger")
+	// Seed a version so the trigger is not a first check (first checks store
+	// versions without triggering builds).
+	_, err = svc.CreateResourceVersion(ctx, "main", "concurrent-test", "cron.trigger", resource.Version{
+		Version: map[string]interface{}{"date": "seed"},
+	})
 	require.NoError(t, err)
 
-	require.Eventually(t, func() bool {
-		vers, err := svc.ListResourceVersions(ctx, "main", "concurrent-test", "cron.trigger")
-		return err == nil && len(vers) > 0
-	}, 10*time.Second, 200*time.Millisecond)
-
-	// Second trigger sees existing versions and triggers all 3 jobs
+	// Trigger the resource — this creates a version which triggers all 3 jobs
 	err = svc.TriggerPipelineResource(ctx, "main", "concurrent-test", "cron.trigger")
 	require.NoError(t, err)
 

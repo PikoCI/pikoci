@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/xescugc/pikoci/pikoci"
 	"github.com/xescugc/pikoci/pikoci/build"
+	"github.com/xescugc/pikoci/pikoci/resource"
 	"github.com/xescugc/pikoci/pikoci/mysql"
 	"github.com/xescugc/pikoci/pikoci/mysql/migrate"
 	"github.com/xescugc/pikoci/pikoci/unitwork"
@@ -132,13 +133,19 @@ job "deploy" {
 		assert.Len(t, pp.SecretTypes, 1)
 		assert.Equal(t, "mock-vault", pp.SecretTypes[0].Name)
 
-		// First trigger seeds the cursor (first check stores versions without triggering)
+		// Seed a version so the trigger is not a first check
+		_, err = svc.CreateResourceVersion(ctx, "main", "secrets-e2e", "cron.timer", resource.Version{
+			Version: map[string]interface{}{"date": "seed"},
+		})
+		require.NoError(t, err)
+
+		// Trigger resource check to create a version and trigger builds
 		err = svc.TriggerPipelineResource(ctx, "main", "secrets-e2e", "cron.timer")
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
 			vers, err := svc.ListResourceVersions(ctx, "main", "secrets-e2e", "cron.timer")
-			return err == nil && len(vers) > 0
+			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
 
 		// Second trigger sees existing versions and triggers builds
@@ -223,13 +230,19 @@ job "deploy" {
 		assert.Equal(t, "my-file", pp.SecretTypes[0].Name)
 		assert.Equal(t, "pikoci://file", pp.SecretTypes[0].Source)
 
-		// First trigger seeds the cursor
+		// Seed a version so the trigger is not a first check
+		_, err = svc.CreateResourceVersion(ctx, "main", "secrets-file-e2e", "cron.timer", resource.Version{
+			Version: map[string]interface{}{"date": "seed"},
+		})
+		require.NoError(t, err)
+
+		// Trigger resource check to create a version and trigger builds
 		err = svc.TriggerPipelineResource(ctx, "main", "secrets-file-e2e", "cron.timer")
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
 			vers, err := svc.ListResourceVersions(ctx, "main", "secrets-file-e2e", "cron.timer")
-			return err == nil && len(vers) > 0
+			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
 
 		// Second trigger sees existing versions and triggers builds
@@ -331,13 +344,19 @@ job "deploy" {
 		assert.Equal(t, "env-file", pp.SecretTypes[0].Name)
 		assert.Equal(t, "pikoci://file", pp.SecretTypes[0].Source)
 
-		// First trigger seeds the cursor
+		// Seed a version so the trigger is not a first check
+		_, err = svc.CreateResourceVersion(ctx, "main", "secrets-env-file-e2e", "cron.timer", resource.Version{
+			Version: map[string]interface{}{"date": "seed"},
+		})
+		require.NoError(t, err)
+
+		// Trigger resource check to create a version and trigger builds
 		err = svc.TriggerPipelineResource(ctx, "main", "secrets-env-file-e2e", "cron.timer")
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
 			vers, err := svc.ListResourceVersions(ctx, "main", "secrets-env-file-e2e", "cron.timer")
-			return err == nil && len(vers) > 0
+			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
 
 		// Second trigger sees existing versions and triggers builds
