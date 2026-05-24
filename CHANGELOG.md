@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pipeline graph zoom, pan, and fullscreen controls: scroll-wheel zoom toward cursor, click-drag pan (including on nodes), zoom buttons, reset, fullscreen overlay with navbar visible, pinch-zoom on mobile, and auto-sizing that prevents small pipelines from appearing oversized ([#338](https://github.com/PikoCI/pikoci/issues/338))
 - Database export: admin-only `GET /admin/export` endpoint, CLI `pikoci client export -o file.db`, and web UI dropdown button to download the full database as a portable SQLite file ([#275](https://github.com/PikoCI/pikoci/issues/275))
 
+### Fixed
+
+- Concurrency re-queuing infinite loop: builds are now created as Pending at trigger time and transitioned to Started atomically by workers, eliminating duplicate build creation from re-queued messages ([#358](https://github.com/PikoCI/pikoci/issues/358), [#246](https://github.com/PikoCI/pikoci/issues/246))
+
 ### Changed
 
 - CLI outputs JSON instead of Go struct dumps for all commands, making output parseable and pipeable to tools like `jq` ([#360](https://github.com/PikoCI/pikoci/issues/360))
