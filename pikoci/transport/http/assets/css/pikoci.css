@@ -467,6 +467,7 @@ textarea.form-control {
 .piko-tab-status.status-failed { background: var(--status-failed); }
 .piko-tab-status.status-started { background: var(--status-started); }
 .piko-tab-status.status-cancelled { background: var(--status-cancelled); }
+.piko-tab-status.status-pending { background: var(--status-pending); }
 
 /* ============================================================
    BUILD META & STEP LABELS
@@ -726,10 +727,12 @@ textarea.form-control {
 .piko-badge-failed { background: #ffe0e8; color: #cc003e; }
 .piko-badge-started { background: #fff0d0; color: #9a7000; }
 .piko-badge-cancelled { background: #f5e6df; color: #8A3F2B; }
+.piko-badge-pending { background: #e8e0f0; color: #5F574F; }
 [data-theme="dark"] .piko-badge-succeeded { background: rgba(0,168,58,0.15); color: #00E436; }
 [data-theme="dark"] .piko-badge-failed { background: rgba(255,0,77,0.15); color: #FF77A8; }
 [data-theme="dark"] .piko-badge-started { background: rgba(255,163,0,0.15); color: #FFA300; }
 [data-theme="dark"] .piko-badge-cancelled { background: rgba(171,82,54,0.15); color: #D4845E; }
+[data-theme="dark"] .piko-badge-pending { background: rgba(131,118,156,0.15); color: #83769C; }
 
 /* ============================================================
    VERSION ROWS (Resource versions)

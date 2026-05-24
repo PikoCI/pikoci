@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/xescugc/pikoci/pikoci/build"
 	"github.com/xescugc/pikoci/pikoci/job"
 	"github.com/xescugc/pikoci/pikoci/queue"
 	"github.com/xescugc/pikoci/pikoci/utils"
@@ -25,11 +26,7 @@ func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) erro
 		return fmt.Errorf("failed to Find Job %q on Pipeline %q: %w", jn, pc, err)
 	}
 
-	m := queue.Body{
-		TeamCanonical:     tc,
-		PipelineCanonical: pc,
-		JobName:           jn,
-	}
+	bb := build.Build{Status: build.Pending}
 
 	// Pin the latest version of the first get-step resource so the version
 	// is locked at trigger time rather than at execution time.
@@ -39,9 +36,23 @@ func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) erro
 		rCan := g.ResourceCanonical()
 		vers, err := q.Resources.FilterVersions(ctx, tc, pc, rCan)
 		if err == nil && len(vers) > 0 {
-			m.ResourceCanonical = rCan
-			m.VersionID = vers[len(vers)-1].ID
+			bb.ResourceCanonical = rCan
+			bb.VersionID = vers[len(vers)-1].ID
 		}
+	}
+
+	nb, err := q.CreateJobBuild(ctx, tc, pc, jn, bb)
+	if err != nil {
+		return fmt.Errorf("failed to create pending build for Job %q on Pipeline %q: %w", jn, pc, err)
+	}
+
+	m := queue.Body{
+		TeamCanonical:     tc,
+		PipelineCanonical: pc,
+		JobName:           jn,
+		BuildID:           nb.ID,
+		ResourceCanonical: nb.ResourceCanonical,
+		VersionID:         nb.VersionID,
 	}
 
 	mb, err := json.Marshal(m)

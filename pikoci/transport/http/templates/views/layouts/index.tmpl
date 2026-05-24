@@ -454,11 +454,13 @@
           </div>
         <% } %>
         <div class="piko-build-meta">
+          <% if (status !== "pending") { %>
           <span><span class="piko-build-label">Started</span> <span class="piko-time-ago" data-time="<%= started_at %>" title="<%= new Date(started_at).toLocaleString() %>"><%= pikoTimeAgo(started_at) %></span></span>
           <% if (status === "started" && duration === 0) { %>
             <span><span class="piko-build-label">Duration</span> <span class="piko-elapsed" data-started="<%= started_at %>"></span></span>
           <% } else if (duration !== 0) { %>
             <span><span class="piko-build-label">Duration</span> <%- duration %></span>
+          <% } %>
           <% } %>
           <% if (status === "succeeded") { %>
             <span class="piko-badge piko-badge-succeeded">Succeeded</span>
@@ -468,12 +470,16 @@
             <span class="piko-badge piko-badge-started">Running</span>
           <% } else if (status === "cancelled") { %>
             <span class="piko-badge piko-badge-cancelled">Cancelled</span>
+          <% } else if (status === "pending") { %>
+            <span class="piko-badge piko-badge-pending">Pending</span>
           <% } %>
-          <% if (status === "started") { %>
+          <% if (status === "started" || status === "pending") { %>
             <span style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+              <% if (status === "started") { %>
               <button type="button" class="btn btn-sm btn-outline-info piko-follow-toggle" title="Auto-scroll logs">
                 <i class="bi bi-arrow-down-circle"></i> Follow
               </button>
+              <% } %>
               <% if (!app.session.isEmpty()) { %>
               <button type="button" class="btn btn-sm btn-outline-danger piko-cancel-build" data-build-number="<%- build_number %>">
                 <i class="bi bi-x-circle"></i> Cancel
@@ -3141,7 +3147,7 @@
           this.$el.html(this.template(data));
           // Set the status stripe color
           var stripe = this.$el.find(".piko-tab-status")
-          stripe.removeClass("status-succeeded status-failed status-started status-cancelled")
+          stripe.removeClass("status-succeeded status-failed status-started status-cancelled status-pending")
           stripe.addClass("status-"+this.model.get("status"))
           return this; // enable chained calls
         },

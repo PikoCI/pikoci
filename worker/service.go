@@ -151,46 +151,64 @@ func (w *Worker) processMessage(ctx context.Context, m queue.Body, cwd string) {
 	}
 }
 
-// processJob handles executing a job: creates a build, runs the plan steps,
-// and runs hooks. Downstream job triggering is handled by the scheduler.
+// processJob handles executing a job: transitions a pending build to started,
+// runs the plan steps, and runs hooks. Downstream job triggering is handled
+// by the scheduler.
 func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *pipeline.Pipeline) {
-	b := build.Build{
-		Status:    build.Started,
-		Steps:     []build.Step{},
-		StartedAt: time.Now().Round(0),
+	if m.BuildID == 0 {
+		w.logger.Error("missing build_id in message",
+			"pipeline", m.PipelineCanonical, "job", m.JobName)
+		return
 	}
-	w.logger.Info("processJob called",
-		"pipeline", m.PipelineCanonical, "job", m.JobName, "version_id", m.VersionID,
-		"resource", m.ResourceCanonical)
 
-	var (
-		nb  *build.Build
-		err error
-	)
-	if m.RetryBuildNumber != "" {
-		nb, err = w.pikoci.CreateRetryJobBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, m.RetryBuildNumber, b)
-	} else {
-		nb, err = w.pikoci.CreateJobBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b)
-	}
+	w.logger.Info("processJob called",
+		"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID,
+		"version_id", m.VersionID, "resource", m.ResourceCanonical)
+
+	nb, err := w.pikoci.StartPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID)
 	if err != nil {
 		if errors.Is(err, pikoci.ErrConcurrencyLimit) {
-			w.logger.Info("job at concurrency limit, re-queuing",
-				"pipeline", m.PipelineCanonical, "job", m.JobName)
+			w.logger.Info("concurrency limit, re-queuing",
+				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID)
 			mb, _ := json.Marshal(m)
 			if err := w.topic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
-				w.logger.Error("failed to re-queue concurrency-limited build",
-					"pipeline", m.PipelineCanonical, "job", m.JobName, "error", err)
+				w.logger.Error("failed to re-queue", "error", err)
 			}
 			time.Sleep(2 * time.Second)
 			return
 		}
-		w.logger.Error("failed create build", "pipeline", m.PipelineCanonical, "job", m.JobName, "error", err)
+		if errors.Is(err, pikoci.ErrBuildNotPending) {
+			w.logger.Info("build no longer pending, skipping", "build_id", m.BuildID)
+			return
+		}
+		w.logger.Error("failed to start pending build",
+			"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID, "error", err)
 		return
 	}
-	b.ID = nb.ID
-	b.BuildNumber = nb.BuildNumber
-	w.logger.Info("build created",
-		"pipeline", m.PipelineCanonical, "job", m.JobName, "build_number", b.BuildNumber, "version_id", m.VersionID)
+
+	b := build.Build{
+		ID:          nb.ID,
+		BuildNumber: nb.BuildNumber,
+		Status:      build.Started,
+		StartedAt:   nb.StartedAt,
+		Steps:       []build.Step{},
+	}
+
+	// If the message doesn't carry version info, fall back to what was stored on the build
+	if m.VersionID == 0 && nb.VersionID != 0 {
+		m.VersionID = nb.VersionID
+	}
+	if m.ResourceCanonical == "" && nb.ResourceCanonical != "" {
+		m.ResourceCanonical = nb.ResourceCanonical
+	}
+
+	// After the build completes (success, failure, or cancellation),
+	// notify the next pending build so it can start.
+	defer w.notifyNextPendingBuild(ctx, m)
+
+	w.logger.Info("build started",
+		"pipeline", m.PipelineCanonical, "job", m.JobName, "build_number", b.BuildNumber,
+		"build_id", b.ID, "version_id", m.VersionID)
 
 	jobCtx, jobCancel := context.WithCancel(ctx)
 	defer jobCancel()
@@ -273,6 +291,27 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 		status = "failed"
 	}
 	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.Ensure, "ensure", resolved, status)
+}
+
+func (w *Worker) notifyNextPendingBuild(ctx context.Context, m queue.Body) {
+	pending, err := w.pikoci.FindOldestPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName)
+	if err != nil {
+		w.logger.Warn("failed to find next pending build", "error", err)
+		return
+	}
+	if pending == nil {
+		return
+	}
+	msg := queue.Body{
+		TeamCanonical:     m.TeamCanonical,
+		PipelineCanonical: m.PipelineCanonical,
+		JobName:           m.JobName,
+		BuildID:           pending.ID,
+	}
+	mb, _ := json.Marshal(msg)
+	if err := w.topic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
+		w.logger.Warn("failed to notify next pending build", "build_id", pending.ID, "error", err)
+	}
 }
 
 // checkPassedConstraints verifies that all jobs in the "passed" list have a
@@ -1263,10 +1302,21 @@ func (w *Worker) triggerResourceJobs(ctx context.Context, m queue.Body, pp *pipe
 			// If Passed is not 0 it means is waiting for another job
 			// and this trigger is only for resources
 			if g.Name == r.Name && g.Type == r.Type && g.Trigger && len(g.Passed) == 0 {
+				// Create a pending build first
+				nb, err := w.pikoci.CreateJobBuild(ctx, m.TeamCanonical, pp.Canonical, j.Name, build.Build{
+					Status:            build.Pending,
+					VersionID:         cv.ID,
+					ResourceCanonical: r.Canonical,
+				})
+				if err != nil {
+					w.logger.Error("failed to create pending build for trigger", "job", j.Name, "error", err)
+					continue
+				}
 				qb := queue.Body{
 					TeamCanonical:     m.TeamCanonical,
 					PipelineCanonical: pp.Canonical,
 					JobName:           j.Name,
+					BuildID:           nb.ID,
 					ResourceCanonical: r.Canonical,
 					VersionID:         cv.ID,
 				}
@@ -1277,7 +1327,7 @@ func (w *Worker) triggerResourceJobs(ctx context.Context, m queue.Body, pp *pipe
 				}
 				w.logger.Info("sending trigger message",
 					"pipeline", pp.Canonical, "job", j.Name, "resource", r.Canonical,
-					"version_id", cv.ID, "step", g.Name)
+					"version_id", cv.ID, "step", g.Name, "build_id", nb.ID)
 				if err := w.topic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
 					w.logger.Error("failed to send trigger message", "job", j.Name, "error", err)
 				}

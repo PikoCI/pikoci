@@ -133,6 +133,21 @@ func (mr *BuildRepositoryMockRecorder) Find(ctx, tc, pn, jn, buildNumber any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Find", reflect.TypeOf((*BuildRepository)(nil).Find), ctx, tc, pn, jn, buildNumber)
 }
 
+// FindByID mocks base method.
+func (m *BuildRepository) FindByID(ctx context.Context, buildID uint32) (*build.Build, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindByID", ctx, buildID)
+	ret0, _ := ret[0].(*build.Build)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindByID indicates an expected call of FindByID.
+func (mr *BuildRepositoryMockRecorder) FindByID(ctx, buildID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByID", reflect.TypeOf((*BuildRepository)(nil).FindByID), ctx, buildID)
+}
+
 // FindGetVersions mocks base method.
 func (m *BuildRepository) FindGetVersions(ctx context.Context, buildID uint32) (map[string]uint32, error) {
 	m.ctrl.T.Helper()
@@ -146,6 +161,21 @@ func (m *BuildRepository) FindGetVersions(ctx context.Context, buildID uint32) (
 func (mr *BuildRepositoryMockRecorder) FindGetVersions(ctx, buildID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindGetVersions", reflect.TypeOf((*BuildRepository)(nil).FindGetVersions), ctx, buildID)
+}
+
+// FindOldestPending mocks base method.
+func (m *BuildRepository) FindOldestPending(ctx context.Context, tc, pn, jn string) (*build.Build, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindOldestPending", ctx, tc, pn, jn)
+	ret0, _ := ret[0].(*build.Build)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindOldestPending indicates an expected call of FindOldestPending.
+func (mr *BuildRepositoryMockRecorder) FindOldestPending(ctx, tc, pn, jn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindOldestPending", reflect.TypeOf((*BuildRepository)(nil).FindOldestPending), ctx, tc, pn, jn)
 }
 
 // FindReadyDownstreamVersion mocks base method.
@@ -191,6 +221,20 @@ func (m *BuildRepository) LastBuildAtByPipeline(ctx context.Context, tc string) 
 func (mr *BuildRepositoryMockRecorder) LastBuildAtByPipeline(ctx, tc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastBuildAtByPipeline", reflect.TypeOf((*BuildRepository)(nil).LastBuildAtByPipeline), ctx, tc)
+}
+
+// StartPending mocks base method.
+func (m *BuildRepository) StartPending(ctx context.Context, tc, pn, jn string, buildID uint32) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartPending", ctx, tc, pn, jn, buildID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StartPending indicates an expected call of StartPending.
+func (mr *BuildRepositoryMockRecorder) StartPending(ctx, tc, pn, jn, buildID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartPending", reflect.TypeOf((*BuildRepository)(nil).StartPending), ctx, tc, pn, jn, buildID)
 }
 
 // Update mocks base method.

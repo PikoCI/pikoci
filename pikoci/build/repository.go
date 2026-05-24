@@ -19,4 +19,7 @@ type Repository interface {
 	FindReadyDownstreamVersion(ctx context.Context, tc, pn string, upstreamJobs []string, downstreamJob string, stepName string, upstreamCount int) (uint32, bool, error)
 	LastBuildAtByPipeline(ctx context.Context, tc string) (map[uint32]time.Time, error)
 	CountRunning(ctx context.Context, tc, pn, jn string) (int, error)
+	FindByID(ctx context.Context, buildID uint32) (*Build, error)
+	FindOldestPending(ctx context.Context, tc, pn, jn string) (*Build, error)
+	StartPending(ctx context.Context, tc, pn, jn string, buildID uint32) error
 }

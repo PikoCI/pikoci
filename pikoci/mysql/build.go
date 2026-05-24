@@ -34,38 +34,44 @@ func (r *BuildRepository) castAsInt(expr string) string {
 }
 
 type dbBuild struct {
-	ID          sql.NullInt64
-	BuildNumber sql.NullString
-	Steps       sql.NullString
-	Job         sql.NullString
-	Status      sql.NullString
-	Error       sql.NullString
-	StartedAt   sql.NullTime
-	Duration    sql.NullInt64
+	ID                sql.NullInt64
+	BuildNumber       sql.NullString
+	Steps             sql.NullString
+	Job               sql.NullString
+	Status            sql.NullString
+	Error             sql.NullString
+	StartedAt         sql.NullTime
+	Duration          sql.NullInt64
+	VersionID         sql.NullInt64
+	ResourceCanonical sql.NullString
 }
 
 func newDBBuild(b build.Build) dbBuild {
 	s, _ := json.Marshal(b.Steps)
 	j, _ := json.Marshal(b.Job)
 	return dbBuild{
-		Steps:     toNullString(string(s)),
-		Job:       toNullString(string(j)),
-		Status:    toNullString(b.Status.String()),
-		Error:     toNullString(b.Error),
-		StartedAt: toNullTime(b.StartedAt),
-		Duration:  toNullInt64(int(b.Duration)),
+		Steps:             toNullString(string(s)),
+		Job:               toNullString(string(j)),
+		Status:            toNullString(b.Status.String()),
+		Error:             toNullString(b.Error),
+		StartedAt:         toNullTime(b.StartedAt),
+		Duration:          toNullInt64(int(b.Duration)),
+		VersionID:         toNullInt64(int(b.VersionID)),
+		ResourceCanonical: toNullString(b.ResourceCanonical),
 	}
 }
 
 func (dbb *dbBuild) toDomainEntity() *build.Build {
 	s, _ := build.StatusString(dbb.Status.String)
 	b := &build.Build{
-		ID:          uint32(dbb.ID.Int64),
-		BuildNumber: dbb.BuildNumber.String,
-		Status:      s,
-		Error:       dbb.Error.String,
-		StartedAt:   dbb.StartedAt.Time,
-		Duration:    time.Duration(dbb.Duration.Int64),
+		ID:                uint32(dbb.ID.Int64),
+		BuildNumber:       dbb.BuildNumber.String,
+		Status:            s,
+		Error:             dbb.Error.String,
+		StartedAt:         dbb.StartedAt.Time,
+		Duration:          time.Duration(dbb.Duration.Int64),
+		VersionID:         uint32(dbb.VersionID.Int64),
+		ResourceCanonical: dbb.ResourceCanonical.String,
 	}
 
 	_ = json.Unmarshal([]byte(dbb.Steps.String), &b.Steps)
@@ -102,8 +108,8 @@ func (r *BuildRepository) Create(ctx context.Context, tc, pn, jn string, b build
 		buildNumber := fmt.Sprintf("%d", nextNum)
 
 		res, err := r.querier.ExecContext(ctx, `
-			INSERT INTO builds(steps, job, status, error, started_at, duration, build_number, job_id)
-			VALUES (?, ?, ?, ?, ?, ?, ?,
+			INSERT INTO builds(steps, job, status, error, started_at, duration, build_number, version_id, resource_canonical, job_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
 				-- job_id
 				(
 					SELECT j.id
@@ -113,7 +119,7 @@ func (r *BuildRepository) Create(ctx context.Context, tc, pn, jn string, b build
 					JOIN teams AS t
 						ON p.team_id = t.id
 					WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
-				))`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, buildNumber, tc, pn, jn)
+				))`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, buildNumber, dbb.VersionID, dbb.ResourceCanonical, tc, pn, jn)
 		if err != nil {
 			if isUniqueViolation(err) {
 				continue
@@ -161,8 +167,8 @@ func (r *BuildRepository) CreateRetry(ctx context.Context, tc, pn, jn, parentBui
 		buildNumber := fmt.Sprintf("%s.%d", parentBuildNumber, nextNum)
 
 		res, err := r.querier.ExecContext(ctx, `
-			INSERT INTO builds(steps, job, status, error, started_at, duration, build_number, job_id)
-			VALUES (?, ?, ?, ?, ?, ?, ?,
+			INSERT INTO builds(steps, job, status, error, started_at, duration, build_number, version_id, resource_canonical, job_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
 				(
 					SELECT j.id
 					FROM jobs AS j
@@ -171,7 +177,7 @@ func (r *BuildRepository) CreateRetry(ctx context.Context, tc, pn, jn, parentBui
 					JOIN teams AS t
 						ON p.team_id = t.id
 					WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
-				))`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, buildNumber, tc, pn, jn)
+				))`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, buildNumber, dbb.VersionID, dbb.ResourceCanonical, tc, pn, jn)
 		if err != nil {
 			if isUniqueViolation(err) {
 				continue
@@ -216,7 +222,7 @@ func (r *BuildRepository) FindGetVersions(ctx context.Context, buildID uint32) (
 
 func (r *BuildRepository) Find(ctx context.Context, tc, pn, jn string, buildNumber string) (*build.Build, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration
+		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical
 		FROM builds AS b
 		JOIN jobs AS j
 			ON b.job_id = j.id
@@ -237,7 +243,7 @@ func (r *BuildRepository) Find(ctx context.Context, tc, pn, jn string, buildNumb
 
 func (r *BuildRepository) Filter(ctx context.Context, tc, pn, jn string) ([]*build.Build, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration
+		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical
 		FROM builds AS b
 		JOIN jobs AS j
 			ON b.job_id = j.id
@@ -264,7 +270,7 @@ func (r *BuildRepository) Update(ctx context.Context, tc, pn, jn string, buildNu
 	dbb := newDBBuild(b)
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE builds AS b
-		SET steps = ?, job = ?, status = ?, error = ?, started_at = ?, duration = ?
+		SET steps = ?, job = ?, status = ?, error = ?, started_at = ?, duration = ?, version_id = ?, resource_canonical = ?
 		FROM (
 			SELECT b.id
 			FROM builds AS b
@@ -277,7 +283,7 @@ func (r *BuildRepository) Update(ctx context.Context, tc, pn, jn string, buildNu
 			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ? AND b.build_number = ?
 		) AS bb
 		WHERE bb.id = b.id
-	`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, tc, pn, jn, buildNumber)
+	`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, dbb.VersionID, dbb.ResourceCanonical, tc, pn, jn, buildNumber)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -454,6 +460,65 @@ func (r *BuildRepository) CountRunning(ctx context.Context, tc, pn, jn string) (
 	return count, nil
 }
 
+func (r *BuildRepository) FindByID(ctx context.Context, buildID uint32) (*build.Build, error) {
+	row := r.querier.QueryRowContext(ctx, `
+		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical
+		FROM builds AS b
+		WHERE b.id = ?
+	`, buildID)
+
+	b, err := scanBuild(row)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find build by ID: %w", err)
+	}
+	return b, nil
+}
+
+func (r *BuildRepository) FindOldestPending(ctx context.Context, tc, pn, jn string) (*build.Build, error) {
+	row := r.querier.QueryRowContext(ctx, `
+		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical
+		FROM builds AS b
+		JOIN jobs AS j
+			ON b.job_id = j.id
+		JOIN pipelines AS p
+			ON j.pipeline_id = p.id
+		JOIN teams AS t
+			ON p.team_id = t.id
+		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ? AND b.status = 'pending'
+		ORDER BY b.id ASC
+		LIMIT 1
+	`, tc, pn, jn)
+
+	b, err := scanBuild(row)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to find oldest pending build: %w", err)
+	}
+	return b, nil
+}
+
+func (r *BuildRepository) StartPending(ctx context.Context, tc, pn, jn string, buildID uint32) error {
+	now := time.Now().Round(0)
+	res, err := r.querier.ExecContext(ctx, `
+		UPDATE builds
+		SET status = 'started', started_at = ?
+		WHERE id = ? AND status = 'pending'
+	`, now, buildID)
+	if err != nil {
+		return fmt.Errorf("failed to start pending build: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check affected rows: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("build %d is not in pending status: %w", buildID, build.ErrNotPending)
+	}
+	return nil
+}
+
 func scanBuild(s sqlr.Scanner) (*build.Build, error) {
 	var b dbBuild
 
@@ -466,6 +531,8 @@ func scanBuild(s sqlr.Scanner) (*build.Build, error) {
 		&b.Error,
 		&b.StartedAt,
 		&b.Duration,
+		&b.VersionID,
+		&b.ResourceCanonical,
 	)
 
 	if err != nil {
