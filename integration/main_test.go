@@ -66,7 +66,7 @@ func runTests(m *testing.M) int {
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 	var svc = pikoci.New(ctx, topic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
 	svc.StartScheduler(ctx)
-	var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"))
+	var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.Mem)
 	server := httptest.NewServer(handler)
 	pikoURL = server.URL
 	defer server.Close()

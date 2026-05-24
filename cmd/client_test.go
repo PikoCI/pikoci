@@ -23,7 +23,7 @@ func TestCommandTree(t *testing.T) {
 		parentName  string
 		subcommands []string
 	}{
-		{clientCmd, "client", []string{"login", "pipelines", "jobs", "users", "teams", "builds", "resources", "triggers"}},
+		{clientCmd, "client", []string{"login", "pipelines", "jobs", "users", "teams", "builds", "resources", "triggers", "export"}},
 		{usersCmd, "users", []string{"create", "list", "update", "delete", "change-password"}},
 		{teamsCmd, "teams", []string{"create", "list", "get", "update", "delete", "members"}},
 		{teamsMembersCmd, "members", []string{"create", "update", "delete"}},
@@ -69,6 +69,7 @@ func TestRequiredFlags(t *testing.T) {
 		{"resources webhook-regenerate", resourcesWebhookRegenerateCmd, []string{"resource-canonical"}},
 		{"triggers create", triggersCreateCmd, []string{"name", "version"}},
 		{"triggers list", triggersListCmd, []string{"name"}},
+		{"export", exportCmd, []string{"output"}},
 	}
 
 	for _, tt := range tests {

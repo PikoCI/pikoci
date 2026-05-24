@@ -65,6 +65,8 @@ var (
 
 		CreateTrigger:     admin,
 		ListTriggersAfter: member,
+
+		ExportDatabase: admin,
 	}
 )
 

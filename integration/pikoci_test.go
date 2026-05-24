@@ -585,6 +585,30 @@ job "gen" {
 				require.Equal(t, 2, len(members))
 			})
 		})
+		t.Run("Export Database Visible", func(t *testing.T) {
+			navLink, err := wd.FindElement(selenium.ByCSSSelector, ".navbar .nav-link")
+			require.NoError(t, err)
+
+			err = navLink.Click()
+			require.NoError(t, err)
+
+			// Admin should see the export database link
+			exportLink, err := wd.FindElement(selenium.ByCSSSelector, "#nav-export-db")
+			require.NoError(t, err, "admin should see export database link")
+
+			txt, err := exportLink.Text()
+			require.NoError(t, err)
+			require.Contains(t, txt, "Export Database")
+
+			// Also verify admin-only Users link is visible
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#nav-users")
+			require.NoError(t, err, "admin should see users link")
+
+			// Close the dropdown by clicking elsewhere
+			logo, err := wd.FindElement(selenium.ByCSSSelector, "#logo")
+			require.NoError(t, err)
+			logo.Click()
+		})
 		t.Run("Logout", func(t *testing.T) {
 			navLink, err := wd.FindElement(selenium.ByCSSSelector, ".navbar .nav-link")
 			require.NoError(t, err)
@@ -619,6 +643,26 @@ job "gen" {
 			require.NoError(t, err)
 
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 5*time.Second)
+		})
+		t.Run("Export Database Not Visible", func(t *testing.T) {
+			navLink, err := wd.FindElement(selenium.ByCSSSelector, ".navbar .nav-link")
+			require.NoError(t, err)
+
+			err = navLink.Click()
+			require.NoError(t, err)
+
+			// Non-admin should NOT see the export database link
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#nav-export-db")
+			require.Error(t, err, "non-admin should not see export database link")
+
+			// Non-admin should NOT see the users link either
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#nav-users")
+			require.Error(t, err, "non-admin should not see users link")
+
+			// Close the dropdown by clicking elsewhere
+			logo, err := wd.FindElement(selenium.ByCSSSelector, "#logo")
+			require.NoError(t, err)
+			logo.Click()
 		})
 		t.Run("Teams", func(t *testing.T) {
 			teams, err := wd.FindElements(selenium.ByCSSSelector, ".piko-team-row")
@@ -903,6 +947,59 @@ job "gen" {
 			// Trigger job button should not be present for public viewers
 			_, err := wd.FindElement(selenium.ByCSSSelector, "#trigger-job")
 			require.Error(t, err, "trigger job button should not be visible on public pipeline view")
+		})
+
+		t.Run("ExportEndpoint_AdminAllowed", func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodGet, pikoURL+"/admin/export", nil)
+			require.NoError(t, err)
+			req.Header.Set("Authorization", "Bearer "+adminJWT)
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			require.Equal(t, http.StatusOK, resp.StatusCode, "admin should be able to export")
+			require.Equal(t, "application/octet-stream", resp.Header.Get("Content-Type"))
+			require.Contains(t, resp.Header.Get("Content-Disposition"), "pikoci.db")
+		})
+
+		t.Run("ExportEndpoint_UnauthenticatedRejected", func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodGet, pikoURL+"/admin/export", nil)
+			require.NoError(t, err)
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode, "unauthenticated should be rejected")
+		})
+
+		t.Run("ExportEndpoint_NonAdminRejected", func(t *testing.T) {
+			// Login as pepito (non-admin) via HTTP
+			pepitoBody, _ := json.Marshal(thttp.UserLoginRequest{
+				Username: "pepito",
+				Password: "pepito",
+			})
+			pepitoReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login.json", bytes.NewReader(pepitoBody))
+			require.NoError(t, err)
+			pepitoResp, err := http.DefaultClient.Do(pepitoReq)
+			require.NoError(t, err)
+			defer pepitoResp.Body.Close()
+			require.Equal(t, http.StatusOK, pepitoResp.StatusCode)
+			var plr thttp.UserLoginResponse
+			json.NewDecoder(pepitoResp.Body).Decode(&plr)
+			require.Empty(t, plr.Err)
+			pepitoJWT := plr.Data.JWT
+
+			req, err := http.NewRequest(http.MethodGet, pikoURL+"/admin/export", nil)
+			require.NoError(t, err)
+			req.Header.Set("Authorization", "Bearer "+pepitoJWT)
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode, "non-admin should be rejected")
 		})
 
 		// Log back in as pepito for the RefreshToken test

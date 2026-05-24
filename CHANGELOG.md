@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - User management: Profile page, admin Users page, CLI commands, force password change on default `admin/admin123`, and `--users` flag preserves UI/CLI password changes ([#237](https://github.com/PikoCI/pikoci/issues/237))
 - Pipeline graph zoom, pan, and fullscreen controls: scroll-wheel zoom toward cursor, click-drag pan (including on nodes), zoom buttons, reset, fullscreen overlay with navbar visible, pinch-zoom on mobile, and auto-sizing that prevents small pipelines from appearing oversized ([#338](https://github.com/PikoCI/pikoci/issues/338))
+- Database export: admin-only `GET /admin/export` endpoint, CLI `pikoci client export -o file.db`, and web UI dropdown button to download the full database as a portable SQLite file ([#275](https://github.com/PikoCI/pikoci/issues/275))
 
 ### Changed
 

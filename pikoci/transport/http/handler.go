@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -32,7 +33,7 @@ var publicFallbackRoutes = map[RouteName]bool{
 	ListResourceVersions: true,
 }
 
-func Handler(s pikoci.Service, ts []byte, l *slog.Logger) http.Handler {
+func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem string) http.Handler {
 	r := mux.NewRouter()
 
 	auth := func(h http.Handler) http.Handler {
@@ -245,6 +246,11 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger) http.Handler {
 			fmt.Fprintf(w, `{"error": "Path not found"}`)
 		},
 	)
+
+	// Binary API routes (authenticated, no JSON content-type requirement)
+	binApi := r.PathPrefix("/").Subrouter()
+	binApi.Use(auth)
+	binApi.Methods(http.MethodGet).Path("/admin/export").Name(ExportDatabase.String()).Handler(exportDatabase(db, dbSystem))
 
 	r.PathPrefix("/css/").Handler(http.FileServer(http.FS(assets.Assets)))
 	r.PathPrefix("/js/").Handler(http.FileServer(http.FS(assets.Assets)))
