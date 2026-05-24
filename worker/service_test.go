@@ -21,6 +21,7 @@ import (
 	"github.com/xescugc/pikoci/pikoci/restype"
 	"github.com/xescugc/pikoci/pikoci/runner"
 	"github.com/xescugc/pikoci/pikoci/sectype"
+	"github.com/xescugc/pikoci/pikoci/trigger"
 	"github.com/xescugc/pikoci/pikoci/utils"
 	"go.uber.org/mock/gomock"
 	"gocloud.dev/pubsub"
@@ -590,7 +591,7 @@ func TestProcessJob_NoDownstreamTrigger(t *testing.T) {
 
 func TestProcessResourceCheck_NewVersions(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -643,23 +644,15 @@ func TestProcessResourceCheck_NewVersions(t *testing.T) {
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", gomock.Any()).
 		Return(&resource.Version{ID: 1, Version: map[string]interface{}{"date": "now"}}, nil)
 
-	// Should trigger the job that depends on this resource
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, "test-job", body.JobName)
-		assert.Equal(t, "cron.my-cron", body.ResourceCanonical)
-		assert.Equal(t, uint32(1), body.VersionID)
-		return nil
-	})
+	// First check: versions are stored but NO jobs should be triggered
+	// (topic.Send is NOT expected)
 
 	w.processResourceCheck(ctx, m, cwd, pp)
 }
 
-func TestProcessResourceCheck_DuplicateVersionSkipped_NewVersionTriggered(t *testing.T) {
+func TestProcessResourceCheck_DuplicateVersionSkipped_FirstCheckNoTrigger(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -723,25 +716,195 @@ func TestProcessResourceCheck_DuplicateVersionSkipped_NewVersionTriggered(t *tes
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.my-repo", gomock.Any()).
 		Return(&resource.Version{ID: 2, Version: map[string]interface{}{"ref": "new"}}, nil)
 
-	// Should trigger both jobs for the new version only
+	// First check: NO jobs should be triggered even for new versions
+	// (topic.Send is NOT expected)
+
+	w.processResourceCheck(ctx, m, cwd, pp)
+}
+
+func TestProcessResourceCheck_SecondCheckTriggers(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, topic := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		ResourceCanonical: "cron.my-cron",
+	}
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "test-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get:  &job.GetStep{Type: "cron", Name: "my-cron", Trigger: true},
+					},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Name: "my-cron", Type: "cron", Canonical: "cron.my-cron"},
+		},
+		ResourceTypes: []restype.ResourceType{
+			{
+				ID: 1, Name: "cron",
+				Check: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"-ec", `printf "[{\"date\":\"now2\"}]\n"`},
+					Params: map[string]string{
+						"path": "/bin/sh",
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	// Not a first check: existing versions present
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron").
+		Return([]*resource.Version{
+			{ID: 1, Version: map[string]interface{}{"date": "now"}},
+		}, nil).AnyTimes()
+
+	// CreateResourceVersion for the new version
+	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", gomock.Any()).
+		Return(&resource.Version{ID: 2, Version: map[string]interface{}{"date": "now2"}}, nil)
+
+	// Second check: jobs SHOULD be triggered
 	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
 		var body queue.Body
 		err := json.Unmarshal(msg.Body, &body)
 		require.NoError(t, err)
-		assert.Equal(t, "lint", body.JobName)
-		assert.Equal(t, uint32(2), body.VersionID)
-		return nil
-	})
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, "test", body.JobName)
+		assert.Equal(t, "test-job", body.JobName)
+		assert.Equal(t, "cron.my-cron", body.ResourceCanonical)
 		assert.Equal(t, uint32(2), body.VersionID)
 		return nil
 	})
 
 	w.processResourceCheck(ctx, m, cwd, pp)
+}
+
+func TestProcessResourceCheckTrigger_FirstCheckNoTrigger(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		ResourceCanonical: "trigger.my-trigger",
+	}
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "deploy",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get:  &job.GetStep{Type: "trigger", Name: "my-trigger", Trigger: true},
+					},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Name: "my-trigger", Type: "trigger", Canonical: "trigger.my-trigger"},
+		},
+		ResourceTypes: []restype.ResourceType{
+			{ID: 1, Name: "trigger", Source: "pikoci://trigger"},
+		},
+	}
+
+	// No existing versions — first check
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "trigger.my-trigger").
+		Return([]*resource.Version{}, nil).AnyTimes()
+
+	// Triggers exist
+	svc.EXPECT().ListTriggersAfter(gomock.Any(), m.TeamCanonical, "trigger.my-trigger", uint32(0)).
+		Return([]*trigger.Trigger{
+			{ID: 1, Version: map[string]interface{}{"key": "val"}},
+		}, nil)
+
+	// CreateResourceVersion succeeds
+	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "trigger.my-trigger", gomock.Any()).
+		Return(&resource.Version{ID: 1, Version: map[string]interface{}{"key": "val", "trigger_id": float64(1)}}, nil)
+
+	// First check: NO jobs should be triggered (topic.Send is NOT expected)
+
+	w.processResourceCheck(ctx, m, "", pp)
+}
+
+func TestProcessResourceCheckTrigger_SecondCheckTriggers(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, topic := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		ResourceCanonical: "trigger.my-trigger",
+	}
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "deploy",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get:  &job.GetStep{Type: "trigger", Name: "my-trigger", Trigger: true},
+					},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Name: "my-trigger", Type: "trigger", Canonical: "trigger.my-trigger"},
+		},
+		ResourceTypes: []restype.ResourceType{
+			{ID: 1, Name: "trigger", Source: "pikoci://trigger"},
+		},
+	}
+
+	// Existing versions present — not a first check
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "trigger.my-trigger").
+		Return([]*resource.Version{
+			{ID: 1, Version: map[string]interface{}{"key": "old", "trigger_id": float64(1)}},
+		}, nil)
+
+	// New trigger after the existing one
+	svc.EXPECT().ListTriggersAfter(gomock.Any(), m.TeamCanonical, "trigger.my-trigger", uint32(1)).
+		Return([]*trigger.Trigger{
+			{ID: 2, Version: map[string]interface{}{"key": "new"}},
+		}, nil)
+
+	// CreateResourceVersion succeeds
+	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "trigger.my-trigger", gomock.Any()).
+		Return(&resource.Version{ID: 2, Version: map[string]interface{}{"key": "new", "trigger_id": float64(2)}}, nil)
+
+	// Second check: jobs SHOULD be triggered
+	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, "deploy", body.JobName)
+		assert.Equal(t, "trigger.my-trigger", body.ResourceCanonical)
+		assert.Equal(t, uint32(2), body.VersionID)
+		return nil
+	})
+
+	w.processResourceCheck(ctx, m, "", pp)
 }
 
 func TestCheckPassedConstraints_AllPassed(t *testing.T) {
@@ -1909,13 +2072,15 @@ func TestProcessResourceCheck_WithSecretVars(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
-	// No existing versions
+	// Existing versions present — not a first check
 	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.repo").
-		Return([]*resource.Version{}, nil).AnyTimes()
+		Return([]*resource.Version{
+			{ID: 1, Version: map[string]interface{}{"ref": "old"}},
+		}, nil).AnyTimes()
 
 	// CreateResourceVersion for the new version found
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.repo", gomock.Any()).
-		Return(&resource.Version{ID: 1, Version: map[string]interface{}{"ref": "abc123"}}, nil)
+		Return(&resource.Version{ID: 2, Version: map[string]interface{}{"ref": "abc123"}}, nil)
 
 	// Trigger the job
 	topic.EXPECT().Send(gomock.Any(), gomock.Any()).Return(nil)
@@ -2213,10 +2378,13 @@ func TestProcessResourceCheck_RawSecretFormat(t *testing.T) {
 	}
 	cwd := t.TempDir()
 
+	// Existing versions present — not a first check
 	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.timer").
-		Return([]*resource.Version{}, nil)
+		Return([]*resource.Version{
+			{ID: 1, Version: map[string]interface{}{"date": "old"}},
+		}, nil)
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.timer", gomock.Any()).
-		Return(&resource.Version{ID: 1, Version: map[string]interface{}{"date": "now"}}, nil)
+		Return(&resource.Version{ID: 2, Version: map[string]interface{}{"date": "now"}}, nil)
 	topic.EXPECT().Send(gomock.Any(), gomock.Any()).Return(nil)
 
 	w.processResourceCheck(ctx, m, cwd, pp)
