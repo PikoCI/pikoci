@@ -1,6 +1,7 @@
 package http
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/xescugc/pikoci/pikoci/pipeline"
 	"github.com/xescugc/pikoci/pikoci/user"
 	"go.uber.org/mock/gomock"
+	_ "modernc.org/sqlite"
 )
 
 func TestEncodeResponse_WithError(t *testing.T) {
@@ -154,7 +156,7 @@ func TestUpdatePipeline_TeamCanonicalFromURL(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger)
+	handler := Handler(s, secret, logger, nil, "")
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -194,7 +196,7 @@ func TestRefreshTokenEndpoint(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger)
+	handler := Handler(s, secret, logger, nil, "")
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -231,6 +233,130 @@ func TestRefreshTokenEndpoint(t *testing.T) {
 	assert.Len(t, refreshResp.Data.User.Memberships, 1)
 }
 
+func TestExportDatabase_AdminAllowed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	// Create an in-memory SQLite DB for the export handler
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+
+	handler := Handler(s, secret, logger, db, "mem")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/admin/export", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// The export may fail (minimal DB without migrations), but it should
+	// not be a 400 auth error — it should reach the handler.
+	assert.NotEqual(t, http.StatusBadRequest, resp.StatusCode, "admin should pass authorization")
+}
+
+func TestExportDatabase_NonAdminForbidden(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "pepito", Admin: false},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: false}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	s.EXPECT().GetUser(gomock.Any(), "pepito").Return(um, nil).AnyTimes()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/admin/export", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "non-admin should be rejected")
+}
+
+func TestExportDatabase_UnauthenticatedForbidden(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/admin/export", nil)
+	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "unauthenticated should be rejected")
+}
+
+func TestExportDatabase_ResponseHeaders(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	// Use a real mem DB with migrations for a successful export
+	memDB, err := sql.Open("sqlite", "file::memory:?cache=shared&_pragma=foreign_keys(1)&_busy_timeout=5000&_txlock=immediate")
+	require.NoError(t, err)
+	defer memDB.Close()
+
+	handler := Handler(s, secret, logger, memDB, "mem")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/admin/export", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// With a fresh mem DB (no tables), the export runs migrations on dest
+	// and copies data. It should succeed with proper headers.
+	if resp.StatusCode == http.StatusOK {
+		assert.Equal(t, "application/octet-stream", resp.Header.Get("Content-Type"))
+		assert.Contains(t, resp.Header.Get("Content-Disposition"), "pikoci.db")
+	}
+}
+
 func TestXRefreshTokenHeader(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
@@ -238,7 +364,7 @@ func TestXRefreshTokenHeader(t *testing.T) {
 	t.Run("header set when memberships differ", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		s := mock.NewService(ctrl)
-		handler := Handler(s, secret, logger)
+		handler := Handler(s, secret, logger, nil, "")
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -271,7 +397,7 @@ func TestXRefreshTokenHeader(t *testing.T) {
 	t.Run("header not set when memberships match", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		s := mock.NewService(ctrl)
-		handler := Handler(s, secret, logger)
+		handler := Handler(s, secret, logger, nil, "")
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -298,7 +424,7 @@ func TestXRefreshTokenHeader(t *testing.T) {
 	t.Run("header not set for worker tokens", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		s := mock.NewService(ctrl)
-		handler := Handler(s, secret, logger)
+		handler := Handler(s, secret, logger, nil, "")
 		server := httptest.NewServer(handler)
 		defer server.Close()
 

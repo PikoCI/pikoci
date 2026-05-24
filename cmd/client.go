@@ -64,6 +64,7 @@ func init() {
 	clientCmd.AddCommand(buildsCmd)
 	clientCmd.AddCommand(resourcesCmd)
 	clientCmd.AddCommand(triggersCmd)
+	clientCmd.AddCommand(exportCmd)
 }
 
 // login
@@ -1362,4 +1363,33 @@ func init() {
 	triggersListCmd.Flags().String("name", "", "Name of the Trigger")
 	triggersListCmd.Flags().Uint32("after", 0, "List triggers after this ID")
 	triggersListCmd.MarkFlagRequired("name")
+}
+
+// export
+var exportCmd = &cobra.Command{
+	Use:   "export",
+	Short: "Export the database to a SQLite file",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url, _ := cmd.Flags().GetString("url")
+		jwt, _ := cmd.Flags().GetString("jwt")
+		output, _ := cmd.Flags().GetString("output")
+
+		c, err := newClientWithConfig(url, jwt)
+		if err != nil {
+			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
+		}
+
+		err = c.ExportDatabase(cmd.Context(), output)
+		if err != nil {
+			return fmt.Errorf("failed to export database: %w", err)
+		}
+
+		fmt.Printf("Database exported to %s\n", output)
+		return nil
+	},
+}
+
+func init() {
+	exportCmd.Flags().StringP("output", "o", "", "Output file path for the SQLite export")
+	exportCmd.MarkFlagRequired("output")
 }

@@ -60,4 +60,6 @@ const (
 
 	CreateTrigger
 	ListTriggersAfter
+
+	ExportDatabase
 )

@@ -690,6 +690,47 @@ func TestListTriggersAfter(t *testing.T) {
 	assert.Equal(t, uint32(6), triggers[0].ID)
 }
 
+func TestExportDatabase(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/admin/export", func(w http.ResponseWriter, req *http.Request) {
+		assert.Equal(t, "Bearer jwt", req.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="pikoci.db"`)
+		w.Write([]byte("fake-sqlite-data"))
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	outputPath := filepath.Join(t.TempDir(), "export.db")
+	err = c.ExportDatabase(context.Background(), outputPath)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(outputPath)
+	require.NoError(t, err)
+	assert.Equal(t, "fake-sqlite-data", string(data))
+}
+
+func TestExportDatabase_Error(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/admin/export", func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte("needs to be admin"))
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	outputPath := filepath.Join(t.TempDir(), "export.db")
+	err = c.ExportDatabase(context.Background(), outputPath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "403")
+}
+
 func TestRequestError(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/teams", func(w http.ResponseWriter, req *http.Request) {

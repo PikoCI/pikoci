@@ -64,6 +64,7 @@
                   <li><a class="dropdown-item" id="nav-profile" href="/profile"><i class="bi bi-person"></i> Profile</a></li>
                   <% if (session.user.admin) { %>
                     <li><a class="dropdown-item" id="nav-users" href="/users"><i class="bi bi-people"></i> Users <span class="badge bg-secondary ms-1">Admin</span></a></li>
+                    <li><a class="dropdown-item" id="nav-export-db" href="#" onclick="event.preventDefault(); exportDatabase();"><i class="bi bi-download"></i> Export Database <span class="badge bg-secondary ms-1">Admin</span></a></li>
                   <% } %>
                   <li><hr class="dropdown-divider"></li>
                   <li><a class="dropdown-item" id="logout" href="/logout"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
@@ -773,6 +774,32 @@
             t.classList.remove('on');
           }
         }
+      }
+
+      function exportDatabase() {
+        var jwt = app.session ? app.session.get('jwt') : '';
+        if (!jwt) { app.apiNotice.set({error: 'Not authenticated'}); return; }
+        fetch('/admin/export', {
+          headers: { 'Authorization': 'Bearer ' + jwt }
+        }).then(function(resp) {
+          if (!resp.ok) {
+            return resp.text().then(function(body) {
+              throw new Error(body || resp.statusText);
+            });
+          }
+          return resp.blob();
+        }).then(function(blob) {
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = 'pikoci.db';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }).catch(function(err) {
+          app.apiNotice.set({error: err.message});
+        });
       }
 
       var app = {};
