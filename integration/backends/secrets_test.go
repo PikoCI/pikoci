@@ -133,7 +133,7 @@ job "deploy" {
 		assert.Len(t, pp.SecretTypes, 1)
 		assert.Equal(t, "mock-vault", pp.SecretTypes[0].Name)
 
-		// Seed a version so the trigger is not a first check
+		// Seed a version so the next check creates a second version
 		_, err = svc.CreateResourceVersion(ctx, "main", "secrets-e2e", "cron.timer", resource.Version{
 			Version: map[string]interface{}{"date": "seed"},
 		})
@@ -230,7 +230,7 @@ job "deploy" {
 		assert.Equal(t, "my-file", pp.SecretTypes[0].Name)
 		assert.Equal(t, "pikoci://file", pp.SecretTypes[0].Source)
 
-		// Seed a version so the trigger is not a first check
+		// Seed a version so the next check creates a second version
 		_, err = svc.CreateResourceVersion(ctx, "main", "secrets-file-e2e", "cron.timer", resource.Version{
 			Version: map[string]interface{}{"date": "seed"},
 		})
@@ -344,7 +344,7 @@ job "deploy" {
 		assert.Equal(t, "env-file", pp.SecretTypes[0].Name)
 		assert.Equal(t, "pikoci://file", pp.SecretTypes[0].Source)
 
-		// Seed a version so the trigger is not a first check
+		// Seed a version so the next check creates a second version
 		_, err = svc.CreateResourceVersion(ctx, "main", "secrets-env-file-e2e", "cron.timer", resource.Version{
 			Version: map[string]interface{}{"date": "seed"},
 		})

@@ -615,7 +615,7 @@ func TestProcessJob_NoDownstreamTrigger(t *testing.T) {
 
 func TestProcessResourceCheck_NewVersions(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc, topic := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -668,15 +668,23 @@ func TestProcessResourceCheck_NewVersions(t *testing.T) {
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", gomock.Any()).
 		Return(&resource.Version{ID: 1, Version: map[string]interface{}{"date": "now"}}, nil)
 
-	// First check: versions are stored but NO jobs should be triggered
-	// (topic.Send is NOT expected)
+	// First check: jobs should be triggered
+	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, "test-job", body.JobName)
+		assert.Equal(t, "cron.my-cron", body.ResourceCanonical)
+		assert.Equal(t, uint32(1), body.VersionID)
+		return nil
+	})
 
 	w.processResourceCheck(ctx, m, cwd, pp)
 }
 
-func TestProcessResourceCheck_DuplicateVersionSkipped_FirstCheckNoTrigger(t *testing.T) {
+func TestProcessResourceCheck_DuplicateVersionSkipped_FirstCheck(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc, topic := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -740,8 +748,15 @@ func TestProcessResourceCheck_DuplicateVersionSkipped_FirstCheckNoTrigger(t *tes
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.my-repo", gomock.Any()).
 		Return(&resource.Version{ID: 2, Version: map[string]interface{}{"ref": "new"}}, nil)
 
-	// First check: NO jobs should be triggered even for new versions
-	// (topic.Send is NOT expected)
+	// First check: jobs should be triggered for the non-duplicate version
+	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, "git.my-repo", body.ResourceCanonical)
+		assert.Equal(t, uint32(2), body.VersionID)
+		return nil
+	}).Times(2) // Two jobs: lint and test
 
 	w.processResourceCheck(ctx, m, cwd, pp)
 }
@@ -816,9 +831,9 @@ func TestProcessResourceCheck_SecondCheckTriggers(t *testing.T) {
 	w.processResourceCheck(ctx, m, cwd, pp)
 }
 
-func TestProcessResourceCheckTrigger_FirstCheckNoTrigger(t *testing.T) {
+func TestProcessResourceCheckTrigger_FirstCheckTriggers(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc, topic := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -863,7 +878,16 @@ func TestProcessResourceCheckTrigger_FirstCheckNoTrigger(t *testing.T) {
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "trigger.my-trigger", gomock.Any()).
 		Return(&resource.Version{ID: 1, Version: map[string]interface{}{"key": "val", "trigger_id": float64(1)}}, nil)
 
-	// First check: NO jobs should be triggered (topic.Send is NOT expected)
+	// First check: jobs should be triggered
+	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, "deploy", body.JobName)
+		assert.Equal(t, "trigger.my-trigger", body.ResourceCanonical)
+		assert.Equal(t, uint32(1), body.VersionID)
+		return nil
+	})
 
 	w.processResourceCheck(ctx, m, "", pp)
 }

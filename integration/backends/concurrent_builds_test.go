@@ -138,8 +138,7 @@ job "job-c" {
 	require.NoError(t, err)
 	require.NotNil(t, pp)
 
-	// Seed a version so the trigger is not a first check (first checks store
-	// versions without triggering builds).
+	// Seed a version so the next check creates a second version.
 	_, err = svc.CreateResourceVersion(ctx, "main", "concurrent-test", "cron.trigger", resource.Version{
 		Version: map[string]interface{}{"date": "seed"},
 	})
