@@ -1419,7 +1419,10 @@ func (w *Worker) pollForCancellation(apiCtx, jobCtx context.Context, cancel cont
 
 // updateBuild persists the current build state to the DB.
 func (w *Worker) updateBuild(ctx context.Context, m queue.Body, b build.Build) error {
-	err := w.pikoci.UpdateJobBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b)
+	// Use a detached context so the DB update succeeds even if the job
+	// context was cancelled (e.g. user-initiated cancellation).
+	dbCtx := context.WithoutCancel(ctx)
+	err := w.pikoci.UpdateJobBuild(dbCtx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b)
 	if err != nil {
 		w.logger.Error("failed update build", "pipeline", m.PipelineCanonical, "job", m.JobName, "error", err)
 	}
@@ -1432,7 +1435,10 @@ func (w *Worker) failBuild(ctx context.Context, m queue.Body, b build.Build, err
 		b.Error = err.Error()
 		w.logger.Error(err.Error())
 	}
-	if uerr := w.pikoci.UpdateJobBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b); uerr != nil {
+	// Use a detached context so the DB update succeeds even if the job
+	// context was cancelled (e.g. user-initiated cancellation).
+	dbCtx := context.WithoutCancel(ctx)
+	if uerr := w.pikoci.UpdateJobBuild(dbCtx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b); uerr != nil {
 		w.logger.Error("failed update build", "pipeline", m.PipelineCanonical, "job", m.JobName, "error", uerr)
 	}
 }
