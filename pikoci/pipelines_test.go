@@ -1549,6 +1549,23 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 			wantFillColor:   colorFailed,
 			wantDashedStyle: true,
 		},
+		{
+			name: "pending build with previous success - shows previous color with dashed outline",
+			builds: []*build.Build{
+				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
+				{ID: 2, BuildNumber: "2", Status: build.Pending},
+			},
+			wantFillColor:   colorSucceeded,
+			wantDashedStyle: true,
+		},
+		{
+			name: "only build is pending - default color with dashed outline",
+			builds: []*build.Build{
+				{ID: 1, BuildNumber: "1", Status: build.Pending},
+			},
+			wantFillColor:   colorDefault,
+			wantDashedStyle: true,
+		},
 	}
 
 	for _, tt := range tests {

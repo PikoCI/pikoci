@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Follow button: fix race conditions between auto-scroll and scroll listeners, target running step in multi-step builds, and improve visual feedback with "Following"/"Follow" text and solid/outline styles ([#343](https://github.com/PikoCI/pikoci/issues/343))
+- Pending builds showing gray on pipeline graph instead of previous build's color with dashed border
 - Concurrency re-queuing infinite loop: builds are now created as Pending at trigger time and transitioned to Started atomically by workers, eliminating duplicate build creation from re-queued messages ([#358](https://github.com/PikoCI/pikoci/issues/358), [#246](https://github.com/PikoCI/pikoci/issues/246))
 - Resource "Last checked" showing raw duration (e.g., "739760d ago") instead of "never" for resources that have never been checked ([#367](https://github.com/PikoCI/pikoci/issues/367))
 
