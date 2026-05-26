@@ -1099,7 +1099,6 @@ func (w *Worker) processResourceCheck(ctx context.Context, m queue.Body, cwd str
 		w.logger.Error("failed to list resource versions", "error", err)
 		return
 	}
-	isFirstCheck := len(dbvers) == 0
 	if len(dbvers) != 0 {
 		for k, v := range dbvers[0].Version {
 			params["version_"+k] = fmt.Sprintf("%s", v)
@@ -1183,14 +1182,9 @@ func (w *Worker) processResourceCheck(ctx context.Context, m queue.Body, cwd str
 			w.logger.Error("failed to create resource version", "error", err)
 			return
 		}
-		if isFirstCheck {
-			w.logger.Info("first check, setting cursor without triggering",
-				"pipeline", m.PipelineCanonical, "resource", r.Canonical, "version_id", cv.ID)
-		} else {
-			w.logger.Info("new version created, triggering jobs",
-				"pipeline", m.PipelineCanonical, "resource", r.Canonical, "version_id", cv.ID)
-			w.triggerResourceJobs(ctx, m, pp, r, cv)
-		}
+		w.logger.Info("new version created, triggering jobs",
+			"pipeline", m.PipelineCanonical, "resource", r.Canonical, "version_id", cv.ID)
+		w.triggerResourceJobs(ctx, m, pp, r, cv)
 	}
 }
 
@@ -1204,7 +1198,6 @@ func (w *Worker) processResourceCheckTrigger(ctx context.Context, m queue.Body, 
 		w.logger.Error("failed to list resource versions for trigger check", "error", err)
 		return
 	}
-	isFirstCheck := len(dbvers) == 0
 	if len(dbvers) > 0 {
 		if tid, ok := dbvers[0].Version["trigger_id"]; ok {
 			switch v := tid.(type) {
@@ -1242,14 +1235,9 @@ func (w *Worker) processResourceCheckTrigger(ctx context.Context, m queue.Body, 
 			w.logger.Error("failed to create resource version from trigger", "error", err)
 			return
 		}
-		if isFirstCheck {
-			w.logger.Info("first check, setting cursor without triggering",
-				"pipeline", m.PipelineCanonical, "resource", r.Canonical, "trigger_id", t.ID, "version_id", cv.ID)
-		} else {
-			w.logger.Info("trigger version created, triggering jobs",
-				"pipeline", m.PipelineCanonical, "resource", r.Canonical, "trigger_id", t.ID, "version_id", cv.ID)
-			w.triggerResourceJobs(ctx, m, pp, r, cv)
-		}
+		w.logger.Info("trigger version created, triggering jobs",
+			"pipeline", m.PipelineCanonical, "resource", r.Canonical, "trigger_id", t.ID, "version_id", cv.ID)
+		w.triggerResourceJobs(ctx, m, pp, r, cv)
 	}
 }
 

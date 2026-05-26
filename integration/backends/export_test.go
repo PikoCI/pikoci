@@ -105,7 +105,7 @@ job "export-job" {
 	require.NoError(t, err)
 	require.NotNil(t, pp)
 
-	// Seed a version so the trigger is not a first check
+	// Seed a version so the next check creates a second version
 	_, err = svc.CreateResourceVersion(ctx, "main", "export-test", "cron.trigger", resource.Version{
 		Version: map[string]interface{}{"date": "seed"},
 	})

@@ -18,6 +18,9 @@ resource_type "git" {
       PR="$param_pr"
       TAG="$param_tag"
 
+      # First check: version vars are empty when no previous versions exist.
+      # Return only the latest item to avoid triggering a build per historical entry.
+
       # Tag mode: check for latest tags
       if [ "$TAG" = "true" ]; then
         if [ -z "$TOKEN" ]; then
@@ -25,11 +28,18 @@ resource_type "git" {
           exit 1
         fi
 
+        # On first check return only the latest tag
+        if [ -z "$version_tag" ]; then
+          PER_PAGE=1
+        else
+          PER_PAGE=100
+        fi
+
         # GitHub tags
         if echo "$URL" | grep -q "github.com"; then
           REPO=$(echo "$URL" | sed -E 's|https?://github\.com/||;s|\.git$||')
           curl -sf -H "Authorization: token $TOKEN" \
-            "https://api.github.com/repos/$REPO/tags?per_page=100" \
+            "https://api.github.com/repos/$REPO/tags?per_page=$PER_PAGE" \
             | jq -c '[.[] | {"ref": .commit.sha, "tag": .name}]'
           exit 0
         fi
@@ -38,7 +48,7 @@ resource_type "git" {
         if echo "$URL" | grep -q "gitlab.com"; then
           PROJECT=$(echo "$URL" | sed -E 's|https?://gitlab\.com/||;s|\.git$||' | sed 's|/|%2F|g')
           curl -sf -H "PRIVATE-TOKEN: $TOKEN" \
-            "https://gitlab.com/api/v4/projects/$PROJECT/repository/tags?order_by=updated&sort=desc&per_page=100" \
+            "https://gitlab.com/api/v4/projects/$PROJECT/repository/tags?order_by=updated&sort=desc&per_page=$PER_PAGE" \
             | jq -c '[.[] | {"ref": .commit.id, "tag": .name}]'
           exit 0
         fi
@@ -54,11 +64,18 @@ resource_type "git" {
           exit 1
         fi
 
+        # On first check return only the most recently updated PR
+        if [ -z "$version_pr" ]; then
+          PER_PAGE=1
+        else
+          PER_PAGE=100
+        fi
+
         # GitHub PRs
         if echo "$URL" | grep -q "github.com"; then
           REPO=$(echo "$URL" | sed -E 's|https?://github\.com/||;s|\.git$||')
           curl -sf -H "Authorization: token $TOKEN" \
-            "https://api.github.com/repos/$REPO/pulls?state=open&sort=updated&direction=desc&per_page=100" \
+            "https://api.github.com/repos/$REPO/pulls?state=open&sort=updated&direction=desc&per_page=$PER_PAGE" \
             | jq -c '[.[] | {"ref": .head.sha, "pr": (.number | tostring)}]'
           exit 0
         fi
@@ -67,7 +84,7 @@ resource_type "git" {
         if echo "$URL" | grep -q "gitlab.com"; then
           PROJECT=$(echo "$URL" | sed -E 's|https?://gitlab\.com/||;s|\.git$||' | sed 's|/|%2F|g')
           curl -sf -H "PRIVATE-TOKEN: $TOKEN" \
-            "https://gitlab.com/api/v4/projects/$PROJECT/merge_requests?state=opened&order_by=updated_at&sort=desc&per_page=100" \
+            "https://gitlab.com/api/v4/projects/$PROJECT/merge_requests?state=opened&order_by=updated_at&sort=desc&per_page=$PER_PAGE" \
             | jq -c '[.[] | {"ref": .sha, "pr": (.iid | tostring)}]'
           exit 0
         fi

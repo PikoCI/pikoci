@@ -44,6 +44,8 @@ All three operations are optional. A resource type that only defines `push` can 
 [{"ref": "abc123"}, {"ref": "def456"}]
 ```
 
+> **First check convention:** When no previous version exists, the `check` command should return only the **current/latest** version (a single-element array). PikoCI triggers builds for all versions returned, including the first check. Returning a large list of historical versions (e.g. all git tags) on the first check will create a build for each one. Resource types should be designed to return only what is new.
+
 **pull** fetches a specific version into the working directory. The version fields are available as `$version_<key>` environment variables.
 
 **push** publishes to the resource. Used when a job has a `put` step.

@@ -126,7 +126,7 @@ job "use-service" {
 		require.NoError(t, err)
 		require.NotNil(t, pp)
 
-		// Seed a version so the trigger is not a first check
+		// Seed a version so the next check creates a second version
 		_, err = svc.CreateResourceVersion(ctx, "main", "svc-start-stop-e2e", "cron.timer", resource.Version{
 			Version: map[string]interface{}{"date": "seed"},
 		})
@@ -219,7 +219,7 @@ job "use-slow-service" {
 		_, err := svc.CreatePipeline(ctx, "main", "svc-timeout-e2e", hclConfig, nil)
 		require.NoError(t, err)
 
-		// Seed a version so the trigger is not a first check
+		// Seed a version so the next check creates a second version
 		_, err = svc.CreateResourceVersion(ctx, "main", "svc-timeout-e2e", "cron.timer", resource.Version{
 			Version: map[string]interface{}{"date": "seed"},
 		})
@@ -314,7 +314,7 @@ job "use-param-service" {
 		_, err := svc.CreatePipeline(ctx, "main", "svc-params-e2e", hclConfig, nil)
 		require.NoError(t, err)
 
-		// Seed a version so the trigger is not a first check
+		// Seed a version so the next check creates a second version
 		_, err = svc.CreateResourceVersion(ctx, "main", "svc-params-e2e", "cron.timer", resource.Version{
 			Version: map[string]interface{}{"date": "seed"},
 		})
@@ -393,7 +393,7 @@ job "will-fail" {
 		_, err := svc.CreatePipeline(ctx, "main", "svc-stop-fail-e2e", hclConfig, nil)
 		require.NoError(t, err)
 
-		// Seed a version so the trigger is not a first check
+		// Seed a version so the next check creates a second version
 		_, err = svc.CreateResourceVersion(ctx, "main", "svc-stop-fail-e2e", "cron.timer", resource.Version{
 			Version: map[string]interface{}{"date": "seed"},
 		})
