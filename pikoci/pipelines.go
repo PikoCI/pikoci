@@ -500,7 +500,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		// Find the latest main build number first
 		var latestMain string
 		for _, b := range builds {
-			if b.Status == build.Started && rb == nil {
+			if (b.Status == build.Started || b.Status == build.Pending) && rb == nil {
 				rb = b
 			}
 			if !strings.Contains(b.BuildNumber, ".") && latestMain == "" {
@@ -511,7 +511,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		if latestMain != "" {
 			for _, b := range builds {
 				if b.BuildNumber == latestMain || strings.HasPrefix(b.BuildNumber, latestMain+".") {
-					if b.Status != build.Started {
+					if b.Status != build.Started && b.Status != build.Pending {
 						cb = b
 						break
 					}
@@ -520,7 +520,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 			// If all builds in the group are running, fall back to previous main build
 			if cb == nil {
 				for _, b := range builds {
-					if b.Status != build.Started && !strings.Contains(b.BuildNumber, ".") && b.BuildNumber != latestMain {
+					if b.Status != build.Started && b.Status != build.Pending && !strings.Contains(b.BuildNumber, ".") && b.BuildNumber != latestMain {
 						cb = b
 						break
 					}
