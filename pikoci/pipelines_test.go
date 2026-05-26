@@ -1472,12 +1472,14 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 	colorFailed := `"#FF004D"`
 	colorDefault := `"#83769C"`
 	colorStartedBorder := `"#CC8200"`
+	colorDefaultBorder := `"#5F574F"`
 
 	tests := []struct {
 		name            string
 		builds          []*build.Build
 		wantFillColor   string
 		wantDashedStyle bool
+		wantBorderColor string
 	}{
 		{
 			name:            "no builds - default color, no outline",
@@ -1511,6 +1513,7 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 			},
 			wantFillColor:   colorSucceeded,
 			wantDashedStyle: true,
+			wantBorderColor: colorStartedBorder,
 		},
 		{
 			name: "retry running - latest main build color with dashed outline",
@@ -1520,6 +1523,7 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 			},
 			wantFillColor:   colorFailed,
 			wantDashedStyle: true,
+			wantBorderColor: colorStartedBorder,
 		},
 		{
 			name: "retry succeeded - color reflects retry success",
@@ -1537,6 +1541,7 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 			},
 			wantFillColor:   colorDefault,
 			wantDashedStyle: true,
+			wantBorderColor: colorStartedBorder,
 		},
 		{
 			name: "multiple main builds with retries - latest main build wins",
@@ -1548,23 +1553,37 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 			},
 			wantFillColor:   colorFailed,
 			wantDashedStyle: true,
+			wantBorderColor: colorStartedBorder,
 		},
 		{
-			name: "pending build with previous success - shows previous color with dashed outline",
+			name: "pending build with previous success - shows previous color with gray dashed outline",
 			builds: []*build.Build{
 				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
 				{ID: 2, BuildNumber: "2", Status: build.Pending},
 			},
 			wantFillColor:   colorSucceeded,
 			wantDashedStyle: true,
+			wantBorderColor: colorDefaultBorder,
 		},
 		{
-			name: "only build is pending - default color with dashed outline",
+			name: "pending and running builds - running takes priority with orange outline",
+			builds: []*build.Build{
+				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
+				{ID: 2, BuildNumber: "2", Status: build.Pending},
+				{ID: 3, BuildNumber: "1.1", Status: build.Started},
+			},
+			wantFillColor:   colorSucceeded,
+			wantDashedStyle: true,
+			wantBorderColor: colorStartedBorder,
+		},
+		{
+			name: "only build is pending - default color with gray dashed outline",
 			builds: []*build.Build{
 				{ID: 1, BuildNumber: "1", Status: build.Pending},
 			},
 			wantFillColor:   colorDefault,
 			wantDashedStyle: true,
+			wantBorderColor: colorDefaultBorder,
 		},
 	}
 
@@ -1589,8 +1608,8 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 
 			// Check dashed outline on the subgraph cluster
 			if tt.wantDashedStyle {
-				assert.Contains(t, dot, fmt.Sprintf("color=%s", colorStartedBorder),
-					"expected running border color on subgraph")
+				assert.Contains(t, dot, fmt.Sprintf("color=%s", tt.wantBorderColor),
+					"expected border color %s on subgraph", tt.wantBorderColor)
 				assert.Contains(t, dot, `style="dashed,bold"`,
 					"expected dashed style on subgraph when build is running")
 			} else {
