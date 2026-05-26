@@ -3365,13 +3365,17 @@
         resetVersions: function() {
           this.$('#resource-versions').empty();
           this.collection.each(function(m) {
-            this.addVersion(m);
+            this.addVersion(m, true);
           }, this);
         },
-        addVersion: function(m) {
+        addVersion: function(m, isReset) {
           var isFirst = $('#resource-versions').children().length === 0
           var ver = new app.ResourceVersionView({model: m, isFirst: isFirst})
-          $('#resource-versions').append(ver.render().el);
+          if (isReset) {
+            $('#resource-versions').append(ver.render().el);
+          } else {
+            $('#resource-versions').prepend(ver.render().el);
+          }
         },
         remove: function() {
           clearInterval(this.intervalID)
