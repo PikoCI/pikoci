@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -3278,6 +3279,103 @@ func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 	// on_failure hook should NOT have run
 	_, err = os.Stat(failureMarker)
 	assert.True(t, os.IsNotExist(err), "on_failure hook should NOT run on cancellation (marker file should not exist)")
+}
+
+func TestProcessJob_Cancellation_NoUpdateLoopAfterCancel(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	topic := mock.NewTopic(ctrl)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	var pendingCallCount int32
+	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _ string) (*build.Build, error) {
+			atomic.AddInt32(&pendingCallCount, 1)
+			if atomic.LoadInt32(&pendingCallCount) == 1 {
+				return &build.Build{ID: 10, BuildNumber: "1", Status: build.Pending}, nil
+			}
+			return nil, nil
+		}).AnyTimes()
+
+	w := &Worker{
+		pikoci:   svc,
+		jobTopic: topic,
+		logger:   logger,
+	}
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "cancel-loop-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "cancel-loop-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "long-task",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"60"},
+								Params: map[string]string{"path": "sleep"},
+							},
+						},
+					},
+				},
+				OnCancel: []job.HookStep{},
+				Ensure:   []job.HookStep{},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 900, BuildNumber: "900", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	// Return Cancelled immediately so the poll triggers cancellation fast
+	svc.EXPECT().GetJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "900").
+		Return(&build.Build{ID: 900, BuildNumber: "900", Status: build.Cancelled}, nil).AnyTimes()
+
+	// Track UpdateJobBuild calls that happen with a cancelled context
+	var cancelledCtxCalls int32
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "900", gomock.Any()).
+		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
+			if ctx.Err() != nil {
+				atomic.AddInt32(&cancelledCtxCalls, 1)
+				return ctx.Err()
+			}
+			return nil
+		}).AnyTimes()
+
+	done := make(chan struct{})
+	go func() {
+		w.processJob(ctx, m, cwd, pp)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("processJob did not finish in time; likely stuck in update loop after cancellation")
+	}
+
+	// No UpdateJobBuild calls should have been made with a cancelled context
+	assert.Equal(t, int32(0), atomic.LoadInt32(&cancelledCtxCalls),
+		"UpdateJobBuild should not be called with a cancelled context")
 }
 
 func TestProcessJob_MissingBuildID(t *testing.T) {
