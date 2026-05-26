@@ -139,7 +139,7 @@ The `docker` runner is built in. It runs commands inside Docker containers:
 ```hcl
 task "test" {
   run "docker" {
-    image = "golang:1.23"
+    image = "golang:1.25"
     cmd   = "make test"
   }
 }
@@ -162,7 +162,7 @@ Use the `args` parameter to pass additional flags to `docker run`:
 ```hcl
 task "test" {
   run "docker" {
-    image = "golang:1.23"
+    image = "golang:1.25"
     cmd   = "make test"
     args  = ["-e", "CI=true", "-e", "FOO=bar"]
   }
@@ -174,7 +174,7 @@ With volumes:
 ```hcl
 task "test" {
   run "docker" {
-    image = "golang:1.23"
+    image = "golang:1.25"
     cmd   = "make test"
     args  = ["-v", "/data:/data"]
   }
@@ -198,7 +198,7 @@ Using HCL functions to build args dynamically:
 ```hcl
 task "test" {
   run "docker" {
-    image = "golang:1.23"
+    image = "golang:1.25"
     cmd   = "make test"
     args  = concat(
       ["-e", "CI=true"],

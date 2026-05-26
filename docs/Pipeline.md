@@ -9,7 +9,7 @@ Declares a pipeline variable. Variables can be referenced as `var.<name>` or `${
 ```hcl
 variable "repo_url" {
   type    = string
-  default = "https://github.com/xescugc/pikoci.git"
+  default = "https://github.com/PikoCI/pikoci.git"
 }
 
 variable "repo_name" {
@@ -348,11 +348,12 @@ An empty body references a top-level `service` block by name. Attributes in the 
 
 ### Step hooks
 
-Each step (and the job itself) can have `on_success`, `on_failure`, and `ensure` blocks:
+Each step (and the job itself) can have `on_success`, `on_failure`, `on_cancel`, and `ensure` blocks:
 
 - `on_success` runs after the step succeeds
 - `on_failure` runs after the step fails
-- `ensure` always runs, regardless of success or failure
+- `on_cancel` runs when the build is cancelled (via UI, CLI, or API)
+- `ensure` always runs, regardless of success, failure, or cancellation
 
 Hooks can contain runner commands or `put` steps:
 
@@ -440,7 +441,7 @@ Using built-in `git` and `docker` (no inline resource_type or runner blocks need
 ```hcl
 variable "repo_url" {
   type    = string
-  default = "https://github.com/xescugc/pikoci.git"
+  default = "https://github.com/PikoCI/pikoci.git"
 }
 
 variable "repo_name" {
@@ -466,7 +467,7 @@ job "test" {
 
   task "run-tests" {
     run "docker" {
-      image = "golang:1.23"
+      image = "golang:1.25"
       cmd   = "cd ${var.repo_name} && make test"
     }
   }

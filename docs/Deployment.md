@@ -22,7 +22,7 @@ PikoCI is now running on port 8080. That's it for a minimal deploy.
 
 This setup runs PikoCI as a bare binary managed by systemd, with supporting services (Caddy, Prometheus, Grafana, Node Exporter) in Docker Compose. This avoids Docker-in-Docker while keeping infrastructure containerized.
 
-All config files are in the [`deploy/`](https://github.com/xescugc/pikoci/tree/master/deploy) directory.
+All config files are in the [`deploy/`](https://github.com/PikoCI/pikoci/tree/master/deploy) directory.
 
 ### 1. Install PikoCI
 
@@ -34,18 +34,18 @@ GOOS=linux GOARCH=amd64 go build -o pikoci .
 scp pikoci root@your-server:/usr/local/bin/pikoci
 
 # Or download a release
-curl -L https://github.com/xescugc/pikoci/releases/latest/download/linux-amd64 -o /usr/local/bin/pikoci
+curl -L https://github.com/PikoCI/pikoci/releases/latest/download/linux-amd64 -o /usr/local/bin/pikoci
 chmod +x /usr/local/bin/pikoci
 ```
 
 Alternatively, use the Docker image:
 
 ```bash
-docker pull xescugc/pikoci:latest
-docker run -p 8080:8080 xescugc/pikoci:latest server --db-system mem --pubsub-system mem --jwt-secret my-secret --run-worker
+docker pull ghcr.io/pikoci/pikoci:latest
+docker run -p 8080:8080 ghcr.io/pikoci/pikoci:latest server --db-system mem --pubsub-system mem --jwt-secret my-secret --run-worker
 ```
 
-The image is based on Alpine and includes git, jq, curl, openssl, and docker-cli. See the [Dockerfile](https://github.com/xescugc/pikoci/blob/master/Dockerfile) for details.
+The image is based on Alpine and includes git, jq, curl, openssl, and docker-cli. See the [Dockerfile](https://github.com/PikoCI/pikoci/blob/master/Dockerfile) for details.
 
 ### 2. Install prerequisites
 

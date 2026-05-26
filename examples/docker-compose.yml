@@ -1,6 +1,6 @@
 services:
   pikoci:
-    image: xescugc/pikoci:latest
+    image: ghcr.io/pikoci/pikoci:latest
     ports:
       - "8080:8080"
     volumes:
