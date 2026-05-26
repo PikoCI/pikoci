@@ -144,7 +144,7 @@ ssh "$SSH_HOST" 'chown pikoci:pikoci /usr/local/bin/pikoci'
 # Creates directories and the pikoci system user on first run.
 
 echo "==> Syncing deploy configs..."
-ssh "$SSH_HOST" 'mkdir -p /opt/pikoci /etc/pikoci /var/lib/pikoci /var/www/pikoci.com && id -u pikoci &>/dev/null || useradd --system --no-create-home pikoci && chown pikoci:pikoci /var/lib/pikoci /var/www/pikoci.com && usermod -aG docker pikoci 2>/dev/null || true'
+ssh "$SSH_HOST" 'mkdir -p /opt/pikoci /etc/pikoci /var/lib/pikoci /var/www/pikoci.com /var/www/docs.pikoci.com && id -u pikoci &>/dev/null || useradd --system --no-create-home pikoci && chown pikoci:pikoci /var/lib/pikoci /var/www/pikoci.com /var/www/docs.pikoci.com && usermod -aG docker pikoci 2>/dev/null || true'
 scp "$DEPLOY_DIR/pikoci.service" "$SSH_HOST":/etc/systemd/system/pikoci.service
 scp "$DEPLOY_DIR/docker-compose.yml" "$SSH_HOST":/opt/pikoci/docker-compose.yml
 scp "$DEPLOY_DIR/Caddyfile" "$SSH_HOST":/opt/pikoci/Caddyfile
@@ -198,6 +198,11 @@ fi
 if ! ssh "$SSH_HOST" 'command -v git &>/dev/null'; then
     echo "==> Installing git on $SSH_HOST..."
     ssh "$SSH_HOST" 'apt-get install -y git || apk add git || dnf install -y git'
+fi
+
+if ! ssh "$SSH_HOST" 'python3 -c "import venv" 2>/dev/null'; then
+    echo "==> Installing python3-venv on $SSH_HOST..."
+    ssh "$SSH_HOST" 'apt-get install -y python3-venv || apk add python3 || dnf install -y python3'
 fi
 
 if ! ssh "$SSH_HOST" 'command -v docker &>/dev/null'; then
