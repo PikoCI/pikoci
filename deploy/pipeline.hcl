@@ -236,17 +236,18 @@ job "deploy-docs" {
     trigger = true
   }
   task "build-and-deploy" {
-    run "docker" {
-      image = "python:3.13-slim"
-      cmd   = <<-EOT
-        pip install --quiet mkdocs-material
+    run "exec" {
+      path = "/bin/sh"
+      args = [
+        "-ec",
+        <<-EOT
         cd ${var.git_name}
-        mkdocs build --clean
+        python3 -m venv .venv
+        .venv/bin/pip install --quiet mkdocs-material
+        .venv/bin/mkdocs build --clean
         mkdir -p /var/www/docs.pikoci.com
         cp -a site/. /var/www/docs.pikoci.com/
-      EOT
-      args = [
-        "-v", "/var/www/docs.pikoci.com:/var/www/docs.pikoci.com",
+        EOT
       ]
     }
   }
