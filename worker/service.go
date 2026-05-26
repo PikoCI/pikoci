@@ -344,7 +344,7 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 
 	if !failed {
 		b.Status = build.Succeeded
-		if err := w.updateBuild(jobCtx, m, b); err != nil {
+		if err := w.updateBuild(ctx, m, b); err != nil {
 			return
 		}
 		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnSuccess, "on_success", resolved, "succeeded")
@@ -1533,7 +1533,12 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 			for {
 				select {
 				case <-ticker.C:
+					if ctx.Err() != nil {
+						return
+					}
 					partialCb(sw.String())
+				case <-ctx.Done():
+					return
 				case <-done:
 					return
 				}
