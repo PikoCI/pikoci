@@ -41,8 +41,9 @@ type Worker struct {
 	jobSubscription   queue.Subscription
 	checkSubscription queue.Subscription
 
-	draining atomic.Bool
-	logger   *slog.Logger
+	draining    atomic.Bool
+	drainCancel context.CancelFunc
+	logger      *slog.Logger
 
 	// apiCtx is the parent server context used for DB operations.
 	// It outlives individual job contexts (which get cancelled on
@@ -70,6 +71,9 @@ func New(s pikoci.Service, jobTopic queue.Topic, jobSub, checkSub queue.Subscrip
 
 func (w *Worker) Drain() {
 	w.draining.Store(true)
+	if w.drainCancel != nil {
+		w.drainCancel()
+	}
 }
 
 func (w *Worker) Run(ctx context.Context) error {
@@ -79,8 +83,11 @@ func (w *Worker) Run(ctx context.Context) error {
 	// job-level cancellation but respect server shutdown.
 	w.apiCtx = ctx
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	// receiveCtx is cancelled on Drain() to unblock Receive() calls
+	// immediately while still allowing in-flight jobs to finish.
+	receiveCtx, receiveCancel := context.WithCancel(ctx)
+	w.drainCancel = receiveCancel
+	defer receiveCancel()
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
@@ -89,7 +96,7 @@ func (w *Worker) Run(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := w.receiveLoop(ctx, w.jobSubscription, "job"); err != nil {
+			if err := w.receiveLoop(receiveCtx, ctx, w.jobSubscription, "job"); err != nil {
 				errs <- err
 			}
 		}()
@@ -99,7 +106,7 @@ func (w *Worker) Run(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := w.receiveLoop(ctx, w.checkSubscription, "check"); err != nil {
+			if err := w.receiveLoop(receiveCtx, ctx, w.checkSubscription, "check"); err != nil {
 				errs <- err
 			}
 		}()
@@ -116,15 +123,15 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
-func (w *Worker) receiveLoop(ctx context.Context, sub queue.Subscription, kind string) error {
+func (w *Worker) receiveLoop(receiveCtx, processCtx context.Context, sub queue.Subscription, kind string) error {
 	for {
 		if w.draining.Load() {
 			w.logger.Info("Worker draining, stopping message receive", "queue", kind)
 			return nil
 		}
-		msg, err := sub.Receive(ctx)
+		msg, err := sub.Receive(receiveCtx)
 		if err != nil {
-			if ctx.Err() != nil && w.draining.Load() {
+			if w.draining.Load() {
 				w.logger.Info("Worker draining, stopping message receive", "queue", kind)
 				return nil
 			}
@@ -150,7 +157,7 @@ func (w *Worker) receiveLoop(ctx context.Context, sub queue.Subscription, kind s
 			return err
 		}
 
-		w.processMessage(ctx, m, cwd)
+		w.processMessage(processCtx, m, cwd)
 		os.RemoveAll(cwd)
 	}
 }

@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Drain hanging on SIGQUIT: `Drain()` now cancels the receive context immediately so blocked `Receive()` calls unblock without waiting for the drain timeout ([#390](https://github.com/PikoCI/pikoci/issues/390))
 - Documentation: update stale GitHub/Docker URLs to PikoCI org and GHCR, fix outdated claims, add missing docs for `run`, `export`, `pipelines rename`, `on_cancel` hook, and `/metrics` endpoint ([#388](https://github.com/PikoCI/pikoci/issues/388))
 - Trigger Resource new version appears at bottom of versions list instead of at top ([#380](https://github.com/PikoCI/pikoci/issues/380))
 - SIGQUIT graceful shutdown hanging forever: cancel the main context after workers drain so blocked Receive() calls unblock and the process exits cleanly ([#384](https://github.com/PikoCI/pikoci/issues/384))
