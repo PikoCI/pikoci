@@ -3532,5 +3532,48 @@ func TestRunGetStepLocal_MissingPath(t *testing.T) {
 	assert.Contains(t, b.Steps[0].Logs, "does not exist")
 }
 
+func TestDrain_UnblocksReceiveImmediately(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	jobSub := mock.NewSubscription(ctrl)
+	checkSub := mock.NewSubscription(ctrl)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	w := &Worker{
+		pikoci:            svc,
+		jobSubscription:   jobSub,
+		checkSubscription: checkSub,
+		logger:            logger,
+	}
+
+	// Receive blocks until the context is cancelled (simulating waiting for messages)
+	jobSub.EXPECT().Receive(gomock.Any()).DoAndReturn(func(ctx context.Context) (*pubsub.Message, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}).AnyTimes()
+	checkSub.EXPECT().Receive(gomock.Any()).DoAndReturn(func(ctx context.Context) (*pubsub.Message, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}).AnyTimes()
+
+	ctx := context.Background()
+	done := make(chan error, 1)
+	go func() {
+		done <- w.Run(ctx)
+	}()
+
+	// Give Run() time to start the receive loops
+	time.Sleep(50 * time.Millisecond)
+
+	w.Drain()
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Drain() did not unblock Run() within 2 seconds")
+	}
+}
+
 // Silence the unused import warnings
 var _ = time.Now
