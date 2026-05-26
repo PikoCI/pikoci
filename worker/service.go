@@ -115,6 +115,10 @@ func (w *Worker) receiveLoop(ctx context.Context, sub queue.Subscription, kind s
 		}
 		msg, err := sub.Receive(ctx)
 		if err != nil {
+			if ctx.Err() != nil && w.draining.Load() {
+				w.logger.Info("Worker draining, stopping message receive", "queue", kind)
+				return nil
+			}
 			return fmt.Errorf("failed to receive %s message: %w", kind, err)
 		}
 

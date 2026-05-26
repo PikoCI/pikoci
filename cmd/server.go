@@ -252,6 +252,10 @@ var serverCmd = &cobra.Command{
 				}
 			}
 
+			// Cancel the main context so any blocked Receive() calls
+			// unblock and worker goroutines can exit.
+			cancel()
+
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer shutdownCancel()
 			svr.Shutdown(shutdownCtx)
