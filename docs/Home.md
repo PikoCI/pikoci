@@ -17,6 +17,7 @@ PikoCI is a portable, self-hosted CI/CD system. One binary, any database, any qu
 - [Variables](Variables) - Pipeline variables
 - [CLI Reference](CLI) - Client commands and flags
 - [Public Pipelines](Public-Pipelines) - Sharing pipeline status publicly
+- [Scaling](Scaling) - From single binary to distributed production
 - [Running Workers Separately](Workers) - Distributed worker setup
 - [Deployment](Deployment) - Production deployment guide
 - [Portability and Bundling](Portability) - Bundle and deploy anywhere
