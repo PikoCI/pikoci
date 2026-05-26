@@ -677,6 +677,44 @@ func (cl *Client) InsertBuildGetVersion(ctx context.Context, tc, pn, jn string, 
 	return nil
 }
 
+func (cl *Client) StartPendingBuild(ctx context.Context, tc, pn, jn string, buildID uint32) (*build.Build, error) {
+	var resp thttp.StartPendingBuildResponse
+
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/builds/start-pending", cl.url, tc, pn, jn), thttp.StartPendingBuildRequest{
+		BuildID: buildID,
+	}, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		if resp.Err == pikoci.ErrConcurrencyLimit.Error() {
+			return nil, pikoci.ErrConcurrencyLimit
+		}
+		if strings.Contains(resp.Err, pikoci.ErrBuildNotPending.Error()) {
+			return nil, pikoci.ErrBuildNotPending
+		}
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return resp.Build, nil
+}
+
+func (cl *Client) FindOldestPendingBuild(ctx context.Context, tc, pn, jn string) (*build.Build, error) {
+	var resp thttp.FindOldestPendingBuildResponse
+
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/builds/oldest-pending", cl.url, tc, pn, jn), nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return resp.Build, nil
+}
+
 func (cl *Client) ListJobBuilds(ctx context.Context, tc, pn, jn string) ([]*build.Build, error) {
 	var resp thttp.ListJobBuildsResponse
 

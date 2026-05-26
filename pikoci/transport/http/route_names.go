@@ -48,6 +48,8 @@ const (
 	GetJobBuild
 	CancelJobBuild
 	RetryJobBuild
+	StartPendingBuild
+	FindOldestPendingBuild
 
 	GetPipelineResource
 	UpdatePipelineResource

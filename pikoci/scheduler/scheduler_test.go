@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/xescugc/pikoci/pikoci/build"
 	"github.com/xescugc/pikoci/pikoci/job"
 	"github.com/xescugc/pikoci/pikoci/mock"
 	"github.com/xescugc/pikoci/pikoci/pipeline"
@@ -217,6 +218,14 @@ func TestTickJobs_TriggersWhenCommonVersionExists(t *testing.T) {
 		[]string{"lint", "test-mock"}, "test-backends", "repo", 2,
 	).Return(uint32(42), true, nil)
 
+	// Check for existing pending build (none)
+	br.EXPECT().FindOldestPending(gomock.Any(), "main", "my-pipeline", "test-backends").
+		Return(nil, nil)
+
+	// Create a pending build
+	br.EXPECT().Create(gomock.Any(), "main", "my-pipeline", "test-backends", gomock.Any()).
+		Return(uint32(100), "1", nil)
+
 	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
 		var body queue.Body
 		err := json.Unmarshal(msg.Body, &body)
@@ -225,6 +234,7 @@ func TestTickJobs_TriggersWhenCommonVersionExists(t *testing.T) {
 		assert.Equal(t, "my-pipeline", body.PipelineCanonical)
 		assert.Equal(t, "main", body.TeamCanonical)
 		assert.Equal(t, uint32(42), body.VersionID)
+		assert.Equal(t, uint32(100), body.BuildID)
 		return nil
 	})
 
@@ -269,6 +279,51 @@ func TestTickJobs_SkipsWhenNoCommonVersion(t *testing.T) {
 	).Return(uint32(0), false, nil)
 
 	// topic.Send should NOT be called
+	s.tick(context.Background())
+}
+
+func TestTickJobs_SkipsWhenPendingBuildExists(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, rr, pr, br, _ := newTestScheduler(ctrl)
+
+	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
+
+	pps := []*pipeline.WithTeam{
+		{
+			Pipeline: pipeline.Pipeline{
+				Name: "my-pipeline", Canonical: "my-pipeline",
+				Jobs: []job.Job{
+					{
+						Name: "deploy",
+						Plan: []job.PlanStep{
+							{
+								Type: job.StepTypeGet,
+								Get: &job.GetStep{
+									Type:    "git",
+									Name:    "repo",
+									Passed:  []string{"lint"},
+									Trigger: true,
+								},
+							},
+						},
+					},
+				},
+			},
+			Team: team.Team{Canonical: "main"},
+		},
+	}
+	pr.EXPECT().FilterAll(gomock.Any()).Return(pps, nil)
+
+	br.EXPECT().FindReadyDownstreamVersion(
+		gomock.Any(), "main", "my-pipeline",
+		[]string{"lint"}, "deploy", "repo", 1,
+	).Return(uint32(42), true, nil)
+
+	// A pending build already exists — should skip creating another
+	br.EXPECT().FindOldestPending(gomock.Any(), "main", "my-pipeline", "deploy").
+		Return(&build.Build{ID: 99, BuildNumber: "1", Status: build.Pending}, nil)
+
+	// topic.Send and builds.Create should NOT be called
 	s.tick(context.Background())
 }
 
@@ -453,6 +508,14 @@ func TestTickJobs_MultipleGetSteps_BothReady_TriggersOnce(t *testing.T) {
 		[]string{"build"}, "deploy", "image", 1,
 	).Return(uint32(99), true, nil)
 
+	// Check for existing pending build (none)
+	br.EXPECT().FindOldestPending(gomock.Any(), "main", "my-pipeline", "deploy").
+		Return(nil, nil)
+
+	// Create a pending build
+	br.EXPECT().Create(gomock.Any(), "main", "my-pipeline", "deploy", gomock.Any()).
+		Return(uint32(100), "1", nil)
+
 	// Should trigger exactly once
 	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
 		var body queue.Body
@@ -460,6 +523,7 @@ func TestTickJobs_MultipleGetSteps_BothReady_TriggersOnce(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "deploy", body.JobName)
 		assert.Equal(t, uint32(42), body.VersionID) // first candidate's version
+		assert.Equal(t, uint32(100), body.BuildID)
 		return nil
 	})
 

@@ -566,6 +566,87 @@ func TestListJobBuilds(t *testing.T) {
 	assert.Len(t, builds, 2)
 }
 
+func TestStartPendingBuild(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/pipelines/{pn}/jobs/{jn}/builds/start-pending", func(w http.ResponseWriter, req *http.Request) {
+		var body thttp.StartPendingBuildRequest
+		json.NewDecoder(req.Body).Decode(&body)
+		assert.Equal(t, uint32(42), body.BuildID)
+		jsonHandler(w, thttp.StartPendingBuildResponse{Build: &build.Build{ID: 42, BuildNumber: "1"}})
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	b, err := c.StartPendingBuild(context.Background(), "team", "pipe", "job1", 42)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(42), b.ID)
+}
+
+func TestStartPendingBuild_ConcurrencyLimit(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/pipelines/{pn}/jobs/{jn}/builds/start-pending", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.StartPendingBuildResponse{Err: pikoci.ErrConcurrencyLimit.Error()})
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	_, err = c.StartPendingBuild(context.Background(), "team", "pipe", "job1", 42)
+	require.ErrorIs(t, err, pikoci.ErrConcurrencyLimit)
+}
+
+func TestStartPendingBuild_NotPending(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/pipelines/{pn}/jobs/{jn}/builds/start-pending", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.StartPendingBuildResponse{Err: "build 42 is not in pending status: " + pikoci.ErrBuildNotPending.Error()})
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	_, err = c.StartPendingBuild(context.Background(), "team", "pipe", "job1", 42)
+	require.ErrorIs(t, err, pikoci.ErrBuildNotPending)
+}
+
+func TestFindOldestPendingBuild(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/pipelines/{pn}/jobs/{jn}/builds/oldest-pending", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.FindOldestPendingBuildResponse{Build: &build.Build{ID: 5, BuildNumber: "5"}})
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	b, err := c.FindOldestPendingBuild(context.Background(), "team", "pipe", "job1")
+	require.NoError(t, err)
+	assert.Equal(t, uint32(5), b.ID)
+}
+
+func TestFindOldestPendingBuild_None(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/pipelines/{pn}/jobs/{jn}/builds/oldest-pending", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.FindOldestPendingBuildResponse{})
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	b, err := c.FindOldestPendingBuild(context.Background(), "team", "pipe", "job1")
+	require.NoError(t, err)
+	assert.Nil(t, b)
+}
+
 func TestCreateResourceVersion(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/teams/{tc}/pipelines/{pn}/resources/{rCan}/versions", func(w http.ResponseWriter, req *http.Request) {

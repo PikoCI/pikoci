@@ -72,6 +72,8 @@ func TestTriggerPipelineJob_SendError(t *testing.T) {
 	ctx := context.TODO()
 
 	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(&job.Job{ID: 1}, nil)
+	// TriggerPipelineJob now creates a pending build first
+	s.Builds.EXPECT().Create(ctx, "main", "pp", "jn", gomock.Any()).Return(uint32(1), "1", nil)
 	s.Topic.EXPECT().Send(ctx, gomock.Any()).Return(assert.AnError)
 
 	err := s.S.TriggerPipelineJob(ctx, "main", "pp", "jn")
@@ -108,19 +110,22 @@ func TestTriggerPipelineJob_PinsLatestVersion(t *testing.T) {
 
 	s.Jobs.EXPECT().Find(ctx, tc, ppc, jn).Return(j, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, tc, ppc, rCan).Return(versions, nil)
+	// TriggerPipelineJob now creates a pending build first
+	s.Builds.EXPECT().Create(ctx, tc, ppc, jn, gomock.Any()).Return(uint32(5), "1", nil)
 
-	m := queue.Body{
-		TeamCanonical:     tc,
-		PipelineCanonical: ppc,
-		JobName:           jn,
-		ResourceCanonical: rCan,
-		VersionID:         30,
-	}
-	mb, err := json.Marshal(m)
-	require.NoError(t, err)
+	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, tc, body.TeamCanonical)
+		assert.Equal(t, ppc, body.PipelineCanonical)
+		assert.Equal(t, jn, body.JobName)
+		assert.Equal(t, rCan, body.ResourceCanonical)
+		assert.Equal(t, uint32(30), body.VersionID)
+		assert.Equal(t, uint32(5), body.BuildID)
+		return nil
+	})
 
-	s.Topic.EXPECT().Send(ctx, &pubsub.Message{Body: mb}).Return(nil)
-
-	err = s.S.TriggerPipelineJob(ctx, tc, ppc, jn)
+	err := s.S.TriggerPipelineJob(ctx, tc, ppc, jn)
 	require.NoError(t, err)
 }

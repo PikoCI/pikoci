@@ -23,6 +23,63 @@ type CreateJobBuildResponse struct {
 
 func (r CreateJobBuildResponse) Error() string { return r.Err }
 
+type StartPendingBuildRequest struct {
+	BuildID uint32 `json:"build_id"`
+}
+type StartPendingBuildResponse struct {
+	Build *build.Build `json:"build,omitempty"`
+	Err   string       `json:"error,omitempty"`
+}
+
+func (r StartPendingBuildResponse) Error() string { return r.Err }
+
+func startPendingBuild(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var (
+			req StartPendingBuildRequest
+			ctx = r.Context()
+		)
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		jn := vars["job_name"]
+		err := json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			encodeResponse(StartPendingBuildResponse{Err: err.Error()}, w)
+			return
+		}
+		b, err := s.StartPendingBuild(ctx, tc, pc, jn, req.BuildID)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(StartPendingBuildResponse{Build: b, Err: errs}, w)
+	}
+}
+
+type FindOldestPendingBuildResponse struct {
+	Build *build.Build `json:"data,omitempty"`
+	Err   string       `json:"error,omitempty"`
+}
+
+func (r FindOldestPendingBuildResponse) Error() string { return r.Err }
+
+func findOldestPendingBuild(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var ctx = r.Context()
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		jn := vars["job_name"]
+		b, err := s.FindOldestPendingBuild(ctx, tc, pc, jn)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(FindOldestPendingBuildResponse{Build: b, Err: errs}, w)
+	}
+}
+
 type UpdateJobBuildRequest struct {
 	TeamCanonical     string      `json:"team_canonical"`
 	PipelineCanonical string      `json:"pipeline_canonical"`

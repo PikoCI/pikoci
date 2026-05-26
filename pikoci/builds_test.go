@@ -18,13 +18,13 @@ func TestCreateJobBuild(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job"}, nil)
 	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "my-job", gomock.Any()).Return(uint32(1), "1", nil)
 
-	b, err := s.S.CreateJobBuild(ctx, "main", "my-pipeline", "my-job", build.Build{Status: build.Started})
+	b, err := s.S.CreateJobBuild(ctx, "main", "my-pipeline", "my-job", build.Build{})
 	require.NoError(t, err)
 	assert.Equal(t, uint32(1), b.ID)
 	assert.Equal(t, "1", b.BuildNumber)
+	assert.Equal(t, build.Pending, b.Status)
 }
 
 func TestCreateJobBuild_InvalidCanonical(t *testing.T) {
@@ -91,9 +91,13 @@ func TestRetryJobBuild_BaseBuild(t *testing.T) {
 
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3").
 		Return(&build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}, nil)
+	// RetryJobBuild now creates a pending build first
+	s.Builds.EXPECT().CreateRetry(ctx, "main", "my-pipeline", "my-job", "3", gomock.Any()).
+		Return(uint32(10), "3.1", nil)
 	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
 		assert.Contains(t, string(msg.Body), `"retry_build_number":"3"`)
 		assert.Contains(t, string(msg.Body), `"retry_build_id":5`)
+		assert.Contains(t, string(msg.Body), `"build_id":10`)
 		return nil
 	})
 
@@ -111,10 +115,14 @@ func TestRetryJobBuild_RetryOfRetry(t *testing.T) {
 		Return(&build.Build{ID: 7, BuildNumber: "3.1", Status: build.Failed}, nil)
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3").
 		Return(&build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}, nil)
+	// RetryJobBuild now creates a pending build first
+	s.Builds.EXPECT().CreateRetry(ctx, "main", "my-pipeline", "my-job", "3", gomock.Any()).
+		Return(uint32(12), "3.2", nil)
 	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
 		assert.Contains(t, string(msg.Body), `"retry_build_number":"3"`)
 		// Should use parent build ID (5), not the retry build ID (7)
 		assert.Contains(t, string(msg.Body), `"retry_build_id":5`)
+		assert.Contains(t, string(msg.Body), `"build_id":12`)
 		return nil
 	})
 
@@ -132,7 +140,7 @@ func TestRetryJobBuild_RunningBuildFails(t *testing.T) {
 
 	err := s.S.RetryJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "still running")
+	assert.Contains(t, err.Error(), "still running or pending")
 }
 
 func TestCreateRetryJobBuild(t *testing.T) {
@@ -140,43 +148,33 @@ func TestCreateRetryJobBuild(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job"}, nil)
 	s.Builds.EXPECT().CreateRetry(ctx, "main", "my-pipeline", "my-job", "3", gomock.Any()).
 		Return(uint32(8), "3.1", nil)
 
-	b, err := s.S.CreateRetryJobBuild(ctx, "main", "my-pipeline", "my-job", "3", build.Build{Status: build.Started})
+	b, err := s.S.CreateRetryJobBuild(ctx, "main", "my-pipeline", "my-job", "3", build.Build{})
 	require.NoError(t, err)
 	assert.Equal(t, uint32(8), b.ID)
 	assert.Equal(t, "3.1", b.BuildNumber)
+	assert.Equal(t, build.Pending, b.Status)
 }
 
-func TestCreateJobBuild_ConcurrencyLimit(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	s := newService(ctrl)
-	ctx := context.TODO()
-
-	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job", Concurrency: 1}, nil)
-	s.Builds.EXPECT().CountRunning(ctx, "main", "my-pipeline", "my-job").Return(1, nil)
-
-	_, err := s.S.CreateJobBuild(ctx, "main", "my-pipeline", "my-job", build.Build{Status: build.Started})
-	require.ErrorIs(t, err, pikoci.ErrConcurrencyLimit)
-}
-
-func TestCreateJobBuild_ConcurrencyAllowed(t *testing.T) {
+func TestStartPendingBuild(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
 	ctx := context.TODO()
 
 	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job", Concurrency: 2}, nil)
 	s.Builds.EXPECT().CountRunning(ctx, "main", "my-pipeline", "my-job").Return(1, nil)
-	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "my-job", gomock.Any()).Return(uint32(1), "1", nil)
+	s.Builds.EXPECT().StartPending(ctx, "main", "my-pipeline", "my-job", uint32(10)).Return(nil)
+	s.Builds.EXPECT().FindByID(ctx, uint32(10)).Return(
+		&build.Build{ID: 10, BuildNumber: "1", Status: build.Started}, nil)
 
-	b, err := s.S.CreateJobBuild(ctx, "main", "my-pipeline", "my-job", build.Build{Status: build.Started})
+	b, err := s.S.StartPendingBuild(ctx, "main", "my-pipeline", "my-job", 10)
 	require.NoError(t, err)
-	assert.Equal(t, uint32(1), b.ID)
+	assert.Equal(t, uint32(10), b.ID)
 }
 
-func TestCreateRetryJobBuild_ConcurrencyLimit(t *testing.T) {
+func TestStartPendingBuild_ConcurrencyLimit(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
 	ctx := context.TODO()
@@ -184,8 +182,33 @@ func TestCreateRetryJobBuild_ConcurrencyLimit(t *testing.T) {
 	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job", Concurrency: 1}, nil)
 	s.Builds.EXPECT().CountRunning(ctx, "main", "my-pipeline", "my-job").Return(1, nil)
 
-	_, err := s.S.CreateRetryJobBuild(ctx, "main", "my-pipeline", "my-job", "3", build.Build{Status: build.Started})
+	_, err := s.S.StartPendingBuild(ctx, "main", "my-pipeline", "my-job", 10)
 	require.ErrorIs(t, err, pikoci.ErrConcurrencyLimit)
+}
+
+func TestFindOldestPendingBuild(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	expected := &build.Build{ID: 5, BuildNumber: "5", Status: build.Pending}
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "my-job").Return(expected, nil)
+
+	b, err := s.S.FindOldestPendingBuild(ctx, "main", "my-pipeline", "my-job")
+	require.NoError(t, err)
+	assert.Equal(t, expected, b)
+}
+
+func TestFindOldestPendingBuild_None(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "my-job").Return(nil, nil)
+
+	b, err := s.S.FindOldestPendingBuild(ctx, "main", "my-pipeline", "my-job")
+	require.NoError(t, err)
+	assert.Nil(t, b)
 }
 
 func TestFindBuildGetVersions(t *testing.T) {
@@ -199,4 +222,36 @@ func TestFindBuildGetVersions(t *testing.T) {
 	result, err := s.S.FindBuildGetVersions(ctx, "main", "my-pipeline", "my-job", 5)
 	require.NoError(t, err)
 	assert.Equal(t, expected, result)
+}
+
+func TestCancelJobBuild_Pending(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "1").
+		Return(&build.Build{ID: 1, BuildNumber: "1", Status: build.Pending}, nil)
+	s.Builds.EXPECT().Update(ctx, "main", "my-pipeline", "my-job", "1", gomock.Any()).Return(nil)
+	// Should also notify next pending build
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "my-job").
+		Return(nil, nil)
+
+	err := s.S.CancelJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
+	require.NoError(t, err)
+}
+
+func TestCancelJobBuild_Running_NotifiesNextPending(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "1").
+		Return(&build.Build{ID: 1, BuildNumber: "1", Status: build.Started}, nil)
+	s.Builds.EXPECT().Update(ctx, "main", "my-pipeline", "my-job", "1", gomock.Any()).Return(nil)
+	// Should check for next pending build
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "my-job").
+		Return(nil, nil)
+
+	err := s.S.CancelJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
+	require.NoError(t, err)
 }

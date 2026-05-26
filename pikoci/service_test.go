@@ -48,20 +48,22 @@ func TestTriggerPipelineJob(t *testing.T) {
 	ppc := "pipeline-name"
 	jn := "job-name"
 
-	m := queue.Body{
-		TeamCanonical:     tc,
-		PipelineCanonical: ppc,
-		JobName:           jn,
-	}
-
-	mb, err := json.Marshal(m)
-	require.NoError(t, err)
 	s.Jobs.EXPECT().Find(ctx, tc, ppc, jn).Return(&job.Job{ID: 2}, nil)
-	s.Topic.EXPECT().Send(ctx, &pubsub.Message{
-		Body: mb,
-	}).Return(nil)
+	// TriggerPipelineJob now creates a pending build first
+	s.Builds.EXPECT().Create(ctx, tc, ppc, jn, gomock.Any()).Return(uint32(1), "1", nil)
 
-	err = s.S.TriggerPipelineJob(ctx, tc, ppc, jn)
+	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, tc, body.TeamCanonical)
+		assert.Equal(t, ppc, body.PipelineCanonical)
+		assert.Equal(t, jn, body.JobName)
+		assert.Equal(t, uint32(1), body.BuildID)
+		return nil
+	})
+
+	err := s.S.TriggerPipelineJob(ctx, tc, ppc, jn)
 	require.NoError(t, err)
 }
 

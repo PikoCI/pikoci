@@ -162,17 +162,46 @@ func (s *Scheduler) evaluateJob(ctx context.Context, pwt *pipeline.WithTeam, j *
 		return
 	}
 
+	// If there's already a pending build for this job, skip — don't create
+	// another one. This prevents queue pollution from the scheduler
+	// re-triggering the same unconsumed version every tick.
+	pending, err := s.builds.FindOldestPending(ctx, pwt.Team.Canonical, pwt.Canonical, j.Name)
+	if err != nil {
+		s.logger.Error("failed to check for pending builds",
+			"pipeline", pwt.Canonical, "job", j.Name, "error", err)
+		return
+	}
+	if pending != nil {
+		return
+	}
+
 	// Use the version from the first candidate for the queue message.
 	versionID := candidates[0].versionID
 
-	s.logger.Info("[debug-297] Triggering downstream job",
+	s.logger.Info("Triggering downstream job",
 		"pipeline", pwt.Canonical, "job", j.Name, "version_id", versionID,
 		"candidates", fmt.Sprintf("%+v", candidates))
+
+	// Create a pending build first
+	bb := build.Build{
+		Status:    build.Pending,
+		VersionID: versionID,
+	}
+	id, buildNumber, err := s.builds.Create(ctx, pwt.Team.Canonical, pwt.Canonical, j.Name, bb)
+	if err != nil {
+		s.logger.Error("failed to create pending build for downstream job",
+			"pipeline", pwt.Canonical, "job", j.Name, "error", err)
+		return
+	}
+
+	s.logger.Info("created pending build for downstream job",
+		"pipeline", pwt.Canonical, "job", j.Name, "build_id", id, "build_number", buildNumber)
 
 	m := queue.Body{
 		TeamCanonical:     pwt.Team.Canonical,
 		PipelineCanonical: pwt.Canonical,
 		JobName:           j.Name,
+		BuildID:           id,
 		VersionID:         versionID,
 	}
 	mb, err := json.Marshal(m)

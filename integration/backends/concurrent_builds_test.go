@@ -158,7 +158,7 @@ job "job-c" {
 			if err != nil || len(builds) == 0 {
 				return false
 			}
-			return builds[0].Status != build.Started
+			return builds[0].Status != build.Started && builds[0].Status != build.Pending
 		}, 15*time.Second, 200*time.Millisecond, "job %q should have a completed build", jn)
 	}
 

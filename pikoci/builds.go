@@ -16,7 +16,10 @@ import (
 	"gocloud.dev/pubsub"
 )
 
-var ErrConcurrencyLimit = errors.New("concurrency limit reached")
+var (
+	ErrConcurrencyLimit = errors.New("concurrency limit reached")
+	ErrBuildNotPending  = build.ErrNotPending
+)
 
 func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.Build) (*build.Build, error) {
 	if !utils.ValidateCanonical(tc) {
@@ -27,11 +30,9 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 		return nil, fmt.Errorf("invalid Job Name format %q", jn)
 	}
 
-	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
-		if err := checkConcurrencyLimit(ctx, uow, tc, pc, jn); err != nil {
-			return err
-		}
+	b.Status = build.Pending
 
+	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
 		id, buildNumber, err := uow.Builds().Create(ctx, tc, pc, jn, b)
 		if err != nil {
 			return fmt.Errorf("failed to Create Build: %w", err)
@@ -96,12 +97,22 @@ func (q *PikoCI) CancelJobBuild(ctx context.Context, tc, pc, jn string, buildNum
 	if err != nil {
 		return fmt.Errorf("failed to Find Build: %w", err)
 	}
-	if b.Status != build.Started {
-		return fmt.Errorf("build %s is not running (status: %s)", buildNumber, b.Status)
+	wasRunning := b.Status == build.Started
+	if b.Status != build.Started && b.Status != build.Pending {
+		return fmt.Errorf("build %s is not running or pending (status: %s)", buildNumber, b.Status)
 	}
 	b.Status = build.Cancelled
-	b.Duration = time.Since(b.StartedAt)
-	return q.Builds.Update(ctx, tc, pc, jn, buildNumber, *b)
+	if wasRunning {
+		b.Duration = time.Since(b.StartedAt)
+	}
+	if err := q.Builds.Update(ctx, tc, pc, jn, buildNumber, *b); err != nil {
+		return err
+	}
+
+	// Notify the next pending build so it can start (whether we cancelled
+	// a running or a pending build, a concurrency slot may have opened).
+	q.notifyNextPendingBuild(ctx, tc, pc, jn)
+	return nil
 }
 
 func (q *PikoCI) UpdateJobBuild(ctx context.Context, tc, pc, jn string, buildNumber string, b build.Build) error {
@@ -164,8 +175,8 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 	if err != nil {
 		return fmt.Errorf("failed to Find Build: %w", err)
 	}
-	if b.Status == build.Started {
-		return fmt.Errorf("build %s is still running", buildNumber)
+	if b.Status == build.Started || b.Status == build.Pending {
+		return fmt.Errorf("build %s is still running or pending", buildNumber)
 	}
 
 	// Extract parent build number: if "3.1" -> "3", if "3" -> "3"
@@ -186,10 +197,17 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 		retryBuildID = parentBuild.ID
 	}
 
+	// Create a pending retry build first
+	nb, err := q.CreateRetryJobBuild(ctx, tc, pc, jn, parentBN, build.Build{Status: build.Pending})
+	if err != nil {
+		return fmt.Errorf("failed to create pending retry build: %w", err)
+	}
+
 	m := queue.Body{
 		TeamCanonical:     tc,
 		PipelineCanonical: pc,
 		JobName:           jn,
+		BuildID:           nb.ID,
 		RetryBuildNumber:  parentBN,
 		RetryBuildID:      retryBuildID,
 	}
@@ -218,11 +236,9 @@ func (q *PikoCI) CreateRetryJobBuild(ctx context.Context, tc, pc, jn, parentBuil
 		return nil, fmt.Errorf("invalid Job Name format %q", jn)
 	}
 
-	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
-		if err := checkConcurrencyLimit(ctx, uow, tc, pc, jn); err != nil {
-			return err
-		}
+	b.Status = build.Pending
 
+	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
 		id, buildNumber, err := uow.Builds().CreateRetry(ctx, tc, pc, jn, parentBuildNumber, b)
 		if err != nil {
 			return fmt.Errorf("failed to Create Retry Build: %w", err)
@@ -251,19 +267,65 @@ func (q *PikoCI) FindBuildGetVersions(ctx context.Context, tc, pc, jn string, bu
 	return q.Builds.FindGetVersions(ctx, buildID)
 }
 
-func checkConcurrencyLimit(ctx context.Context, uow unitwork.UnitOfWork, tc, pc, jn string) error {
-	j, err := uow.Jobs().Find(ctx, tc, pc, jn)
-	if err != nil {
-		return fmt.Errorf("failed to find job: %w", err)
+func (q *PikoCI) StartPendingBuild(ctx context.Context, tc, pn, jn string, buildID uint32) (*build.Build, error) {
+	if !utils.ValidateCanonical(tc) {
+		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
+	} else if !utils.ValidateCanonical(pn) {
+		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pn)
+	} else if !utils.ValidateCanonical(jn) {
+		return nil, fmt.Errorf("invalid Job Name format %q", jn)
 	}
-	if j.Concurrency > 0 {
-		running, err := uow.Builds().CountRunning(ctx, tc, pc, jn)
+
+	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
+		j, err := uow.Jobs().Find(ctx, tc, pn, jn)
 		if err != nil {
-			return fmt.Errorf("failed to count running builds: %w", err)
+			return fmt.Errorf("failed to find job: %w", err)
 		}
-		if running >= j.Concurrency {
-			return ErrConcurrencyLimit
+		if j.Concurrency > 0 {
+			running, err := uow.Builds().CountRunning(ctx, tc, pn, jn)
+			if err != nil {
+				return fmt.Errorf("failed to count running builds: %w", err)
+			}
+			if running >= j.Concurrency {
+				return ErrConcurrencyLimit
+			}
 		}
+
+		return uow.Builds().StartPending(ctx, tc, pn, jn, buildID)
+	})
+	if err != nil {
+		return nil, err
 	}
-	return nil
+
+	return q.Builds.FindByID(ctx, buildID)
+}
+
+func (q *PikoCI) FindOldestPendingBuild(ctx context.Context, tc, pn, jn string) (*build.Build, error) {
+	if !utils.ValidateCanonical(tc) {
+		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
+	} else if !utils.ValidateCanonical(pn) {
+		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pn)
+	} else if !utils.ValidateCanonical(jn) {
+		return nil, fmt.Errorf("invalid Job Name format %q", jn)
+	}
+
+	return q.Builds.FindOldestPending(ctx, tc, pn, jn)
+}
+
+func (q *PikoCI) notifyNextPendingBuild(ctx context.Context, tc, pc, jn string) {
+	pending, err := q.Builds.FindOldestPending(ctx, tc, pc, jn)
+	if err != nil || pending == nil {
+		return
+	}
+	msg := queue.Body{
+		TeamCanonical:     tc,
+		PipelineCanonical: pc,
+		JobName:           jn,
+		BuildID:           pending.ID,
+	}
+	mb, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	q.Topic.Send(ctx, &pubsub.Message{Body: mb})
 }

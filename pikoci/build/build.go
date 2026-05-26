@@ -1,6 +1,11 @@
 package build
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrNotPending = errors.New("build is not in pending status")
 
 //go:generate go tool enumer -type=Status -transform=snake -output=status_string.go -json
 
@@ -11,6 +16,7 @@ const (
 	Failed
 	Started
 	Cancelled
+	Pending
 )
 
 // Build represents a run of a Job
@@ -25,6 +31,9 @@ type Build struct {
 
 	StartedAt time.Time     `json:"started_at"`
 	Duration  time.Duration `json:"duration"`
+
+	VersionID         uint32 `json:"version_id,omitempty"`
+	ResourceCanonical string `json:"resource_canonical,omitempty"`
 }
 
 type Step struct {

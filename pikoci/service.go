@@ -75,6 +75,9 @@ type Service interface {
 	RetryJobBuild(ctx context.Context, tc, pn, jn, buildNumber string) error
 	FindBuildGetVersions(ctx context.Context, tc, pn, jn string, buildID uint32) (map[string]uint32, error)
 
+	StartPendingBuild(ctx context.Context, tc, pn, jn string, buildID uint32) (*build.Build, error)
+	FindOldestPendingBuild(ctx context.Context, tc, pn, jn string) (*build.Build, error)
+
 	GetPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error)
 	UpdatePipelineResource(ctx context.Context, tc, pn, rCan string, r resource.Resource) error
 	TriggerPipelineResource(ctx context.Context, tc, pn, rCan string) error

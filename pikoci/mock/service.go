@@ -295,6 +295,21 @@ func (mr *ServiceMockRecorder) FindBuildGetVersions(ctx, tc, pn, jn, buildID any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindBuildGetVersions", reflect.TypeOf((*Service)(nil).FindBuildGetVersions), ctx, tc, pn, jn, buildID)
 }
 
+// FindOldestPendingBuild mocks base method.
+func (m *Service) FindOldestPendingBuild(ctx context.Context, tc, pn, jn string) (*build.Build, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindOldestPendingBuild", ctx, tc, pn, jn)
+	ret0, _ := ret[0].(*build.Build)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindOldestPendingBuild indicates an expected call of FindOldestPendingBuild.
+func (mr *ServiceMockRecorder) FindOldestPendingBuild(ctx, tc, pn, jn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindOldestPendingBuild", reflect.TypeOf((*Service)(nil).FindOldestPendingBuild), ctx, tc, pn, jn)
+}
+
 // GetJobBuild mocks base method.
 func (m *Service) GetJobBuild(ctx context.Context, tc, pn, jn, buildNumber string) (*build.Build, error) {
 	m.ctrl.T.Helper()
@@ -651,6 +666,21 @@ func (m *Service) SetPipelinePublic(ctx context.Context, tc, pn string, public b
 func (mr *ServiceMockRecorder) SetPipelinePublic(ctx, tc, pn, public any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPipelinePublic", reflect.TypeOf((*Service)(nil).SetPipelinePublic), ctx, tc, pn, public)
+}
+
+// StartPendingBuild mocks base method.
+func (m *Service) StartPendingBuild(ctx context.Context, tc, pn, jn string, buildID uint32) (*build.Build, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartPendingBuild", ctx, tc, pn, jn, buildID)
+	ret0, _ := ret[0].(*build.Build)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartPendingBuild indicates an expected call of StartPendingBuild.
+func (mr *ServiceMockRecorder) StartPendingBuild(ctx, tc, pn, jn, buildID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartPendingBuild", reflect.TypeOf((*Service)(nil).StartPendingBuild), ctx, tc, pn, jn, buildID)
 }
 
 // TriggerPipelineJob mocks base method.
