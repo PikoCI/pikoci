@@ -500,7 +500,9 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		// Find the latest main build number first
 		var latestMain string
 		for _, b := range builds {
-			if (b.Status == build.Started || b.Status == build.Pending) && rb == nil {
+			if b.Status == build.Started && (rb == nil || rb.Status == build.Pending) {
+				rb = b
+			} else if b.Status == build.Pending && rb == nil {
 				rb = b
 			}
 			if !strings.Contains(b.BuildNumber, ".") && latestMain == "" {
@@ -538,14 +540,18 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		}
 
 		style := "invis"
+		clusterBorderColor := jobBorderColors[build.Started]
 		if rb != nil {
 			style = `"dashed,bold"`
+			if rb.Status == build.Pending {
+				clusterBorderColor = colorDefaultBorder
+			}
 		}
 
 		jg := fmt.Sprintf("cluster_%d", i)
 		graph.AddSubGraph(pn, jg, map[string]string{
 			string(gographviz.Style): style,
-			string(gographviz.Color): jobBorderColors[build.Started],
+			string(gographviz.Color): clusterBorderColor,
 		})
 
 		burl := fmt.Sprintf(`"/teams/%s/pipelines/%s/jobs/%s/builds"`, tc, pp.Canonical, j.Name)
