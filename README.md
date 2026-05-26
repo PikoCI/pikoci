@@ -9,7 +9,7 @@
   [![License](https://img.shields.io/badge/license-Apache%202.0-yellow)](LICENSE)
   [![Go Report Card](https://goreportcard.com/badge/github.com/pikoci/pikoci)](https://goreportcard.com/report/github.com/pikoci/pikoci)
 
-  [Documentation](https://github.com/PikoCI/pikoci/wiki) · [Quick Start](#quick-start) · [Contributing](#contributing)
+  [Documentation](https://docs.pikoci.com) · [Quick Start](#quick-start) · [Contributing](#contributing)
 </div>
 
 <!-- GIF goes here -->
@@ -160,7 +160,7 @@ For production setups, run the server and workers as separate processes on diffe
 ./pikoci worker --pikoci-url http://your-server:8080 --pubsub-system nats --worker-token <token>
 ```
 
-Full server and worker configuration options are covered in the [documentation](https://github.com/PikoCI/pikoci/wiki/Server).
+Full server and worker configuration options are covered in the [documentation](https://docs.pikoci.com/Server).
 
 
 ## Dogfooding: PikoCI runs its own CI
@@ -234,7 +234,7 @@ job "test-backends" {
 }
 ```
 
-The `test-backends` job uses [service types](https://github.com/PikoCI/pikoci/wiki/Services) to spin up MariaDB, PostgreSQL, NATS, RabbitMQ, Kafka, and Vault as Docker containers, runs the backend integration tests against them, then tears everything down. See the [full pipeline](deploy/pipeline.hcl) for secrets, variables, and service definitions.
+The `test-backends` job uses [service types](https://docs.pikoci.com/Services) to spin up MariaDB, PostgreSQL, NATS, RabbitMQ, Kafka, and Vault as Docker containers, runs the backend integration tests against them, then tears everything down. See the [full pipeline](deploy/pipeline.hcl) for secrets, variables, and service definitions.
 
 
 ## Coming from Concourse?
@@ -250,21 +250,21 @@ PikoCI's resource model is directly inspired by Concourse. The main differences:
 
 ## Documentation
 
-Full documentation is in the [wiki](https://github.com/PikoCI/pikoci/wiki):
+Full documentation is at [docs.pikoci.com](https://docs.pikoci.com):
 
-- [Pipeline configuration reference](https://github.com/PikoCI/pikoci/wiki/Pipeline)
-- [Resource types](https://github.com/PikoCI/pikoci/wiki/Resource-Types)
-- [Runners](https://github.com/PikoCI/pikoci/wiki/Runners)
-- [Server configuration](https://github.com/PikoCI/pikoci/wiki/Server)
-- [Variables and secrets](https://github.com/PikoCI/pikoci/wiki/Variables)
-- [Database backends](https://github.com/PikoCI/pikoci/wiki/Database)
-- [Queue backends](https://github.com/PikoCI/pikoci/wiki/Queue)
-- [CLI reference](https://github.com/PikoCI/pikoci/wiki/CLI)
-- [Public pipelines](https://github.com/PikoCI/pikoci/wiki/Public-Pipelines)
-- [Running workers separately](https://github.com/PikoCI/pikoci/wiki/Workers)
-- [Deployment](https://github.com/PikoCI/pikoci/wiki/Deployment)
-- [Portability and bundling](https://github.com/PikoCI/pikoci/wiki/Portability)
-- [Coming from Concourse](https://github.com/PikoCI/pikoci/wiki/Concourse)
+- [Pipeline configuration reference](https://docs.pikoci.com/Pipeline)
+- [Resource types](https://docs.pikoci.com/Resource-Types)
+- [Runners](https://docs.pikoci.com/Runners)
+- [Server configuration](https://docs.pikoci.com/Server)
+- [Variables and secrets](https://docs.pikoci.com/Variables)
+- [Database backends](https://docs.pikoci.com/Database)
+- [Queue backends](https://docs.pikoci.com/Queue)
+- [CLI reference](https://docs.pikoci.com/CLI)
+- [Public pipelines](https://docs.pikoci.com/Public-Pipelines)
+- [Running workers separately](https://docs.pikoci.com/Workers)
+- [Deployment](https://docs.pikoci.com/Deployment)
+- [Portability and bundling](https://docs.pikoci.com/Portability)
+- [Coming from Concourse](https://docs.pikoci.com/Concourse)
 
 
 ## Contributing
