@@ -711,6 +711,13 @@ textarea.form-control {
   background: #1D2B53;
 }
 
+/* Follow toggle button */
+.piko-follow-toggle.btn-info {
+  background: var(--primary) !important;
+  color: #fff !important;
+  border-color: var(--primary) !important;
+}
+
 /* Status badges (used in build meta + step rows) */
 .piko-badge {
   display: inline-flex;

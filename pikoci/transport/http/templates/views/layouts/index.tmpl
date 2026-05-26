@@ -476,8 +476,8 @@
           <% if (status === "started" || status === "pending") { %>
             <span style="margin-left:auto;display:flex;gap:6px;align-items:center;">
               <% if (status === "started") { %>
-              <button type="button" class="btn btn-sm btn-outline-info piko-follow-toggle" title="Auto-scroll logs">
-                <i class="bi bi-arrow-down-circle"></i> Follow
+              <button type="button" class="btn btn-sm btn-info piko-follow-toggle" title="Auto-scroll logs">
+                <i class="bi bi-arrow-down-circle-fill"></i> Following
               </button>
               <% } %>
               <% if (!app.session.isEmpty()) { %>
@@ -496,7 +496,7 @@
         <% var _job = job || []; %>
         <% var lastStep = _steps.length > 0 ? _steps[_steps.length-1] : null; %>
         <% _.each(_steps, function(s, i) { %>
-          <div class="piko-step-row">
+          <div class="piko-step-row" data-status="<%= s.status %>">
             <div class="piko-step-row-header" onclick="var body=this.nextElementSibling;body.style.display=body.style.display==='none'?'block':'none'">
               <span><span class="piko-step-label"><i class="bi <%= ({get:'bi-cloud-download',task:'bi-terminal',put:'bi-cloud-upload',service:'bi-hdd-stack',runner:'bi-gear'})[s.type] || 'bi-terminal' %>"></i> <%- s.type || "step" %></span> <%- s.name %> <span style="color:var(--text-muted);">(<%- s.duration %>)</span></span>
               <span style="display:flex;align-items:center;gap:6px;">
@@ -530,7 +530,7 @@
         <% }) %>
         <% var lastJob = _job.length > 0 ? _job[_job.length-1] : null; %>
         <% _.each(_job, function(j, i) { %>
-          <div class="piko-step-row">
+          <div class="piko-step-row" data-status="<%= j.status %>">
             <div class="piko-step-row-header" onclick="var body=this.nextElementSibling;body.style.display=body.style.display==='none'?'block':'none'">
               <span><span class="piko-step-label"><i class="bi bi-braces"></i> job</span> <%- j.name %> <span style="color:var(--text-muted);">(<%- j.duration %>)</span></span>
               <span style="display:flex;align-items:center;gap:6px;">
@@ -3165,6 +3165,7 @@
         },
         initialize: function() {
           this.autoFollow = true;
+          this._isAutoScrolling = false;
           this._elapsedInterval = null;
           this.listenTo(this.model, "change", this.render)
         },
@@ -3185,9 +3186,18 @@
           this.autoFollow = !this.autoFollow;
           this._updateFollowButton();
           if (this.autoFollow) {
-            var runningPre = this.$el.find('.piko-step-row-body:visible pre').last();
+            var runningPre = this.$el.find('.piko-step-row[data-status="started"] .piko-step-row-body pre');
+            if (!runningPre.length) {
+              runningPre = this.$el.find('.piko-step-row-body:visible pre').last();
+            }
             if (runningPre.length) {
-              runningPre[0].scrollTop = runningPre[0].scrollHeight;
+              var that = this;
+              var el = runningPre[0];
+              this._isAutoScrolling = true;
+              requestAnimationFrame(function() {
+                el.scrollTop = el.scrollHeight;
+                requestAnimationFrame(function() { that._isAutoScrolling = false; });
+              });
             }
           }
         },
@@ -3195,8 +3205,10 @@
           var btn = this.$el.find('.piko-follow-toggle');
           if (this.autoFollow) {
             btn.removeClass('btn-outline-info').addClass('btn-info');
+            btn.html('<i class="bi bi-arrow-down-circle-fill"></i> Following');
           } else {
             btn.removeClass('btn-info').addClass('btn-outline-info');
+            btn.html('<i class="bi bi-arrow-down-circle"></i> Follow');
           }
         },
         _startElapsedTimers: function() {
@@ -3230,6 +3242,7 @@
           this.$el.find('.piko-step-row-body pre').each(function() {
             var pre = this;
             $(pre).off('scroll.autofollow').on('scroll.autofollow', function() {
+              if (that._isAutoScrolling) return;
               var atBottom = (pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 20);
               if (atBottom) {
                 that.autoFollow = true;
@@ -3271,17 +3284,25 @@
               }
             });
           }
+          this._setupScrollListeners();
           // Auto-scroll if follow mode is on
           if (this.autoFollow) {
-            var runningPre = this.$el.find('.piko-step-row-body:visible pre').last();
+            var runningPre = this.$el.find('.piko-step-row[data-status="started"] .piko-step-row-body pre');
+            if (!runningPre.length) {
+              runningPre = this.$el.find('.piko-step-row-body:visible pre').last();
+            }
             if (runningPre.length) {
+              var that = this;
               var el = runningPre[0];
-              requestAnimationFrame(function() { el.scrollTop = el.scrollHeight; });
+              this._isAutoScrolling = true;
+              requestAnimationFrame(function() {
+                el.scrollTop = el.scrollHeight;
+                requestAnimationFrame(function() { that._isAutoScrolling = false; });
+              });
             }
           }
           this._updateFollowButton();
           this._startElapsedTimers();
-          this._setupScrollListeners();
           return this; // enable chained calls
         },
         remove: function() {
