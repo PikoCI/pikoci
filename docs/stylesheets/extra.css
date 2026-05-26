@@ -1,0 +1,17 @@
+/* Light mode - PICO-8 Dark Blue primary */
+:root {
+  --md-primary-fg-color: #1D2B53;
+  --md-primary-bg-color: #ffffff;
+  --md-accent-fg-color: #29ADFF;
+  --md-typeset-a-color: #29ADFF;
+}
+
+/* Dark mode - PICO-8 palette dark surfaces */
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #1a1a2e;
+  --md-default-fg-color: #e8e8f0;
+  --md-primary-fg-color: #29ADFF;
+  --md-primary-bg-color: #0f0f23;
+  --md-accent-fg-color: #29ADFF;
+  --md-typeset-a-color: #29ADFF;
+}

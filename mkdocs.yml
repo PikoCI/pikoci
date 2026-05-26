@@ -1,0 +1,64 @@
+site_name: PikoCI
+site_url: https://docs.pikoci.com
+site_description: PikoCI documentation - portable, self-hosted CI/CD
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Getting Started: Getting-Started.md
+  - Pipeline Reference: Pipeline.md
+  - Resource Types: Resource-Types.md
+  - Runners: Runners.md
+  - Secret Types: Secret-Types.md
+  - Services: Services.md
+  - Variables: Variables.md
+  - Functions: Functions.md
+  - CLI Reference: CLI.md
+  - Server Configuration: Server.md
+  - Database Backends: Database.md
+  - Queue Backends: Queue.md
+  - Public Pipelines: Public-Pipelines.md
+  - Scaling: Scaling.md
+  - Running Workers Separately: Workers.md
+  - Deployment: Deployment.md
+  - Portability: Portability.md
+  - Coming from Concourse: Concourse.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - toc:
+      permalink: true
+
+extra:
+  analytics:
+    provider: google
+    property: G-W5TE6077M1
+
+extra_css:
+  - stylesheets/extra.css

@@ -231,6 +231,27 @@ job "deploy" {
   }
 }
 
+job "deploy-docs" {
+  get "git" "pikoci_master" {
+    trigger = true
+  }
+  task "build-and-deploy" {
+    run "docker" {
+      image = "python:3.13-slim"
+      cmd   = <<-EOT
+        pip install --quiet mkdocs-material
+        cd ${var.git_name}
+        mkdocs build --clean
+        mkdir -p /var/www/docs.pikoci.com
+        cp -a site/. /var/www/docs.pikoci.com/
+      EOT
+      args = [
+        "-v", "/var/www/docs.pikoci.com:/var/www/docs.pikoci.com",
+      ]
+    }
+  }
+}
+
 job "deploy-website" {
   get "git" "pikoci_com" {
     trigger = true

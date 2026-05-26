@@ -94,6 +94,6 @@ Open [http://localhost:8080](http://localhost:8080) and log in with `admin` / `a
 
 ## Next steps
 
-- [Pipeline Reference](Pipeline) - Full HCL syntax
-- [Server Configuration](Server) - All server flags
-- [CLI Reference](CLI) - Manage pipelines from the command line
+- [Pipeline Reference](Pipeline.md) - Full HCL syntax
+- [Server Configuration](Server.md) - All server flags
+- [CLI Reference](CLI.md) - Manage pipelines from the command line

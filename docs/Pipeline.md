@@ -27,7 +27,7 @@ Variables without a default must be provided via a JSON vars file (`--vars` / `-
 
 ## resource_type
 
-Defines how to check, pull, and push a resource. See [Resource Types](Resource-Types).
+Defines how to check, pull, and push a resource. See [Resource Types](Resource-Types.md).
 
 ```hcl
 resource_type "git" {
@@ -60,7 +60,7 @@ When `source` is set, inline commands are not needed. The source is resolved onc
 
 ## resource
 
-An instance of a resource type. See [Resource Types](Resource-Types).
+An instance of a resource type. See [Resource Types](Resource-Types.md).
 
 ```hcl
 resource "git" "my_repo" {
@@ -84,7 +84,7 @@ resource "cron" "every_10s" {
 
 ## runner_type
 
-Defines a reusable execution environment. See [Runners](Runners).
+Defines a reusable execution environment. See [Runners](Runners.md).
 
 ```hcl
 runner_type "docker" {
@@ -110,7 +110,7 @@ When `source` is set, inline `run` block is not needed.
 
 ## secret_type
 
-Defines how to fetch secrets. See [Secret Types](Secret-Types). The `get` command should print a JSON object on its last stdout line with key-value pairs that become `secret_<key>` environment variables. Connection config (address, token, etc.) is set as attributes on the block.
+Defines how to fetch secrets. See [Secret Types](Secret-Types.md). The `get` command should print a JSON object on its last stdout line with key-value pairs that become `secret_<key>` environment variables. Connection config (address, token, etc.) is set as attributes on the block.
 
 ```hcl
 secret_type "vault" {
@@ -146,11 +146,11 @@ task "migrate" {
 }
 ```
 
-See [Variables](Variables) for full secret-backed variable documentation.
+See [Variables](Variables.md) for full secret-backed variable documentation.
 
 ## service_type
 
-Defines an ephemeral process that runs alongside a job's tasks. See [Services](Services).
+Defines an ephemeral process that runs alongside a job's tasks. See [Services](Services.md).
 
 ```hcl
 service_type "postgres" {

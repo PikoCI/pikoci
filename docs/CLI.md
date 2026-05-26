@@ -419,8 +419,8 @@ The server also logs a worker token on startup when `--run-worker=false`.
 
 ## server
 
-See [Server Configuration](Server).
+See [Server Configuration](Server.md).
 
 ## worker
 
-See [Running Workers Separately](Workers).
+See [Running Workers Separately](Workers.md).

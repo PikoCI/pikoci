@@ -244,4 +244,4 @@ Add infrastructure when you need it — not before.
 
 **Queues:** in-memory, NATS, RabbitMQ, Kafka
 
-See [Database Backends](Database) and [Queue Backends](Queue) for full configuration reference.
+See [Database Backends](Database.md) and [Queue Backends](Queue.md) for full configuration reference.

@@ -58,4 +58,4 @@ AWS SQS and GCP Pub/Sub support is planned. See [#209](https://github.com/xescug
 | `rabbit` | Existing RabbitMQ infrastructure |
 | `kafka` | High-throughput, existing Kafka infrastructure |
 
-When running workers separately, you must use a non-memory queue backend. See [Running Workers Separately](Workers).
+When running workers separately, you must use a non-memory queue backend. See [Running Workers Separately](Workers.md).

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Documentation site at docs.pikoci.com using MkDocs Material with search, PICO-8 themed light/dark mode, and auto-deploy on master push ([#377](https://github.com/PikoCI/pikoci/issues/377))
 - Separate queues for jobs and resource checks: long-running jobs no longer block resource version detection. New `--queues` flag lets operators run dedicated check-only or job-only workers ([#368](https://github.com/PikoCI/pikoci/issues/368))
 - User management: Profile page, admin Users page, CLI commands, force password change on default `admin/admin123`, and `--users` flag preserves UI/CLI password changes ([#237](https://github.com/PikoCI/pikoci/issues/237))
 - Pipeline graph zoom, pan, and fullscreen controls: scroll-wheel zoom toward cursor, click-drag pan (including on nodes), zoom buttons, reset, fullscreen overlay with navbar visible, pinch-zoom on mobile, and auto-sizing that prevents small pipelines from appearing oversized ([#338](https://github.com/PikoCI/pikoci/issues/338))
