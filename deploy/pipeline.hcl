@@ -227,7 +227,7 @@ job "deploy" {
   }
   on_success "exec" {
     path = "/bin/sh"
-    args = ["-ec", "kill $(pidof pikoci)"]
+    args = ["-ec", "kill -QUIT $(pidof pikoci)"]
   }
 }
 
