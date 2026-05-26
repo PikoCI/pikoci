@@ -599,7 +599,7 @@
         </div>
       </div>
       <div class="piko-resource-info">
-        <span class="piko-build-label">Last checked</span> (<%- resource.check_interval||"@every 1m" %>) at: <span class="piko-time-ago" data-time="<%= resource.last_check %>" title="<%= new Date(resource.last_check).toLocaleString() %>" style="color: var(--text-primary);"><%= pikoTimeAgo(resource.last_check) %></span>
+        <span class="piko-build-label">Last checked</span> (<%- resource.check_interval||"@every 1m" %>)<%= (!resource.last_check || resource.last_check.startsWith('0001-01-01')) ? ':' : ' at:' %> <span class="piko-time-ago" data-time="<%= resource.last_check %>" title="<%= new Date(resource.last_check).toLocaleString() %>" style="color: var(--text-primary);"><%= pikoTimeAgo(resource.last_check) %></span>
       </div>
       <div id="resource-versions">
       </div>
@@ -813,7 +813,7 @@
       var isLogin = true
 
       function pikoTimeAgo(dateStr) {
-        if (!dateStr) return ''
+        if (!dateStr || dateStr.startsWith('0001-01-01')) return 'never'
         var seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000)
         if (seconds < 60) return 'just now'
         if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago'
