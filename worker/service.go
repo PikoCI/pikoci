@@ -196,6 +196,36 @@ func (w *Worker) processMessage(ctx context.Context, m queue.Body, cwd string) {
 // runs the plan steps, and runs hooks. Downstream job triggering is handled
 // by the scheduler.
 func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *pipeline.Pipeline) {
+	// Resolve the oldest pending build from the DB rather than trusting the
+	// message's BuildID. Queue messages are treated as wake-up signals — the
+	// DB is the source of truth for ordering. This ensures strict FIFO even
+	// when pub/sub backends deliver messages out of order.
+	if !w.LocalMode {
+		oldest, err := w.pikoci.FindOldestPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName)
+		if err != nil {
+			w.logger.Error("failed to find oldest pending build",
+				"pipeline", m.PipelineCanonical, "job", m.JobName, "error", err)
+			return
+		}
+		if oldest == nil {
+			w.logger.Info("no pending builds, skipping",
+				"pipeline", m.PipelineCanonical, "job", m.JobName, "msg_build_id", m.BuildID)
+			return
+		}
+		if oldest.ID != m.BuildID {
+			w.logger.Info("reordering: oldest pending build differs from message",
+				"pipeline", m.PipelineCanonical, "job", m.JobName,
+				"msg_build_id", m.BuildID, "oldest_build_id", oldest.ID)
+		}
+		m.BuildID = oldest.ID
+		if oldest.VersionID != 0 {
+			m.VersionID = oldest.VersionID
+		}
+		if oldest.ResourceCanonical != "" {
+			m.ResourceCanonical = oldest.ResourceCanonical
+		}
+	}
+
 	if m.BuildID == 0 {
 		w.logger.Error("missing build_id in message",
 			"pipeline", m.PipelineCanonical, "job", m.JobName)

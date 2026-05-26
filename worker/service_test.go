@@ -41,8 +41,10 @@ func newTestWorker(ctrl *gomock.Controller) (*Worker, *mock.Service, *mock.Topic
 		Return(&build.Build{Status: build.Started}, nil).AnyTimes()
 
 	// FindOldestPendingBuild is called by notifyNextPendingBuild at end of processJob.
-	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil, nil).AnyTimes()
+	// Tests that call processJob must also call expectPendingBuild() to set up
+	// the ordering lookup that happens at the start of processJob.
+	// (No global fallback here — each test calls expectPendingBuild which
+	// registers a DoAndReturn that returns the build once, then nil.)
 
 	// CreateJobBuild is called by triggerResourceJobs to create pending builds.
 	var createBuildCounter uint32
@@ -58,6 +60,24 @@ func newTestWorker(ctrl *gomock.Controller) (*Worker, *mock.Service, *mock.Topic
 		logger:   logger,
 	}
 	return w, svc, jobTopic
+}
+
+// expectPendingBuild sets up a FindOldestPendingBuild expectation using
+// DoAndReturn: the first call returns a pending build with the given ID,
+// and subsequent calls return nil (for notifyNextPendingBuild at the end
+// of processJob). This must be called by any test that invokes processJob,
+// since processJob queries the DB for the oldest pending build before
+// starting it.
+func expectPendingBuild(svc *mock.Service, buildID uint32) {
+	var pendingCallCount int32
+	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _ string) (*build.Build, error) {
+			pendingCallCount++
+			if pendingCallCount == 1 {
+				return &build.Build{ID: buildID, BuildNumber: "1", Status: build.Pending}, nil
+			}
+			return nil, nil
+		}).AnyTimes()
 }
 
 func runnerHook(rc utils.RunnerCommand) job.HookStep {
@@ -183,6 +203,7 @@ func TestProcessJob_Success_TaskOnly(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
 		Return(nil).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 }
 
@@ -252,6 +273,7 @@ func TestProcessJob_Success_WithGetAndTask(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
 		Return(nil).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 }
 
@@ -263,8 +285,15 @@ func TestInsertBuildGetVersion_CalledWithCorrectArgs(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	svc.EXPECT().GetJobBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&build.Build{Status: build.Started}, nil).AnyTimes()
+	var pendingCallCount int32
 	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil, nil).AnyTimes()
+		DoAndReturn(func(_ context.Context, _, _, _ string) (*build.Build, error) {
+			pendingCallCount++
+			if pendingCallCount == 1 {
+				return &build.Build{ID: 10, BuildNumber: "1", Status: build.Pending}, nil
+			}
+			return nil, nil
+		}).AnyTimes()
 	w := &Worker{pikoci: svc, jobTopic: topic, logger: logger}
 
 	ctx := context.Background()
@@ -384,6 +413,7 @@ func TestProcessJob_FailedPassedConstraint_NoBuilds(t *testing.T) {
 	svc.EXPECT().DeleteJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "20").
 		Return(nil)
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 }
 
@@ -437,6 +467,7 @@ func TestProcessJob_FailedPassedConstraint_NotSucceeded(t *testing.T) {
 	svc.EXPECT().DeleteJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "21").
 		Return(nil)
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 }
 
@@ -527,6 +558,7 @@ func TestProcessJob_TaskFailure_RunsHooks(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "30", gomock.Any()).
 		Return(nil).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 }
 
@@ -610,6 +642,7 @@ func TestProcessJob_NoDownstreamTrigger(t *testing.T) {
 
 	// No topic.Send expected — downstream is now scheduler-driven
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 }
 
@@ -1252,6 +1285,7 @@ func TestProcessMessage_JobDispatch(t *testing.T) {
 			return nil
 		})
 
+	expectPendingBuild(svc, 10)
 	w.processMessage(ctx, m, cwd)
 }
 
@@ -1550,6 +1584,7 @@ func TestProcessJob_PutStep_Success(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "80", gomock.Any()).
 		Return(nil).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 }
 
@@ -1625,6 +1660,7 @@ func TestProcessJob_OrderedPlan_GetTaskPut(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "90", gomock.Any()).
 		Return(nil).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 }
 
@@ -1698,6 +1734,7 @@ func TestProcessJob_TaskTimeout(t *testing.T) {
 			return nil
 		}).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 
 	assert.Equal(t, build.Failed, capturedBuild.Status)
@@ -1771,6 +1808,7 @@ func TestProcessJob_GetTimeout(t *testing.T) {
 			return nil
 		}).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 
 	assert.Equal(t, build.Failed, capturedBuild.Status)
@@ -1831,6 +1869,7 @@ func TestProcessJob_NoTimeout_Succeeds(t *testing.T) {
 			return nil
 		}).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 
 	assert.Equal(t, build.Succeeded, lastBuild.Status)
@@ -1903,6 +1942,7 @@ fi
 			return nil
 		}).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 
 	assert.Equal(t, build.Succeeded, capturedBuild.Status)
@@ -1971,6 +2011,7 @@ func TestProcessJob_TaskRetry_ExhaustsAttempts(t *testing.T) {
 			return nil
 		}).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 
 	assert.Equal(t, build.Failed, capturedBuild.Status)
@@ -2033,6 +2074,7 @@ func TestProcessJob_TaskRetry_WithTimeout(t *testing.T) {
 			return nil
 		}).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 
 	assert.Equal(t, build.Failed, capturedBuild.Status)
@@ -2602,6 +2644,7 @@ func TestProcessJob_TaskInputMissing(t *testing.T) {
 			return nil
 		}).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 
 	assert.Equal(t, build.Failed, capturedBuild.Status)
@@ -2664,6 +2707,7 @@ func TestProcessJob_TaskOutputMissing(t *testing.T) {
 			return nil
 		}).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 
 	assert.Equal(t, build.Failed, capturedBuild.Status)
@@ -2732,6 +2776,7 @@ func TestProcessJob_TaskInputsOutputs_Success(t *testing.T) {
 			return nil
 		}).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 
 	assert.Equal(t, build.Succeeded, capturedBuild.Status)
@@ -2798,6 +2843,7 @@ func TestProcessJob_TaskMultipleInputs_FailsOnFirst(t *testing.T) {
 			return nil
 		}).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 
 	assert.Equal(t, build.Failed, capturedBuild.Status)
@@ -2863,6 +2909,7 @@ func TestProcessJob_TaskMultipleOutputs_FailsOnFirst(t *testing.T) {
 			return nil
 		}).AnyTimes()
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 
 	assert.Equal(t, build.Failed, capturedBuild.Status)
@@ -2879,8 +2926,15 @@ func TestProcessJob_Cancellation(t *testing.T) {
 	topic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	var pendingCallCount int32
 	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil, nil).AnyTimes()
+		DoAndReturn(func(_ context.Context, _, _, _ string) (*build.Build, error) {
+			pendingCallCount++
+			if pendingCallCount == 1 {
+				return &build.Build{ID: 10, BuildNumber: "1", Status: build.Pending}, nil
+			}
+			return nil, nil
+		}).AnyTimes()
 
 	w := &Worker{
 		pikoci: svc,
@@ -3042,6 +3096,7 @@ func TestProcessJob_Retry_UsesCreateRetryAndResolvedVersions(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "3.1", gomock.Any()).
 		Return(nil).AnyTimes()
 
+	expectPendingBuild(svc, 20)
 	w.processJob(ctx, m, cwd, pp)
 }
 
@@ -3093,6 +3148,7 @@ func TestProcessJob_Retry_FailsOnVersionLookupError(t *testing.T) {
 			return nil
 		}).AnyTimes()
 
+	expectPendingBuild(svc, 20)
 	w.processJob(ctx, m, cwd, pp)
 }
 
@@ -3102,8 +3158,15 @@ func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 	topic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	var pendingCallCount int32
 	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil, nil).AnyTimes()
+		DoAndReturn(func(_ context.Context, _, _, _ string) (*build.Build, error) {
+			pendingCallCount++
+			if pendingCallCount == 1 {
+				return &build.Build{ID: 10, BuildNumber: "1", Status: build.Pending}, nil
+			}
+			return nil, nil
+		}).AnyTimes()
 
 	w := &Worker{
 		pikoci: svc,
@@ -3219,7 +3282,7 @@ func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 
 func TestProcessJob_MissingBuildID(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, svc, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3231,6 +3294,9 @@ func TestProcessJob_MissingBuildID(t *testing.T) {
 	pp := testPipeline()
 	cwd := t.TempDir()
 
+	// FindOldestPendingBuild returns nil → no pending builds, processJob returns early.
+	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, nil).AnyTimes()
 	// Should return immediately without calling any service methods
 	w.processJob(ctx, m, cwd, pp)
 }
@@ -3253,6 +3319,7 @@ func TestProcessJob_BuildNotPending(t *testing.T) {
 		Return(nil, pikoci.ErrBuildNotPending)
 
 	// Should return immediately — build already started by another worker
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 }
 
@@ -3283,6 +3350,7 @@ func TestProcessJob_ConcurrencyLimit_Requeues(t *testing.T) {
 		return nil
 	})
 
+	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 }
 
