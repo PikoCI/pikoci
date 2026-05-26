@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-27
+
 ### Added
 
 - Documentation site at docs.pikoci.com using MkDocs Material with search, PICO-8 themed light/dark mode, and auto-deploy on master push ([#377](https://github.com/PikoCI/pikoci/issues/377))
