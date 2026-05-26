@@ -44,6 +44,11 @@ type Worker struct {
 	draining atomic.Bool
 	logger   *slog.Logger
 
+	// apiCtx is the parent server context used for DB operations.
+	// It outlives individual job contexts (which get cancelled on
+	// build cancellation) but is cancelled on server shutdown.
+	apiCtx context.Context
+
 	// ResourceOverrides maps resource canonical names to local directory paths.
 	// When set, get steps for these resources will copy the local directory
 	// instead of running the resource type's pull command.
@@ -69,6 +74,10 @@ func (w *Worker) Drain() {
 
 func (w *Worker) Run(ctx context.Context) error {
 	w.logger.Info("Worker waiting for messages...")
+
+	// Store the parent context for DB operations that must survive
+	// job-level cancellation but respect server shutdown.
+	w.apiCtx = ctx
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -348,7 +357,7 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 
 	if !failed {
 		b.Status = build.Succeeded
-		if err := w.updateBuild(jobCtx, m, b); err != nil {
+		if err := w.updateBuild(ctx, m, b); err != nil {
 			return
 		}
 		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnSuccess, "on_success", resolved, "succeeded")
@@ -1422,23 +1431,37 @@ func (w *Worker) pollForCancellation(apiCtx, jobCtx context.Context, cancel cont
 }
 
 // updateBuild persists the current build state to the DB.
-func (w *Worker) updateBuild(ctx context.Context, m queue.Body, b build.Build) error {
-	err := w.pikoci.UpdateJobBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b)
+// It uses apiCtx (the parent server context) so that DB writes survive
+// job-level cancellation but are still cancelled on server shutdown.
+func (w *Worker) updateBuild(_ context.Context, m queue.Body, b build.Build) error {
+	dbCtx := w.dbContext()
+	err := w.pikoci.UpdateJobBuild(dbCtx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b)
 	if err != nil {
 		w.logger.Error("failed update build", "pipeline", m.PipelineCanonical, "job", m.JobName, "error", err)
 	}
 	return err
 }
 
-func (w *Worker) failBuild(ctx context.Context, m queue.Body, b build.Build, err error) {
+func (w *Worker) failBuild(_ context.Context, m queue.Body, b build.Build, err error) {
 	b.Status = build.Failed
 	if err != nil {
 		b.Error = err.Error()
 		w.logger.Error(err.Error())
 	}
-	if uerr := w.pikoci.UpdateJobBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b); uerr != nil {
+	dbCtx := w.dbContext()
+	if uerr := w.pikoci.UpdateJobBuild(dbCtx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b); uerr != nil {
 		w.logger.Error("failed update build", "pipeline", m.PipelineCanonical, "job", m.JobName, "error", uerr)
 	}
+}
+
+// dbContext returns the appropriate context for DB operations.
+// Uses apiCtx if set (normal server mode), falls back to background
+// context for tests and local mode.
+func (w *Worker) dbContext() context.Context {
+	if w.apiCtx != nil {
+		return w.apiCtx
+	}
+	return context.Background()
 }
 
 func (w *Worker) deleteBuild(ctx context.Context, m queue.Body, b build.Build) {
@@ -1537,7 +1560,12 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 			for {
 				select {
 				case <-ticker.C:
+					if ctx.Err() != nil {
+						return
+					}
 					partialCb(sw.String())
+				case <-ctx.Done():
+					return
 				case <-done:
 					return
 				}
