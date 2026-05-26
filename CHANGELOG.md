@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- SIGQUIT graceful shutdown hanging forever: cancel the main context after workers drain so blocked Receive() calls unblock and the process exits cleanly ([#384](https://github.com/PikoCI/pikoci/issues/384))
+- Worker stuck in loop after build cancellation: use parent server context for DB operations so writes survive job cancellation but respect server shutdown ([#382](https://github.com/PikoCI/pikoci/issues/382))
 - Follow button: fix race conditions between auto-scroll and scroll listeners, target running step in multi-step builds, and improve visual feedback with "Following"/"Follow" text and solid/outline styles ([#343](https://github.com/PikoCI/pikoci/issues/343))
 - Pending builds showing gray on pipeline graph instead of previous build's color with dashed border
 - Concurrency re-queuing infinite loop: builds are now created as Pending at trigger time and transitioned to Started atomically by workers, eliminating duplicate build creation from re-queued messages ([#358](https://github.com/PikoCI/pikoci/issues/358), [#246](https://github.com/PikoCI/pikoci/issues/246))
