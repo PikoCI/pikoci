@@ -17,23 +17,25 @@ import (
 
 // Scheduler polls the database for resources due for a check and sends messages to the topic.
 type Scheduler struct {
-	resources resource.Repository
-	pipelines pipeline.Repository
-	builds    build.Repository
-	topic     queue.Topic
-	logger    *slog.Logger
-	interval  time.Duration
+	resources  resource.Repository
+	pipelines  pipeline.Repository
+	builds     build.Repository
+	jobTopic   queue.Topic
+	checkTopic queue.Topic
+	logger     *slog.Logger
+	interval   time.Duration
 }
 
 // New creates a new Scheduler.
-func New(resources resource.Repository, pipelines pipeline.Repository, builds build.Repository, topic queue.Topic, logger *slog.Logger) *Scheduler {
+func New(resources resource.Repository, pipelines pipeline.Repository, builds build.Repository, jobTopic, checkTopic queue.Topic, logger *slog.Logger) *Scheduler {
 	return &Scheduler{
-		resources: resources,
-		pipelines: pipelines,
-		builds:    builds,
-		topic:     topic,
-		logger:    logger,
-		interval:  10 * time.Second,
+		resources:  resources,
+		pipelines:  pipelines,
+		builds:     builds,
+		jobTopic:   jobTopic,
+		checkTopic: checkTopic,
+		logger:     logger,
+		interval:   10 * time.Second,
 	}
 }
 
@@ -78,7 +80,7 @@ func (s *Scheduler) tickResources(ctx context.Context) {
 			s.logger.Error("failed to marshal Message Body", "error", err)
 			continue
 		}
-		err = s.topic.Send(ctx, &pubsub.Message{
+		err = s.checkTopic.Send(ctx, &pubsub.Message{
 			Body: mb,
 		})
 		if err != nil {
@@ -209,7 +211,7 @@ func (s *Scheduler) evaluateJob(ctx context.Context, pwt *pipeline.WithTeam, j *
 		s.logger.Error("failed to marshal downstream trigger body", "error", err)
 		return
 	}
-	if err := s.topic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
+	if err := s.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
 		s.logger.Error("failed to send downstream trigger message",
 			"job", j.Name, "error", err)
 	}

@@ -60,18 +60,23 @@ var workerCmd = &cobra.Command{
 			return fmt.Errorf("failed to initialize client with url %q: %w", cfg.PikoCIURL, err)
 		}
 
-		topic, err := pubsub.OpenTopic(ctx, getTopicURL(cfg.PubSubSystem))
+		jobTopic, err := pubsub.OpenTopic(ctx, getTopicURL(cfg.PubSubSystem, "pikoci-jobs"))
 		if err != nil {
-			return fmt.Errorf("failed to open: %v", err)
+			return fmt.Errorf("failed to open job topic: %v", err)
 		}
-		defer topic.Shutdown(ctx)
+		defer jobTopic.Shutdown(ctx)
 
 		drainTimeout, err := time.ParseDuration(cfg.DrainTimeout)
 		if err != nil {
 			return fmt.Errorf("invalid drain-timeout %q: %w", cfg.DrainTimeout, err)
 		}
 
-		workers, wg, cleanup, err := runWorker(ctx, cfg.PubSubSystem, topic, c, cfg.Concurrency, cfg.LogLevel)
+		queues := cfg.Queues
+		if queues == "" {
+			queues = "jobs,checks"
+		}
+
+		workers, wg, cleanup, err := runWorker(ctx, cfg.PubSubSystem, jobTopic, c, cfg.Concurrency, cfg.LogLevel, queues)
 		if err != nil {
 			return fmt.Errorf("failed to start worker: %w", err)
 		}
@@ -129,6 +134,7 @@ func init() {
 	workerCmd.Flags().String("drain-timeout", "10m", "Maximum time to wait for in-flight jobs to finish during graceful shutdown (SIGQUIT)")
 	workerCmd.Flags().String("log-level", "info", "Sets the log level ('debug', 'info', 'warn', 'error')")
 	workerCmd.Flags().String("worker-token", "", "Worker authentication token (from 'pikoci worker-token' or server startup logs)")
+	workerCmd.Flags().String("queues", "jobs,checks", "Which queues to listen on: jobs, checks, or jobs,checks")
 
 	workerViper.BindPFlags(workerCmd.Flags())
 
@@ -136,24 +142,59 @@ func init() {
 	workerViper.AutomaticEnv()
 }
 
-func runWorker(ctx context.Context, sy string, t queue.Topic, s pikoci.Service, c int, llvl string) ([]*worker.Worker, *sync.WaitGroup, func(), error) {
+func runWorker(ctx context.Context, sy string, jobTopic queue.Topic, s pikoci.Service, c int, llvl string, queues string) ([]*worker.Worker, *sync.WaitGroup, func(), error) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: parseSlogLevel(llvl)}))
 	logger = logger.With("service", "worker")
-	// Create a subscription connected to that topic.
-	subscription, err := pubsub.OpenSubscription(ctx, getSubscriptionURL(sy))
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to OpenSubscription: %w", err)
+
+	queueSet := make(map[string]bool)
+	for _, p := range strings.Split(queues, ",") {
+		queueSet[strings.TrimSpace(p)] = true
+	}
+	listenJobs := queueSet["jobs"]
+	listenChecks := queueSet["checks"]
+
+	if !listenJobs && !listenChecks {
+		return nil, nil, nil, fmt.Errorf("--queues must contain at least one of: jobs, checks (got %q)", queues)
 	}
 
-	cleanup := func() { subscription.Shutdown(context.Background()) }
+	var jobSub queue.Subscription
+	var checkSub queue.Subscription
+	var cleanups []func()
+
+	if listenJobs {
+		sub, err := pubsub.OpenSubscription(ctx, getSubscriptionURL(sy, "pikoci-jobs"))
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to open job subscription: %w", err)
+		}
+		jobSub = sub
+		cleanups = append(cleanups, func() { sub.Shutdown(context.Background()) })
+	}
+
+	if listenChecks {
+		sub, err := pubsub.OpenSubscription(ctx, getSubscriptionURL(sy, "pikoci-checks"))
+		if err != nil {
+			for _, fn := range cleanups {
+				fn()
+			}
+			return nil, nil, nil, fmt.Errorf("failed to open check subscription: %w", err)
+		}
+		checkSub = sub
+		cleanups = append(cleanups, func() { sub.Shutdown(context.Background()) })
+	}
+
+	cleanup := func() {
+		for _, fn := range cleanups {
+			fn()
+		}
+	}
 
 	var workers []*worker.Worker
 	var wg sync.WaitGroup
 	for i := range c {
 		wg.Add(1)
 		nlogger := logger.With("num", i+1)
-		nlogger.Info(fmt.Sprintf("Starting Worker %d", i+1))
-		w := worker.New(s, t, subscription, nlogger)
+		nlogger.Info(fmt.Sprintf("Starting Worker %d", i+1), "queues", queues)
+		w := worker.New(s, jobTopic, jobSub, checkSub, nlogger)
 		workers = append(workers, w)
 
 		go func() {

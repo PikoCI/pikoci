@@ -60,7 +60,7 @@ func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) erro
 		return fmt.Errorf("failed to marshal Message Body: %w", err)
 	}
 
-	err = q.Topic.Send(ctx, &pubsub.Message{
+	err = q.JobTopic.Send(ctx, &pubsub.Message{
 		Body: mb,
 	})
 	if err != nil {

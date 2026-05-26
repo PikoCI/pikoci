@@ -30,7 +30,7 @@ import (
 
 func newTestWorker(ctrl *gomock.Controller) (*Worker, *mock.Service, *mock.Topic) {
 	svc := mock.NewService(ctrl)
-	topic := mock.NewTopic(ctrl)
+	jobTopic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	// InsertBuildGetVersion is called after every successful get step; allow it globally.
@@ -53,11 +53,11 @@ func newTestWorker(ctrl *gomock.Controller) (*Worker, *mock.Service, *mock.Topic
 		}).AnyTimes()
 
 	w := &Worker{
-		pikoci: svc,
-		topic:  topic,
-		logger: logger,
+		pikoci:   svc,
+		jobTopic: jobTopic,
+		logger:   logger,
 	}
-	return w, svc, topic
+	return w, svc, jobTopic
 }
 
 func runnerHook(rc utils.RunnerCommand) job.HookStep {
@@ -265,7 +265,7 @@ func TestInsertBuildGetVersion_CalledWithCorrectArgs(t *testing.T) {
 		Return(&build.Build{Status: build.Started}, nil).AnyTimes()
 	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil).AnyTimes()
-	w := &Worker{pikoci: svc, topic: topic, logger: logger}
+	w := &Worker{pikoci: svc, jobTopic: topic, logger: logger}
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -2884,7 +2884,7 @@ func TestProcessJob_Cancellation(t *testing.T) {
 
 	w := &Worker{
 		pikoci: svc,
-		topic:  topic,
+		jobTopic: topic,
 		logger: logger,
 	}
 
@@ -3107,7 +3107,7 @@ func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 
 	w := &Worker{
 		pikoci: svc,
-		topic:  topic,
+		jobTopic: topic,
 		logger: logger,
 	}
 

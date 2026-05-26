@@ -7,6 +7,7 @@ type Config struct {
 	Concurrency  int    `mapstructure:"concurrency"`
 	DrainTimeout string `mapstructure:"drain-timeout"`
 	PubSubSystem string `mapstructure:"pubsub-system"`
+	Queues       string `mapstructure:"queues"`
 
 	LogLevel string `mapstructure:"log-level"`
 }

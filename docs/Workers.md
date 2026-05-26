@@ -4,19 +4,24 @@ By default, PikoCI runs an embedded worker inside the server process. For produc
 
 ## Architecture
 
+PikoCI uses two separate queues: one for **jobs** and one for **resource checks**. This prevents long-running jobs (e.g. Docker builds) from blocking resource check processing.
+
 ```
                     ┌─────────┐
                     │  Server  │  --run-worker=false
                     └────┬────┘
-                         │ pub/sub queue
-              ┌──────────┼──────────┐
-              │          │          │
-         ┌────┴───┐ ┌───┴────┐ ┌──┴─────┐
-         │Worker 1│ │Worker 2│ │Worker 3│
-         └────────┘ └────────┘ └────────┘
+                    ┌────┴────┐
+              ┌─────┤  Queues ├─────┐
+              │     └─────────┘     │
+         jobs │                     │ checks
+              │                     │
+         ┌────┴───┐           ┌────┴───┐
+         │Worker 1│           │Worker 2│
+         │(all)   │           │(checks)│
+         └────────┘           └────────┘
 ```
 
-The server publishes jobs to a queue. Workers subscribe, execute the jobs, and report results back via the PikoCI API.
+The server publishes jobs and resource checks to separate queues. Workers subscribe, execute the work, and report results back via the PikoCI API.
 
 ## Requirements
 
@@ -65,6 +70,7 @@ pikoci worker \
 |------|-------|---------|----------|-------------|
 | `--pikoci-url` | `-u` | `localhost:8080` | no | PikoCI server URL |
 | `--pubsub-system` | | `mem` | no | Queue backend (must match server) |
+| `--queues` | | `jobs,checks` | no | Which queues to listen on: `jobs`, `checks`, or `jobs,checks` |
 | `--concurrency` | | `1` | no | Number of parallel job goroutines |
 | `--drain-timeout` | | `10m` | no | Max time to wait for in-flight jobs during graceful shutdown (`SIGQUIT`) |
 | `--log-level` | | `info` | no | Log level: `debug`, `info`, `warn`, `error` |
@@ -84,15 +90,22 @@ export CONCURRENCY=4
 
 ## Scaling
 
-Run multiple worker instances to increase throughput. Each worker independently subscribes to the queue:
+Run multiple worker instances to increase throughput. Each worker independently subscribes to the queues:
 
 ```bash
-# Machine A
+# Machine A — handles both jobs and checks (default)
 pikoci worker --pikoci-url http://server:8080 --pubsub-system nats --worker-token eyJhbG... --concurrency 2
 
-# Machine B
-pikoci worker --pikoci-url http://server:8080 --pubsub-system nats --worker-token eyJhbG... --concurrency 4
+# Machine B — dedicated job runner
+pikoci worker --pikoci-url http://server:8080 --pubsub-system nats --worker-token eyJhbG... --concurrency 4 --queues jobs
+
+# Machine C — dedicated check worker (never blocked by long jobs)
+pikoci worker --pikoci-url http://server:8080 --pubsub-system nats --worker-token eyJhbG... --queues checks
 ```
+
+## Dedicated check workers
+
+When jobs take minutes (e.g. Docker builds), a single worker processing both queues will block resource checks until the job finishes. Use `--queues checks` to run a dedicated check worker that detects new versions promptly, regardless of job load.
 
 ## Signal handling
 
