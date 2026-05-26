@@ -47,7 +47,7 @@ pikoci worker --pikoci-url http://localhost:8080 --pubsub-system kafka --worker-
 
 ## Planned
 
-AWS SQS and GCP Pub/Sub support is planned. See [#209](https://github.com/xescugc/pikoci/issues/209).
+AWS SQS and GCP Pub/Sub support is planned. See [#209](https://github.com/PikoCI/pikoci/issues/209).
 
 ## Choosing a backend
 

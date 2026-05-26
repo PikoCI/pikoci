@@ -7,7 +7,7 @@ Pipeline variables let you parameterize your pipeline configuration.
 ```hcl
 variable "repo_url" {
   type    = string
-  default = "https://github.com/xescugc/pikoci.git"
+  default = "https://github.com/PikoCI/pikoci.git"
 }
 
 variable "repo_name" {
@@ -76,7 +76,7 @@ variable "git_token" {
 
 resource "git" "repo" {
   params {
-    url   = "https://github.com/xescugc/pikoci.git"
+    url   = "https://github.com/PikoCI/pikoci.git"
     token = var.git_token  # resolved lazily from vault at runtime
   }
 }
@@ -139,7 +139,7 @@ variable "git_token" {
 resource "git" "app" {
   check_interval = "@every 1m"
   params {
-    url   = "https://github.com/xescugc/pikoci.git"
+    url   = "https://github.com/PikoCI/pikoci.git"
     token = var.git_token
   }
 }

@@ -52,7 +52,7 @@ var clientCmd = &cobra.Command{
 }
 
 func init() {
-	clientCmd.PersistentFlags().StringP("url", "u", "localhost:4000", "URL to the PikoCI server")
+	clientCmd.PersistentFlags().StringP("url", "u", "localhost:8080", "URL to the PikoCI server")
 	clientCmd.MarkPersistentFlagRequired("url")
 	clientCmd.PersistentFlags().String("jwt", "", "Provide the JWT to authenticate on the API, if not provided will read it from the FS")
 

@@ -116,6 +116,16 @@ PikoCI supports running multiple server instances concurrently when using Postgr
 
 SQLite and in-memory backends are single-instance only (no locking support).
 
+## Metrics
+
+PikoCI exposes a `/metrics` endpoint in Prometheus format with Go runtime metrics (goroutines, memory, GC), HTTP request counts by status code and method, and HTTP request duration histograms.
+
+```bash
+curl http://localhost:8080/metrics
+```
+
+See [Deployment — Monitoring](Deployment.md#monitoring) for setting up Prometheus and Grafana.
+
 ## Signal handling
 
 PikoCI supports two shutdown modes:

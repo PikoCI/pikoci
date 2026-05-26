@@ -6,24 +6,24 @@ Download the latest release for your platform:
 
 ```bash
 # Linux (amd64)
-curl -L https://github.com/xescugc/pikoci/releases/latest/download/linux-amd64 -o pikoci
+curl -L https://github.com/PikoCI/pikoci/releases/latest/download/linux-amd64 -o pikoci
 chmod +x pikoci
 
 # macOS (amd64)
-curl -L https://github.com/xescugc/pikoci/releases/latest/download/darwin-amd64 -o pikoci
+curl -L https://github.com/PikoCI/pikoci/releases/latest/download/darwin-amd64 -o pikoci
 chmod +x pikoci
 ```
 
 Or pull the Docker image:
 
 ```bash
-docker pull xescugc/pikoci:latest
+docker pull ghcr.io/pikoci/pikoci:latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/xescugc/pikoci.git
+git clone https://github.com/PikoCI/pikoci.git
 cd pikoci
 go build -o pikoci .
 ```
@@ -83,7 +83,7 @@ The default user is `admin` / `admin123` (created by the initial database migrat
 
 ## Try with Docker Compose
 
-The [`examples/`](https://github.com/xescugc/pikoci/tree/master/examples) folder contains ready-to-run pipelines. The fastest way to try PikoCI:
+The [`examples/`](https://github.com/PikoCI/pikoci/tree/master/examples) folder contains ready-to-run pipelines. The fastest way to try PikoCI:
 
 ```bash
 cd examples

@@ -1,6 +1,6 @@
 # CLI Reference
 
-PikoCI provides three top-level commands: `server`, `worker`, and `client`, plus utility commands `user-password` and `worker-token`.
+PikoCI provides three top-level commands: `server`, `worker`, and `client`, plus `run` for local execution and utility commands `user-password` and `worker-token`.
 
 ## Global structure
 
@@ -8,6 +8,7 @@ PikoCI provides three top-level commands: `server`, `worker`, and `client`, plus
 pikoci server       [flags]          # Start the server
 pikoci worker       [flags]          # Start a standalone worker
 pikoci client       [flags] <cmd>    # Interact with the API
+pikoci run          [flags]          # Run a pipeline job locally
 pikoci user-password [flags]         # Generate hashed passwords
 pikoci worker-token  [flags]         # Generate a worker authentication token
 ```
@@ -20,7 +21,7 @@ Manage pipelines and jobs via the PikoCI API.
 
 | Flag | Alias | Default | Required | Description |
 |------|-------|---------|----------|-------------|
-| `--url` | `-u` | `localhost:4000` | **yes** | PikoCI server URL |
+| `--url` | `-u` | `localhost:8080` | **yes** | PikoCI server URL |
 | `--jwt` | | | no | JWT token (if not provided, reads from `$XDG_CONFIG_HOME/pikoci/authentication`) |
 
 ### login
@@ -109,6 +110,17 @@ pikoci client -u localhost:8080 pipelines delete -n my-pipeline
 | Flag | Alias | Required | Description |
 |------|-------|----------|-------------|
 | `--name` | `-n`, `-pn` | **yes** | Pipeline name |
+
+#### pipelines rename
+
+```bash
+pikoci client -u localhost:8080 pipelines rename -n my-pipeline --new-name new-pipeline
+```
+
+| Flag | Alias | Required | Description |
+|------|-------|----------|-------------|
+| `--name` | `-n`, `-pn` | **yes** | Current pipeline name |
+| `--new-name` | | **yes** | New name for the pipeline |
 
 ### jobs
 
@@ -387,6 +399,47 @@ pikoci client triggers list --team-canonical main --name my-trigger --after 0
 |------|----------|-------------|
 | `--name` | **yes** | Name of the Trigger |
 | `--after` | no | List triggers after this ID (default: 0) |
+
+### export
+
+Export the full database as a portable SQLite file. Requires admin credentials.
+
+```bash
+pikoci client -u localhost:8080 export -o backup.db
+```
+
+| Flag | Alias | Required | Description |
+|------|-------|----------|-------------|
+| `--output` | `-o` | **yes** | Output file path for the SQLite export |
+
+This is also available via the web UI admin dropdown and as a `GET /admin/export` API endpoint.
+
+## run
+
+Run a pipeline job locally without needing a server. Creates an ephemeral in-memory environment, executes the specified job, streams output, and exits with the job's status code.
+
+```bash
+pikoci run -p pipeline.hcl -j my-job
+```
+
+| Flag | Alias | Default | Required | Description |
+|------|-------|---------|----------|-------------|
+| `--pipeline-config` | `-p` | | **yes** | Path to the pipeline HCL file |
+| `--job` | `-j` | | **yes** | Job name to execute |
+| `--var` | | | no | Variable overrides in `key=value` format (repeatable) |
+| `--vars` | `-v` | | no | Path to a JSON vars file |
+| `--resource` | | | no | Resource overrides in `type.name=path` format (repeatable, e.g. `git.my-repo=./local-dir`) |
+| `--log-level` | | `error` | no | Log level: `debug`, `info`, `warn`, `error` |
+
+### Resource overrides
+
+Use `--resource` to skip cloning and point a resource at a local directory instead:
+
+```bash
+pikoci run -p pipeline.hcl -j test --resource git.my-repo=./
+```
+
+This replaces the `pull` step for that resource with a symlink to the local path, so your task runs against local files.
 
 ## user-password
 

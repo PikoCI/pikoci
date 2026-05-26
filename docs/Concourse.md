@@ -18,7 +18,7 @@ PikoCI's resource model is directly inspired by [Concourse CI](https://concourse
 | Web UI | Built-in UI | Similar functionality. |
 | `passed` constraint | `passed` | Same. Gates a resource version through upstream jobs. |
 | `trigger: true` | `trigger = true` | Same. Auto-triggers the job on new versions. |
-| `on_success` / `on_failure` / `ensure` | Same names | Same semantics. Available on both steps and jobs. |
+| `on_success` / `on_failure` / `on_cancel` / `ensure` | Same names | Same semantics. Available on both steps and jobs. |
 | Webhook triggers | Webhook triggers | Same. `POST /webhooks/<token>` triggers a resource check. |
 | Teams | Teams | Similar. PikoCI has team-based scoping. |
 
@@ -121,7 +121,7 @@ Pipelines use HCL syntax, which supports variables, string interpolation, and is
 
 ## Known gaps vs Concourse
 
-- **No built-in resource registry**: Concourse ships with built-in resource types (git, s3, time, etc.). PikoCI ships only with the `cron` resource type. You define your own resource types in HCL.
+- **No built-in resource registry**: Concourse ships with built-in resource types (git, s3, time, etc.). PikoCI ships with `cron`, `git`, `trigger`, and `github-check` resource types, but does not have the breadth of Concourse's registry. You can define your own resource types in HCL.
 
 ## Migration tips
 
@@ -130,4 +130,4 @@ Pipelines use HCL syntax, which supports variables, string interpolation, and is
 3. Convert your pipeline YAML to HCL, mapping `get`/`task`/`put` steps
 4. Use `variable` blocks for values that were in your Concourse credential manager
 
-A [Concourse pipeline importer](https://github.com/xescugc/pikoci/issues/210) is planned.
+A [Concourse pipeline importer](https://github.com/PikoCI/pikoci/issues/210) is planned.
