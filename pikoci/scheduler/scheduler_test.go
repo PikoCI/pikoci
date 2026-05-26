@@ -20,14 +20,15 @@ import (
 	"gocloud.dev/pubsub"
 )
 
-func newTestScheduler(ctrl *gomock.Controller) (*Scheduler, *mock.ResourceRepository, *mock.PipelineRepository, *mock.BuildRepository, *mock.Topic) {
+func newTestScheduler(ctrl *gomock.Controller) (*Scheduler, *mock.ResourceRepository, *mock.PipelineRepository, *mock.BuildRepository, *mock.Topic, *mock.Topic) {
 	rr := mock.NewResourceRepository(ctrl)
 	pr := mock.NewPipelineRepository(ctrl)
 	br := mock.NewBuildRepository(ctrl)
-	topic := mock.NewTopic(ctrl)
+	jobTopic := mock.NewTopic(ctrl)
+	checkTopic := mock.NewTopic(ctrl)
 	logger := slog.Default()
-	s := New(rr, pr, br, topic, logger)
-	return s, rr, pr, br, topic
+	s := New(rr, pr, br, jobTopic, checkTopic, logger)
+	return s, rr, pr, br, jobTopic, checkTopic
 }
 
 // expectEmptyTickJobs sets up expectations for tickJobs when no pipelines exist.
@@ -37,7 +38,7 @@ func expectEmptyTickJobs(pr *mock.PipelineRepository) {
 
 func TestTickResources_NoDueResources(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, _, _ := newTestScheduler(ctrl)
+	s, rr, pr, _, _, _ := newTestScheduler(ctrl)
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
 	expectEmptyTickJobs(pr)
@@ -47,7 +48,7 @@ func TestTickResources_NoDueResources(t *testing.T) {
 
 func TestTickResources_ProcessesDueResources(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, _, topic := newTestScheduler(ctrl)
+	s, rr, pr, _, _, topic := newTestScheduler(ctrl)
 
 	due := []*resource.ResourceWithPipeline{
 		{
@@ -89,7 +90,7 @@ func TestTickResources_ProcessesDueResources(t *testing.T) {
 
 func TestTickResources_MultipleDueResources(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, _, topic := newTestScheduler(ctrl)
+	s, rr, pr, _, _, topic := newTestScheduler(ctrl)
 
 	due := []*resource.ResourceWithPipeline{
 		{
@@ -116,7 +117,7 @@ func TestTickResources_MultipleDueResources(t *testing.T) {
 
 func TestTickResources_DefaultCheckInterval(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, _, topic := newTestScheduler(ctrl)
+	s, rr, pr, _, _, topic := newTestScheduler(ctrl)
 
 	due := []*resource.ResourceWithPipeline{
 		{
@@ -143,7 +144,7 @@ func TestTickResources_DefaultCheckInterval(t *testing.T) {
 
 func TestStart_StopsOnContextCancel(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, _, _ := newTestScheduler(ctrl)
+	s, rr, pr, _, _, _ := newTestScheduler(ctrl)
 	s.interval = 50 * time.Millisecond
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil).AnyTimes()
@@ -159,7 +160,7 @@ func TestStart_StopsOnContextCancel(t *testing.T) {
 
 func TestTickResources_SendErrorSkipsResource(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, _, topic := newTestScheduler(ctrl)
+	s, rr, pr, _, _, topic := newTestScheduler(ctrl)
 
 	due := []*resource.ResourceWithPipeline{
 		{
@@ -181,7 +182,7 @@ func TestTickResources_SendErrorSkipsResource(t *testing.T) {
 
 func TestTickJobs_TriggersWhenCommonVersionExists(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, br, topic := newTestScheduler(ctrl)
+	s, rr, pr, br, topic, _ := newTestScheduler(ctrl)
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
 
@@ -243,7 +244,7 @@ func TestTickJobs_TriggersWhenCommonVersionExists(t *testing.T) {
 
 func TestTickJobs_SkipsWhenNoCommonVersion(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, br, _ := newTestScheduler(ctrl)
+	s, rr, pr, br, _, _ := newTestScheduler(ctrl)
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
 
@@ -284,7 +285,7 @@ func TestTickJobs_SkipsWhenNoCommonVersion(t *testing.T) {
 
 func TestTickJobs_SkipsWhenPendingBuildExists(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, br, _ := newTestScheduler(ctrl)
+	s, rr, pr, br, _, _ := newTestScheduler(ctrl)
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
 
@@ -329,7 +330,7 @@ func TestTickJobs_SkipsWhenPendingBuildExists(t *testing.T) {
 
 func TestTickJobs_SkipsWhenTriggerFalse(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, _, _ := newTestScheduler(ctrl)
+	s, rr, pr, _, _, _ := newTestScheduler(ctrl)
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
 
@@ -366,7 +367,7 @@ func TestTickJobs_SkipsWhenTriggerFalse(t *testing.T) {
 
 func TestTickJobs_SkipsJobsWithoutPassedConstraints(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, _, _ := newTestScheduler(ctrl)
+	s, rr, pr, _, _, _ := newTestScheduler(ctrl)
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
 
@@ -401,7 +402,7 @@ func TestTickJobs_SkipsJobsWithoutPassedConstraints(t *testing.T) {
 
 func TestTickJobs_MultipleGetSteps_AllMustBeReady(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, br, _ := newTestScheduler(ctrl)
+	s, rr, pr, br, _, _ := newTestScheduler(ctrl)
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
 
@@ -459,7 +460,7 @@ func TestTickJobs_MultipleGetSteps_AllMustBeReady(t *testing.T) {
 
 func TestTickJobs_MultipleGetSteps_BothReady_TriggersOnce(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, br, topic := newTestScheduler(ctrl)
+	s, rr, pr, br, topic, _ := newTestScheduler(ctrl)
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
 
@@ -532,7 +533,7 @@ func TestTickJobs_MultipleGetSteps_BothReady_TriggersOnce(t *testing.T) {
 
 func TestTickJobs_FindReadyError_SkipsJob(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, br, _ := newTestScheduler(ctrl)
+	s, rr, pr, br, _, _ := newTestScheduler(ctrl)
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
 

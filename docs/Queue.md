@@ -2,6 +2,8 @@
 
 PikoCI uses a pub/sub queue to dispatch work from the server to workers. Configure with `--pubsub-system`.
 
+PikoCI uses two separate queues: `pikoci-jobs` for job execution and `pikoci-checks` for resource checks. This ensures long-running jobs never block resource version detection.
+
 ## mem (default)
 
 In-memory queue. Only works when the worker runs embedded in the server process (`--run-worker=true`). Suitable for development and single-process deployments.

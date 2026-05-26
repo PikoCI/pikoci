@@ -41,9 +41,13 @@ func TestServicesE2E(t *testing.T) {
 	err = migrate.Migrate(db, mysql.Mem)
 	require.NoError(t, err)
 
-	topic, err := pubsub.OpenTopic(ctx, fmt.Sprintf("%s://services-test", mempubsub.Scheme))
+	jobTopic, err := pubsub.OpenTopic(ctx, fmt.Sprintf("%s://services-test-jobs", mempubsub.Scheme))
 	require.NoError(t, err)
-	defer topic.Shutdown(ctx)
+	defer jobTopic.Shutdown(ctx)
+
+	checkTopic, err := pubsub.OpenTopic(ctx, fmt.Sprintf("%s://services-test-checks", mempubsub.Scheme))
+	require.NoError(t, err)
+	defer checkTopic.Shutdown(ctx)
 
 	ur := mysql.NewUserRepository(db)
 	tr := mysql.NewTeamRepository(db)
@@ -58,7 +62,7 @@ func TestServicesE2E(t *testing.T) {
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 
 	jwtSecret := []byte("test-secret")
-	svc := pikoci.New(ctx, topic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
+	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
 	svc.StartScheduler(ctx)
 
 	_, _ = svc.CreateUser(ctx, user.User{
@@ -67,15 +71,19 @@ func TestServicesE2E(t *testing.T) {
 		Password: "$2a$14$rwQk8Qvc2rij7qhFO4P1W.OiSF6AkgVU1RCrLaY2wawJcpkPEKwbm",
 	}, true)
 
-	subscription, err := pubsub.OpenSubscription(ctx, fmt.Sprintf("%s://services-test", mempubsub.Scheme))
+	jobSub, err := pubsub.OpenSubscription(ctx, fmt.Sprintf("%s://services-test-jobs", mempubsub.Scheme))
 	require.NoError(t, err)
-	defer subscription.Shutdown(ctx)
+	defer jobSub.Shutdown(ctx)
+
+	checkSub, err := pubsub.OpenSubscription(ctx, fmt.Sprintf("%s://services-test-checks", mempubsub.Scheme))
+	require.NoError(t, err)
+	defer checkSub.Shutdown(ctx)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		w := worker.New(svc, topic, subscription, logger.With("component", "worker"))
+		w := worker.New(svc, jobTopic, jobSub, checkSub, logger.With("component", "worker"))
 		w.Run(ctx)
 	}()
 

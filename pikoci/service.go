@@ -94,8 +94,9 @@ type Service interface {
 }
 
 type PikoCI struct {
-	Topic         queue.Topic
-	Users         user.Repository
+	JobTopic   queue.Topic
+	CheckTopic queue.Topic
+	Users      user.Repository
 	Teams         team.Repository
 	Pipelines     pipeline.Repository
 	Jobs          job.Repository
@@ -114,10 +115,11 @@ type PikoCI struct {
 	logger    *slog.Logger
 }
 
-func New(ctx context.Context, t queue.Topic, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, suow unitwork.StartUnitOfWork, js []byte, l *slog.Logger) *PikoCI {
+func New(ctx context.Context, jobTopic, checkTopic queue.Topic, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, suow unitwork.StartUnitOfWork, js []byte, l *slog.Logger) *PikoCI {
 	return &PikoCI{
 		Ctx:           ctx,
-		Topic:         t,
+		JobTopic:      jobTopic,
+		CheckTopic:    checkTopic,
 		Users:         ur,
 		Teams:         tr,
 		Pipelines:     pr,
@@ -131,7 +133,7 @@ func New(ctx context.Context, t queue.Topic, ur user.Repository, tr team.Reposit
 		StartUoW:      suow,
 		JWTSecret:     js,
 		logger:        l,
-		scheduler:     scheduler.New(rr, pr, br, t, l),
+		scheduler:     scheduler.New(rr, pr, br, jobTopic, checkTopic, l),
 	}
 }
 

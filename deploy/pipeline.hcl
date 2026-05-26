@@ -8,20 +8,20 @@ job "lint" {
   task "install-jq" {
     run "docker" {
       image = var.go_image
-      cmd   = "apt-get update -qq && apt-get install -qq -y jq"
+      cmd   = "apt-get update -qq && apt-get install -qq -y jq && cp /usr/bin/jq /pikoci-tools/ && cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true"
       args  = [
-        "-v", "pikoci-go-mod:/go/pkg/mod",
-        "-v", "pikoci-build:/root/.cache/go-build",
+        "-v", "pikoci-tools:/pikoci-tools",
       ]
     }
   }
   task "make" {
     run "docker" {
       image = var.go_image
-      cmd   = "cd ${var.git_name} && make lint"
+      cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH && cd ${var.git_name} && make lint"
       args  = [
         "-v", "pikoci-go-mod:/go/pkg/mod",
         "-v", "pikoci-build:/root/.cache/go-build",
+        "-v", "pikoci-tools:/pikoci-tools",
       ]
     }
   }
@@ -41,20 +41,20 @@ job "test-mock" {
   task "install-jq" {
     run "docker" {
       image = var.go_image
-      cmd   = "apt-get update -qq && apt-get install -qq -y jq"
+      cmd   = "apt-get update -qq && apt-get install -qq -y jq && cp /usr/bin/jq /pikoci-tools/ && cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true"
       args  = [
-        "-v", "pikoci-go-mod:/go/pkg/mod",
-        "-v", "pikoci-build:/root/.cache/go-build",
+        "-v", "pikoci-tools:/pikoci-tools",
       ]
     }
   }
   task "make" {
     run "docker" {
       image = var.go_image
-      cmd   = "cd ${var.git_name} && make test-mock"
+      cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH && cd ${var.git_name} && make test-mock"
       args  = [
         "-v", "pikoci-go-mod:/go/pkg/mod",
         "-v", "pikoci-build:/root/.cache/go-build",
+        "-v", "pikoci-tools:/pikoci-tools",
       ]
     }
   }
@@ -74,10 +74,9 @@ job "test-integration" {
   task "install-jq" {
     run "docker" {
       image = "ghcr.io/xescugc/pikoci-integration:latest"
-      cmd   = "apt-get update -qq && apt-get install -qq -y jq"
+      cmd   = "apt-get update -qq && apt-get install -qq -y jq && cp /usr/bin/jq /pikoci-tools/ && cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true"
       args  = [
-        "-v", "pikoci-go-mod:/go/pkg/mod",
-        "-v", "pikoci-build:/root/.cache/go-build",
+        "-v", "pikoci-tools:/pikoci-tools",
       ]
     }
   }
@@ -85,6 +84,7 @@ job "test-integration" {
     run "docker" {
       image = "ghcr.io/xescugc/pikoci-integration:latest"
       cmd   = <<-EOT
+        export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH
         cd ${var.git_name}
         cp /usr/local/bin/geckodriver integration/vendor/geckodriver
         make test-integration
@@ -92,6 +92,7 @@ job "test-integration" {
       args  = [
         "-v", "pikoci-go-mod:/go/pkg/mod",
         "-v", "pikoci-build:/root/.cache/go-build",
+        "-v", "pikoci-tools:/pikoci-tools",
       ]
     }
   }
@@ -143,22 +144,22 @@ job "test-backends" {
   task "install-jq" {
     run "docker" {
       image = var.go_image
-      cmd   = "apt-get update -qq && apt-get install -qq -y jq"
+      cmd   = "apt-get update -qq && apt-get install -qq -y jq && cp /usr/bin/jq /pikoci-tools/ && cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true"
       args  = [
         "--network=host",
-        "-v", "pikoci-go-mod:/go/pkg/mod",
-        "-v", "pikoci-build:/root/.cache/go-build",
+        "-v", "pikoci-tools:/pikoci-tools",
       ]
     }
   }
   task "make" {
     run "docker" {
       image = var.go_image
-      cmd   = "cd ${var.git_name} && make test-backends"
+      cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH && cd ${var.git_name} && make test-backends"
       args  = [
         "--network=host",
         "-v", "pikoci-go-mod:/go/pkg/mod",
         "-v", "pikoci-build:/root/.cache/go-build",
+        "-v", "pikoci-tools:/pikoci-tools",
       ]
     }
   }

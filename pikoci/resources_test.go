@@ -99,7 +99,7 @@ func TestTriggerPipelineResource(t *testing.T) {
 		ResourceCanonical: "git.repo",
 	}
 	mb, _ := json.Marshal(expectedBody)
-	s.Topic.EXPECT().Send(ctx, &pubsub.Message{Body: mb}).Return(nil)
+	s.CheckTopic.EXPECT().Send(ctx, &pubsub.Message{Body: mb}).Return(nil)
 
 	// UpdatePipelineResource is called to set LastCheck
 	s.Resources.EXPECT().Update(ctx, "main", "my-pipeline", "git.repo", gomock.Any()).Return(nil)

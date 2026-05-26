@@ -22,6 +22,7 @@ pikoci server [flags]
 | `--run-migrations` | | `true` | no | Run database migrations on startup |
 | `--run-worker` | | `true` | no | Run an embedded worker |
 | `--concurrency` | | `1` | no | Number of worker goroutines |
+| `--queues` | | `jobs,checks` | no | Which queues the embedded worker listens on: `jobs`, `checks`, or `jobs,checks` |
 | `--drain-timeout` | | `10m` | no | Max time to wait for in-flight jobs during graceful shutdown (`SIGQUIT`) |
 | `--pubsub-system` | | `mem` | no | Queue backend: `mem`, `nats`, `rabbit`, `kafka` |
 | `--log-level` | | `info` | no | Log level: `debug`, `info`, `warn`, `error` |

@@ -36,9 +36,10 @@ type Service interface {
 }
 
 type Worker struct {
-	topic        queue.Topic
-	pikoci       pikoci.Service
-	subscription queue.Subscription
+	jobTopic          queue.Topic
+	pikoci            pikoci.Service
+	jobSubscription   queue.Subscription
+	checkSubscription queue.Subscription
 
 	draining atomic.Bool
 	logger   *slog.Logger
@@ -52,12 +53,13 @@ type Worker struct {
 	LocalMode bool
 }
 
-func New(s pikoci.Service, t queue.Topic, ss queue.Subscription, l *slog.Logger) *Worker {
+func New(s pikoci.Service, jobTopic queue.Topic, jobSub, checkSub queue.Subscription, l *slog.Logger) *Worker {
 	return &Worker{
-		pikoci:       s,
-		topic:        t,
-		subscription: ss,
-		logger:       l,
+		pikoci:            s,
+		jobTopic:          jobTopic,
+		jobSubscription:   jobSub,
+		checkSubscription: checkSub,
+		logger:            l,
 	}
 }
 
@@ -67,21 +69,60 @@ func (w *Worker) Drain() {
 
 func (w *Worker) Run(ctx context.Context) error {
 	w.logger.Info("Worker waiting for messages...")
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+
+	if w.jobSubscription != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := w.receiveLoop(ctx, w.jobSubscription, "job"); err != nil {
+				errs <- err
+			}
+		}()
+	}
+
+	if w.checkSubscription != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := w.receiveLoop(ctx, w.checkSubscription, "check"); err != nil {
+				errs <- err
+			}
+		}()
+	}
+
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+
+	select {
+	case err := <-errs:
+		return err
+	case <-done:
+		return nil
+	}
+}
+
+func (w *Worker) receiveLoop(ctx context.Context, sub queue.Subscription, kind string) error {
 	for {
 		if w.draining.Load() {
-			w.logger.Info("Worker draining, stopping message receive")
+			w.logger.Info("Worker draining, stopping message receive", "queue", kind)
 			return nil
 		}
-		msg, err := w.subscription.Receive(ctx)
+		msg, err := sub.Receive(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to receive message: %w", err)
+			return fmt.Errorf("failed to receive %s message: %w", kind, err)
 		}
 
-		w.logger.Info("received message", "body", string(msg.Body))
+		w.logger.Info("received message", "queue", kind, "body", string(msg.Body))
 
 		var m queue.Body
 		if err := json.Unmarshal(msg.Body, &m); err != nil {
-			w.logger.Error("failed unmarshal message body", "error", err)
+			w.logger.Error("failed unmarshal message body", "queue", kind, "error", err)
 			msg.Ack()
 			continue
 		}
@@ -155,6 +196,36 @@ func (w *Worker) processMessage(ctx context.Context, m queue.Body, cwd string) {
 // runs the plan steps, and runs hooks. Downstream job triggering is handled
 // by the scheduler.
 func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *pipeline.Pipeline) {
+	// Resolve the oldest pending build from the DB rather than trusting the
+	// message's BuildID. Queue messages are treated as wake-up signals — the
+	// DB is the source of truth for ordering. This ensures strict FIFO even
+	// when pub/sub backends deliver messages out of order.
+	if !w.LocalMode {
+		oldest, err := w.pikoci.FindOldestPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName)
+		if err != nil {
+			w.logger.Error("failed to find oldest pending build",
+				"pipeline", m.PipelineCanonical, "job", m.JobName, "error", err)
+			return
+		}
+		if oldest == nil {
+			w.logger.Info("no pending builds, skipping",
+				"pipeline", m.PipelineCanonical, "job", m.JobName, "msg_build_id", m.BuildID)
+			return
+		}
+		if oldest.ID != m.BuildID {
+			w.logger.Info("reordering: oldest pending build differs from message",
+				"pipeline", m.PipelineCanonical, "job", m.JobName,
+				"msg_build_id", m.BuildID, "oldest_build_id", oldest.ID)
+		}
+		m.BuildID = oldest.ID
+		if oldest.VersionID != 0 {
+			m.VersionID = oldest.VersionID
+		}
+		if oldest.ResourceCanonical != "" {
+			m.ResourceCanonical = oldest.ResourceCanonical
+		}
+	}
+
 	if m.BuildID == 0 {
 		w.logger.Error("missing build_id in message",
 			"pipeline", m.PipelineCanonical, "job", m.JobName)
@@ -171,7 +242,7 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 			w.logger.Info("concurrency limit, re-queuing",
 				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID)
 			mb, _ := json.Marshal(m)
-			if err := w.topic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
+			if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
 				w.logger.Error("failed to re-queue", "error", err)
 			}
 			time.Sleep(2 * time.Second)
@@ -309,7 +380,7 @@ func (w *Worker) notifyNextPendingBuild(ctx context.Context, m queue.Body) {
 		BuildID:           pending.ID,
 	}
 	mb, _ := json.Marshal(msg)
-	if err := w.topic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
+	if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
 		w.logger.Warn("failed to notify next pending build", "build_id", pending.ID, "error", err)
 	}
 }
@@ -1316,7 +1387,7 @@ func (w *Worker) triggerResourceJobs(ctx context.Context, m queue.Body, pp *pipe
 				w.logger.Info("sending trigger message",
 					"pipeline", pp.Canonical, "job", j.Name, "resource", r.Canonical,
 					"version_id", cv.ID, "step", g.Name, "build_id", nb.ID)
-				if err := w.topic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
+				if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
 					w.logger.Error("failed to send trigger message", "job", j.Name, "error", err)
 				}
 			}

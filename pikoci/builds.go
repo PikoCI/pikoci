@@ -217,7 +217,7 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 		return fmt.Errorf("failed to marshal Message Body: %w", err)
 	}
 
-	err = q.Topic.Send(ctx, &pubsub.Message{
+	err = q.JobTopic.Send(ctx, &pubsub.Message{
 		Body: mb,
 	})
 	if err != nil {
@@ -327,5 +327,5 @@ func (q *PikoCI) notifyNextPendingBuild(ctx context.Context, tc, pc, jn string) 
 	if err != nil {
 		return
 	}
-	q.Topic.Send(ctx, &pubsub.Message{Body: mb})
+	q.JobTopic.Send(ctx, &pubsub.Message{Body: mb})
 }

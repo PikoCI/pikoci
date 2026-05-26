@@ -77,11 +77,17 @@ var serverCmd = &cobra.Command{
 			return fmt.Errorf("invalid DBSystem %q, should be one of: %s, %s, %s or %s", cfg.DBSystem, mysql.Mem, mysql.MySQL, mysql.SQLite, mysql.PostgreSQL)
 		}
 
-		topic, err := pubsub.OpenTopic(ctx, getTopicURL(cfg.PubSubSystem))
+		jobTopic, err := pubsub.OpenTopic(ctx, getTopicURL(cfg.PubSubSystem, "pikoci-jobs"))
 		if err != nil {
-			return fmt.Errorf("failed to open: %v", err)
+			return fmt.Errorf("failed to open job topic: %v", err)
 		}
-		defer topic.Shutdown(ctx)
+		defer jobTopic.Shutdown(ctx)
+
+		checkTopic, err := pubsub.OpenTopic(ctx, getTopicURL(cfg.PubSubSystem, "pikoci-checks"))
+		if err != nil {
+			return fmt.Errorf("failed to open check topic: %v", err)
+		}
+		defer checkTopic.Shutdown(ctx)
 		dbFile, err := xdg.DataFile(filepath.Join(AppName, AppName+".db"))
 		if err != nil {
 			return fmt.Errorf("failed to create dbFile: %v", err)
@@ -127,7 +133,7 @@ var serverCmd = &cobra.Command{
 		suow := unitwork.NewStartUnitOfWork(db, cfg.DBSystem)
 
 		logger.Info("initializing service")
-		var svc = pikoci.New(ctx, topic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
+		var svc = pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
 		svc.StartScheduler(ctx)
 		logger.Info("initialized service")
 
@@ -180,7 +186,11 @@ var serverCmd = &cobra.Command{
 			logger.Info("Starting Worker ...")
 			var werr error
 			var workerCleanup func()
-			workers, wg, workerCleanup, werr = runWorker(ctx, cfg.PubSubSystem, topic, svc, cfg.Concurrency, cfg.LogLevel)
+			queues := cfg.Queues
+			if queues == "" {
+				queues = "jobs,checks"
+			}
+			workers, wg, workerCleanup, werr = runWorker(ctx, cfg.PubSubSystem, jobTopic, svc, cfg.Concurrency, cfg.LogLevel, queues)
 			if werr != nil {
 				return fmt.Errorf("worker failed to start: %w", werr)
 			}
@@ -278,6 +288,7 @@ func init() {
 	serverCmd.Flags().Int("concurrency", 1, "Number of workers to start in one instance")
 	serverCmd.Flags().String("drain-timeout", "10m", "Maximum time to wait for in-flight jobs to finish during graceful shutdown (SIGQUIT)")
 	serverCmd.Flags().String("pubsub-system", mempubsub.Scheme, "Which PubSub system to use (mem, nats, rabbit, kafka). Env vars: NATS_SERVER_URL, RABBIT_SERVER_URL, KAFKA_BROKERS")
+	serverCmd.Flags().String("queues", "jobs,checks", "Which queues the embedded worker listens on: jobs, checks, or jobs,checks")
 	serverCmd.Flags().String("log-level", "info", "Sets the log level ('debug', 'info', 'warn', 'error')")
 	serverCmd.Flags().String("team-canonical", mainTeamCanonical, "Team Canonical to scope the action")
 	serverCmd.Flags().String("pipeline-config", "", "Path to the Pipeline config file")
@@ -292,28 +303,28 @@ func init() {
 	serverViper.AutomaticEnv()
 }
 
-func getSubscriptionURL(s string) string {
-	u := fmt.Sprintf("%s://pikoci", s)
+func getSubscriptionURL(s, name string) string {
+	u := fmt.Sprintf("%s://%s", s, name)
 	switch s {
 	case natspubsub.Scheme:
-		u += "?queue=pikoci&natsv2"
+		u += fmt.Sprintf("?queue=%s&natsv2", name)
 	case "rabbit":
-		// rabbit://pikoci — uses RABBIT_SERVER_URL env var
+		// rabbit://<name> — uses RABBIT_SERVER_URL env var
 	case "kafka":
-		u = "kafka://pikoci-group?topic=pikoci"
+		u = fmt.Sprintf("kafka://%s-group?topic=%s", name, name)
 	}
 	return u
 }
 
-func getTopicURL(s string) string {
-	u := fmt.Sprintf("%s://pikoci", s)
+func getTopicURL(s, name string) string {
+	u := fmt.Sprintf("%s://%s", s, name)
 	switch s {
 	case natspubsub.Scheme:
 		u += "?natsv2"
 	case "rabbit":
-		// rabbit://pikoci — uses RABBIT_SERVER_URL env var
+		// rabbit://<name> — uses RABBIT_SERVER_URL env var
 	case "kafka":
-		// kafka://pikoci — uses KAFKA_BROKERS env var
+		// kafka://<name> — uses KAFKA_BROKERS env var
 	}
 	return u
 }

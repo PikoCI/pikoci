@@ -110,7 +110,7 @@ func (q *PikoCI) TriggerPipelineResource(ctx context.Context, tc, pc, rCan strin
 	if err != nil {
 		return fmt.Errorf("failed to marshal Message Body: %w", err)
 	}
-	err = q.Topic.Send(ctx, &pubsub.Message{
+	err = q.CheckTopic.Send(ctx, &pubsub.Message{
 		Body: mb,
 	})
 	if err != nil {

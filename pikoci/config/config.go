@@ -19,6 +19,7 @@ type Config struct {
 	RunWorker    bool   `mapstructure:"run-worker"`
 	Concurrency  int    `mapstructure:"concurrency"`
 	DrainTimeout string `mapstructure:"drain-timeout"`
+	Queues       string `mapstructure:"queues"`
 
 	PubSubSystem string `mapstructure:"pubsub-system"`
 
