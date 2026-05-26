@@ -4,6 +4,8 @@ site_description: PikoCI documentation - portable, self-hosted CI/CD
 
 theme:
   name: material
+  logo: stylesheets/logo.svg
+  favicon: stylesheets/favicon.svg
   palette:
     - scheme: default
       primary: custom
