@@ -5,6 +5,16 @@ job "lint" {
     trigger = true
   }
   put "github-check" "ci" { status = "in_progress" }
+  task "install-jq" {
+    run "docker" {
+      image = var.go_image
+      cmd   = "apt-get update -qq && apt-get install -qq -y jq"
+      args  = [
+        "-v", "pikoci-go-mod:/go/pkg/mod",
+        "-v", "pikoci-build:/root/.cache/go-build",
+      ]
+    }
+  }
   task "make" {
     run "docker" {
       image = var.go_image
@@ -28,6 +38,16 @@ job "test-mock" {
     trigger = true
   }
   put "github-check" "ci" { status = "in_progress" }
+  task "install-jq" {
+    run "docker" {
+      image = var.go_image
+      cmd   = "apt-get update -qq && apt-get install -qq -y jq"
+      args  = [
+        "-v", "pikoci-go-mod:/go/pkg/mod",
+        "-v", "pikoci-build:/root/.cache/go-build",
+      ]
+    }
+  }
   task "make" {
     run "docker" {
       image = var.go_image
@@ -51,6 +71,16 @@ job "test-integration" {
     trigger = true
   }
   put "github-check" "ci" { status = "in_progress" }
+  task "install-jq" {
+    run "docker" {
+      image = "ghcr.io/xescugc/pikoci-integration:latest"
+      cmd   = "apt-get update -qq && apt-get install -qq -y jq"
+      args  = [
+        "-v", "pikoci-go-mod:/go/pkg/mod",
+        "-v", "pikoci-build:/root/.cache/go-build",
+      ]
+    }
+  }
   task "make" {
     run "docker" {
       image = "ghcr.io/xescugc/pikoci-integration:latest"
@@ -110,6 +140,17 @@ job "test-backends" {
     root_token = "test-root-token"
   }
 
+  task "install-jq" {
+    run "docker" {
+      image = var.go_image
+      cmd   = "apt-get update -qq && apt-get install -qq -y jq"
+      args  = [
+        "--network=host",
+        "-v", "pikoci-go-mod:/go/pkg/mod",
+        "-v", "pikoci-build:/root/.cache/go-build",
+      ]
+    }
+  }
   task "make" {
     run "docker" {
       image = var.go_image
