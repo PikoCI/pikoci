@@ -168,7 +168,7 @@ scp "$DEPLOY_DIR/pikoci.env" "$SSH_HOST":/etc/pikoci/pikoci.env
 ssh "$SSH_HOST" 'chown pikoci:pikoci /etc/pikoci/pikoci.env && chmod 600 /etc/pikoci/pikoci.env'
 scp "$DEPLOY_DIR/pikoci.env" "$SSH_HOST":/opt/pikoci/pikoci.env
 ssh "$SSH_HOST" 'chmod 600 /opt/pikoci/pikoci.env'
-ssh "$SSH_HOST" 'rm -f /opt/pikoci/.env && grep -E "^(PIKOCI_DOMAIN|PIKOCI_GRAFANA_DOMAIN|PIKOCI_WWW_DOMAIN|GF_)" /opt/pikoci/pikoci.env > /opt/pikoci/.env'
+ssh "$SSH_HOST" 'rm -f /opt/pikoci/.env && grep -E "^(PIKOCI_DOMAIN|PIKOCI_GRAFANA_DOMAIN|PIKOCI_WWW_DOMAIN|PIKOCI_DOCS_DOMAIN|GF_)" /opt/pikoci/pikoci.env > /opt/pikoci/.env'
 
 # Copy GitHub App PEM key if present
 if [ -f "$DEPLOY_DIR/pikoci_github_app.pem" ]; then
@@ -176,6 +176,17 @@ if [ -f "$DEPLOY_DIR/pikoci_github_app.pem" ]; then
     scp "$DEPLOY_DIR/pikoci_github_app.pem" "$SSH_HOST":/etc/pikoci/pikoci_github_app.pem
     ssh "$SSH_HOST" 'chown pikoci:pikoci /etc/pikoci/pikoci_github_app.pem && chmod 600 /etc/pikoci/pikoci_github_app.pem'
 fi
+
+# --- Build and deploy docs ---
+
+echo "==> Building docs..."
+cd "$REPO_ROOT"
+python3 -m venv "$REPO_ROOT/.venv" 2>/dev/null || true
+"$REPO_ROOT/.venv/bin/pip" install --quiet mkdocs-material
+"$REPO_ROOT/.venv/bin/mkdocs" build --clean
+echo "==> Uploading docs to $SSH_HOST..."
+ssh "$SSH_HOST" 'mkdir -p /var/www/docs.pikoci.com'
+rsync -a --delete "$REPO_ROOT/site/" "$SSH_HOST":/var/www/docs.pikoci.com/
 
 # --- Install required packages ---
 

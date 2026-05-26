@@ -2,7 +2,7 @@
 
 This guide covers deploying PikoCI on a single server. This setup uses in-memory pubsub and an embedded worker, which is suitable for demos and small teams.
 
-For production scaling with multiple workers or high availability, use an external queue backend and run workers separately. See [Queue Backends](Queue) and [Running Workers Separately](Workers).
+For production scaling with multiple workers or high availability, use an external queue backend and run workers separately. See [Queue Backends](Queue.md) and [Running Workers Separately](Workers.md).
 
 ## Quick start
 
@@ -94,7 +94,7 @@ pikoci user-password -u admin -p your-password
 
 `deploy/pikoci.env` is gitignored — only the `.example` file is tracked.
 
-See [Server Configuration](Server) for all available options.
+See [Server Configuration](Server.md) for all available options.
 
 ### 5. Deploy
 
@@ -151,7 +151,7 @@ Caddy handles TLS certificates automatically via Let's Encrypt.
 - The `pikoci.env.example` file is a template — never commit actual secrets
 - Generate JWT secrets with: `openssl rand -hex 32`
 - Generate password hashes with: `pikoci user-password -u <user> -p <password>`
-- For standalone workers, generate a worker token with `pikoci worker-token --jwt-secret <secret>` instead of distributing the raw JWT secret. See [Running Workers Separately](Workers)
+- For standalone workers, generate a worker token with `pikoci worker-token --jwt-secret <secret>` instead of distributing the raw JWT secret. See [Running Workers Separately](Workers.md)
 
 ## Monitoring
 
@@ -211,4 +211,4 @@ job "deploy" {
 }
 ```
 
-See [Server Configuration — Signal handling](Server#signal-handling) for details on `SIGQUIT` vs `SIGTERM` behavior.
+See [Server Configuration — Signal handling](Server.md#signal-handling) for details on `SIGQUIT` vs `SIGTERM` behavior.

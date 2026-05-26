@@ -98,7 +98,7 @@ pikoci server \
   --run-worker=false
 ```
 
-When `--run-worker=false`, the server logs a pre-generated worker token on startup. Copy this token to configure standalone workers with `--worker-token`. See [Running Workers Separately](Workers).
+When `--run-worker=false`, the server logs a pre-generated worker token on startup. Copy this token to configure standalone workers with `--worker-token`. See [Running Workers Separately](Workers.md).
 
 ### Load a pipeline at startup
 
@@ -137,4 +137,4 @@ kill -QUIT $(pidof pikoci)
 kill -TERM $(pidof pikoci)
 ```
 
-See also: [Database Backends](Database) · [Queue Backends](Queue) · [Running Workers Separately](Workers)
+See also: [Database Backends](Database.md) · [Queue Backends](Queue.md) · [Running Workers Separately](Workers.md)
