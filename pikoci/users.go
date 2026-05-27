@@ -15,6 +15,10 @@ import (
 const defaultAdminUsername = "admin"
 const defaultAdmin123Hash = "$2a$14$FoV/2Z0CRgQyiDJLMcErd.cC/DtWCKMWtxZEaL6HQd/rrtU2DZpAu"
 
+// UserLogin authenticates a user by username and password. On success, it returns
+// the user with team memberships and a signed JWT token. If the user is the
+// migration-seeded admin with the default password, the MustChangePassword flag
+// is set.
 func (q *PikoCI) UserLogin(ctx context.Context, un, pass string) (*user.WithMemberships, string, error) {
 	if !utils.ValidateCanonical(un) {
 		return nil, "", fmt.Errorf("invalid Username format %q", un)
@@ -45,6 +49,8 @@ func (q *PikoCI) UserLogin(ctx context.Context, un, pass string) (*user.WithMemb
 	return um, tokenString, nil
 }
 
+// RefreshToken generates a new JWT token for the given username without
+// requiring the password. It returns the updated user data and the new token.
 func (q *PikoCI) RefreshToken(ctx context.Context, un string) (*user.WithMemberships, string, error) {
 	if !utils.ValidateCanonical(un) {
 		return nil, "", fmt.Errorf("invalid Username format %q", un)
@@ -65,6 +71,7 @@ func (q *PikoCI) RefreshToken(ctx context.Context, un string) (*user.WithMembers
 	return um, tokenString, nil
 }
 
+// GetUser retrieves a user and their team memberships by username.
 func (q *PikoCI) GetUser(ctx context.Context, un string) (*user.WithMemberships, error) {
 	if !utils.ValidateCanonical(un) {
 		return nil, fmt.Errorf("invalid Username format %q", un)
@@ -78,6 +85,8 @@ func (q *PikoCI) GetUser(ctx context.Context, un string) (*user.WithMemberships,
 	return um, nil
 }
 
+// CreateUser creates a new user. If isHash is true, the password is stored
+// directly; otherwise it is hashed with bcrypt before storage.
 func (q *PikoCI) CreateUser(ctx context.Context, u user.User, isHash bool) (*user.User, error) {
 	if !utils.ValidateCanonical(u.Username) {
 		return nil, fmt.Errorf("invalid Username format %q", u.Username)
@@ -149,6 +158,7 @@ func (q *PikoCI) CreateOrUpdateUser(ctx context.Context, u user.User, isHash boo
 	return &u, nil
 }
 
+// ListUsers returns all registered users.
 func (q *PikoCI) ListUsers(ctx context.Context) ([]*user.User, error) {
 	us, err := q.Users.Filter(ctx)
 	if err != nil {
@@ -158,6 +168,8 @@ func (q *PikoCI) ListUsers(ctx context.Context) ([]*user.User, error) {
 	return us, nil
 }
 
+// UpdateUser updates an existing user identified by username. It merges the
+// provided fields into the existing record and prevents demoting the last admin.
 func (q *PikoCI) UpdateUser(ctx context.Context, un string, u user.User, isHash bool) (*user.User, error) {
 	existing, err := q.Users.Find(ctx, un)
 	if err != nil {
@@ -211,6 +223,7 @@ func (q *PikoCI) UpdateUser(ctx context.Context, un string, u user.User, isHash 
 	return existing, nil
 }
 
+// DeleteUser removes a user by username. It prevents deleting the last admin user.
 func (q *PikoCI) DeleteUser(ctx context.Context, un string) error {
 	if !utils.ValidateCanonical(un) {
 		return fmt.Errorf("invalid Username format %q", un)
@@ -245,6 +258,8 @@ func (q *PikoCI) DeleteUser(ctx context.Context, un string) error {
 	return nil
 }
 
+// ChangePassword updates the password for the given user after verifying the
+// old password matches the stored hash.
 func (q *PikoCI) ChangePassword(ctx context.Context, un, oldPassword, newPassword string) error {
 	if !utils.ValidateCanonical(un) {
 		return fmt.Errorf("invalid Username format %q", un)
@@ -277,6 +292,8 @@ func (q *PikoCI) ChangePassword(ctx context.Context, un, oldPassword, newPasswor
 	return nil
 }
 
+// UpdateProfile updates a user's display name and optionally their username.
+// Empty values for fullName or newUsername are ignored.
 func (q *PikoCI) UpdateProfile(ctx context.Context, un string, fullName, newUsername string) (*user.User, error) {
 	if !utils.ValidateCanonical(un) {
 		return nil, fmt.Errorf("invalid Username format %q", un)

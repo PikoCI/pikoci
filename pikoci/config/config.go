@@ -1,5 +1,11 @@
+// Package config defines the server-side configuration for the PikoCI application.
+// Fields are populated from command-line flags or environment variables via
+// mapstructure tags.
 package config
 
+// Config holds all configuration values needed to run the PikoCI server,
+// including database credentials, JWT settings, worker options, and pipeline
+// defaults.
 type Config struct {
 	Port int `mapstructure:"port"`
 

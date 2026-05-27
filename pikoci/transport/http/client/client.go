@@ -1,3 +1,6 @@
+// Package client provides an HTTP client for interacting with the PikoCI server API.
+// It implements the pikoci.Service interface by making authenticated HTTP requests
+// to the server endpoints for managing users, teams, pipelines, jobs, builds, and resources.
 package client
 
 import (
@@ -17,13 +20,17 @@ import (
 	"github.com/xescugc/pikoci/pikoci/user"
 )
 
+// Client is an HTTP client for the PikoCI API. It holds the server URL,
+// a JWT for authentication, and an optional config path for persisting
+// refreshed tokens.
 type Client struct {
 	url        string
 	jwt        string
 	configPath string
 }
 
-// New returns a new HTTP Client for QID
+// New returns a new Client configured with the given host URL and JWT token.
+// The host must be a valid URL; if no scheme is provided, "http://" is prepended.
 func New(host, jwt string) (*Client, error) {
 	if host == "" {
 		return nil, fmt.Errorf("can't initialize the %q with an empty host", "qid")
@@ -50,6 +57,8 @@ func (cl *Client) SetConfigPath(path string) {
 	cl.configPath = path
 }
 
+// UserLogin authenticates a user with the given username and password,
+// returning the user details and a JWT token on success.
 func (cl *Client) UserLogin(ctx context.Context, un, pass string) (*user.WithMemberships, string, error) {
 	var resp thttp.UserLoginResponse
 
@@ -68,6 +77,8 @@ func (cl *Client) UserLogin(ctx context.Context, un, pass string) (*user.WithMem
 	return resp.Data.User, resp.Data.JWT, nil
 }
 
+// RefreshToken requests a new JWT token for the given user, returning
+// updated user details and the new token.
 func (cl *Client) RefreshToken(ctx context.Context, un string) (*user.WithMemberships, string, error) {
 	var resp thttp.RefreshTokenResponse
 
@@ -83,6 +94,7 @@ func (cl *Client) RefreshToken(ctx context.Context, un string) (*user.WithMember
 	return resp.Data.User, resp.Data.JWT, nil
 }
 
+// GetUser retrieves a user by username.
 func (cl *Client) GetUser(ctx context.Context, un string) (*user.WithMemberships, error) {
 	var resp thttp.GetUserResponse
 
@@ -102,6 +114,8 @@ func (cl *Client) GetUser(ctx context.Context, un string) (*user.WithMemberships
 	return &user.WithMemberships{User: *resp.User}, nil
 }
 
+// CreateUser creates a new user. If isHash is true, the password is treated
+// as already hashed.
 func (cl *Client) CreateUser(ctx context.Context, u user.User, isHash bool) (*user.User, error) {
 	var resp thttp.CreateUserResponse
 
@@ -121,6 +135,7 @@ func (cl *Client) CreateUser(ctx context.Context, u user.User, isHash bool) (*us
 	return resp.User, nil
 }
 
+// ListUsers retrieves all users from the server.
 func (cl *Client) ListUsers(ctx context.Context) ([]*user.User, error) {
 	var resp thttp.ListUsersResponse
 
@@ -136,6 +151,7 @@ func (cl *Client) ListUsers(ctx context.Context) ([]*user.User, error) {
 	return resp.Users, nil
 }
 
+// UpdateUser updates an existing user identified by username.
 func (cl *Client) UpdateUser(ctx context.Context, un string, u user.User, isHash bool) (*user.User, error) {
 	var resp thttp.UpdateUserResponse
 
@@ -157,6 +173,7 @@ func (cl *Client) UpdateUser(ctx context.Context, un string, u user.User, isHash
 	return resp.User, nil
 }
 
+// DeleteUser deletes the user with the given username.
 func (cl *Client) DeleteUser(ctx context.Context, un string) error {
 	var resp thttp.DeleteUserResponse
 
@@ -172,6 +189,7 @@ func (cl *Client) DeleteUser(ctx context.Context, un string) error {
 	return nil
 }
 
+// ChangePassword changes the password for the authenticated user.
 func (cl *Client) ChangePassword(ctx context.Context, un, oldPassword, newPassword string) error {
 	var resp thttp.ChangePasswordResponse
 
@@ -190,6 +208,7 @@ func (cl *Client) ChangePassword(ctx context.Context, un, oldPassword, newPasswo
 	return nil
 }
 
+// UpdateProfile updates the profile of the authenticated user.
 func (cl *Client) UpdateProfile(ctx context.Context, un string, fullName, newUsername string) (*user.User, error) {
 	var resp thttp.UpdateProfileResponse
 
@@ -208,6 +227,7 @@ func (cl *Client) UpdateProfile(ctx context.Context, un string, fullName, newUse
 	return resp.User, nil
 }
 
+// CreateTeam creates a new team with the given details.
 func (cl *Client) CreateTeam(ctx context.Context, un string, t team.Team) (*team.WithMembers, error) {
 	var resp thttp.CreateTeamResponse
 
@@ -225,6 +245,7 @@ func (cl *Client) CreateTeam(ctx context.Context, un string, t team.Team) (*team
 	return resp.Team, nil
 }
 
+// ListTeams retrieves all teams visible to the given user.
 func (cl *Client) ListTeams(ctx context.Context, un string) ([]*team.WithMembers, error) {
 	var resp thttp.ListTeamsResponse
 
@@ -240,6 +261,7 @@ func (cl *Client) ListTeams(ctx context.Context, un string) ([]*team.WithMembers
 	return resp.Teams, nil
 }
 
+// GetTeam retrieves a team by its canonical name.
 func (cl *Client) GetTeam(ctx context.Context, tc string) (*team.WithMembers, error) {
 	var resp thttp.GetTeamResponse
 
@@ -255,6 +277,7 @@ func (cl *Client) GetTeam(ctx context.Context, tc string) (*team.WithMembers, er
 	return resp.Team, nil
 }
 
+// UpdateTeam updates a team identified by its canonical name.
 func (cl *Client) UpdateTeam(ctx context.Context, tc string, t team.Team) (*team.WithMembers, error) {
 	var resp thttp.UpdateTeamResponse
 
@@ -272,6 +295,7 @@ func (cl *Client) UpdateTeam(ctx context.Context, tc string, t team.Team) (*team
 	return resp.Team, nil
 }
 
+// DeleteTeam deletes the team with the given canonical name.
 func (cl *Client) DeleteTeam(ctx context.Context, tc string) error {
 	var resp thttp.DeleteTeamResponse
 
@@ -287,6 +311,7 @@ func (cl *Client) DeleteTeam(ctx context.Context, tc string) error {
 	return nil
 }
 
+// CreateTeamMember adds a new member to the specified team.
 func (cl *Client) CreateTeamMember(ctx context.Context, tc string, tm team.Member) (*team.Member, error) {
 	var resp thttp.CreateTeamMemberResponse
 
@@ -302,6 +327,7 @@ func (cl *Client) CreateTeamMember(ctx context.Context, tc string, tm team.Membe
 	return resp.Member, nil
 }
 
+// UpdateTeamMember updates a member's role within a team.
 func (cl *Client) UpdateTeamMember(ctx context.Context, tc, mu string, tm team.Member) (*team.Member, error) {
 	var resp thttp.UpdateTeamMemberResponse
 
@@ -319,6 +345,7 @@ func (cl *Client) UpdateTeamMember(ctx context.Context, tc, mu string, tm team.M
 	return resp.Member, nil
 }
 
+// DeleteTeamMember removes a member from the specified team.
 func (cl *Client) DeleteTeamMember(ctx context.Context, tc, mu string) error {
 	var resp thttp.DeleteTeamMemberResponse
 
@@ -334,6 +361,7 @@ func (cl *Client) DeleteTeamMember(ctx context.Context, tc, mu string) error {
 	return nil
 }
 
+// CreatePipeline creates a new pipeline with the given name, HCL config, and variables.
 func (cl *Client) CreatePipeline(ctx context.Context, tc, pn string, pp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error) {
 	var resp thttp.CreatePipelineResponse
 
@@ -353,6 +381,7 @@ func (cl *Client) CreatePipeline(ctx context.Context, tc, pn string, pp []byte, 
 	return resp.Pipeline, nil
 }
 
+// SetPipelinePublic sets the public visibility of a pipeline.
 func (cl *Client) SetPipelinePublic(ctx context.Context, tc, pn string, public bool) error {
 	var resp thttp.UpdatePipelineResponse
 
@@ -370,30 +399,37 @@ func (cl *Client) SetPipelinePublic(ctx context.Context, tc, pn string, public b
 	return nil
 }
 
+// GetPublicPipeline retrieves a public pipeline. It delegates to GetPipeline.
 func (cl *Client) GetPublicPipeline(ctx context.Context, tc, pn string) (*pipeline.Pipeline, error) {
 	return cl.GetPipeline(ctx, tc, pn)
 }
 
+// GetPublicPipelineImage retrieves a public pipeline's image. It delegates to GetPipelineImage.
 func (cl *Client) GetPublicPipelineImage(ctx context.Context, tc, pn, format string) ([]byte, error) {
 	return cl.GetPipelineImage(ctx, tc, pn, format)
 }
 
+// GetPublicPipelineJob retrieves a job from a public pipeline. It delegates to GetPipelineJob.
 func (cl *Client) GetPublicPipelineJob(ctx context.Context, tc, pn, jn string) (*job.Job, error) {
 	return cl.GetPipelineJob(ctx, tc, pn, jn)
 }
 
+// ListPublicJobBuilds lists builds for a job on a public pipeline. It delegates to ListJobBuilds.
 func (cl *Client) ListPublicJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error) {
 	return cl.ListJobBuilds(ctx, tc, pn, jn, before, after, limit)
 }
 
+// GetPublicPipelineResource retrieves a resource from a public pipeline. It delegates to GetPipelineResource.
 func (cl *Client) GetPublicPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error) {
 	return cl.GetPipelineResource(ctx, tc, pn, rCan)
 }
 
+// ListPublicResourceVersions lists versions for a resource on a public pipeline. It delegates to ListResourceVersions.
 func (cl *Client) ListPublicResourceVersions(ctx context.Context, tc, pn, rCan string, before *uint32, after *uint32, limit uint32) ([]*resource.Version, bool, error) {
 	return cl.ListResourceVersions(ctx, tc, pn, rCan, before, after, limit)
 }
 
+// UpdatePipeline updates an existing pipeline's configuration, variables, and optionally its name.
 func (cl *Client) UpdatePipeline(ctx context.Context, tc, pn string, pp []byte, vars map[string]interface{}, newName ...string) (*pipeline.Pipeline, error) {
 	var resp thttp.UpdatePipelineResponse
 
@@ -416,6 +452,7 @@ func (cl *Client) UpdatePipeline(ctx context.Context, tc, pn string, pp []byte, 
 	return resp.Pipeline, nil
 }
 
+// GetPipeline retrieves a pipeline by team canonical and pipeline name.
 func (cl *Client) GetPipeline(ctx context.Context, tc, pn string) (*pipeline.Pipeline, error) {
 	var resp thttp.GetPipelineResponse
 
@@ -431,6 +468,7 @@ func (cl *Client) GetPipeline(ctx context.Context, tc, pn string) (*pipeline.Pip
 	return resp.Pipeline, nil
 }
 
+// GetPipelineImage retrieves the rendered image of a pipeline in the given format.
 func (cl *Client) GetPipelineImage(ctx context.Context, tc, pn, format string) ([]byte, error) {
 	var resp thttp.GetPipelineImageResponse
 
@@ -446,6 +484,7 @@ func (cl *Client) GetPipelineImage(ctx context.Context, tc, pn, format string) (
 	return []byte(resp.Image), nil
 }
 
+// CreatePipelineImage generates a pipeline image from the given config without persisting it.
 func (cl *Client) CreatePipelineImage(ctx context.Context, tc string, pp []byte, vars map[string]interface{}, format string) ([]byte, error) {
 	var resp thttp.CreatePipelineImageResponse
 
@@ -464,6 +503,7 @@ func (cl *Client) CreatePipelineImage(ctx context.Context, tc string, pp []byte,
 	return []byte(resp.Image), nil
 }
 
+// ListPipelines retrieves all pipelines for a team.
 func (cl *Client) ListPipelines(ctx context.Context, tc string) ([]*pipeline.Pipeline, error) {
 	var resp thttp.ListPipelinesResponse
 
@@ -479,6 +519,7 @@ func (cl *Client) ListPipelines(ctx context.Context, tc string) ([]*pipeline.Pip
 	return resp.Pipelines, nil
 }
 
+// DeletePipeline deletes a pipeline by team canonical and pipeline name.
 func (cl *Client) DeletePipeline(ctx context.Context, tc, pn string) error {
 	var resp thttp.DeletePipelineResponse
 
@@ -494,6 +535,7 @@ func (cl *Client) DeletePipeline(ctx context.Context, tc, pn string) error {
 	return nil
 }
 
+// TriggerPipelineJob triggers a manual run of the specified job.
 func (cl *Client) TriggerPipelineJob(ctx context.Context, tc, pn, jn string) error {
 	var resp thttp.TriggerPipelineJobResponse
 
@@ -509,6 +551,7 @@ func (cl *Client) TriggerPipelineJob(ctx context.Context, tc, pn, jn string) err
 	return nil
 }
 
+// GetPipelineJob retrieves a single job from a pipeline.
 func (cl *Client) GetPipelineJob(ctx context.Context, tc, pn, jn string) (*job.Job, error) {
 	var resp thttp.GetPipelineJobResponse
 
@@ -524,6 +567,7 @@ func (cl *Client) GetPipelineJob(ctx context.Context, tc, pn, jn string) (*job.J
 	return resp.Job, nil
 }
 
+// CreateJobBuild creates a new build for the specified job.
 func (cl *Client) CreateJobBuild(ctx context.Context, tc, pn, jn string, b build.Build) (*build.Build, error) {
 	var resp thttp.CreateJobBuildResponse
 
@@ -544,6 +588,7 @@ func (cl *Client) CreateJobBuild(ctx context.Context, tc, pn, jn string, b build
 	return resp.Build, nil
 }
 
+// UpdateJobBuild updates the status or details of an existing build.
 func (cl *Client) UpdateJobBuild(ctx context.Context, tc, pn, jn string, buildNumber string, b build.Build) error {
 	var resp thttp.UpdateJobBuildResponse
 
@@ -561,6 +606,7 @@ func (cl *Client) UpdateJobBuild(ctx context.Context, tc, pn, jn string, buildNu
 	return nil
 }
 
+// DeleteJobBuild deletes a build by its number.
 func (cl *Client) DeleteJobBuild(ctx context.Context, tc, pn, jn string, buildNumber string) error {
 	var resp thttp.DeleteJobBuildResponse
 
@@ -576,6 +622,7 @@ func (cl *Client) DeleteJobBuild(ctx context.Context, tc, pn, jn string, buildNu
 	return nil
 }
 
+// GetJobBuild retrieves a single build by its number.
 func (cl *Client) GetJobBuild(ctx context.Context, tc, pn, jn string, buildNumber string) (*build.Build, error) {
 	var resp thttp.GetJobBuildResponse
 
@@ -591,6 +638,7 @@ func (cl *Client) GetJobBuild(ctx context.Context, tc, pn, jn string, buildNumbe
 	return resp.Build, nil
 }
 
+// CancelJobBuild cancels a running build.
 func (cl *Client) CancelJobBuild(ctx context.Context, tc, pn, jn string, buildNumber string) error {
 	var resp thttp.CancelJobBuildResponse
 
@@ -606,6 +654,7 @@ func (cl *Client) CancelJobBuild(ctx context.Context, tc, pn, jn string, buildNu
 	return nil
 }
 
+// RetryJobBuild retries a completed build.
 func (cl *Client) RetryJobBuild(ctx context.Context, tc, pn, jn, buildNumber string) error {
 	var resp thttp.RetryJobBuildResponse
 
@@ -621,6 +670,7 @@ func (cl *Client) RetryJobBuild(ctx context.Context, tc, pn, jn, buildNumber str
 	return nil
 }
 
+// CreateRetryJobBuild creates a new build as a retry of a parent build.
 func (cl *Client) CreateRetryJobBuild(ctx context.Context, tc, pn, jn, parentBuildNumber string, b build.Build) (*build.Build, error) {
 	var resp thttp.CreateRetryJobBuildResponse
 
@@ -642,6 +692,7 @@ func (cl *Client) CreateRetryJobBuild(ctx context.Context, tc, pn, jn, parentBui
 	return resp.Build, nil
 }
 
+// FindBuildGetVersions retrieves the resource versions fetched by get steps in a build.
 func (cl *Client) FindBuildGetVersions(ctx context.Context, tc, pn, jn string, buildID uint32) (map[string]uint32, error) {
 	var resp thttp.FindBuildGetVersionsResponse
 
@@ -657,6 +708,7 @@ func (cl *Client) FindBuildGetVersions(ctx context.Context, tc, pn, jn string, b
 	return resp.Versions, nil
 }
 
+// InsertBuildGetVersion records which resource version a get step fetched during a build.
 func (cl *Client) InsertBuildGetVersion(ctx context.Context, tc, pn, jn string, buildID uint32, stepName string, versionID uint32) error {
 	var resp thttp.InsertBuildGetVersionResponse
 
@@ -677,6 +729,7 @@ func (cl *Client) InsertBuildGetVersion(ctx context.Context, tc, pn, jn string, 
 	return nil
 }
 
+// StartPendingBuild transitions a pending build to started status.
 func (cl *Client) StartPendingBuild(ctx context.Context, tc, pn, jn string, buildID uint32) (*build.Build, error) {
 	var resp thttp.StartPendingBuildResponse
 
@@ -700,6 +753,7 @@ func (cl *Client) StartPendingBuild(ctx context.Context, tc, pn, jn string, buil
 	return resp.Build, nil
 }
 
+// FindOldestPendingBuild retrieves the oldest pending build for a job.
 func (cl *Client) FindOldestPendingBuild(ctx context.Context, tc, pn, jn string) (*build.Build, error) {
 	var resp thttp.FindOldestPendingBuildResponse
 
@@ -737,6 +791,7 @@ func (cl *Client) ListJobBuilds(ctx context.Context, tc, pn, jn string, before *
 	return resp.Builds, hasMore, nil
 }
 
+// CreateResourceVersion creates a new version for the specified resource.
 func (cl *Client) CreateResourceVersion(ctx context.Context, tc, pn, rCan string, rv resource.Version) (*resource.Version, error) {
 	var resp thttp.CreateResourceVersionResponse
 
@@ -776,6 +831,7 @@ func (cl *Client) ListResourceVersions(ctx context.Context, tc, pn, rCan string,
 	return resp.Versions, hasMore, nil
 }
 
+// GetPipelineResource retrieves a single resource from a pipeline.
 func (cl *Client) GetPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error) {
 	var resp thttp.GetPipelineResourceResponse
 
@@ -791,6 +847,7 @@ func (cl *Client) GetPipelineResource(ctx context.Context, tc, pn, rCan string) 
 	return resp.Resource, nil
 }
 
+// UpdatePipelineResource updates the configuration of a pipeline resource.
 func (cl *Client) UpdatePipelineResource(ctx context.Context, tc, pn, rCan string, r resource.Resource) error {
 	var resp thttp.UpdatePipelineResourceResponse
 
@@ -808,6 +865,7 @@ func (cl *Client) UpdatePipelineResource(ctx context.Context, tc, pn, rCan strin
 	return nil
 }
 
+// TriggerPipelineResource triggers a manual check on the specified resource.
 func (cl *Client) TriggerPipelineResource(ctx context.Context, tc, pn, rCan string) error {
 	var resp thttp.TriggerPipelineResourceResponse
 
@@ -823,6 +881,7 @@ func (cl *Client) TriggerPipelineResource(ctx context.Context, tc, pn, rCan stri
 	return nil
 }
 
+// WebhookTrigger sends a webhook trigger request using the given token.
 func (cl *Client) WebhookTrigger(ctx context.Context, token string) error {
 	var resp thttp.WebhookTriggerResponse
 
@@ -838,6 +897,7 @@ func (cl *Client) WebhookTrigger(ctx context.Context, token string) error {
 	return nil
 }
 
+// RegenerateWebhookToken generates a new webhook token for the specified resource.
 func (cl *Client) RegenerateWebhookToken(ctx context.Context, tc, pn, rCan string) (string, error) {
 	var resp thttp.RegenerateWebhookTokenResponse
 

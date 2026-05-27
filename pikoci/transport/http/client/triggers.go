@@ -9,6 +9,7 @@ import (
 	"github.com/xescugc/pikoci/pikoci/trigger"
 )
 
+// CreateTrigger creates a new trigger event with the given name and version data.
 func (cl *Client) CreateTrigger(ctx context.Context, tc, name string, version map[string]interface{}) (*trigger.Trigger, error) {
 	var resp thttp.CreateTriggerResponse
 
@@ -26,6 +27,7 @@ func (cl *Client) CreateTrigger(ctx context.Context, tc, name string, version ma
 	return resp.Trigger, nil
 }
 
+// ListTriggersAfter retrieves all triggers with an ID greater than afterID.
 func (cl *Client) ListTriggersAfter(ctx context.Context, tc, name string, afterID uint32) ([]*trigger.Trigger, error) {
 	var resp thttp.ListTriggersAfterResponse
 

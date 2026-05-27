@@ -14,10 +14,16 @@ import (
 	"github.com/xescugc/pikoci/pikoci/user"
 )
 
+// noopUnitOfWork is a non-transactional UnitOfWork implementation that
+// delegates directly to the provided repositories without wrapping them
+// in a database transaction.
 type noopUnitOfWork struct {
 	repos Repositories
 }
 
+// NewNoopStartUnitOfWork returns a StartUnitOfWork that executes the callback
+// without any transactional guarantees. It is intended for testing and for
+// environments where a real database is not available.
 func NewNoopStartUnitOfWork(repos Repositories) StartUnitOfWork {
 	return func(ctx context.Context, uowFn func(uow UnitOfWork) error) error {
 		uow := &noopUnitOfWork{repos: repos}

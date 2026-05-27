@@ -214,6 +214,9 @@ type hclPipeline struct {
 	Remain        hcl.Body            `hcl:",remain"`
 }
 
+// hclFunctions returns the set of built-in HCL functions available in pipeline
+// configuration files, including string manipulation, collection operations,
+// numeric functions, encoding utilities, and regex functions.
 func hclFunctions() map[string]function.Function {
 	return map[string]function.Function{
 		// String
@@ -261,6 +264,10 @@ func hclFunctions() map[string]function.Function {
 	}
 }
 
+// readPipeline parses raw HCL pipeline configuration bytes into a Pipeline
+// struct. It handles variable resolution (string, number, bool, and secret
+// types), source resolution for resource types, runners, secret types, and
+// services, and extracts ordered job plans from the HCL AST.
 func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error) {
 	funcs := hclFunctions()
 	ectx := pipeline.TypeEvalContext()

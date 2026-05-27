@@ -19,6 +19,9 @@ import (
 	"github.com/xescugc/pikoci/pikoci/utils"
 )
 
+// CreatePipeline parses the raw HCL configuration and creates a new pipeline
+// along with all its jobs, resources, resource types, runners, and secret types
+// within a single unit of work.
 func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -120,6 +123,10 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 	return cp, nil
 }
 
+// UpdatePipeline replaces an existing pipeline's configuration. It performs a
+// diff-based reconciliation of jobs, resources, resource types, runners, and
+// secret types, creating, updating, or deleting entities as needed. An optional
+// newName parameter renames the pipeline.
 func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pCan string, rpp []byte, vars map[string]interface{}, newName ...string) (*pipeline.Pipeline, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -343,6 +350,8 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pCan string, rpp []byte
 	return up, nil
 }
 
+// ListPipelines returns all pipelines for the given team, enriched with the
+// timestamp of the most recent build for each pipeline.
 func (q *PikoCI) ListPipelines(ctx context.Context, tc string) ([]*pipeline.Pipeline, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -368,6 +377,7 @@ func (q *PikoCI) ListPipelines(ctx context.Context, tc string) ([]*pipeline.Pipe
 	return pps, nil
 }
 
+// GetPipeline retrieves a pipeline by team canonical and pipeline canonical.
 func (q *PikoCI) GetPipeline(ctx context.Context, tc, pCan string) (*pipeline.Pipeline, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -383,6 +393,8 @@ func (q *PikoCI) GetPipeline(ctx context.Context, tc, pCan string) (*pipeline.Pi
 	return pp, nil
 }
 
+// jobColors and jobBorderColors map build statuses to PICO-8 palette hex
+// colors used for rendering pipeline graph nodes.
 var (
 	jobColors = map[build.Status]string{
 		build.Started:   `"#FFA300"`,
@@ -403,6 +415,8 @@ var (
 	colorError          = `"#FF004D"`
 )
 
+// GetPipelineImage generates a DOT graph representation of a pipeline's jobs
+// and resources, colored by the latest build status of each job.
 func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string) ([]byte, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -433,6 +447,9 @@ func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string) 
 	return img, err
 }
 
+// generateImage builds a DOT-format directed graph representing the pipeline's
+// jobs, resources, and their interconnections. Each job node is colored based on
+// its latest build status, and running builds are highlighted with a dashed border.
 func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipeline) ([]byte, error) {
 	var (
 		pn  = fmt.Sprintf(`"%s"`, pp.Canonical)
@@ -653,6 +670,9 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 	return []byte(str), nil
 }
 
+// CreatePipelineImage generates a DOT graph image from raw pipeline configuration
+// bytes without persisting the pipeline. This is useful for previewing a pipeline
+// layout before creating it.
 func (q *PikoCI) CreatePipelineImage(ctx context.Context, tc string, pipeline []byte, vars map[string]interface{}, format string) ([]byte, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -674,6 +694,8 @@ func (q *PikoCI) CreatePipelineImage(ctx context.Context, tc string, pipeline []
 	return img, err
 }
 
+// sanitizePipelineForPublic returns a copy of the pipeline with sensitive fields
+// (raw config, resource params, webhook tokens) removed for public consumption.
 func sanitizePipelineForPublic(pp *pipeline.Pipeline) *pipeline.Pipeline {
 	cp := *pp
 	cp.Raw = nil
@@ -703,6 +725,8 @@ func sanitizePipelineForPublic(pp *pipeline.Pipeline) *pipeline.Pipeline {
 	return &cp
 }
 
+// sanitizeResourceForPublic removes sensitive fields (params, webhook token, logs)
+// from a resource for public access.
 func sanitizeResourceForPublic(r resource.Resource) resource.Resource {
 	r.Params = nil
 	r.WebhookToken = ""
@@ -710,6 +734,7 @@ func sanitizeResourceForPublic(r resource.Resource) resource.Resource {
 	return r
 }
 
+// SetPipelinePublic toggles the public visibility of a pipeline.
 func (q *PikoCI) SetPipelinePublic(ctx context.Context, tc, pCan string, public bool) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -720,6 +745,8 @@ func (q *PikoCI) SetPipelinePublic(ctx context.Context, tc, pCan string, public 
 	return q.Pipelines.SetPublic(ctx, tc, pCan, public)
 }
 
+// GetPublicPipeline retrieves a public pipeline with sensitive fields sanitized.
+// It returns an error if the pipeline does not exist or is not marked as public.
 func (q *PikoCI) GetPublicPipeline(ctx context.Context, tc, pCan string) (*pipeline.Pipeline, error) {
 	pp, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
@@ -728,6 +755,7 @@ func (q *PikoCI) GetPublicPipeline(ctx context.Context, tc, pCan string) (*pipel
 	return sanitizePipelineForPublic(pp), nil
 }
 
+// GetPublicPipelineImage generates a DOT graph image for a public pipeline.
 func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pCan, format string) ([]byte, error) {
 	pp, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
@@ -747,6 +775,7 @@ func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pCan, format st
 	return q.generateImage(ctx, tc, pp)
 }
 
+// GetPublicPipelineJob retrieves a job from a public pipeline.
 func (q *PikoCI) GetPublicPipelineJob(ctx context.Context, tc, pCan, jn string) (*job.Job, error) {
 	_, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
@@ -756,6 +785,8 @@ func (q *PikoCI) GetPublicPipelineJob(ctx context.Context, tc, pCan, jn string) 
 	return q.GetPipelineJob(ctx, tc, pCan, jn)
 }
 
+// ListPublicJobBuilds returns paginated builds for a job on a public pipeline,
+// with secret step logs redacted for safety.
 func (q *PikoCI) ListPublicJobBuilds(ctx context.Context, tc, pCan, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error) {
 	_, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
@@ -776,6 +807,8 @@ func (q *PikoCI) ListPublicJobBuilds(ctx context.Context, tc, pCan, jn string, b
 	return builds, hasMore, nil
 }
 
+// GetPublicPipelineResource retrieves a resource from a public pipeline with
+// sensitive fields sanitized.
 func (q *PikoCI) GetPublicPipelineResource(ctx context.Context, tc, pCan, rCan string) (*resource.Resource, error) {
 	_, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
@@ -791,6 +824,7 @@ func (q *PikoCI) GetPublicPipelineResource(ctx context.Context, tc, pCan, rCan s
 	return &sr, nil
 }
 
+// ListPublicResourceVersions returns paginated resource versions for a public pipeline.
 func (q *PikoCI) ListPublicResourceVersions(ctx context.Context, tc, pCan, rCan string, before *uint32, after *uint32, limit uint32) ([]*resource.Version, bool, error) {
 	_, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
@@ -800,6 +834,8 @@ func (q *PikoCI) ListPublicResourceVersions(ctx context.Context, tc, pCan, rCan 
 	return q.ListResourceVersions(ctx, tc, pCan, rCan, before, after, limit)
 }
 
+// DeletePipeline removes a pipeline and all its associated entities within a
+// single unit of work.
 func (q *PikoCI) DeletePipeline(ctx context.Context, tc, pCan string) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)

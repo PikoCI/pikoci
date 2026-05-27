@@ -1,3 +1,6 @@
+// Package builtin provides access to the built-in resource types, runners,
+// and secret types that ship with PikoCI. Definitions are embedded as HCL
+// files at compile time and parsed lazily on first access using sync.Once.
 package builtin
 
 import (
@@ -43,6 +46,8 @@ var (
 	secretTypesOnce sync.Once
 )
 
+// ResourceTypes returns a map of all built-in resource types keyed by name.
+// The result is computed once and cached for subsequent calls.
 func ResourceTypes() map[string]restype.ResourceType {
 	resourceTypesOnce.Do(func() {
 		resourceTypes = make(map[string]restype.ResourceType)
@@ -68,6 +73,8 @@ func ResourceTypes() map[string]restype.ResourceType {
 	return resourceTypes
 }
 
+// Runners returns a map of all built-in runners keyed by name. The result is
+// computed once and cached for subsequent calls.
 func Runners() map[string]runner.Runner {
 	runnersOnce.Do(func() {
 		runners = make(map[string]runner.Runner)
@@ -102,6 +109,8 @@ func ResourceTypeHCL(name string) ([]byte, bool) {
 	return data, true
 }
 
+// SecretTypes returns a map of all built-in secret types keyed by name. The
+// result is computed once and cached for subsequent calls.
 func SecretTypes() map[string]sectype.SecretType {
 	secretTypesOnce.Do(func() {
 		secretTypes = make(map[string]sectype.SecretType)

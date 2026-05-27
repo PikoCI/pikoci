@@ -1,3 +1,6 @@
+// Package mysql provides the database layer for PikoCI. It supports
+// multiple database backends (MySQL, PostgreSQL, SQLite, and in-memory SQLite)
+// and contains repository implementations for all domain entities.
 package mysql
 
 import (
@@ -14,19 +17,24 @@ import (
 )
 
 const (
-	Mem        = "mem"
-	MySQL      = "mysql"
-	SQLite     = "sqlite"
+	// Mem identifies the in-memory SQLite database backend.
+	Mem = "mem"
+	// MySQL identifies the MySQL/MariaDB database backend.
+	MySQL = "mysql"
+	// SQLite identifies the file-backed SQLite database backend.
+	SQLite = "sqlite"
+	// PostgreSQL identifies the PostgreSQL database backend.
 	PostgreSQL = "postgresql"
 )
 
-// New returns a new sql.DB with the provided parameters. If the Ping to the DB fails
-// due to not existing DB it'll create the DB
-// IsPostgreSQL returns true if the system is PostgreSQL.
+// IsPostgreSQL returns true if the given system string identifies PostgreSQL.
 func IsPostgreSQL(system string) bool {
 	return system == PostgreSQL
 }
 
+// New opens a database connection using the provided credentials and options.
+// If the target database does not exist, New attempts to create it automatically
+// for MySQL and PostgreSQL backends.
 func New(host string, port int, user, password string, ops Options) (*sql.DB, error) {
 	switch ops.System {
 	case MySQL:
@@ -186,12 +194,18 @@ func pqQuoteIdentifier(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }
 
-// Options list of options that can be assigned to the New function
+// Options configures the database connection opened by New.
 type Options struct {
-	DBName          string
+	// DBName is the name of the database to connect to or create.
+	DBName string
+	// ClientFoundRows makes UPDATE return matched rows instead of changed rows (MySQL).
 	ClientFoundRows bool
-	ParseTime       bool
+	// ParseTime enables scanning DATE/DATETIME columns into time.Time (MySQL).
+	ParseTime bool
+	// MultiStatements allows multiple SQL statements in a single Exec call.
 	MultiStatements bool
-	System          string
-	DBFile          string
+	// System identifies the database backend (Mem, MySQL, SQLite, or PostgreSQL).
+	System string
+	// DBFile is the file path for the SQLite database (required when System is SQLite).
+	DBFile string
 }

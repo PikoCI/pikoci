@@ -15,6 +15,7 @@ import (
 	"gocloud.dev/pubsub"
 )
 
+// CreateResourceVersion creates a new version for the specified resource.
 func (q *PikoCI) CreateResourceVersion(ctx context.Context, tc, pc, rCan string, v resource.Version) (*resource.Version, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -34,6 +35,9 @@ func (q *PikoCI) CreateResourceVersion(ctx context.Context, tc, pc, rCan string,
 	return &v, nil
 }
 
+// ListResourceVersions returns paginated versions for a resource, supporting
+// cursor-based pagination with before and after parameters. Results are returned
+// in newest-first order.
 func (q *PikoCI) ListResourceVersions(ctx context.Context, tc, pc, rCan string, before *uint32, after *uint32, limit uint32) ([]*resource.Version, bool, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, false, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -67,6 +71,7 @@ func (q *PikoCI) ListResourceVersions(ctx context.Context, tc, pc, rCan string, 
 	return rvers, hasMore, nil
 }
 
+// GetPipelineResource retrieves a resource by its canonical name within a pipeline.
 func (q *PikoCI) GetPipelineResource(ctx context.Context, tc, pc, rCan string) (*resource.Resource, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -84,6 +89,7 @@ func (q *PikoCI) GetPipelineResource(ctx context.Context, tc, pc, rCan string) (
 	return r, nil
 }
 
+// UpdatePipelineResource updates a resource's metadata within a pipeline.
 func (q *PikoCI) UpdatePipelineResource(ctx context.Context, tc, pc, rCan string, r resource.Resource) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -101,6 +107,8 @@ func (q *PikoCI) UpdatePipelineResource(ctx context.Context, tc, pc, rCan string
 	return nil
 }
 
+// TriggerPipelineResource enqueues a resource check via the check topic and
+// updates the resource's last check time and next scheduled check time.
 func (q *PikoCI) TriggerPipelineResource(ctx context.Context, tc, pc, rCan string) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -145,6 +153,8 @@ func (q *PikoCI) TriggerPipelineResource(ctx context.Context, tc, pc, rCan strin
 	return nil
 }
 
+// WebhookTrigger triggers a resource check using the resource's unique webhook
+// token. It looks up the resource by token and delegates to TriggerPipelineResource.
 func (q *PikoCI) WebhookTrigger(ctx context.Context, token string) error {
 	r, tc, pc, err := q.Resources.FindByWebhookToken(ctx, token)
 	if err != nil {
@@ -154,6 +164,8 @@ func (q *PikoCI) WebhookTrigger(ctx context.Context, token string) error {
 	return q.TriggerPipelineResource(ctx, tc, pc, r.Canonical)
 }
 
+// RegenerateWebhookToken generates a new webhook token for the specified resource,
+// invalidating the previous one.
 func (q *PikoCI) RegenerateWebhookToken(ctx context.Context, tc, pc, rCan string) (string, error) {
 	if !utils.ValidateCanonical(tc) {
 		return "", fmt.Errorf("invalid Team Canonical format %q", tc)

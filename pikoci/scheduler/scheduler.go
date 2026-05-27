@@ -1,3 +1,8 @@
+// Package scheduler implements the background polling loop that triggers
+// resource checks and downstream job builds. The scheduler periodically queries
+// the database for resources whose next check time has passed and for jobs
+// whose input constraints are satisfied, then publishes messages to the
+// appropriate pub/sub topics for the worker to consume.
 package scheduler
 
 import (

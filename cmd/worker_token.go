@@ -6,6 +6,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// workerTokenCmd is the cobra command that generates a worker authentication token
+// from a JWT secret, for use by standalone workers connecting to the server.
 var workerTokenCmd = &cobra.Command{
 	Use:   "worker-token",
 	Short: "Generate a worker authentication token",

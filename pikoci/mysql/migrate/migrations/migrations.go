@@ -1,17 +1,21 @@
+// Package migrations defines the ordered list of database schema migrations
+// for PikoCI. Each migration has a name and raw SQL that gets adapted to the
+// target database system at runtime by the migrate package.
 package migrations
 
-// Migration defines a basic struct to write
-// the migraions
+// Migration represents a single database schema migration with a name
+// and the SQL statement to execute.
 type Migration struct {
+	// Name is the human-readable identifier for this migration.
 	Name string
-	SQL  string
+	// SQL is the raw SQL statement to execute, written in MySQL syntax.
+	// It is adapted to other database systems at runtime.
+	SQL string
 }
 
-// Migrations is a list of all the Migrations
-// we have, is defined as an array so it fails
-// in compilation time if some order is wrong
-// if it where to have more than one person working
-// on it
+// Migrations is the ordered list of all schema migrations. It is defined as
+// a fixed-size array so that the compiler catches ordering conflicts when
+// multiple developers add migrations concurrently.
 var Migrations = [23]Migration{
 	V0Initial,
 	V1ResourceCheckInterval,

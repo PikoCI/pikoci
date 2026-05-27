@@ -15,6 +15,10 @@ import (
 
 var successCodeRe = regexp.MustCompile(`2\d\d`)
 
+// Request sends an authenticated JSON HTTP request to the given URL.
+// The body is JSON-encoded and the response is decoded into resp.
+// If the server signals a stale token via X-Refresh-Token, a background
+// token refresh is attempted.
 func (c *Client) Request(ctx context.Context, method, url string, body, resp interface{}) error {
 	buff := bytes.NewBuffer(nil)
 	err := json.NewEncoder(buff).Encode(body)
