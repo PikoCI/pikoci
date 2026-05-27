@@ -1,3 +1,6 @@
+// Package pipeline defines the domain model for CI/CD pipelines in PikoCI.
+// A pipeline aggregates jobs, resources, resource types, runners, secret types,
+// services, and variables. It supports parsing from HCL configuration files.
 package pipeline
 
 import (
@@ -32,11 +35,15 @@ func TypeEvalContext() *hcl.EvalContext {
 	}
 }
 
+// WithTeam embeds a Pipeline along with its owning Team.
 type WithTeam struct {
 	Pipeline
 	Team team.Team
 }
 
+// Pipeline represents a complete CI/CD pipeline configuration. It contains all
+// jobs, resources, resource types, runners, secret types, services, and
+// variable declarations that define the pipeline's behavior.
 type Pipeline struct {
 	ID            uint32                    `json:"id"`
 	Name          string                    `json:"name"`
@@ -54,10 +61,14 @@ type Pipeline struct {
 	LastBuildAt   *time.Time                `json:"last_build_at,omitempty"`
 }
 
+// Variables holds the list of variable declarations parsed from pipeline HCL.
 type Variables struct {
 	Variables []Variable `json:"variables" hcl:"variable,block"`
 	Remain    hcl.Body   `hcl:",remain"`
 }
+
+// Variable represents a single variable declaration in a pipeline. Variables
+// can have a type, a default value, and an optional secret reference.
 type Variable struct {
 	Name    string          `json:"name" hcl:"name,label"`
 	Type    string          `json:"type" hcl:"type"`
@@ -65,12 +76,18 @@ type Variable struct {
 	Secret  *VariableSecret `json:"secret,omitempty" hcl:"secret,block"`
 }
 
+// VariableSecret references a secret value for a pipeline variable. The Type
+// identifies the secret type, Path is an optional path within the secret store,
+// and Key specifies which key to retrieve.
 type VariableSecret struct {
 	Type string `json:"type" hcl:"type,label"`
 	Path string `json:"path,omitempty" hcl:"path,optional"`
 	Key  string `json:"key" hcl:"key"`
 }
 
+// ResourceType looks up a resource type by name in the pipeline's configured
+// resource types, falling back to built-in resource types. It returns the
+// resource type and true if found, or an empty value and false otherwise.
 func (pp *Pipeline) ResourceType(rtn string) (restype.ResourceType, bool) {
 	for _, rt := range pp.ResourceTypes {
 		if rt.Name == rtn {
@@ -85,6 +102,8 @@ func (pp *Pipeline) ResourceType(rtn string) (restype.ResourceType, bool) {
 	return restype.ResourceType{}, false
 }
 
+// Resource looks up a resource by its canonical identifier. It returns the
+// resource and true if found, or an empty value and false otherwise.
 func (pp *Pipeline) Resource(rCan string) (resource.Resource, bool) {
 	for _, r := range pp.Resources {
 		if r.Canonical == rCan {
@@ -95,6 +114,9 @@ func (pp *Pipeline) Resource(rCan string) (resource.Resource, bool) {
 	return resource.Resource{}, false
 }
 
+// Runner looks up a runner by name in the pipeline's configured runners,
+// falling back to built-in runners. It returns the runner and true if found,
+// or an empty value and false otherwise.
 func (pp *Pipeline) Runner(run string) (runner.Runner, bool) {
 	for _, ru := range pp.Runners {
 		if ru.Name == run {
@@ -109,6 +131,9 @@ func (pp *Pipeline) Runner(run string) (runner.Runner, bool) {
 	return runner.Runner{}, false
 }
 
+// SecretType looks up a secret type by name in the pipeline's configured secret
+// types. It returns the secret type and true if found, or an empty value and
+// false otherwise.
 func (pp *Pipeline) SecretType(stn string) (sectype.SecretType, bool) {
 	for _, st := range pp.SecretTypes {
 		if st.Name == stn {
@@ -119,6 +144,8 @@ func (pp *Pipeline) SecretType(stn string) (sectype.SecretType, bool) {
 	return sectype.SecretType{}, false
 }
 
+// Service looks up a service by name in the pipeline's configured services. It
+// returns the service and true if found, or an empty value and false otherwise.
 func (pp *Pipeline) Service(name string) (service.Service, bool) {
 	for _, s := range pp.Services {
 		if s.Name == name {

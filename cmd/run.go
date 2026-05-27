@@ -27,11 +27,13 @@ import (
 )
 
 // ExitError wraps an exit code so cobra's RunE can propagate it without
-// calling os.Exit directly (which would bypass deferred cleanup).
+// calling os.Exit directly, which would bypass deferred cleanup.
 type ExitError struct {
+	// Code is the process exit code to return.
 	Code int
 }
 
+// Error returns a string representation of the exit code.
 func (e *ExitError) Error() string {
 	return fmt.Sprintf("exit code %d", e.Code)
 }

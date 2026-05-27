@@ -17,10 +17,16 @@ import (
 )
 
 var (
+	// ErrConcurrencyLimit is returned when a build cannot be started because the
+	// job's concurrency limit has been reached.
 	ErrConcurrencyLimit = errors.New("concurrency limit reached")
-	ErrBuildNotPending  = build.ErrNotPending
+	// ErrBuildNotPending is returned when attempting to start a build that is not
+	// in the pending state.
+	ErrBuildNotPending = build.ErrNotPending
 )
 
+// CreateJobBuild creates a new pending build for the specified job within a unit
+// of work. The build status is always set to pending regardless of the input.
 func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.Build) (*build.Build, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -49,6 +55,10 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 	return &b, nil
 }
 
+// ListJobBuilds returns paginated builds for a job, supporting cursor-based
+// pagination with before and after parameters. Results are returned in
+// newest-first order. The boolean return value indicates whether more results
+// exist beyond the requested page.
 func (q *PikoCI) ListJobBuilds(ctx context.Context, tc, pc, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, false, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -82,6 +92,7 @@ func (q *PikoCI) ListJobBuilds(ctx context.Context, tc, pc, jn string, before *u
 	return builds, hasMore, nil
 }
 
+// GetJobBuild retrieves a single build by its build number.
 func (q *PikoCI) GetJobBuild(ctx context.Context, tc, pc, jn string, buildNumber string) (*build.Build, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -98,6 +109,8 @@ func (q *PikoCI) GetJobBuild(ctx context.Context, tc, pc, jn string, buildNumber
 	return b, nil
 }
 
+// CancelJobBuild cancels a running or pending build and notifies the next
+// pending build in the queue so it can potentially start.
 func (q *PikoCI) CancelJobBuild(ctx context.Context, tc, pc, jn string, buildNumber string) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -129,6 +142,9 @@ func (q *PikoCI) CancelJobBuild(ctx context.Context, tc, pc, jn string, buildNum
 	return nil
 }
 
+// UpdateJobBuild updates an existing build's state and metadata. It prevents
+// workers from overwriting a cancelled build back to a non-terminal status and
+// automatically computes the duration for completed builds.
 func (q *PikoCI) UpdateJobBuild(ctx context.Context, tc, pc, jn string, buildNumber string, b build.Build) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -155,10 +171,13 @@ func (q *PikoCI) UpdateJobBuild(ctx context.Context, tc, pc, jn string, buildNum
 	return nil
 }
 
+// InsertBuildGetVersion records the resource version fetched by a get step
+// during a build execution.
 func (q *PikoCI) InsertBuildGetVersion(ctx context.Context, tc, pc, jn string, buildID uint32, stepName string, versionID uint32) error {
 	return q.Builds.InsertGetVersion(ctx, tc, pc, jn, buildID, stepName, versionID)
 }
 
+// DeleteJobBuild removes a build by its build number.
 func (q *PikoCI) DeleteJobBuild(ctx context.Context, tc, pc, jn string, buildNumber string) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -176,6 +195,9 @@ func (q *PikoCI) DeleteJobBuild(ctx context.Context, tc, pc, jn string, buildNum
 	return nil
 }
 
+// RetryJobBuild creates a retry of a completed build and enqueues it for
+// execution. The retry inherits the resource versions from the original parent
+// build to ensure consistency.
 func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber string) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -241,6 +263,9 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 	return nil
 }
 
+// CreateRetryJobBuild creates a retry build under the given parent build number
+// within a unit of work. The retry build number is formatted as "parent.N"
+// where N is the retry sequence number.
 func (q *PikoCI) CreateRetryJobBuild(ctx context.Context, tc, pc, jn, parentBuildNumber string, b build.Build) (*build.Build, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -269,6 +294,8 @@ func (q *PikoCI) CreateRetryJobBuild(ctx context.Context, tc, pc, jn, parentBuil
 	return &b, nil
 }
 
+// FindBuildGetVersions returns the resource version IDs fetched during get
+// steps of the specified build, keyed by step name.
 func (q *PikoCI) FindBuildGetVersions(ctx context.Context, tc, pc, jn string, buildID uint32) (map[string]uint32, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -281,6 +308,9 @@ func (q *PikoCI) FindBuildGetVersions(ctx context.Context, tc, pc, jn string, bu
 	return q.Builds.FindGetVersions(ctx, buildID)
 }
 
+// StartPendingBuild transitions a pending build to started status. It checks the
+// job's concurrency limit and returns ErrConcurrencyLimit if the limit has been
+// reached.
 func (q *PikoCI) StartPendingBuild(ctx context.Context, tc, pn, jn string, buildID uint32) (*build.Build, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -314,6 +344,8 @@ func (q *PikoCI) StartPendingBuild(ctx context.Context, tc, pn, jn string, build
 	return q.Builds.FindByID(ctx, buildID)
 }
 
+// FindOldestPendingBuild returns the oldest pending build for the specified job,
+// or nil if no pending builds exist.
 func (q *PikoCI) FindOldestPendingBuild(ctx context.Context, tc, pn, jn string) (*build.Build, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -326,6 +358,9 @@ func (q *PikoCI) FindOldestPendingBuild(ctx context.Context, tc, pn, jn string) 
 	return q.Builds.FindOldestPending(ctx, tc, pn, jn)
 }
 
+// notifyNextPendingBuild finds the oldest pending build for the job and sends a
+// message to the job topic so it can be picked up for execution. This is called
+// after a build is cancelled or completes to fill any freed concurrency slots.
 func (q *PikoCI) notifyNextPendingBuild(ctx context.Context, tc, pc, jn string) {
 	pending, err := q.Builds.FindOldestPending(ctx, tc, pc, jn)
 	if err != nil || pending == nil {

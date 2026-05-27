@@ -7,8 +7,13 @@ import (
 	cron "github.com/netresearch/go-cron"
 )
 
+// parser is a pre-configured cron expression parser that supports standard
+// five-field specs and descriptors like "@every 1m", with a minimum interval
+// of 10 seconds.
 var parser = cron.MustNewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor).WithMinEveryInterval(10 * time.Second)
 
+// minCheckInterval is the minimum allowed duration between consecutive
+// resource checks.
 const minCheckInterval = 10 * time.Second
 
 // ParseCheckInterval parses a cron spec (standard or @every) and returns the Schedule.

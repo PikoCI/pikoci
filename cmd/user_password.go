@@ -8,9 +8,12 @@ import (
 )
 
 const (
+	// userPasswordSeparator is the delimiter between username and password hash in output.
 	userPasswordSeparator = ":"
 )
 
+// userPasswordCmd is the cobra command that generates a hashed password string
+// suitable for use with the --users flag of the server command.
 var userPasswordCmd = &cobra.Command{
 	Use:   "user-password",
 	Short: "This is a helper if you want to add users via configuration. It generates the right value to set",

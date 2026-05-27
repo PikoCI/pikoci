@@ -1,3 +1,6 @@
+// Package migrate runs database schema migrations for PikoCI.
+// It adapts SQL statements to the target database system (MySQL, PostgreSQL,
+// SQLite, or in-memory SQLite) before applying them.
 package migrate
 
 import (

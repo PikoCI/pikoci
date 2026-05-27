@@ -1,3 +1,7 @@
+// Package source resolves HCL pipeline component definitions from various
+// source URLs. It supports the "pikoci://" scheme for built-in components
+// (with a GitHub raw fallback) and "https://" or "http://" schemes for
+// fetching definitions from arbitrary URLs.
 package source
 
 import (
@@ -81,6 +85,8 @@ func (hs hclServiceBlock) toService() service.Service {
 	return s
 }
 
+// ResolveResourceType fetches and decodes a resource type definition from the
+// given source URL. It returns the first resource_type block found in the HCL.
 func ResolveResourceType(ctx context.Context, src string) (*restype.ResourceType, error) {
 	data, err := resolveHCL(ctx, src, "resource_types")
 	if err != nil {
@@ -98,6 +104,8 @@ func ResolveResourceType(ctx context.Context, src string) (*restype.ResourceType
 	return &hrt.ResourceTypes[0], nil
 }
 
+// ResolveRunner fetches and decodes a runner definition from the given source
+// URL. It returns the first runner_type block found in the HCL.
 func ResolveRunner(ctx context.Context, src string) (*runner.Runner, error) {
 	data, err := resolveHCL(ctx, src, "runners")
 	if err != nil {
@@ -115,6 +123,8 @@ func ResolveRunner(ctx context.Context, src string) (*runner.Runner, error) {
 	return &hr.Runners[0], nil
 }
 
+// ResolveSecretType fetches and decodes a secret type definition from the given
+// source URL. It returns the first secret_type block found in the HCL.
 func ResolveSecretType(ctx context.Context, src string) (*sectype.SecretType, error) {
 	data, err := resolveHCL(ctx, src, "secret_types")
 	if err != nil {
@@ -132,6 +142,8 @@ func ResolveSecretType(ctx context.Context, src string) (*sectype.SecretType, er
 	return &hst.SecretTypes[0], nil
 }
 
+// ResolveService fetches and decodes a service definition from the given source
+// URL. It returns the first service_type block found in the HCL.
 func ResolveService(ctx context.Context, src string) (*service.Service, error) {
 	data, err := resolveHCL(ctx, src, "services")
 	if err != nil {

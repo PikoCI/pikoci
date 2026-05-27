@@ -10,6 +10,8 @@ import (
 	"github.com/xescugc/pikoci/pikoci/utils"
 )
 
+// CreateTeam creates a new team and adds the specified user as its initial admin
+// member. The team's canonical name is derived from its display name.
 func (q *PikoCI) CreateTeam(ctx context.Context, un string, t team.Team) (*team.WithMembers, error) {
 	if !utils.ValidateCanonical(un) {
 		return nil, fmt.Errorf("invalid Username format %q", un)
@@ -51,6 +53,7 @@ func (q *PikoCI) CreateTeam(ctx context.Context, un string, t team.Team) (*team.
 	return twm, nil
 }
 
+// ListTeams returns all teams that the given user is a member of.
 func (q *PikoCI) ListTeams(ctx context.Context, un string) ([]*team.WithMembers, error) {
 	if !utils.ValidateCanonical(un) {
 		return nil, fmt.Errorf("invalid Username format %q", un)
@@ -64,6 +67,7 @@ func (q *PikoCI) ListTeams(ctx context.Context, un string) ([]*team.WithMembers,
 	return teams, nil
 }
 
+// GetTeam retrieves a team by its canonical name, including its members.
 func (q *PikoCI) GetTeam(ctx context.Context, tc string) (*team.WithMembers, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -77,6 +81,8 @@ func (q *PikoCI) GetTeam(ctx context.Context, tc string) (*team.WithMembers, err
 	return t, nil
 }
 
+// UpdateTeam updates a team's properties and recomputes its canonical name from
+// the new display name.
 func (q *PikoCI) UpdateTeam(ctx context.Context, tc string, t team.Team) (*team.WithMembers, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -97,6 +103,7 @@ func (q *PikoCI) UpdateTeam(ctx context.Context, tc string, t team.Team) (*team.
 	return twm, nil
 }
 
+// DeleteTeam removes a team by its canonical name.
 func (q *PikoCI) DeleteTeam(ctx context.Context, tc string) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -110,6 +117,8 @@ func (q *PikoCI) DeleteTeam(ctx context.Context, tc string) error {
 	return nil
 }
 
+// CreateTeamMember adds a new member to the specified team and returns the
+// created member.
 func (q *PikoCI) CreateTeamMember(ctx context.Context, tc string, tm team.Member) (*team.Member, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -130,6 +139,8 @@ func (q *PikoCI) CreateTeamMember(ctx context.Context, tc string, tm team.Member
 	return rtm, nil
 }
 
+// UpdateTeamMember updates an existing team member's role. It validates that the
+// operation does not leave the team without any admin members.
 func (q *PikoCI) UpdateTeamMember(ctx context.Context, tc, mu string, tm team.Member) (*team.Member, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -152,6 +163,8 @@ func (q *PikoCI) UpdateTeamMember(ctx context.Context, tc, mu string, tm team.Me
 	return rtm, nil
 }
 
+// DeleteTeamMember removes a member from the specified team. It validates that
+// the operation does not leave the team without any admin members.
 func (q *PikoCI) DeleteTeamMember(ctx context.Context, tc, mu string) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -169,6 +182,9 @@ func (q *PikoCI) DeleteTeamMember(ctx context.Context, tc, mu string) error {
 	return nil
 }
 
+// validateTeamAdmins checks that the team would still have at least one admin
+// after the proposed change. If m is non-nil, it simulates updating the member;
+// otherwise it simulates removing the member.
 func (q *PikoCI) validateTeamAdmins(ctx context.Context, tc, mu string, m *team.Member) error {
 	t, err := q.Teams.Find(ctx, tc)
 	if err != nil {

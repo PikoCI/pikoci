@@ -17,6 +17,9 @@ import (
 	"github.com/xescugc/pikoci/pikoci/user"
 )
 
+// unitOfWork is a transactional UnitOfWork backed by an sql.Tx. Repositories
+// are lazily created on first access so that only the ones actually used
+// participate in the transaction.
 type unitOfWork struct {
 	tx       *sql.Tx
 	dbSystem string
@@ -32,6 +35,10 @@ type unitOfWork struct {
 	secretTypes   sectype.Repository
 }
 
+// NewStartUnitOfWork returns a StartUnitOfWork backed by a real SQL database.
+// Each invocation begins a new transaction, executes the callback, and commits
+// on success or rolls back on error. The dbSystem parameter identifies the
+// database dialect (e.g. "mysql") for repositories that need it.
 func NewStartUnitOfWork(db *sql.DB, dbSystem string) StartUnitOfWork {
 	return func(ctx context.Context, uowFn func(uow UnitOfWork) error) error {
 		tx, err := db.BeginTx(ctx, nil)

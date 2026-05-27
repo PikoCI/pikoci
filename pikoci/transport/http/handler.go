@@ -1,3 +1,6 @@
+// Package http provides the HTTP transport layer for the PikoCI server.
+// It defines the main HTTP handler, route registration, authentication
+// and authorization middleware, and JSON request/response encoding.
 package http
 
 import (
@@ -17,11 +20,15 @@ import (
 	"github.com/xescugc/pikoci/pikoci/user"
 )
 
+// contextKey is a custom type for context value keys to avoid collisions.
 type contextKey string
 
 const (
+	// UsernameContextKey is the context key used to store the authenticated username.
 	UsernameContextKey contextKey = "username_context_key"
-	IsPublicAccessKey  contextKey = "is_public_access_key"
+	// IsPublicAccessKey is the context key used to indicate that the request
+	// is accessing a public pipeline without authentication.
+	IsPublicAccessKey contextKey = "is_public_access_key"
 )
 
 var publicFallbackRoutes = map[RouteName]bool{
@@ -33,6 +40,10 @@ var publicFallbackRoutes = map[RouteName]bool{
 	ListResourceVersions: true,
 }
 
+// Handler creates and returns the main HTTP handler for the PikoCI API.
+// It configures all API routes, authentication middleware, static asset serving,
+// and HTML template rendering. The ts parameter is the JWT signing secret,
+// and dbSystem identifies the database backend for the export endpoint.
 func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem string) http.Handler {
 	r := mux.NewRouter()
 
@@ -281,18 +292,24 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem s
 	})
 }
 
+// encodeError writes an error response as JSON to the response writer.
 func encodeError(errs string, w http.ResponseWriter) {
 	encodeResponse(ErrorResponse{Err: errs}, w)
 }
 
+// ErrorResponse represents a JSON error response returned by the API.
 type ErrorResponse struct {
 	Err string `json:"error"`
 }
 
+// Error returns the error message string, satisfying the Errorer interface.
 func (r ErrorResponse) Error() string {
 	return r.Err
 }
 
+// Errorer is an interface for response types that carry an error message.
+// A non-empty Error() return value causes the response to be written with
+// an HTTP 400 status code.
 type Errorer interface {
 	Error() string
 }

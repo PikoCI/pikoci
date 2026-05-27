@@ -26,8 +26,10 @@ import (
 	_ "gocloud.dev/pubsub/rabbitpubsub"
 )
 
+// workerViper is the viper instance used for worker command flag and env var binding.
 var workerViper = viper.New()
 
+// workerCmd is the cobra command that starts a standalone PikoCI worker.
 var workerCmd = &cobra.Command{
 	Use:   "worker",
 	Short: "Starts a PikoCI Worker",

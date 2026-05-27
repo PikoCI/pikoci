@@ -1,3 +1,7 @@
+// Package queue defines the publish/subscribe abstractions used by the scheduler
+// and worker to exchange job and resource-check messages. The Topic and
+// Subscription interfaces mirror the gocloud.dev/pubsub API so that
+// implementations can be swapped between in-memory, NATS, or other backends.
 package queue
 
 import (
@@ -9,9 +13,9 @@ import (
 //go:generate go tool mockgen -destination=../mock/topic.go -mock_names=Topic=Topic -package mock github.com/xescugc/pikoci/pikoci/queue Topic
 //go:generate go tool mockgen -destination=../mock/subscription.go -mock_names=Subscription=Subscription -package mock github.com/xescugc/pikoci/pikoci/queue Subscription
 
-// COPIED from https://pkg.go.dev/gocloud.dev/pubsub@v0.43.0#Topic as it's an interface
-// and not a specific type
-// Topic publishes messages to all its subscribers.
+// Topic publishes messages to all its subscribers. The interface is modeled
+// after gocloud.dev/pubsub.Topic so that concrete implementations can be
+// used interchangeably.
 type Topic interface {
 	// Send publishes a message. It only returns after the message has been sent, or failed to be sent. Send can be called from multiple goroutines at once.
 	Send(ctx context.Context, m *pubsub.Message) (err error)
@@ -24,6 +28,8 @@ type Topic interface {
 	Shutdown(ctx context.Context) (err error)
 }
 
+// Subscription receives messages published to a topic. The interface is modeled
+// after gocloud.dev/pubsub.Subscription.
 type Subscription interface {
 	// As converts i to driver-specific types
 	As(i any) bool
@@ -38,6 +44,9 @@ type Subscription interface {
 	Shutdown(ctx context.Context) (err error)
 }
 
+// Body is the JSON-serializable payload carried inside every pub/sub message.
+// Depending on the queue, different fields are populated to identify the target
+// team, pipeline, job, resource, or build.
 type Body struct {
 	TeamCanonical     string `json:"team_canonical,omitempty"`
 	PipelineCanonical string `json:"pipeline_canonical,omitempty"`

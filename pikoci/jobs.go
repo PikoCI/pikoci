@@ -12,6 +12,9 @@ import (
 	"gocloud.dev/pubsub"
 )
 
+// TriggerPipelineJob creates a pending build for the specified job, pins the
+// latest version of its first get-step resource, and enqueues the build for
+// execution via the job topic.
 func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -70,6 +73,7 @@ func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) erro
 	return nil
 }
 
+// GetPipelineJob retrieves a job by its name within a pipeline.
 func (q *PikoCI) GetPipelineJob(ctx context.Context, tc, pc, jn string) (*job.Job, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)

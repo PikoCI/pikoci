@@ -1,3 +1,7 @@
+// Package worker implements the background job execution engine for PikoCI.
+// It receives messages from pub/sub subscriptions for job builds and resource
+// checks, then executes the corresponding pipeline steps using the configured
+// runners and resource types.
 package worker
 
 import (
@@ -31,10 +35,17 @@ import (
 	"gocloud.dev/pubsub"
 )
 
+// Service is the interface for running the worker event loop. Implementations
+// listen for incoming messages and process them until the context is cancelled.
 type Service interface {
+	// Run starts the worker loop, consuming messages from the queue identified
+	// by q and publishing to the topic identified by t.
 	Run(ctx context.Context, q, t string) error
 }
 
+// Worker processes job and resource-check messages received from pub/sub
+// subscriptions. It manages build lifecycle, executes pipeline steps, and
+// supports graceful draining.
 type Worker struct {
 	jobTopic          queue.Topic
 	pikoci            pikoci.Service
@@ -59,6 +70,9 @@ type Worker struct {
 	LocalMode bool
 }
 
+// New creates a new Worker with the given PikoCI service, job topic, job and
+// check subscriptions, and logger. The returned Worker is ready to be started
+// with Run.
 func New(s pikoci.Service, jobTopic queue.Topic, jobSub, checkSub queue.Subscription, l *slog.Logger) *Worker {
 	return &Worker{
 		pikoci:            s,
@@ -69,6 +83,8 @@ func New(s pikoci.Service, jobTopic queue.Topic, jobSub, checkSub queue.Subscrip
 	}
 }
 
+// Drain signals the worker to stop accepting new messages. In-flight jobs
+// continue to completion, but the receive loops are cancelled immediately.
 func (w *Worker) Drain() {
 	w.draining.Store(true)
 	if w.drainCancel != nil {
@@ -76,6 +92,9 @@ func (w *Worker) Drain() {
 	}
 }
 
+// Run starts the worker event loop. It launches goroutines that receive
+// messages from the job and check subscriptions and process them concurrently.
+// Run blocks until the context is cancelled or an unrecoverable error occurs.
 func (w *Worker) Run(ctx context.Context) error {
 	w.logger.Info("Worker waiting for messages...")
 

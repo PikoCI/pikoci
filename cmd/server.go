@@ -40,10 +40,13 @@ import (
 	"github.com/adrg/xdg"
 )
 
+// mainTeamCanonical is the default team canonical name used at startup.
 var mainTeamCanonical = "main"
 
+// serverViper is the viper instance used for server command flag and env var binding.
 var serverViper = viper.New()
 
+// serverCmd is the cobra command that starts the PikoCI server.
 var serverCmd = &cobra.Command{
 	Use:   "server",
 	Short: "Starts the PikoCI server",
