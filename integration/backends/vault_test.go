@@ -224,14 +224,14 @@ job "deploy" {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		vers, err := svc.ListResourceVersions(ctx, "main", "vault-e2e", "cron.timer")
+		vers, _, err := svc.ListResourceVersions(ctx, "main", "vault-e2e", "cron.timer", nil, nil, 0)
 		return err == nil && len(vers) > 0
 	}, 10*time.Second, 200*time.Millisecond)
 
 	// Wait for the build to finish
 	var builds []*build.Build
 	require.Eventually(t, func() bool {
-		builds, err = svc.ListJobBuilds(ctx, "main", "vault-e2e", "deploy")
+		builds, _, err = svc.ListJobBuilds(ctx, "main", "vault-e2e", "deploy", nil, nil, 0)
 		if err != nil || len(builds) == 0 {
 			return false
 		}

@@ -47,18 +47,77 @@ func TestListJobBuilds(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	// Builds returned in ascending order from DB, reversed by service
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job").Return([]*build.Build{
-		{ID: 1, BuildNumber: "1", Status: build.Succeeded},
+	// limit=0 fetches all, DB returns DESC order
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
 		{ID: 2, BuildNumber: "2", Status: build.Started},
+		{ID: 1, BuildNumber: "1", Status: build.Succeeded},
 	}, nil)
 
-	builds, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job")
+	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 0)
 	require.NoError(t, err)
 	require.Len(t, builds, 2)
-	// Should be reversed (newest first)
+	assert.False(t, hasMore)
+	// Newest first
 	assert.Equal(t, uint32(2), builds[0].ID)
 	assert.Equal(t, uint32(1), builds[1].ID)
+}
+
+func TestListJobBuilds_WithLimit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// DB returns limit+1 items (3) when we ask for limit=2 → hasMore=true
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(3)).Return([]*build.Build{
+		{ID: 5, BuildNumber: "5"},
+		{ID: 4, BuildNumber: "4"},
+		{ID: 3, BuildNumber: "3"},
+	}, nil)
+
+	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 2)
+	require.NoError(t, err)
+	require.Len(t, builds, 2)
+	assert.True(t, hasMore)
+	assert.Equal(t, uint32(5), builds[0].ID)
+	assert.Equal(t, uint32(4), builds[1].ID)
+}
+
+func TestListJobBuilds_Before(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	before := uint32(4)
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", &before, (*uint32)(nil), uint32(3)).Return([]*build.Build{
+		{ID: 3, BuildNumber: "3"},
+		{ID: 2, BuildNumber: "2"},
+	}, nil)
+
+	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", &before, nil, 2)
+	require.NoError(t, err)
+	require.Len(t, builds, 2)
+	assert.False(t, hasMore)
+}
+
+func TestListJobBuilds_After(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	after := uint32(3)
+	// DB returns ASC order for after queries
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), &after, uint32(0)).Return([]*build.Build{
+		{ID: 4, BuildNumber: "4"},
+		{ID: 5, BuildNumber: "5"},
+	}, nil)
+
+	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, &after, 0)
+	require.NoError(t, err)
+	require.Len(t, builds, 2)
+	assert.False(t, hasMore)
+	// Should be reversed to newest-first
+	assert.Equal(t, uint32(5), builds[0].ID)
+	assert.Equal(t, uint32(4), builds[1].ID)
 }
 
 func TestUpdateJobBuild(t *testing.T) {

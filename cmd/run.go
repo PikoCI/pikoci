@@ -277,7 +277,7 @@ func runLocal(ctx context.Context, logger *slog.Logger, pipelineConfig, jobName 
 			// This can happen if context is cancelled
 			return 1, nil
 		case <-ticker.C:
-			builds, err := svc.ListJobBuilds(ctx, mainTeamCanonical, "local", jobName)
+			builds, _, err := svc.ListJobBuilds(ctx, mainTeamCanonical, "local", jobName, nil, nil, 0)
 			if err != nil {
 				continue
 			}

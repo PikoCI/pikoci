@@ -109,7 +109,7 @@ func TestTriggerPipelineJob_PinsLatestVersion(t *testing.T) {
 	rCan := j.GetSteps()[0].ResourceCanonical()
 
 	s.Jobs.EXPECT().Find(ctx, tc, ppc, jn).Return(j, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, tc, ppc, rCan).Return(versions, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, tc, ppc, rCan, (*uint32)(nil), (*uint32)(nil), uint32(0)).Return(versions, nil)
 	// TriggerPipelineJob now creates a pending build first
 	s.Builds.EXPECT().Create(ctx, tc, ppc, jn, gomock.Any()).Return(uint32(5), "1", nil)
 

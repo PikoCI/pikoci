@@ -152,7 +152,7 @@ job "deploy" {
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
-			vers, err := svc.ListResourceVersions(ctx, "main", "secrets-e2e", "cron.timer")
+			vers, _, err := svc.ListResourceVersions(ctx, "main", "secrets-e2e", "cron.timer", nil, nil, 0)
 			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
 
@@ -163,7 +163,7 @@ job "deploy" {
 		// Wait for the build triggered by the resource to finish
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
-			builds, err = svc.ListJobBuilds(ctx, "main", "secrets-e2e", "deploy")
+			builds, _, err = svc.ListJobBuilds(ctx, "main", "secrets-e2e", "deploy", nil, nil, 0)
 			if err != nil || len(builds) == 0 {
 				return false
 			}
@@ -249,7 +249,7 @@ job "deploy" {
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
-			vers, err := svc.ListResourceVersions(ctx, "main", "secrets-file-e2e", "cron.timer")
+			vers, _, err := svc.ListResourceVersions(ctx, "main", "secrets-file-e2e", "cron.timer", nil, nil, 0)
 			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
 
@@ -260,7 +260,7 @@ job "deploy" {
 		// Wait for the build triggered by the resource to finish
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
-			builds, err = svc.ListJobBuilds(ctx, "main", "secrets-file-e2e", "deploy")
+			builds, _, err = svc.ListJobBuilds(ctx, "main", "secrets-file-e2e", "deploy", nil, nil, 0)
 			if err != nil || len(builds) == 0 {
 				return false
 			}
@@ -363,7 +363,7 @@ job "deploy" {
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
-			vers, err := svc.ListResourceVersions(ctx, "main", "secrets-env-file-e2e", "cron.timer")
+			vers, _, err := svc.ListResourceVersions(ctx, "main", "secrets-env-file-e2e", "cron.timer", nil, nil, 0)
 			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
 
@@ -374,7 +374,7 @@ job "deploy" {
 		// Wait for the build triggered by the resource to finish
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
-			builds, err = svc.ListJobBuilds(ctx, "main", "secrets-env-file-e2e", "deploy")
+			builds, _, err = svc.ListJobBuilds(ctx, "main", "secrets-env-file-e2e", "deploy", nil, nil, 0)
 			if err != nil || len(builds) == 0 {
 				return false
 			}

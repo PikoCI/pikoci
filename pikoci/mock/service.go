@@ -490,18 +490,19 @@ func (mr *ServiceMockRecorder) InsertBuildGetVersion(ctx, tc, pn, jn, buildID, s
 }
 
 // ListJobBuilds mocks base method.
-func (m *Service) ListJobBuilds(ctx context.Context, tc, pn, jn string) ([]*build.Build, error) {
+func (m *Service) ListJobBuilds(ctx context.Context, tc, pn, jn string, before, after *uint32, limit uint32) ([]*build.Build, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListJobBuilds", ctx, tc, pn, jn)
+	ret := m.ctrl.Call(m, "ListJobBuilds", ctx, tc, pn, jn, before, after, limit)
 	ret0, _ := ret[0].([]*build.Build)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // ListJobBuilds indicates an expected call of ListJobBuilds.
-func (mr *ServiceMockRecorder) ListJobBuilds(ctx, tc, pn, jn any) *gomock.Call {
+func (mr *ServiceMockRecorder) ListJobBuilds(ctx, tc, pn, jn, before, after, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListJobBuilds", reflect.TypeOf((*Service)(nil).ListJobBuilds), ctx, tc, pn, jn)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListJobBuilds", reflect.TypeOf((*Service)(nil).ListJobBuilds), ctx, tc, pn, jn, before, after, limit)
 }
 
 // ListPipelines mocks base method.
@@ -520,48 +521,51 @@ func (mr *ServiceMockRecorder) ListPipelines(ctx, tc any) *gomock.Call {
 }
 
 // ListPublicJobBuilds mocks base method.
-func (m *Service) ListPublicJobBuilds(ctx context.Context, tc, pn, jn string) ([]*build.Build, error) {
+func (m *Service) ListPublicJobBuilds(ctx context.Context, tc, pn, jn string, before, after *uint32, limit uint32) ([]*build.Build, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListPublicJobBuilds", ctx, tc, pn, jn)
+	ret := m.ctrl.Call(m, "ListPublicJobBuilds", ctx, tc, pn, jn, before, after, limit)
 	ret0, _ := ret[0].([]*build.Build)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // ListPublicJobBuilds indicates an expected call of ListPublicJobBuilds.
-func (mr *ServiceMockRecorder) ListPublicJobBuilds(ctx, tc, pn, jn any) *gomock.Call {
+func (mr *ServiceMockRecorder) ListPublicJobBuilds(ctx, tc, pn, jn, before, after, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPublicJobBuilds", reflect.TypeOf((*Service)(nil).ListPublicJobBuilds), ctx, tc, pn, jn)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPublicJobBuilds", reflect.TypeOf((*Service)(nil).ListPublicJobBuilds), ctx, tc, pn, jn, before, after, limit)
 }
 
 // ListPublicResourceVersions mocks base method.
-func (m *Service) ListPublicResourceVersions(ctx context.Context, tc, pn, rCan string) ([]*resource.Version, error) {
+func (m *Service) ListPublicResourceVersions(ctx context.Context, tc, pn, rCan string, before, after *uint32, limit uint32) ([]*resource.Version, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListPublicResourceVersions", ctx, tc, pn, rCan)
+	ret := m.ctrl.Call(m, "ListPublicResourceVersions", ctx, tc, pn, rCan, before, after, limit)
 	ret0, _ := ret[0].([]*resource.Version)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // ListPublicResourceVersions indicates an expected call of ListPublicResourceVersions.
-func (mr *ServiceMockRecorder) ListPublicResourceVersions(ctx, tc, pn, rCan any) *gomock.Call {
+func (mr *ServiceMockRecorder) ListPublicResourceVersions(ctx, tc, pn, rCan, before, after, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPublicResourceVersions", reflect.TypeOf((*Service)(nil).ListPublicResourceVersions), ctx, tc, pn, rCan)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPublicResourceVersions", reflect.TypeOf((*Service)(nil).ListPublicResourceVersions), ctx, tc, pn, rCan, before, after, limit)
 }
 
 // ListResourceVersions mocks base method.
-func (m *Service) ListResourceVersions(ctx context.Context, tc, pn, rCan string) ([]*resource.Version, error) {
+func (m *Service) ListResourceVersions(ctx context.Context, tc, pn, rCan string, before, after *uint32, limit uint32) ([]*resource.Version, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListResourceVersions", ctx, tc, pn, rCan)
+	ret := m.ctrl.Call(m, "ListResourceVersions", ctx, tc, pn, rCan, before, after, limit)
 	ret0, _ := ret[0].([]*resource.Version)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // ListResourceVersions indicates an expected call of ListResourceVersions.
-func (mr *ServiceMockRecorder) ListResourceVersions(ctx, tc, pn, rCan any) *gomock.Call {
+func (mr *ServiceMockRecorder) ListResourceVersions(ctx, tc, pn, rCan, before, after, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListResourceVersions", reflect.TypeOf((*Service)(nil).ListResourceVersions), ctx, tc, pn, rCan)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListResourceVersions", reflect.TypeOf((*Service)(nil).ListResourceVersions), ctx, tc, pn, rCan, before, after, limit)
 }
 
 // ListTeams mocks base method.

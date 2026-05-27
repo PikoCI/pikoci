@@ -1149,8 +1149,21 @@
         },
         initialize: function(attr, opts) {
           this.job = opts.job
+          this.newestID = 0
+          this.oldestID = 0
+          this.hasMore = false
+          this.loadingMore = false
         },
         parse: function(response) {
+          if (response.meta) {
+            this.hasMore = response.meta.has_more
+            if (!this.newestID || response.meta.newest_id > this.newestID) {
+              this.newestID = response.meta.newest_id
+            }
+            if (!this.oldestID || response.meta.oldest_id < this.oldestID) {
+              this.oldestID = response.meta.oldest_id
+            }
+          }
           var builds = response.data;
           _.each(builds, function(data) {
             if (data.duration  !== 0) {
@@ -1164,6 +1177,27 @@
             })
           })
           return builds
+        },
+        fetchMore: function() {
+          if (this.loadingMore || !this.hasMore) return
+          this.loadingMore = true
+          var that = this
+          this.fetch({
+            remove: false,
+            data: { before: this.oldestID, limit: 50 },
+            success: function() { that.loadingMore = false },
+            error: function() { that.loadingMore = false },
+          })
+        },
+        fetchNew: function() {
+          if (!this.newestID) {
+            this.fetch({ remove: false })
+            return
+          }
+          this.fetch({
+            remove: false,
+            data: { after: this.newestID },
+          })
         },
         setActive: function(id) {
           if (!id && this.first()) {
@@ -1180,12 +1214,49 @@
         url: function() {
           return this.resource.url() + "/versions"
         },
+        comparator: function(a, b) {
+          return (b.get("id") || 0) - (a.get("id") || 0)
+        },
         initialize: function(attr, opts) {
           this.resource = opts.resource
+          this.newestID = 0
+          this.oldestID = 0
+          this.hasMore = false
+          this.loadingMore = false
         },
         parse: function(response) {
+          if (response.meta) {
+            this.hasMore = response.meta.has_more
+            if (!this.newestID || response.meta.newest_id > this.newestID) {
+              this.newestID = response.meta.newest_id
+            }
+            if (!this.oldestID || response.meta.oldest_id < this.oldestID) {
+              this.oldestID = response.meta.oldest_id
+            }
+          }
           return response.data;
-        }
+        },
+        fetchMore: function() {
+          if (this.loadingMore || !this.hasMore) return
+          this.loadingMore = true
+          var that = this
+          this.fetch({
+            remove: false,
+            data: { before: this.oldestID, limit: 50 },
+            success: function() { that.loadingMore = false },
+            error: function() { that.loadingMore = false },
+          })
+        },
+        fetchNew: function() {
+          if (!this.newestID) {
+            this.fetch({ remove: false })
+            return
+          }
+          this.fetch({
+            remove: false,
+            data: { after: this.newestID },
+          })
+        },
       });
 
       app.teams = new app.Teams();
@@ -3055,17 +3126,14 @@
           this.collection.fetch({
             reset: true,
             success: function(){
-              var bid = that.collection.setActive(opts.currentBuildID)
-              that.currentBuildID = bid
-              var tc = that.collection.job.collection.pipeline.collection.team.get("canonical")
-              var url = new URL(location.origin+"/teams/"+tc+"/pipelines/"+that.pipeline.get("canonical")+"/jobs/"+that.job.get("name")+"/builds/"+bid)
-              app.router.navigate(url.pathname, { trigger: false, replace: true });
+              that.activateAndNavigate(opts.currentBuildID)
+              that.bindScrollListener()
             },
           })
 
           var that = this
           this.intervalID = window.setInterval(function() {
-            that.collection.fetch({isInterval: true})
+            that.collection.fetchNew()
           }, fetchInterval);
         },
         events: {
@@ -3086,8 +3154,47 @@
           })));
           return this; // enable chained calls
         },
+        activateAndNavigate: function(requestedBID) {
+          var that = this
+          var found = requestedBID && this.collection.get(requestedBID)
+          if (requestedBID && !found) {
+            // Requested build is outside the initial page — fetch it individually
+            var singleBuild = new app.Build({build_number: requestedBID})
+            singleBuild.url = this.collection.url() + "/" + requestedBID
+            singleBuild.fetch({
+              success: function(model) {
+                that.collection.add(model, {merge: true})
+                that.doActivate(requestedBID)
+              },
+              error: function() {
+                // Build not found, fall back to newest
+                that.doActivate(null)
+              },
+            })
+          } else {
+            this.doActivate(requestedBID)
+          }
+        },
+        doActivate: function(bid) {
+          bid = this.collection.setActive(bid)
+          this.currentBuildID = bid
+          var tc = this.collection.job.collection.pipeline.collection.team.get("canonical")
+          var url = new URL(location.origin+"/teams/"+tc+"/pipelines/"+this.pipeline.get("canonical")+"/jobs/"+this.job.get("name")+"/builds/"+bid)
+          app.router.navigate(url.pathname, { trigger: false, replace: true });
+        },
+        bindScrollListener: function() {
+          var that = this
+          this._scrollHandler = function() {
+            var el = that.$('#builds-tabs')[0]
+            if (el && el.scrollLeft + el.clientWidth >= el.scrollWidth - 50) {
+              that.collection.fetchMore()
+            }
+          }
+          this.$('#builds-tabs').on('scroll', this._scrollHandler)
+        },
         remove: function() {
           clearInterval(this.intervalID)
+          this.$('#builds-tabs').off('scroll', this._scrollHandler)
           Backbone.View.prototype.remove.call(this);
         },
         addBuild: function(m) {
@@ -3323,12 +3430,15 @@
           this.listenTo(this.collection, "reset", this.resetVersions)
           this.listenTo(this.model, "change", this.render)
 
-          this.collection.fetch({reset: true})
-
           var that = this
+          this.collection.fetch({
+            reset: true,
+            success: function() { that.bindScrollListener() },
+          })
+
           this.intervalID = window.setInterval(function() {
             that.model.fetch({isInterval: true})
-            that.collection.fetch({isInterval: true})
+            that.collection.fetchNew()
           }, fetchInterval);
         },
         render: function () {
@@ -3374,11 +3484,29 @@
           if (isReset) {
             $('#resource-versions').append(ver.render().el);
           } else {
-            $('#resource-versions').prepend(ver.render().el);
+            var idx = this.collection.indexOf(m);
+            var children = $('#resource-versions').children();
+            if (idx === 0 || children.length === 0) {
+              $('#resource-versions').prepend(ver.render().el);
+            } else if (idx < children.length) {
+              $(children[idx]).before(ver.render().el);
+            } else {
+              $('#resource-versions').append(ver.render().el);
+            }
           }
+        },
+        bindScrollListener: function() {
+          var that = this
+          this._scrollHandler = function() {
+            if ($(window).scrollTop() + $(window).height() >= $(document).height() - 200) {
+              that.collection.fetchMore()
+            }
+          }
+          $(window).on('scroll', this._scrollHandler)
         },
         remove: function() {
           clearInterval(this.intervalID)
+          $(window).off('scroll', this._scrollHandler)
           Backbone.View.prototype.remove.call(this);
         },
         clickTriggerResource: function(event) {

@@ -329,12 +329,46 @@ type ListJobBuildsRequest struct {
 	PipelineCanonical string `json:"pipeline_canonical"`
 	JobName           string `json:"job_name"`
 }
+
+type PageMeta struct {
+	HasMore  bool   `json:"has_more"`
+	OldestID uint32 `json:"oldest_id"`
+	NewestID uint32 `json:"newest_id"`
+}
+
 type ListJobBuildsResponse struct {
 	Builds []*build.Build `json:"data,omitempty"`
+	Meta   *PageMeta      `json:"meta,omitempty"`
 	Err    string         `json:"error,omitempty"`
 }
 
 func (r ListJobBuildsResponse) Error() string { return r.Err }
+
+func parsePaginationParams(r *http.Request) (before *uint32, after *uint32, limit uint32) {
+	limit = 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 32); err == nil {
+			limit = uint32(n)
+		}
+	}
+	if v := r.URL.Query().Get("before"); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 32); err == nil {
+			val := uint32(n)
+			before = &val
+		}
+	}
+	if v := r.URL.Query().Get("after"); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 32); err == nil {
+			val := uint32(n)
+			after = &val
+		}
+	}
+	// before and after are mutually exclusive; before takes precedence
+	if before != nil && after != nil {
+		after = nil
+	}
+	return
+}
 
 func listJobBuilds(s pikoci.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -346,17 +380,29 @@ func listJobBuilds(s pikoci.Service) http.HandlerFunc {
 		req.TeamCanonical = vars["team_canonical"]
 		req.PipelineCanonical = vars["pipeline_canonical"]
 		req.JobName = vars["job_name"]
+
+		before, after, limit := parsePaginationParams(r)
+
 		var builds []*build.Build
+		var hasMore bool
 		var err error
 		if isPublic, _ := ctx.Value(IsPublicAccessKey).(bool); isPublic {
-			builds, err = s.ListPublicJobBuilds(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName)
+			builds, hasMore, err = s.ListPublicJobBuilds(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName, before, after, limit)
 		} else {
-			builds, err = s.ListJobBuilds(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName)
+			builds, hasMore, err = s.ListJobBuilds(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName, before, after, limit)
 		}
 		var errs string
 		if err != nil {
 			errs = err.Error()
 		}
-		encodeResponse(ListJobBuildsResponse{Builds: builds, Err: errs}, w)
+		var meta *PageMeta
+		if len(builds) > 0 {
+			meta = &PageMeta{
+				HasMore:  hasMore,
+				OldestID: builds[len(builds)-1].ID,
+				NewestID: builds[0].ID,
+			}
+		}
+		encodeResponse(ListJobBuildsResponse{Builds: builds, Meta: meta, Err: errs}, w)
 	}
 }

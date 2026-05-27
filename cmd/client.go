@@ -1003,7 +1003,7 @@ var buildsListCmd = &cobra.Command{
 			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
 		}
 
-		builds, err := c.ListJobBuilds(cmd.Context(), tc, pn, jn)
+		builds, _, err := c.ListJobBuilds(cmd.Context(), tc, pn, jn, nil, nil, 0)
 		if err != nil {
 			return fmt.Errorf("failed to list builds for job %q: %w", jn, err)
 		}
@@ -1237,7 +1237,7 @@ var resourcesVersionsCmd = &cobra.Command{
 			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
 		}
 
-		versions, err := c.ListResourceVersions(cmd.Context(), tc, pn, rCan)
+		versions, _, err := c.ListResourceVersions(cmd.Context(), tc, pn, rCan, nil, nil, 0)
 		if err != nil {
 			return fmt.Errorf("failed to list versions for resource %q: %w", rCan, err)
 		}

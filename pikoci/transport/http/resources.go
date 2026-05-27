@@ -53,6 +53,7 @@ type ListResourceVersionsRequest struct {
 }
 type ListResourceVersionsResponse struct {
 	Versions []*resource.Version `json:"data,omitempty"`
+	Meta     *PageMeta           `json:"meta,omitempty"`
 	Err      string              `json:"error,omitempty"`
 }
 
@@ -68,18 +69,30 @@ func listResourceVersions(s pikoci.Service) http.HandlerFunc {
 		req.TeamCanonical = vars["team_canonical"]
 		req.PipelineCanonical = vars["pipeline_canonical"]
 		req.ResourceCanonical = vars["resource_canonical"]
+
+		before, after, limit := parsePaginationParams(r)
+
 		var vers []*resource.Version
+		var hasMore bool
 		var err error
 		if isPublic, _ := ctx.Value(IsPublicAccessKey).(bool); isPublic {
-			vers, err = s.ListPublicResourceVersions(ctx, req.TeamCanonical, req.PipelineCanonical, req.ResourceCanonical)
+			vers, hasMore, err = s.ListPublicResourceVersions(ctx, req.TeamCanonical, req.PipelineCanonical, req.ResourceCanonical, before, after, limit)
 		} else {
-			vers, err = s.ListResourceVersions(ctx, req.TeamCanonical, req.PipelineCanonical, req.ResourceCanonical)
+			vers, hasMore, err = s.ListResourceVersions(ctx, req.TeamCanonical, req.PipelineCanonical, req.ResourceCanonical, before, after, limit)
 		}
 		var errs string
 		if err != nil {
 			errs = err.Error()
 		}
-		encodeResponse(ListResourceVersionsResponse{Versions: vers, Err: errs}, w)
+		var meta *PageMeta
+		if len(vers) > 0 {
+			meta = &PageMeta{
+				HasMore:  hasMore,
+				OldestID: vers[len(vers)-1].ID,
+				NewestID: vers[0].ID,
+			}
+		}
+		encodeResponse(ListResourceVersionsResponse{Versions: vers, Meta: meta, Err: errs}, w)
 	}
 }
 

@@ -172,7 +172,7 @@ func TestDBBackends(t *testing.T) {
 				assert.NotZero(t, vID)
 
 				// Filter versions
-				versions, err := rr.FilterVersions(ctx, "main", "test-pipeline", "git-test-resource")
+				versions, err := rr.FilterVersions(ctx, "main", "test-pipeline", "git-test-resource", nil, nil, 0)
 				require.NoError(t, err)
 				assert.Len(t, versions, 1)
 			})
@@ -189,7 +189,7 @@ func TestDBBackends(t *testing.T) {
 				assert.Equal(t, "1", bn)
 
 				// Filter builds
-				builds, err := br.Filter(ctx, "main", "test-pipeline", "test-job")
+				builds, err := br.Filter(ctx, "main", "test-pipeline", "test-job", nil, nil, 0)
 				require.NoError(t, err)
 				assert.Len(t, builds, 1)
 				assert.Equal(t, build.Started, builds[0].Status)

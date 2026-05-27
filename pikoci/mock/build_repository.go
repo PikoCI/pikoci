@@ -104,18 +104,18 @@ func (mr *BuildRepositoryMockRecorder) Delete(ctx, tc, pn, jn, buildNumber any) 
 }
 
 // Filter mocks base method.
-func (m *BuildRepository) Filter(ctx context.Context, tc, pn, jn string) ([]*build.Build, error) {
+func (m *BuildRepository) Filter(ctx context.Context, tc, pn, jn string, before, after *uint32, limit uint32) ([]*build.Build, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Filter", ctx, tc, pn, jn)
+	ret := m.ctrl.Call(m, "Filter", ctx, tc, pn, jn, before, after, limit)
 	ret0, _ := ret[0].([]*build.Build)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Filter indicates an expected call of Filter.
-func (mr *BuildRepositoryMockRecorder) Filter(ctx, tc, pn, jn any) *gomock.Call {
+func (mr *BuildRepositoryMockRecorder) Filter(ctx, tc, pn, jn, before, after, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Filter", reflect.TypeOf((*BuildRepository)(nil).Filter), ctx, tc, pn, jn)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Filter", reflect.TypeOf((*BuildRepository)(nil).Filter), ctx, tc, pn, jn, before, after, limit)
 }
 
 // Find mocks base method.

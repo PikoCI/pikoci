@@ -481,7 +481,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 
 	// Print all the Jobs and the connection to resources
 	for i, j := range pp.Jobs {
-		builds, err := q.Builds.Filter(ctx, tc, pp.Canonical, j.Name)
+		builds, err := q.Builds.Filter(ctx, tc, pp.Canonical, j.Name, nil, nil, 0)
 		if err != nil {
 			return nil, fmt.Errorf("failed to filter builds from Job %q: %w", j.Name, err)
 		}
@@ -758,15 +758,15 @@ func (q *PikoCI) GetPublicPipelineJob(ctx context.Context, tc, pCan, jn string) 
 	return q.GetPipelineJob(ctx, tc, pCan, jn)
 }
 
-func (q *PikoCI) ListPublicJobBuilds(ctx context.Context, tc, pCan, jn string) ([]*build.Build, error) {
+func (q *PikoCI) ListPublicJobBuilds(ctx context.Context, tc, pCan, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error) {
 	_, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
-		return nil, fmt.Errorf("pipeline not found or not public: %w", err)
+		return nil, false, fmt.Errorf("pipeline not found or not public: %w", err)
 	}
 
-	builds, err := q.ListJobBuilds(ctx, tc, pCan, jn)
+	builds, hasMore, err := q.ListJobBuilds(ctx, tc, pCan, jn, before, after, limit)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	for _, b := range builds {
 		for i, s := range b.Steps {
@@ -775,7 +775,7 @@ func (q *PikoCI) ListPublicJobBuilds(ctx context.Context, tc, pCan, jn string) (
 			}
 		}
 	}
-	return builds, nil
+	return builds, hasMore, nil
 }
 
 func (q *PikoCI) GetPublicPipelineResource(ctx context.Context, tc, pCan, rCan string) (*resource.Resource, error) {
@@ -793,13 +793,13 @@ func (q *PikoCI) GetPublicPipelineResource(ctx context.Context, tc, pCan, rCan s
 	return &sr, nil
 }
 
-func (q *PikoCI) ListPublicResourceVersions(ctx context.Context, tc, pCan, rCan string) ([]*resource.Version, error) {
+func (q *PikoCI) ListPublicResourceVersions(ctx context.Context, tc, pCan, rCan string, before *uint32, after *uint32, limit uint32) ([]*resource.Version, bool, error) {
 	_, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
-		return nil, fmt.Errorf("pipeline not found or not public: %w", err)
+		return nil, false, fmt.Errorf("pipeline not found or not public: %w", err)
 	}
 
-	return q.ListResourceVersions(ctx, tc, pCan, rCan)
+	return q.ListResourceVersions(ctx, tc, pCan, rCan, before, after, limit)
 }
 
 func (q *PikoCI) DeletePipeline(ctx context.Context, tc, pCan string) error {

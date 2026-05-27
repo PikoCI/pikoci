@@ -1341,7 +1341,7 @@ func TestGetPipelineImage_HidesUnlinkedResources(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "build").Return([]*build.Build{}, nil)
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "build", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
 	require.NoError(t, err)
@@ -1390,7 +1390,7 @@ func TestGetPipelineImage_QuotesHyphenatedName(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "hello-world").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "hello-world", "hello").Return([]*build.Build{}, nil)
+	s.Builds.EXPECT().Filter(ctx, "main", "hello-world", "hello", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "hello-world", "dot")
 	require.NoError(t, err)
@@ -1433,7 +1433,7 @@ func TestGetPipelineImage_ShowsLinkedResources(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "test").Return([]*build.Build{}, nil)
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "test", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
 	require.NoError(t, err)
@@ -1595,7 +1595,7 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 
 			pp := makePipeline()
 			s.Pipelines.EXPECT().Find(ctx, "main", "p").Return(pp, nil)
-			s.Builds.EXPECT().Filter(ctx, "main", "p", "j").Return(tt.builds, nil)
+			s.Builds.EXPECT().Filter(ctx, "main", "p", "j", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return(tt.builds, nil)
 
 			img, err := s.S.GetPipelineImage(ctx, "main", "p", "dot")
 			require.NoError(t, err)
