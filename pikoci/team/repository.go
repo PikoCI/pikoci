@@ -2,7 +2,7 @@ package team
 
 import "context"
 
-//go:generate go tool mockgen -destination=../mock/team_repository.go -mock_names=Repository=TeamRepository -package mock github.com/xescugc/pikoci/pikoci/team Repository
+//go:generate go tool mockgen -destination=../mock/team_repository.go -mock_names=Repository=TeamRepository -package mock github.com/pikoci/pikoci/pikoci/team Repository
 
 type Repository interface {
 	Create(ctx context.Context, t Team) (uint32, error)

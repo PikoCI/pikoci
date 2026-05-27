@@ -1,6 +1,6 @@
 package runner
 
-import "github.com/xescugc/pikoci/pikoci/utils"
+import "github.com/pikoci/pikoci/pikoci/utils"
 
 type Runner struct {
 	ID     uint32           `json:"id"`

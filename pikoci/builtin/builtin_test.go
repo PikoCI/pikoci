@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/xescugc/pikoci/pikoci/builtin"
+	"github.com/pikoci/pikoci/pikoci/builtin"
 )
 
 func TestResourceTypes(t *testing.T) {

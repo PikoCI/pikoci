@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/xescugc/pikoci/pikoci/team"
-	"github.com/xescugc/pikoci/pikoci/unitwork"
-	"github.com/xescugc/pikoci/pikoci/user"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/team"
+	"github.com/pikoci/pikoci/pikoci/unitwork"
+	"github.com/pikoci/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
 func (q *PikoCI) CreateTeam(ctx context.Context, un string, t team.Team) (*team.WithMembers, error) {

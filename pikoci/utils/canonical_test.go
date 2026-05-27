@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
 func TestCanonicalize(t *testing.T) {

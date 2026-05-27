@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/cycloidio/sqlr"
-	"github.com/xescugc/pikoci/pikoci/runner"
+	"github.com/pikoci/pikoci/pikoci/runner"
 )
 
 type RunnerRepository struct {

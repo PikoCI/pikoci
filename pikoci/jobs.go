@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/xescugc/pikoci/pikoci/build"
-	"github.com/xescugc/pikoci/pikoci/job"
-	"github.com/xescugc/pikoci/pikoci/queue"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/build"
+	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/utils"
 	"gocloud.dev/pubsub"
 )
 

@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strconv"
 
-	thttp "github.com/xescugc/pikoci/pikoci/transport/http"
+	thttp "github.com/pikoci/pikoci/pikoci/transport/http"
 )
 
 var successCodeRe = regexp.MustCompile(`2\d\d`)

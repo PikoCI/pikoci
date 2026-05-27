@@ -1,6 +1,6 @@
 package sectype
 
-import "github.com/xescugc/pikoci/pikoci/utils"
+import "github.com/pikoci/pikoci/pikoci/utils"
 
 type SecretType struct {
 	ID     uint32              `json:"id"`

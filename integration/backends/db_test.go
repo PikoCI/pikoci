@@ -8,15 +8,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/xescugc/pikoci/pikoci/build"
-	"github.com/xescugc/pikoci/pikoci/job"
-	"github.com/xescugc/pikoci/pikoci/mysql"
-	"github.com/xescugc/pikoci/pikoci/pipeline"
-	"github.com/xescugc/pikoci/pikoci/resource"
-	"github.com/xescugc/pikoci/pikoci/sectype"
-	"github.com/xescugc/pikoci/pikoci/team"
-	"github.com/xescugc/pikoci/pikoci/user"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/build"
+	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/mysql"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/sectype"
+	"github.com/pikoci/pikoci/pikoci/team"
+	"github.com/pikoci/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
 func TestDBBackends(t *testing.T) {

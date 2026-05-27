@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xescugc/pikoci/pikoci/build"
-	"github.com/xescugc/pikoci/pikoci/queue"
-	"github.com/xescugc/pikoci/pikoci/unitwork"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/build"
+	"github.com/pikoci/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/unitwork"
+	"github.com/pikoci/pikoci/pikoci/utils"
 	"gocloud.dev/pubsub"
 )
 

@@ -1,6 +1,6 @@
 package restype
 
-import "github.com/xescugc/pikoci/pikoci/utils"
+import "github.com/pikoci/pikoci/pikoci/utils"
 
 type ResourceType struct {
 	ID     uint32   `json:"id"`

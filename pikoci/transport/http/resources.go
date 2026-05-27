@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/xescugc/pikoci/pikoci"
-	"github.com/xescugc/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/resource"
 )
 
 type CreateResourceVersionRequest struct {

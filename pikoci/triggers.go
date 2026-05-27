@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/xescugc/pikoci/pikoci/trigger"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/trigger"
+	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
 func (q *PikoCI) CreateTrigger(ctx context.Context, tc, name string, version map[string]interface{}) (*trigger.Trigger, error) {

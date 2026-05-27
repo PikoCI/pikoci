@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/xescugc/pikoci/pikoci/mysql"
-	"github.com/xescugc/pikoci/pikoci/mysql/migrate"
+	"github.com/pikoci/pikoci/pikoci/mysql"
+	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
 )
 
 func newMemDB(t *testing.T) *sql.DB {

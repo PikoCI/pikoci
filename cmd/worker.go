@@ -13,11 +13,11 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/xescugc/pikoci/pikoci"
-	"github.com/xescugc/pikoci/pikoci/queue"
-	"github.com/xescugc/pikoci/pikoci/transport/http/client"
-	"github.com/xescugc/pikoci/worker"
-	"github.com/xescugc/pikoci/worker/config"
+	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/transport/http/client"
+	"github.com/pikoci/pikoci/worker"
+	"github.com/pikoci/pikoci/worker/config"
 
 	"gocloud.dev/pubsub"
 	"gocloud.dev/pubsub/mempubsub"

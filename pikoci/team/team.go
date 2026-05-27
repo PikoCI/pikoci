@@ -1,7 +1,7 @@
 package team
 
 import (
-	"github.com/xescugc/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/user"
 )
 
 type Team struct {

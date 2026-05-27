@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/xescugc/pikoci/pikoci/job"
-	"github.com/xescugc/pikoci/pikoci/pipeline"
-	"github.com/xescugc/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/queue"
 	"go.uber.org/mock/gomock"
 	"gocloud.dev/pubsub"
 )

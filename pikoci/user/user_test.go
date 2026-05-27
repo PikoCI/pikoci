@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/xescugc/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/user"
 )
 
 func TestWithMemberships_IsAdmin(t *testing.T) {

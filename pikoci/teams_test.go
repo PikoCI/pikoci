@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/xescugc/pikoci/pikoci/team"
-	"github.com/xescugc/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/team"
+	"github.com/pikoci/pikoci/pikoci/user"
 	"go.uber.org/mock/gomock"
 )
 

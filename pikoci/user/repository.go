@@ -2,7 +2,7 @@ package user
 
 import "context"
 
-//go:generate go tool mockgen -destination=../mock/user_repository.go -mock_names=Repository=UserRepository -package mock github.com/xescugc/pikoci/pikoci/user Repository
+//go:generate go tool mockgen -destination=../mock/user_repository.go -mock_names=Repository=UserRepository -package mock github.com/pikoci/pikoci/pikoci/user Repository
 
 type Repository interface {
 	Create(ctx context.Context, u User) (uint32, error)

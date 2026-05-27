@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	thttp "github.com/xescugc/pikoci/pikoci/transport/http"
-	"github.com/xescugc/pikoci/pikoci/trigger"
+	thttp "github.com/pikoci/pikoci/pikoci/transport/http"
+	"github.com/pikoci/pikoci/pikoci/trigger"
 )
 
 func (cl *Client) CreateTrigger(ctx context.Context, tc, name string, version map[string]interface{}) (*trigger.Trigger, error) {
