@@ -3,7 +3,6 @@ package pikoci
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -485,7 +484,6 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		if err != nil {
 			return nil, fmt.Errorf("failed to filter builds from Job %q: %w", j.Name, err)
 		}
-		slices.Reverse(builds)
 		color := colorDefault
 		borderColor := colorDefaultBorder
 
