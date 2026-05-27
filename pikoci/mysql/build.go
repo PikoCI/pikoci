@@ -241,8 +241,8 @@ func (r *BuildRepository) Find(ctx context.Context, tc, pn, jn string, buildNumb
 	return j, nil
 }
 
-func (r *BuildRepository) Filter(ctx context.Context, tc, pn, jn string) ([]*build.Build, error) {
-	rows, err := r.querier.QueryContext(ctx, `
+func (r *BuildRepository) Filter(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, error) {
+	query := `
 		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical
 		FROM builds AS b
 		JOIN jobs AS j
@@ -251,9 +251,29 @@ func (r *BuildRepository) Filter(ctx context.Context, tc, pn, jn string) ([]*bui
 			ON j.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
-		ORDER BY b.id ASC
-	`, tc, pn, jn)
+		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?`
+	args := []interface{}{tc, pn, jn}
+
+	if after != nil {
+		query += ` AND b.id > ?`
+		args = append(args, *after)
+		query += ` ORDER BY b.id ASC`
+	} else if before != nil {
+		query += ` AND b.id < ?`
+		args = append(args, *before)
+		query += ` ORDER BY b.id DESC`
+		if limit > 0 {
+			query += fmt.Sprintf(` LIMIT %d`, limit)
+		}
+	} else {
+		// Initial load or limit=0 (all)
+		query += ` ORDER BY b.id DESC`
+		if limit > 0 {
+			query += fmt.Sprintf(` LIMIT %d`, limit)
+		}
+	}
+
+	rows, err := r.querier.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter builds: %w", err)
 	}

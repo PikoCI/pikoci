@@ -47,17 +47,56 @@ func TestListResourceVersions(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo").Return([]*resource.Version{
-		{ID: 1},
+	// limit=0 fetches all, DB returns DESC order
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
 		{ID: 2},
+		{ID: 1},
 	}, nil)
 
-	vers, err := s.S.ListResourceVersions(ctx, "main", "my-pipeline", "git.repo")
+	vers, hasMore, err := s.S.ListResourceVersions(ctx, "main", "my-pipeline", "git.repo", nil, nil, 0)
 	require.NoError(t, err)
 	require.Len(t, vers, 2)
-	// Should be reversed
+	assert.False(t, hasMore)
+	// Newest first
 	assert.Equal(t, uint32(2), vers[0].ID)
 	assert.Equal(t, uint32(1), vers[1].ID)
+}
+
+func TestListResourceVersions_WithLimit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(3)).Return([]*resource.Version{
+		{ID: 5},
+		{ID: 4},
+		{ID: 3},
+	}, nil)
+
+	vers, hasMore, err := s.S.ListResourceVersions(ctx, "main", "my-pipeline", "git.repo", nil, nil, 2)
+	require.NoError(t, err)
+	require.Len(t, vers, 2)
+	assert.True(t, hasMore)
+}
+
+func TestListResourceVersions_After(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	after := uint32(3)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), &after, uint32(0)).Return([]*resource.Version{
+		{ID: 4},
+		{ID: 5},
+	}, nil)
+
+	vers, hasMore, err := s.S.ListResourceVersions(ctx, "main", "my-pipeline", "git.repo", nil, &after, 0)
+	require.NoError(t, err)
+	require.Len(t, vers, 2)
+	assert.False(t, hasMore)
+	// Reversed to newest-first
+	assert.Equal(t, uint32(5), vers[0].ID)
+	assert.Equal(t, uint32(4), vers[1].ID)
 }
 
 func TestGetPipelineResource(t *testing.T) {

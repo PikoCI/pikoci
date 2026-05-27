@@ -382,16 +382,16 @@ func (cl *Client) GetPublicPipelineJob(ctx context.Context, tc, pn, jn string) (
 	return cl.GetPipelineJob(ctx, tc, pn, jn)
 }
 
-func (cl *Client) ListPublicJobBuilds(ctx context.Context, tc, pn, jn string) ([]*build.Build, error) {
-	return cl.ListJobBuilds(ctx, tc, pn, jn)
+func (cl *Client) ListPublicJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error) {
+	return cl.ListJobBuilds(ctx, tc, pn, jn, before, after, limit)
 }
 
 func (cl *Client) GetPublicPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error) {
 	return cl.GetPipelineResource(ctx, tc, pn, rCan)
 }
 
-func (cl *Client) ListPublicResourceVersions(ctx context.Context, tc, pn, rCan string) ([]*resource.Version, error) {
-	return cl.ListResourceVersions(ctx, tc, pn, rCan)
+func (cl *Client) ListPublicResourceVersions(ctx context.Context, tc, pn, rCan string, before *uint32, after *uint32, limit uint32) ([]*resource.Version, bool, error) {
+	return cl.ListResourceVersions(ctx, tc, pn, rCan, before, after, limit)
 }
 
 func (cl *Client) UpdatePipeline(ctx context.Context, tc, pn string, pp []byte, vars map[string]interface{}, newName ...string) (*pipeline.Pipeline, error) {
@@ -715,19 +715,26 @@ func (cl *Client) FindOldestPendingBuild(ctx context.Context, tc, pn, jn string)
 	return resp.Build, nil
 }
 
-func (cl *Client) ListJobBuilds(ctx context.Context, tc, pn, jn string) ([]*build.Build, error) {
+// ListJobBuilds always fetches all builds (limit=0) for CLI backward compat.
+// The before/after/limit params satisfy the Service interface but are not sent.
+func (cl *Client) ListJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error) {
 	var resp thttp.ListJobBuildsResponse
 
-	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/builds", cl.url, tc, pn, jn), nil, &resp)
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/builds?limit=0", cl.url, tc, pn, jn), nil, &resp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
+		return nil, false, fmt.Errorf("failed to make request: %w", err)
 	}
 
 	if resp.Err != "" {
-		return nil, fmt.Errorf("error from request: %s", resp.Err)
+		return nil, false, fmt.Errorf("error from request: %s", resp.Err)
 	}
 
-	return resp.Builds, nil
+	hasMore := false
+	if resp.Meta != nil {
+		hasMore = resp.Meta.HasMore
+	}
+
+	return resp.Builds, hasMore, nil
 }
 
 func (cl *Client) CreateResourceVersion(ctx context.Context, tc, pn, rCan string, rv resource.Version) (*resource.Version, error) {
@@ -747,19 +754,26 @@ func (cl *Client) CreateResourceVersion(ctx context.Context, tc, pn, rCan string
 	return resp.Version, nil
 }
 
-func (cl *Client) ListResourceVersions(ctx context.Context, tc, pn, rCan string) ([]*resource.Version, error) {
+// ListResourceVersions always fetches all versions (limit=0) for CLI backward compat.
+// The before/after/limit params satisfy the Service interface but are not sent.
+func (cl *Client) ListResourceVersions(ctx context.Context, tc, pn, rCan string, before *uint32, after *uint32, limit uint32) ([]*resource.Version, bool, error) {
 	var resp thttp.ListResourceVersionsResponse
 
-	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/resources/%s/versions", cl.url, tc, pn, rCan), nil, &resp)
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/resources/%s/versions?limit=0", cl.url, tc, pn, rCan), nil, &resp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
+		return nil, false, fmt.Errorf("failed to make request: %w", err)
 	}
 
 	if resp.Err != "" {
-		return nil, fmt.Errorf("error from request: %s", resp.Err)
+		return nil, false, fmt.Errorf("error from request: %s", resp.Err)
 	}
 
-	return resp.Versions, nil
+	hasMore := false
+	if resp.Meta != nil {
+		hasMore = resp.Meta.HasMore
+	}
+
+	return resp.Versions, hasMore, nil
 }
 
 func (cl *Client) GetPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error) {

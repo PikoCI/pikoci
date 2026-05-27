@@ -561,7 +561,7 @@ func TestListJobBuilds(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	builds, err := c.ListJobBuilds(context.Background(), "team", "pipe", "job1")
+	builds, _, err := c.ListJobBuilds(context.Background(), "team", "pipe", "job1", nil, nil, 0)
 	require.NoError(t, err)
 	assert.Len(t, builds, 2)
 }
@@ -674,7 +674,7 @@ func TestListResourceVersions(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	versions, err := c.ListResourceVersions(context.Background(), "team", "pipe", "res1")
+	versions, _, err := c.ListResourceVersions(context.Background(), "team", "pipe", "res1", nil, nil, 0)
 	require.NoError(t, err)
 	assert.Len(t, versions, 1)
 }

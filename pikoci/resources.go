@@ -34,23 +34,37 @@ func (q *PikoCI) CreateResourceVersion(ctx context.Context, tc, pc, rCan string,
 	return &v, nil
 }
 
-func (q *PikoCI) ListResourceVersions(ctx context.Context, tc, pc, rCan string) ([]*resource.Version, error) {
+func (q *PikoCI) ListResourceVersions(ctx context.Context, tc, pc, rCan string, before *uint32, after *uint32, limit uint32) ([]*resource.Version, bool, error) {
 	if !utils.ValidateCanonical(tc) {
-		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
+		return nil, false, fmt.Errorf("invalid Team Canonical format %q", tc)
 	} else if !utils.ValidateCanonical(pc) {
-		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pc)
+		return nil, false, fmt.Errorf("invalid Pipeline Canonical format %q", pc)
 	} else if !utils.ValidateResourceCanonical(rCan) {
-		return nil, fmt.Errorf("invalid Resource Canonical format %q", rCan)
+		return nil, false, fmt.Errorf("invalid Resource Canonical format %q", rCan)
 	}
 
-	rvers, err := q.Resources.FilterVersions(ctx, tc, pc, rCan)
+	fetchLimit := limit
+	if limit > 0 {
+		fetchLimit = limit + 1
+	}
+
+	rvers, err := q.Resources.FilterVersions(ctx, tc, pc, rCan, before, after, fetchLimit)
 	if err != nil {
-		return nil, fmt.Errorf("failed to List Resource Version: %w", err)
+		return nil, false, fmt.Errorf("failed to List Resource Version: %w", err)
 	}
 
-	slices.Reverse(rvers)
+	hasMore := false
+	if limit > 0 && uint32(len(rvers)) > limit {
+		hasMore = true
+		rvers = rvers[:limit]
+	}
 
-	return rvers, nil
+	// For "after" queries the DB returns ASC order; reverse to newest-first
+	if after != nil {
+		slices.Reverse(rvers)
+	}
+
+	return rvers, hasMore, nil
 }
 
 func (q *PikoCI) GetPipelineResource(ctx context.Context, tc, pc, rCan string) (*resource.Resource, error) {

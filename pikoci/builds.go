@@ -49,23 +49,37 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 	return &b, nil
 }
 
-func (q *PikoCI) ListJobBuilds(ctx context.Context, tc, pc, jn string) ([]*build.Build, error) {
+func (q *PikoCI) ListJobBuilds(ctx context.Context, tc, pc, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error) {
 	if !utils.ValidateCanonical(tc) {
-		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
+		return nil, false, fmt.Errorf("invalid Team Canonical format %q", tc)
 	} else if !utils.ValidateCanonical(pc) {
-		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pc)
+		return nil, false, fmt.Errorf("invalid Pipeline Canonical format %q", pc)
 	} else if !utils.ValidateCanonical(jn) {
-		return nil, fmt.Errorf("invalid Job Name format %q", jn)
+		return nil, false, fmt.Errorf("invalid Job Name format %q", jn)
 	}
 
-	builds, err := q.Builds.Filter(ctx, tc, pc, jn)
+	fetchLimit := limit
+	if limit > 0 {
+		fetchLimit = limit + 1
+	}
+
+	builds, err := q.Builds.Filter(ctx, tc, pc, jn, before, after, fetchLimit)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list Builds: %w", err)
+		return nil, false, fmt.Errorf("failed to list Builds: %w", err)
 	}
 
-	slices.Reverse(builds)
+	hasMore := false
+	if limit > 0 && uint32(len(builds)) > limit {
+		hasMore = true
+		builds = builds[:limit]
+	}
 
-	return builds, nil
+	// For "after" queries the DB returns ASC order; reverse to newest-first
+	if after != nil {
+		slices.Reverse(builds)
+	}
+
+	return builds, hasMore, nil
 }
 
 func (q *PikoCI) GetJobBuild(ctx context.Context, tc, pc, jn string, buildNumber string) (*build.Build, error) {

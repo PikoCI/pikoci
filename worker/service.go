@@ -424,7 +424,7 @@ func (w *Worker) checkPassedConstraints(ctx context.Context, m queue.Body, b *bu
 		var intersection map[uint32]bool
 		var hasSucceeded bool
 		for _, p := range g.Passed {
-			builds, err := w.pikoci.ListJobBuilds(ctx, m.TeamCanonical, m.PipelineCanonical, p)
+			builds, _, err := w.pikoci.ListJobBuilds(ctx, m.TeamCanonical, m.PipelineCanonical, p, nil, nil, 0)
 			if err != nil {
 				w.failBuild(ctx, m, *b, fmt.Errorf("failed to list builds for passed job %q: %w", p, err))
 				return false, nil
@@ -496,7 +496,7 @@ func (w *Worker) checkVersionAvailability(ctx context.Context, m queue.Body, b *
 			continue
 		}
 
-		dbvers, err := w.pikoci.ListResourceVersions(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical)
+		dbvers, _, err := w.pikoci.ListResourceVersions(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, nil, nil, 0)
 		if err != nil {
 			// Transient errors (DB, network) should fail the build, not silently delete it.
 			w.failBuild(ctx, m, *b, fmt.Errorf("failed to list resource versions: %w", err))
@@ -1031,7 +1031,7 @@ func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Bui
 		params = make(map[string]string)
 	}
 
-	dbvers, err := w.pikoci.ListResourceVersions(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical)
+	dbvers, _, err := w.pikoci.ListResourceVersions(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, nil, nil, 0)
 	if err != nil {
 		w.failBuild(ctx, m, *b, fmt.Errorf("failed to list resource versions: %w", err))
 		return nil, 0
@@ -1185,7 +1185,7 @@ func (w *Worker) processResourceCheck(ctx context.Context, m queue.Body, cwd str
 		params[k] = v
 	}
 
-	dbvers, err := w.pikoci.ListResourceVersions(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical)
+	dbvers, _, err := w.pikoci.ListResourceVersions(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, nil, nil, 0)
 	if err != nil {
 		w.logger.Error("failed to list resource versions", "error", err)
 		return
@@ -1284,7 +1284,7 @@ func (w *Worker) processResourceCheckTrigger(ctx context.Context, m queue.Body, 
 
 	// Get latest resource version to find the last trigger_id
 	var afterID uint32
-	dbvers, err := w.pikoci.ListResourceVersions(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical)
+	dbvers, _, err := w.pikoci.ListResourceVersions(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, nil, nil, 0)
 	if err != nil {
 		w.logger.Error("failed to list resource versions for trigger check", "error", err)
 		return

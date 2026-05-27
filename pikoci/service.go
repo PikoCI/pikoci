@@ -55,9 +55,9 @@ type Service interface {
 	GetPublicPipeline(ctx context.Context, tc, pn string) (*pipeline.Pipeline, error)
 	GetPublicPipelineImage(ctx context.Context, tc, pn, format string) ([]byte, error)
 	GetPublicPipelineJob(ctx context.Context, tc, pn, jn string) (*job.Job, error)
-	ListPublicJobBuilds(ctx context.Context, tc, pn, jn string) ([]*build.Build, error)
+	ListPublicJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error)
 	GetPublicPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error)
-	ListPublicResourceVersions(ctx context.Context, tc, pn, rCan string) ([]*resource.Version, error)
+	ListPublicResourceVersions(ctx context.Context, tc, pn, rCan string, before *uint32, after *uint32, limit uint32) ([]*resource.Version, bool, error)
 
 	GetPipelineImage(ctx context.Context, tc, pn, format string) ([]byte, error)
 	CreatePipelineImage(ctx context.Context, tc string, pp []byte, vars map[string]interface{}, format string) ([]byte, error)
@@ -69,7 +69,7 @@ type Service interface {
 	CreateRetryJobBuild(ctx context.Context, tc, pn, jn, parentBuildNumber string, b build.Build) (*build.Build, error)
 	UpdateJobBuild(ctx context.Context, tc, pn, jn string, buildNumber string, b build.Build) error
 	DeleteJobBuild(ctx context.Context, tc, pn, jn string, buildNumber string) error
-	ListJobBuilds(ctx context.Context, tc, pn, jn string) ([]*build.Build, error)
+	ListJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error)
 	GetJobBuild(ctx context.Context, tc, pn, jn string, buildNumber string) (*build.Build, error)
 	CancelJobBuild(ctx context.Context, tc, pn, jn string, buildNumber string) error
 	RetryJobBuild(ctx context.Context, tc, pn, jn, buildNumber string) error
@@ -82,7 +82,7 @@ type Service interface {
 	UpdatePipelineResource(ctx context.Context, tc, pn, rCan string, r resource.Resource) error
 	TriggerPipelineResource(ctx context.Context, tc, pn, rCan string) error
 	CreateResourceVersion(ctx context.Context, tc, pn, rCan string, v resource.Version) (*resource.Version, error)
-	ListResourceVersions(ctx context.Context, tc, pn, rCan string) ([]*resource.Version, error)
+	ListResourceVersions(ctx context.Context, tc, pn, rCan string, before *uint32, after *uint32, limit uint32) ([]*resource.Version, bool, error)
 
 	InsertBuildGetVersion(ctx context.Context, tc, pn, jn string, buildID uint32, stepName string, versionID uint32) error
 

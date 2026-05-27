@@ -116,18 +116,18 @@ func (mr *ResourceRepositoryMockRecorder) FilterDueResources(ctx any) *gomock.Ca
 }
 
 // FilterVersions mocks base method.
-func (m *ResourceRepository) FilterVersions(ctx context.Context, tc, pn, rCan string) ([]*resource.Version, error) {
+func (m *ResourceRepository) FilterVersions(ctx context.Context, tc, pn, rCan string, before, after *uint32, limit uint32) ([]*resource.Version, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FilterVersions", ctx, tc, pn, rCan)
+	ret := m.ctrl.Call(m, "FilterVersions", ctx, tc, pn, rCan, before, after, limit)
 	ret0, _ := ret[0].([]*resource.Version)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FilterVersions indicates an expected call of FilterVersions.
-func (mr *ResourceRepositoryMockRecorder) FilterVersions(ctx, tc, pn, rCan any) *gomock.Call {
+func (mr *ResourceRepositoryMockRecorder) FilterVersions(ctx, tc, pn, rCan, before, after, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilterVersions", reflect.TypeOf((*ResourceRepository)(nil).FilterVersions), ctx, tc, pn, rCan)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilterVersions", reflect.TypeOf((*ResourceRepository)(nil).FilterVersions), ctx, tc, pn, rCan, before, after, limit)
 }
 
 // Find mocks base method.

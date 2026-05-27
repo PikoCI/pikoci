@@ -306,8 +306,8 @@ func (r *ResourceRepository) CreateVersion(ctx context.Context, tc, pn, rCan str
 	return id, nil
 }
 
-func (r *ResourceRepository) FilterVersions(ctx context.Context, tc, pn, rCan string) ([]*resource.Version, error) {
-	rows, err := r.querier.QueryContext(ctx, `
+func (r *ResourceRepository) FilterVersions(ctx context.Context, tc, pn, rCan string, before *uint32, after *uint32, limit uint32) ([]*resource.Version, error) {
+	query := `
 		SELECT rv.id, rv.version
 		FROM resource_versions AS rv
 		JOIN resources AS r
@@ -316,9 +316,29 @@ func (r *ResourceRepository) FilterVersions(ctx context.Context, tc, pn, rCan st
 			ON r.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-		ORDER BY rv.id ASC
-	`, tc, pn, rCan)
+		WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?`
+	args := []interface{}{tc, pn, rCan}
+
+	if after != nil {
+		query += ` AND rv.id > ?`
+		args = append(args, *after)
+		query += ` ORDER BY rv.id ASC`
+	} else if before != nil {
+		query += ` AND rv.id < ?`
+		args = append(args, *before)
+		query += ` ORDER BY rv.id DESC`
+		if limit > 0 {
+			query += fmt.Sprintf(` LIMIT %d`, limit)
+		}
+	} else {
+		// Initial load or limit=0 (all)
+		query += ` ORDER BY rv.id DESC`
+		if limit > 0 {
+			query += fmt.Sprintf(` LIMIT %d`, limit)
+		}
+	}
+
+	rows, err := r.querier.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter Resources: %w", err)
 	}

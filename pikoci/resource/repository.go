@@ -14,7 +14,7 @@ type Repository interface {
 	Delete(ctx context.Context, tc, pn, rCan string) error
 
 	CreateVersion(ctx context.Context, tc, pn, rCan string, v Version) (uint32, error)
-	FilterVersions(ctx context.Context, tc, pn, rCan string) ([]*Version, error)
+	FilterVersions(ctx context.Context, tc, pn, rCan string, before *uint32, after *uint32, limit uint32) ([]*Version, error)
 }
 
 type ResourceWithPipeline struct {

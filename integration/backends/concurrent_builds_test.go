@@ -161,7 +161,7 @@ job "job-c" {
 	for _, jn := range jobs {
 		jn := jn
 		require.Eventually(t, func() bool {
-			builds, err := svc.ListJobBuilds(ctx, "main", "concurrent-test", jn)
+			builds, _, err := svc.ListJobBuilds(ctx, "main", "concurrent-test", jn, nil, nil, 0)
 			if err != nil || len(builds) == 0 {
 				return false
 			}
@@ -171,7 +171,7 @@ job "job-c" {
 
 	// Verify all 3 builds succeeded
 	for _, jn := range jobs {
-		builds, err := svc.ListJobBuilds(ctx, "main", "concurrent-test", jn)
+		builds, _, err := svc.ListJobBuilds(ctx, "main", "concurrent-test", jn, nil, nil, 0)
 		require.NoError(t, err)
 		require.NotEmpty(t, builds, "job %q should have builds", jn)
 		assert.Equal(t, build.Succeeded, builds[0].Status, "job %q build should succeed, error: %s", jn, builds[0].Error)

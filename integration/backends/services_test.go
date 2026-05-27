@@ -144,7 +144,7 @@ job "use-service" {
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
-			vers, err := svc.ListResourceVersions(ctx, "main", "svc-start-stop-e2e", "cron.timer")
+			vers, _, err := svc.ListResourceVersions(ctx, "main", "svc-start-stop-e2e", "cron.timer", nil, nil, 0)
 			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
 
@@ -154,7 +154,7 @@ job "use-service" {
 
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
-			builds, err = svc.ListJobBuilds(ctx, "main", "svc-start-stop-e2e", "use-service")
+			builds, _, err = svc.ListJobBuilds(ctx, "main", "svc-start-stop-e2e", "use-service", nil, nil, 0)
 			if err != nil || len(builds) == 0 {
 				return false
 			}
@@ -237,7 +237,7 @@ job "use-slow-service" {
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
-			vers, err := svc.ListResourceVersions(ctx, "main", "svc-timeout-e2e", "cron.timer")
+			vers, _, err := svc.ListResourceVersions(ctx, "main", "svc-timeout-e2e", "cron.timer", nil, nil, 0)
 			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
 
@@ -249,7 +249,7 @@ job "use-slow-service" {
 		// (stop runs via defer after failBuild, so there's a brief window)
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
-			builds, err = svc.ListJobBuilds(ctx, "main", "svc-timeout-e2e", "use-slow-service")
+			builds, _, err = svc.ListJobBuilds(ctx, "main", "svc-timeout-e2e", "use-slow-service", nil, nil, 0)
 			if err != nil || len(builds) == 0 {
 				return false
 			}
@@ -332,7 +332,7 @@ job "use-param-service" {
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
-			vers, err := svc.ListResourceVersions(ctx, "main", "svc-params-e2e", "cron.timer")
+			vers, _, err := svc.ListResourceVersions(ctx, "main", "svc-params-e2e", "cron.timer", nil, nil, 0)
 			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
 
@@ -342,7 +342,7 @@ job "use-param-service" {
 
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
-			builds, err = svc.ListJobBuilds(ctx, "main", "svc-params-e2e", "use-param-service")
+			builds, _, err = svc.ListJobBuilds(ctx, "main", "svc-params-e2e", "use-param-service", nil, nil, 0)
 			if err != nil || len(builds) == 0 {
 				return false
 			}
@@ -411,7 +411,7 @@ job "will-fail" {
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
-			vers, err := svc.ListResourceVersions(ctx, "main", "svc-stop-fail-e2e", "cron.timer")
+			vers, _, err := svc.ListResourceVersions(ctx, "main", "svc-stop-fail-e2e", "cron.timer", nil, nil, 0)
 			return err == nil && len(vers) > 1
 		}, 10*time.Second, 200*time.Millisecond)
 
@@ -422,7 +422,7 @@ job "will-fail" {
 		// Wait until the build completes AND the stop step is present
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
-			builds, err = svc.ListJobBuilds(ctx, "main", "svc-stop-fail-e2e", "will-fail")
+			builds, _, err = svc.ListJobBuilds(ctx, "main", "svc-stop-fail-e2e", "will-fail", nil, nil, 0)
 			if err != nil || len(builds) == 0 {
 				return false
 			}
