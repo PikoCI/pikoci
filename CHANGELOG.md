@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Comprehensive godoc documentation across all packages: package-level comments, exported types, interfaces, functions, methods, and constants ([#395](https://github.com/PikoCI/pikoci/issues/395))
 - Go Reference badge on README
+
+### Changed
+
+- Renamed Go module path from `github.com/xescugc/pikoci` to `github.com/pikoci/pikoci` ([#397](https://github.com/PikoCI/pikoci/issues/397))
+
+### Added
+
 - Lazy loading (infinite scroll) for job builds and resource versions: only the newest 50 items load initially, with older items fetched on scroll and new items appearing via polling. CLI backward compatibility preserved with `limit=0`. Cursor-based pagination uses `before`/`after`/`limit` query params with `has_more` metadata ([#345](https://github.com/PikoCI/pikoci/issues/345))
 
 ## [0.2.0] - 2026-05-27
