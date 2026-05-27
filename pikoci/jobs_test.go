@@ -101,9 +101,9 @@ func TestTriggerPipelineJob_PinsLatestVersion(t *testing.T) {
 	}
 
 	versions := []*resource.Version{
-		{ID: 10},
-		{ID: 20},
 		{ID: 30},
+		{ID: 20},
+		{ID: 10},
 	}
 
 	rCan := j.GetSteps()[0].ResourceCanonical()
