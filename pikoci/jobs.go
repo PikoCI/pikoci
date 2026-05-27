@@ -37,7 +37,7 @@ func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) erro
 		vers, err := q.Resources.FilterVersions(ctx, tc, pc, rCan, nil, nil, 0)
 		if err == nil && len(vers) > 0 {
 			bb.ResourceCanonical = rCan
-			bb.VersionID = vers[len(vers)-1].ID
+			bb.VersionID = vers[0].ID
 		}
 	}
 

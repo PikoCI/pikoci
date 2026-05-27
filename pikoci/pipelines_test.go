@@ -1490,8 +1490,8 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 		{
 			name: "latest main build succeeded",
 			builds: []*build.Build{
-				{ID: 1, BuildNumber: "1", Status: build.Failed},
 				{ID: 2, BuildNumber: "2", Status: build.Succeeded},
+				{ID: 1, BuildNumber: "1", Status: build.Failed},
 			},
 			wantFillColor:   colorSucceeded,
 			wantDashedStyle: false,
@@ -1499,8 +1499,8 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 		{
 			name: "latest main build failed",
 			builds: []*build.Build{
-				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
 				{ID: 2, BuildNumber: "2", Status: build.Failed},
+				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
 			},
 			wantFillColor:   colorFailed,
 			wantDashedStyle: false,
@@ -1508,8 +1508,8 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 		{
 			name: "latest main build running - shows previous color with dashed outline",
 			builds: []*build.Build{
-				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
 				{ID: 2, BuildNumber: "2", Status: build.Started},
+				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
 			},
 			wantFillColor:   colorSucceeded,
 			wantDashedStyle: true,
@@ -1518,8 +1518,8 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 		{
 			name: "retry running - latest main build color with dashed outline",
 			builds: []*build.Build{
-				{ID: 1, BuildNumber: "1", Status: build.Failed},
 				{ID: 2, BuildNumber: "1.1", Status: build.Started},
+				{ID: 1, BuildNumber: "1", Status: build.Failed},
 			},
 			wantFillColor:   colorFailed,
 			wantDashedStyle: true,
@@ -1528,8 +1528,8 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 		{
 			name: "retry succeeded - color reflects retry success",
 			builds: []*build.Build{
-				{ID: 1, BuildNumber: "1", Status: build.Failed},
 				{ID: 2, BuildNumber: "1.1", Status: build.Succeeded},
+				{ID: 1, BuildNumber: "1", Status: build.Failed},
 			},
 			wantFillColor:   colorSucceeded,
 			wantDashedStyle: false,
@@ -1546,10 +1546,10 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 		{
 			name: "multiple main builds with retries - latest main build wins",
 			builds: []*build.Build{
-				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
-				{ID: 2, BuildNumber: "1.1", Status: build.Succeeded},
-				{ID: 3, BuildNumber: "2", Status: build.Failed},
 				{ID: 4, BuildNumber: "2.1", Status: build.Started},
+				{ID: 3, BuildNumber: "2", Status: build.Failed},
+				{ID: 2, BuildNumber: "1.1", Status: build.Succeeded},
+				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
 			},
 			wantFillColor:   colorFailed,
 			wantDashedStyle: true,
@@ -1558,8 +1558,8 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 		{
 			name: "pending build with previous success - shows previous color with gray dashed outline",
 			builds: []*build.Build{
-				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
 				{ID: 2, BuildNumber: "2", Status: build.Pending},
+				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
 			},
 			wantFillColor:   colorSucceeded,
 			wantDashedStyle: true,
@@ -1568,9 +1568,9 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 		{
 			name: "pending and running builds - running takes priority with orange outline",
 			builds: []*build.Build{
-				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
-				{ID: 2, BuildNumber: "2", Status: build.Pending},
 				{ID: 3, BuildNumber: "1.1", Status: build.Started},
+				{ID: 2, BuildNumber: "2", Status: build.Pending},
+				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
 			},
 			wantFillColor:   colorSucceeded,
 			wantDashedStyle: true,
