@@ -10,8 +10,8 @@ import (
 	"gocloud.dev/pubsub"
 )
 
-//go:generate go tool mockgen -destination=../mock/topic.go -mock_names=Topic=Topic -package mock github.com/xescugc/pikoci/pikoci/queue Topic
-//go:generate go tool mockgen -destination=../mock/subscription.go -mock_names=Subscription=Subscription -package mock github.com/xescugc/pikoci/pikoci/queue Subscription
+//go:generate go tool mockgen -destination=../mock/topic.go -mock_names=Topic=Topic -package mock github.com/pikoci/pikoci/pikoci/queue Topic
+//go:generate go tool mockgen -destination=../mock/subscription.go -mock_names=Subscription=Subscription -package mock github.com/pikoci/pikoci/pikoci/queue Subscription
 
 // Topic publishes messages to all its subscribers. The interface is modeled
 // after gocloud.dev/pubsub.Topic so that concrete implementations can be

@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/xescugc/pikoci/pikoci/queue"
-	"github.com/xescugc/pikoci/pikoci/resource"
-	"github.com/xescugc/pikoci/pikoci/scheduler"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/scheduler"
+	"github.com/pikoci/pikoci/pikoci/utils"
 	"gocloud.dev/pubsub"
 )
 

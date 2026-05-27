@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/cycloidio/sqlr"
-	"github.com/xescugc/pikoci/pikoci/secret"
+	"github.com/pikoci/pikoci/pikoci/secret"
 )
 
 type SecretRepository struct {

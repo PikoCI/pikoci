@@ -2,7 +2,7 @@ package trigger
 
 import "context"
 
-//go:generate go tool mockgen -destination=../mock/trigger_repository.go -mock_names=Repository=TriggerRepository -package mock github.com/xescugc/pikoci/pikoci/trigger Repository
+//go:generate go tool mockgen -destination=../mock/trigger_repository.go -mock_names=Repository=TriggerRepository -package mock github.com/pikoci/pikoci/pikoci/trigger Repository
 
 // Repository defines the persistence operations for triggers.
 type Repository interface {

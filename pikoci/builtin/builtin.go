@@ -9,9 +9,9 @@ import (
 	"sync"
 
 	"github.com/hashicorp/hcl/v2/hclsimple"
-	"github.com/xescugc/pikoci/pikoci/restype"
-	"github.com/xescugc/pikoci/pikoci/runner"
-	"github.com/xescugc/pikoci/pikoci/sectype"
+	"github.com/pikoci/pikoci/pikoci/restype"
+	"github.com/pikoci/pikoci/pikoci/runner"
+	"github.com/pikoci/pikoci/pikoci/sectype"
 )
 
 //go:embed resource_types/cron.hcl resource_types/git.hcl resource_types/trigger.hcl

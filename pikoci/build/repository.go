@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-//go:generate go tool mockgen -destination=../mock/build_repository.go -mock_names=Repository=BuildRepository -package mock github.com/xescugc/pikoci/pikoci/build Repository
+//go:generate go tool mockgen -destination=../mock/build_repository.go -mock_names=Repository=BuildRepository -package mock github.com/pikoci/pikoci/pikoci/build Repository
 
 // Repository defines the persistence operations for builds.
 type Repository interface {

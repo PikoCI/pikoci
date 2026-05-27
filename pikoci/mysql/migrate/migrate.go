@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/lopezator/migrator"
-	"github.com/xescugc/pikoci/pikoci/mysql"
-	"github.com/xescugc/pikoci/pikoci/mysql/migrate/migrations"
+	"github.com/pikoci/pikoci/pikoci/mysql"
+	"github.com/pikoci/pikoci/pikoci/mysql/migrate/migrations"
 )
 
 // Migrate runs the migrations on the provided db

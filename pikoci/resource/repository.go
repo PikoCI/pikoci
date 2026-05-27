@@ -2,7 +2,7 @@ package resource
 
 import "context"
 
-//go:generate go tool mockgen -destination=../mock/resource_repository.go -mock_names=Repository=ResourceRepository -package mock github.com/xescugc/pikoci/pikoci/resource Repository
+//go:generate go tool mockgen -destination=../mock/resource_repository.go -mock_names=Repository=ResourceRepository -package mock github.com/pikoci/pikoci/pikoci/resource Repository
 
 // Repository defines the persistence operations for resources and their versions.
 type Repository interface {

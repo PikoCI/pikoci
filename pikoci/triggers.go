@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/xescugc/pikoci/pikoci/trigger"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/trigger"
+	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
 // CreateTrigger creates a new trigger event with the given name and version data

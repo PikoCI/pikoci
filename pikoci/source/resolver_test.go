@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/xescugc/pikoci/pikoci/source"
+	"github.com/pikoci/pikoci/pikoci/source"
 )
 
 func TestResolveResourceType_PikoCI(t *testing.T) {

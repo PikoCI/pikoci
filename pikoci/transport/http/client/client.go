@@ -10,14 +10,14 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/xescugc/pikoci/pikoci"
-	"github.com/xescugc/pikoci/pikoci/build"
-	"github.com/xescugc/pikoci/pikoci/job"
-	"github.com/xescugc/pikoci/pikoci/pipeline"
-	"github.com/xescugc/pikoci/pikoci/resource"
-	"github.com/xescugc/pikoci/pikoci/team"
-	thttp "github.com/xescugc/pikoci/pikoci/transport/http"
-	"github.com/xescugc/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/build"
+	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/team"
+	thttp "github.com/pikoci/pikoci/pikoci/transport/http"
+	"github.com/pikoci/pikoci/pikoci/user"
 )
 
 // Client is an HTTP client for the PikoCI API. It holds the server URL,

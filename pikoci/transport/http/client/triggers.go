@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	thttp "github.com/xescugc/pikoci/pikoci/transport/http"
-	"github.com/xescugc/pikoci/pikoci/trigger"
+	thttp "github.com/pikoci/pikoci/pikoci/transport/http"
+	"github.com/pikoci/pikoci/pikoci/trigger"
 )
 
 // CreateTrigger creates a new trigger event with the given name and version data.

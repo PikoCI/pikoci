@@ -3,7 +3,7 @@
 // using a runner command to fetch secret values at build time.
 package sectype
 
-import "github.com/xescugc/pikoci/pikoci/utils"
+import "github.com/pikoci/pikoci/pikoci/utils"
 
 // SecretType defines the behavior for a category of secrets. It specifies
 // the runner command used to retrieve secret values. Secret types can be

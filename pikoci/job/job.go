@@ -6,7 +6,7 @@ package job
 import (
 	"time"
 
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
 // StepType identifies the kind of step in a job plan.

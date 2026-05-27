@@ -3,15 +3,15 @@ package unitwork
 import (
 	"context"
 
-	"github.com/xescugc/pikoci/pikoci/build"
-	"github.com/xescugc/pikoci/pikoci/job"
-	"github.com/xescugc/pikoci/pikoci/pipeline"
-	"github.com/xescugc/pikoci/pikoci/resource"
-	"github.com/xescugc/pikoci/pikoci/restype"
-	"github.com/xescugc/pikoci/pikoci/runner"
-	"github.com/xescugc/pikoci/pikoci/sectype"
-	"github.com/xescugc/pikoci/pikoci/team"
-	"github.com/xescugc/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/build"
+	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/restype"
+	"github.com/pikoci/pikoci/pikoci/runner"
+	"github.com/pikoci/pikoci/pikoci/sectype"
+	"github.com/pikoci/pikoci/pikoci/team"
+	"github.com/pikoci/pikoci/pikoci/user"
 )
 
 // noopUnitOfWork is a non-transactional UnitOfWork implementation that

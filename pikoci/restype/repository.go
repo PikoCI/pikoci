@@ -2,7 +2,7 @@ package restype
 
 import "context"
 
-//go:generate go tool mockgen -destination=../mock/resource_type_repository.go -mock_names=Repository=ResourceTypeRepository -package mock github.com/xescugc/pikoci/pikoci/restype Repository
+//go:generate go tool mockgen -destination=../mock/resource_type_repository.go -mock_names=Repository=ResourceTypeRepository -package mock github.com/pikoci/pikoci/pikoci/restype Repository
 
 // Repository defines the persistence operations for resource types.
 type Repository interface {

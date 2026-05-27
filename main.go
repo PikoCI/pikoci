@@ -9,7 +9,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/xescugc/pikoci/cmd"
+	"github.com/pikoci/pikoci/cmd"
 )
 
 func main() {

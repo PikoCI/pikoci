@@ -3,7 +3,7 @@
 // alongside job steps and are started before the job plan executes.
 package service
 
-import "github.com/xescugc/pikoci/pikoci/utils"
+import "github.com/pikoci/pikoci/pikoci/utils"
 
 // Service represents a sidecar service that runs during job execution. It
 // defines commands for starting and stopping the service, an optional ready

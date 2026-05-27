@@ -8,24 +8,24 @@ package pikoci
 import (
 	"context"
 
-	"github.com/xescugc/pikoci/pikoci/build"
-	"github.com/xescugc/pikoci/pikoci/job"
-	"github.com/xescugc/pikoci/pikoci/pipeline"
-	"github.com/xescugc/pikoci/pikoci/queue"
-	"github.com/xescugc/pikoci/pikoci/resource"
-	"github.com/xescugc/pikoci/pikoci/restype"
-	"github.com/xescugc/pikoci/pikoci/runner"
-	"github.com/xescugc/pikoci/pikoci/scheduler"
-	"github.com/xescugc/pikoci/pikoci/sectype"
-	"github.com/xescugc/pikoci/pikoci/team"
-	"github.com/xescugc/pikoci/pikoci/trigger"
-	"github.com/xescugc/pikoci/pikoci/unitwork"
-	"github.com/xescugc/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/build"
+	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/restype"
+	"github.com/pikoci/pikoci/pikoci/runner"
+	"github.com/pikoci/pikoci/pikoci/scheduler"
+	"github.com/pikoci/pikoci/pikoci/sectype"
+	"github.com/pikoci/pikoci/pikoci/team"
+	"github.com/pikoci/pikoci/pikoci/trigger"
+	"github.com/pikoci/pikoci/pikoci/unitwork"
+	"github.com/pikoci/pikoci/pikoci/user"
 
 	"log/slog"
 )
 
-//go:generate go tool mockgen -destination=mock/service.go -mock_names=Service=Service -package mock github.com/xescugc/pikoci/pikoci Service
+//go:generate go tool mockgen -destination=mock/service.go -mock_names=Service=Service -package mock github.com/pikoci/pikoci/pikoci Service
 
 // Service defines the complete set of operations exposed by the PikoCI orchestration
 // layer. It covers user authentication, team management, pipeline CRUD, job triggering,

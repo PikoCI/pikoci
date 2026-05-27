@@ -6,8 +6,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/xescugc/pikoci/pikoci/user"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
 // defaultAdminUsername and defaultAdmin123Hash identify the migration-seeded

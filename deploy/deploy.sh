@@ -124,7 +124,7 @@ if [ "$BUILD" = true ]; then
 else
     echo "==> Downloading latest PikoCI release (linux/$GOARCH)..."
     mkdir -p "$REPO_ROOT/builds"
-    curl -fSL "https://github.com/xescugc/pikoci/releases/latest/download/linux-$GOARCH" -o "$BINARY"
+    curl -fSL "https://github.com/pikoci/pikoci/releases/latest/download/linux-$GOARCH" -o "$BINARY"
     chmod +x "$BINARY"
 fi
 

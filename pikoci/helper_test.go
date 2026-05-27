@@ -3,9 +3,9 @@ package pikoci_test
 import (
 	"context"
 
-	"github.com/xescugc/pikoci/pikoci"
-	"github.com/xescugc/pikoci/pikoci/mock"
-	"github.com/xescugc/pikoci/pikoci/unitwork"
+	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/mock"
+	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"go.uber.org/mock/gomock"
 )
 

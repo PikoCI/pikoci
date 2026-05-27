@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/xescugc/pikoci/pikoci/mysql"
-	"github.com/xescugc/pikoci/pikoci/mysql/migrate"
+	"github.com/pikoci/pikoci/pikoci/mysql"
+	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
 )
 
 func exportDatabase(db *sql.DB, dbSystem string) http.HandlerFunc {

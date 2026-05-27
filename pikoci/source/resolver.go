@@ -12,12 +12,12 @@ import (
 	"strings"
 
 	"github.com/hashicorp/hcl/v2/hclsimple"
-	"github.com/xescugc/pikoci/pikoci/builtin"
-	"github.com/xescugc/pikoci/pikoci/restype"
-	"github.com/xescugc/pikoci/pikoci/runner"
-	"github.com/xescugc/pikoci/pikoci/sectype"
-	"github.com/xescugc/pikoci/pikoci/service"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/builtin"
+	"github.com/pikoci/pikoci/pikoci/restype"
+	"github.com/pikoci/pikoci/pikoci/runner"
+	"github.com/pikoci/pikoci/pikoci/sectype"
+	"github.com/pikoci/pikoci/pikoci/service"
+	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
 const (

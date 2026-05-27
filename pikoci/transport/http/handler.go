@@ -14,10 +14,10 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
-	"github.com/xescugc/pikoci/pikoci"
-	"github.com/xescugc/pikoci/pikoci/transport/http/assets"
-	"github.com/xescugc/pikoci/pikoci/transport/http/templates"
-	"github.com/xescugc/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/transport/http/assets"
+	"github.com/pikoci/pikoci/pikoci/transport/http/templates"
+	"github.com/pikoci/pikoci/pikoci/user"
 )
 
 // contextKey is a custom type for context value keys to avoid collisions.

@@ -3,7 +3,7 @@
 // and push artifacts for a given kind of resource.
 package restype
 
-import "github.com/xescugc/pikoci/pikoci/utils"
+import "github.com/pikoci/pikoci/pikoci/utils"
 
 // ResourceType defines the behavior for a category of resources. It specifies
 // the runner commands used to check for new versions, pull resource content,

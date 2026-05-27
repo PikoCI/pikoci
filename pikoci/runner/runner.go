@@ -3,7 +3,7 @@
 // defining how commands are run (e.g., via shell, Docker, or other backends).
 package runner
 
-import "github.com/xescugc/pikoci/pikoci/utils"
+import "github.com/pikoci/pikoci/pikoci/utils"
 
 // Runner represents an execution environment used to run task steps. It
 // defines the command used to execute tasks and can optionally be loaded

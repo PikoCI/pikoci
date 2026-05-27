@@ -11,9 +11,9 @@ import (
 	"github.com/hashicorp/hcl/v2/hclsimple"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/xescugc/pikoci/pikoci/builtin"
-	"github.com/xescugc/pikoci/pikoci/restype"
-	"github.com/xescugc/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/builtin"
+	"github.com/pikoci/pikoci/pikoci/restype"
+	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
 // runScript extracts a shell script from a RunnerCommand and executes it

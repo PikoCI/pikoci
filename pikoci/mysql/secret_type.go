@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/cycloidio/sqlr"
-	"github.com/xescugc/pikoci/pikoci/sectype"
+	"github.com/pikoci/pikoci/pikoci/sectype"
 )
 
 type SecretTypeRepository struct {
