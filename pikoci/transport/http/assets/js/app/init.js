@@ -15,7 +15,7 @@ Backbone.sync = function (method, model, options) {
   var optError = options.error;
   options.error = function(response){
     var msg;
-    if (response.status === 0) {
+    if (response.status === 0 || response.status === 502 || response.status === 503 || response.status === 504) {
       msg = "Connection lost. Retrying...";
     } else {
       msg = (response.responseJSON && response.responseJSON.error) || response.statusText || "Unknown error";
