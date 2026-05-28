@@ -1,16 +1,17 @@
 # CLI Reference
 
-PikoCI provides three top-level commands: `server`, `worker`, and `client`, plus `run` for local execution and utility commands `user-password` and `worker-token`.
+PikoCI provides three top-level commands: `server`, `worker`, and `client`, plus `run` for local execution, `pipeline edit` for local pipeline editing, and utility commands `user-password` and `worker-token`.
 
 ## Global structure
 
 ```
-pikoci server       [flags]          # Start the server
-pikoci worker       [flags]          # Start a standalone worker
-pikoci client       [flags] <cmd>    # Interact with the API
-pikoci run          [flags]          # Run a pipeline job locally
-pikoci user-password [flags]         # Generate hashed passwords
-pikoci worker-token  [flags]         # Generate a worker authentication token
+pikoci server              [flags]          # Start the server
+pikoci worker              [flags]          # Start a standalone worker
+pikoci client              [flags] <cmd>    # Interact with the API
+pikoci run                 [flags]          # Run a pipeline job locally
+pikoci pipeline edit       <file> [flags]   # Edit a pipeline HCL file in the browser
+pikoci user-password       [flags]          # Generate hashed passwords
+pikoci worker-token        [flags]          # Generate a worker authentication token
 ```
 
 ## client
@@ -440,6 +441,26 @@ pikoci run -p pipeline.hcl -j test --resource git.my-repo=./
 ```
 
 This replaces the `pull` step for that resource with a symlink to the local path, so your task runs against local files.
+
+## pipeline edit
+
+Open the browser-based pipeline editor for a local HCL file. Starts a minimal local HTTP server with the full editor UI (CodeMirror syntax highlighting, live graph preview, block navigation), pre-loaded with the file contents. Changes saved in the editor are written back to disk. No PikoCI server or authentication required.
+
+```bash
+pikoci pipeline edit ./pipeline.hcl
+```
+
+With a specific port:
+
+```bash
+pikoci pipeline edit ./pipeline.hcl --port 8181
+```
+
+| Flag | Default | Required | Description |
+|------|---------|----------|-------------|
+| `--port` | `0` (random) | no | Port to listen on (`0` picks a random available port) |
+
+The server binds to `127.0.0.1` only. Press `Ctrl+C` to stop.
 
 ## user-password
 

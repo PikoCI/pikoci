@@ -33,4 +33,5 @@ func init() {
 	rootCmd.AddCommand(workerTokenCmd)
 	rootCmd.AddCommand(userPasswordCmd)
 	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(pipelineCmd)
 }

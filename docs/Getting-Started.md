@@ -92,6 +92,16 @@ docker compose up
 
 Open [http://localhost:8080](http://localhost:8080) and log in with `admin` / `admin123`. The hello-world pipeline runs automatically every 10 seconds.
 
+## Edit pipelines locally
+
+You can use the browser-based editor to develop pipelines without running a server:
+
+```bash
+pikoci pipeline edit ./pipeline.hcl
+```
+
+This opens the full editor UI with syntax highlighting, live graph preview, and block navigation. Changes are saved back to disk. See [CLI Reference](CLI.md#pipeline-edit) for details.
+
 ## Next steps
 
 - [Pipeline Reference](Pipeline.md) - Full HCL syntax
