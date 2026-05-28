@@ -9,6 +9,8 @@
   [![License](https://img.shields.io/badge/license-Apache%202.0-yellow)](LICENSE)
   [![Go Report Card](https://goreportcard.com/badge/github.com/pikoci/pikoci)](https://goreportcard.com/report/github.com/pikoci/pikoci)
   [![Go Reference](https://pkg.go.dev/badge/github.com/pikoci/pikoci.svg)](https://pkg.go.dev/github.com/pikoci/pikoci)
+  [![GitHub Release](https://img.shields.io/github/v/release/PikoCI/pikoci)](https://github.com/PikoCI/pikoci/releases/latest)
+  [![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Fpikoci%2Fpikoci-blue?logo=docker)](https://github.com/PikoCI/pikoci/pkgs/container/pikoci)
 
   [Documentation](https://docs.pikoci.com) · [Quick Start](#quick-start) · [Contributing](#contributing)
 </div>
@@ -64,12 +66,30 @@ cd pikoci
 go build -o pikoci .
 ```
 
+Or pull the Docker image:
+
+```bash
+docker pull ghcr.io/pikoci/pikoci:latest
+```
+
 ### Run with a pipeline
 
 The fastest way to get started. Pass a pipeline config directly at launch. When the server starts, your pipeline is already loaded and ready:
 
 ```bash
 ./pikoci server \
+  --db-system mem \
+  --pubsub-system mem \
+  --jwt-secret my-secret \
+  --run-worker \
+  --pipeline-name my-pipeline \
+  --pipeline-config pipeline.hcl
+```
+
+Or with Docker:
+
+```bash
+docker run -p 8080:8080 ghcr.io/pikoci/pikoci:latest server \
   --db-system mem \
   --pubsub-system mem \
   --jwt-secret my-secret \
