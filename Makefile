@@ -119,5 +119,9 @@ arch = $(word 2, $(temp))
 .PHONY: release $(PLATFORMS)
 release: $(PLATFORMS) ## Creates the bin on the ./builds/
 
+VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
+COMMIT := $(shell git rev-parse --short HEAD)
+LDFLAGS := -X github.com/pikoci/pikoci/cmd.Version=$(VERSION) -X github.com/pikoci/pikoci/cmd.Commit=$(COMMIT)
+
 $(PLATFORMS):
-	GOOS=$(os) GOARCH=$(arch) go build -o ./builds/'$(os)-$(arch)' .
+	GOOS=$(os) GOARCH=$(arch) go build -ldflags "$(LDFLAGS)" -o ./builds/'$(os)-$(arch)' .

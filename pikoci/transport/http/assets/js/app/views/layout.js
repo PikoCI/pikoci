@@ -20,6 +20,12 @@ export var HeaderView = Backbone.View.extend({
   template: _.template($('#header-view').html()),
   initialize: function() {
     this.listenTo(session, "change", this.render);
+    this.versionText = '';
+    var self = this;
+    $.getJSON('/version.json').done(function(data) {
+      self.versionText = data.version + ' (' + data.commit + ')';
+      self.render();
+    });
     this.render();
   },
   events: {
@@ -53,6 +59,9 @@ export var HeaderView = Backbone.View.extend({
       sjson = session.toJSON();
     }
     this.$el.html(this.template({session: sjson}));
+    if (this.versionText) {
+      this.$('#app-version').text(this.versionText);
+    }
     syncThemeSwitch();
     return this;
   }

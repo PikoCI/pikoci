@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Display current deployed version and commit hash in the web UI header dropdown and via `/version.json` API endpoint ([#392](https://github.com/PikoCI/pikoci/issues/392))
+- `--version` CLI flag to print the application version and commit hash ([#392](https://github.com/PikoCI/pikoci/issues/392))
 - Docker pull and run instructions in README Quick Start ([#387](https://github.com/PikoCI/pikoci/issues/387))
 
 ### Changed

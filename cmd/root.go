@@ -10,6 +10,8 @@ import (
 // AppName is the application name used for CLI identification and XDG paths.
 var (
 	AppName = "pikoci"
+	Version = "dev"
+	Commit  = "unknown"
 )
 
 // rootCmd is the top-level cobra command for the PikoCI CLI.
@@ -24,6 +26,7 @@ func Execute() error {
 }
 
 func init() {
+	rootCmd.Version = Version + " (" + Commit + ")"
 	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(clientCmd)
 	rootCmd.AddCommand(workerCmd)

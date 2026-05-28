@@ -44,7 +44,7 @@ var publicFallbackRoutes = map[RouteName]bool{
 // It configures all API routes, authentication middleware, static asset serving,
 // and HTML template rendering. The ts parameter is the JWT signing secret,
 // and dbSystem identifies the database backend for the export endpoint.
-func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem string) http.Handler {
+func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, version, commit string) http.Handler {
 	r := mux.NewRouter()
 
 	auth := func(h http.Handler) http.Handler {
@@ -195,6 +195,13 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem s
 	jsonr := r.Headers("Content-Type", "application/json").Subrouter()
 
 	jsonr.Methods(http.MethodPost).Path("/login").Handler(userLogin(s))
+	jsonr.Methods(http.MethodGet).Path("/version").Name(GetVersion.String()).HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		json.NewEncoder(w).Encode(map[string]string{
+			"version": version,
+			"commit":  commit,
+		})
+	})
 
 	api := jsonr.PathPrefix("/").Subrouter()
 

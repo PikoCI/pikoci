@@ -144,7 +144,7 @@ var serverCmd = &cobra.Command{
 		logger.Info("initialized service")
 
 		logger.Info("initializing http handlers")
-		var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, cfg.DBSystem)
+		var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, cfg.DBSystem, Version, Commit)
 		logger.Info("initialized http handlers")
 
 		reg := prometheus.NewRegistry()
