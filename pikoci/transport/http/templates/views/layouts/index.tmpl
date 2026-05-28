@@ -3937,7 +3937,18 @@
         }
         var optError = options.error
         options.error = function(response){
-          var msg = (response.responseJSON && response.responseJSON.error) || response.statusText || "Unknown error";
+          var msg;
+          if (response.status === 0) {
+            msg = "Connection lost. Retrying...";
+          } else {
+            msg = (response.responseJSON && response.responseJSON.error) || response.statusText || "Unknown error";
+          }
+          if (options.isInterval && app.apiNotice.get("error") !== "") {
+            if (optError) {
+              optError(response)
+            }
+            return;
+          }
           app.apiNotice.set({error: msg})
           if (optError) {
             optError(response)
@@ -3945,7 +3956,9 @@
         }
         var optSuccess = options.success
         options.success = function(response, textStatus, jqXHR){
-          if (!options.isInterval) {
+          if (options.isInterval) {
+            app.apiNotice.set({error: ""})
+          } else {
             app.apiNotice.clear()
           }
           if (jqXHR && jqXHR.getResponseHeader('X-Refresh-Token') === 'true') {
