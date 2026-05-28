@@ -10,5 +10,5 @@ import (
 // Assets is the embedded filesystem containing all static assets
 // (CSS, JavaScript, images, and fonts) served by the HTTP handler.
 //
-//go:embed css/* js/* images/* fonts/*
+//go:embed css/* all:js images/* fonts/*
 var Assets embed.FS
