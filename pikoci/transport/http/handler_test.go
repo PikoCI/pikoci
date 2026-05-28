@@ -156,7 +156,7 @@ func TestUpdatePipeline_TeamCanonicalFromURL(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -196,7 +196,7 @@ func TestRefreshTokenEndpoint(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -233,6 +233,33 @@ func TestRefreshTokenEndpoint(t *testing.T) {
 	assert.Len(t, refreshResp.Data.User.Memberships, 1)
 }
 
+func TestGetVersion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "v0.2.1", "b17daa3")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/version.json", nil)
+	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Content-Type"), "application/json")
+
+	var got map[string]string
+	err = json.NewDecoder(resp.Body).Decode(&got)
+	require.NoError(t, err)
+	assert.Equal(t, "v0.2.1", got["version"])
+	assert.Equal(t, "b17daa3", got["commit"])
+}
+
 func TestExportDatabase_AdminAllowed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := mock.NewService(ctrl)
@@ -244,7 +271,7 @@ func TestExportDatabase_AdminAllowed(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	handler := Handler(s, secret, logger, db, "mem")
+	handler := Handler(s, secret, logger, db, "mem", "test", "abc1234")
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -275,7 +302,7 @@ func TestExportDatabase_NonAdminForbidden(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -304,7 +331,7 @@ func TestExportDatabase_UnauthenticatedForbidden(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -329,7 +356,7 @@ func TestExportDatabase_ResponseHeaders(t *testing.T) {
 	require.NoError(t, err)
 	defer memDB.Close()
 
-	handler := Handler(s, secret, logger, memDB, "mem")
+	handler := Handler(s, secret, logger, memDB, "mem", "test", "abc1234")
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -364,7 +391,7 @@ func TestXRefreshTokenHeader(t *testing.T) {
 	t.Run("header set when memberships differ", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		s := mock.NewService(ctrl)
-		handler := Handler(s, secret, logger, nil, "")
+		handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -397,7 +424,7 @@ func TestXRefreshTokenHeader(t *testing.T) {
 	t.Run("header not set when memberships match", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		s := mock.NewService(ctrl)
-		handler := Handler(s, secret, logger, nil, "")
+		handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -424,7 +451,7 @@ func TestXRefreshTokenHeader(t *testing.T) {
 	t.Run("header not set for worker tokens", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		s := mock.NewService(ctrl)
-		handler := Handler(s, secret, logger, nil, "")
+		handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
 		server := httptest.NewServer(handler)
 		defer server.Close()
 

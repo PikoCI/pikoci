@@ -215,7 +215,7 @@ job "deploy" {
       image = var.go_image
       cmd   = <<-EOT
         cd ${var.git_name}
-        GOOS=linux GOARCH=arm64 go build -buildvcs=false -o /tmp/pikoci-new .
+        GOOS=linux GOARCH=arm64 go build -buildvcs=false -ldflags "-X github.com/pikoci/pikoci/cmd.Version=$(git describe --tags --abbrev=0 2>/dev/null || echo dev) -X github.com/pikoci/pikoci/cmd.Commit=$(git rev-parse --short HEAD)" -o /tmp/pikoci-new .
         mv /tmp/pikoci-new /hostbin/pikoci
       EOT
       args = [

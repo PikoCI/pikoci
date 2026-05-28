@@ -114,4 +114,7 @@ const (
 
 	// ExportDatabase is the route for exporting the database as a binary dump.
 	ExportDatabase
+
+	// GetVersion is the route for retrieving the application version.
+	GetVersion
 )
