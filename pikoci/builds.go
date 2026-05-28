@@ -378,3 +378,52 @@ func (q *PikoCI) notifyNextPendingBuild(ctx context.Context, tc, pc, jn string) 
 	}
 	q.JobTopic.Send(ctx, &pubsub.Message{Body: mb})
 }
+
+// ReEnqueuePendingBuilds scans all jobs for pending builds and re-publishes
+// queue messages so workers can pick them up. This is called on server startup
+// to recover builds that were stranded when the previous server instance stopped.
+//
+// This is safe to call even if some messages are still in the queue: the worker
+// does not trust the BuildID in the message — it always calls FindOldestPending
+// on the DB to determine which build to run (worker/service.go:238-266).
+// Duplicate messages simply result in redundant DB lookups with no side effects.
+func (q *PikoCI) ReEnqueuePendingBuilds(ctx context.Context) error {
+	pps, err := q.Pipelines.FilterAll(ctx)
+	if err != nil {
+		return fmt.Errorf("filtering all pipelines: %w", err)
+	}
+
+	var count int
+	for _, pwt := range pps {
+		tc := pwt.Team.Canonical
+		pc := pwt.Canonical
+		for _, j := range pwt.Jobs {
+			pending, err := q.Builds.FindOldestPending(ctx, tc, pc, j.Name)
+			if err != nil {
+				return fmt.Errorf("finding oldest pending build for %s/%s/%s: %w", tc, pc, j.Name, err)
+			}
+			if pending == nil {
+				continue
+			}
+			msg := queue.Body{
+				TeamCanonical:     tc,
+				PipelineCanonical: pc,
+				JobName:           j.Name,
+				BuildID:           pending.ID,
+			}
+			mb, err := json.Marshal(msg)
+			if err != nil {
+				return fmt.Errorf("marshalling queue body: %w", err)
+			}
+			if err := q.JobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
+				return fmt.Errorf("sending queue message for %s/%s/%s: %w", tc, pc, j.Name, err)
+			}
+			count++
+		}
+	}
+
+	if q.logger != nil && count > 0 {
+		q.logger.Info("re-enqueued pending builds on startup", "count", count)
+	}
+	return nil
+}
