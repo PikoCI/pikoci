@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Docker pull and run instructions in README Quick Start ([#387](https://github.com/PikoCI/pikoci/issues/387))
 
+### Changed
+
+- Refactored frontend JavaScript from a single inline `<script>` block into ES modules under `js/app/` ([#317](https://github.com/PikoCI/pikoci/issues/317))
+
 ### Fixed
 
 - Re-enqueue pending builds on server startup so they are not stranded forever ([#399](https://github.com/PikoCI/pikoci/issues/399))
