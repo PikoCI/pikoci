@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Webhook tokens lost on every pipeline update, causing GitHub webhooks to return 400 ([#408](https://github.com/PikoCI/pikoci/issues/408))
 - Re-enqueue pending builds on server startup so they are not stranded forever ([#399](https://github.com/PikoCI/pikoci/issues/399))
 - Error banner persists after backend reconnects: polling successes now clear errors, connection failures show "Connection lost. Retrying...", and polling errors are debounced ([#400](https://github.com/PikoCI/pikoci/issues/400))
 

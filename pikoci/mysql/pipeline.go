@@ -330,7 +330,7 @@ const pipelineQuery = `
 	SELECT
 		p.id, p.name, p.canonical, p.raw, p.public,
 		j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure,
-		r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check,
+		r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token,
 		rt.id, rt.name, rt.` + "`check`" + `, rt.pull, rt.push, rt.params,
 		ru.id, ru.name, ru.run,
 		st.id, st.name, st.source, st.get, st.params, st.config
@@ -368,7 +368,7 @@ func scanPipelines(rows *sql.Rows) ([]*pipeline.Pipeline, error) {
 		err := rows.Scan(
 			&pp.ID, &pp.Name, &pp.Canonical, &pp.Raw, &pp.Public,
 			&j.ID, &j.Name, &j.Plan, &j.OnSuccess, &j.OnFailure, &j.OnCancel, &j.Ensure,
-			&r.ID, &r.Name, &r.Type, &r.Canonical, &r.Params, &r.CheckInterval, &r.Logs, &r.LastCheck, &r.NextCheck,
+			&r.ID, &r.Name, &r.Type, &r.Canonical, &r.Params, &r.CheckInterval, &r.Logs, &r.LastCheck, &r.NextCheck, &r.WebhookToken,
 			&rt.ID, &rt.Name, &rt.Check, &rt.Pull, &rt.Push, &rt.Params,
 			&ru.ID, &ru.Name, &ru.Run,
 			&st.ID, &st.Name, &st.Source, &st.Get, &st.Params, &st.Config,

@@ -45,6 +45,13 @@ func Migrate(db *sql.DB, system string, opts ...migrator.Option) error {
 	return nil
 }
 
+// sqliteUUIDExpr is the SQLite expression used to generate UUID v4 values.
+const sqliteUUIDExpr = `lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))`
+
+func replaceSQLiteUUID(sql, replacement string) string {
+	return strings.ReplaceAll(sql, sqliteUUIDExpr, replacement)
+}
+
 func adaptSQL(sql, system string) string {
 	switch system {
 	case mysql.Mem, mysql.SQLite:
@@ -62,11 +69,15 @@ func adaptSQL(sql, system string) string {
 		sql = strings.ReplaceAll(sql, "`check`", `"check"`)
 		// PostgreSQL doesn't support RENAME COLUMN with the same syntax in older versions,
 		// but ALTER TABLE ... RENAME COLUMN is standard and works in PG 9.6+
+		// Replace SQLite UUID expression with PostgreSQL's gen_random_uuid()
+		sql = replaceSQLiteUUID(sql, "gen_random_uuid()")
 	case mysql.MySQL:
 		// MySQL/MariaDB doesn't support CASCADE on DROP TABLE,
 		// but SET FOREIGN_KEY_CHECKS=0 achieves the same effect
 		sql = strings.ReplaceAll(sql, "DROP TABLE IF EXISTS pipelines CASCADE;",
 			"SET FOREIGN_KEY_CHECKS = 0; DROP TABLE IF EXISTS pipelines; SET FOREIGN_KEY_CHECKS = 1;")
+		// Replace SQLite UUID expression with MySQL's UUID()
+		sql = replaceSQLiteUUID(sql, "UUID()")
 	}
 	return sql
 }
