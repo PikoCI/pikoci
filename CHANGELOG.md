@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Docker pull and run instructions in README Quick Start ([#387](https://github.com/PikoCI/pikoci/issues/387))
+- GitHub Release and Docker Image badges in README
+
 ### Fixed
 
 - Error banner persists after backend reconnects: polling successes now clear errors, connection failures show "Connection lost. Retrying...", and polling errors are debounced ([#400](https://github.com/PikoCI/pikoci/issues/400))
