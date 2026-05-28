@@ -167,15 +167,21 @@ var JobBuildsContentView = Backbone.View.extend({
   },
   cancelBuild: function(e) {
     e.preventDefault();
+    var that = this;
     var bid = this.model.get("build_number");
     var url = this.model.collection.url() + "/" + bid + "/cancel.json";
-    $.ajax({ url: url, type: "POST", headers: { "Authorization": "Bearer " + session.get("jwt") } });
+    $.ajax({ url: url, type: "POST", headers: { "Authorization": "Bearer " + session.get("jwt") },
+      success: function() { that.model.fetch(); },
+    });
   },
   retryBuild: function(e) {
     e.preventDefault();
     var bid = this.model.get("build_number");
-    var url = this.model.collection.url() + "/" + bid + "/retry.json";
-    $.ajax({ url: url, type: "POST", headers: { "Authorization": "Bearer " + session.get("jwt") } });
+    var collection = this.model.collection;
+    var url = collection.url() + "/" + bid + "/retry.json";
+    $.ajax({ url: url, type: "POST", headers: { "Authorization": "Bearer " + session.get("jwt") },
+      success: function() { collection.fetchNew(); },
+    });
   },
   toggleFollow: function(e) {
     e.preventDefault();
