@@ -10,7 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Docker pull and run instructions in README Quick Start ([#387](https://github.com/PikoCI/pikoci/issues/387))
-- GitHub Release and Docker Image badges in README
 
 ### Fixed
 
