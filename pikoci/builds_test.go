@@ -2,6 +2,7 @@ package pikoci_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,6 +10,9 @@ import (
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/team"
 	"go.uber.org/mock/gomock"
 	"gocloud.dev/pubsub"
 )
@@ -312,5 +316,75 @@ func TestCancelJobBuild_Running_NotifiesNextPending(t *testing.T) {
 		Return(nil, nil)
 
 	err := s.S.CancelJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
+	require.NoError(t, err)
+}
+
+func TestReEnqueuePendingBuilds(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	pps := []*pipeline.WithTeam{
+		{
+			Pipeline: pipeline.Pipeline{
+				Canonical: "my-pipeline",
+				Jobs: []job.Job{
+					{Name: "job1"},
+					{Name: "job2"},
+				},
+			},
+			Team: team.Team{Canonical: "main"},
+		},
+	}
+	s.Pipelines.EXPECT().FilterAll(ctx).Return(pps, nil)
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "job1").
+		Return(&build.Build{ID: 42, Status: build.Pending}, nil)
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "job2").
+		Return(nil, nil)
+	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, "main", body.TeamCanonical)
+		assert.Equal(t, "my-pipeline", body.PipelineCanonical)
+		assert.Equal(t, "job1", body.JobName)
+		assert.Equal(t, uint32(42), body.BuildID)
+		return nil
+	})
+
+	err := s.P.ReEnqueuePendingBuilds(ctx)
+	require.NoError(t, err)
+}
+
+func TestReEnqueuePendingBuilds_NoPending(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	pps := []*pipeline.WithTeam{
+		{
+			Pipeline: pipeline.Pipeline{
+				Canonical: "my-pipeline",
+				Jobs:      []job.Job{{Name: "job1"}},
+			},
+			Team: team.Team{Canonical: "main"},
+		},
+	}
+	s.Pipelines.EXPECT().FilterAll(ctx).Return(pps, nil)
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "job1").
+		Return(nil, nil)
+
+	err := s.P.ReEnqueuePendingBuilds(ctx)
+	require.NoError(t, err)
+}
+
+func TestReEnqueuePendingBuilds_NoPipelines(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Pipelines.EXPECT().FilterAll(ctx).Return(nil, nil)
+
+	err := s.P.ReEnqueuePendingBuilds(ctx)
 	require.NoError(t, err)
 }

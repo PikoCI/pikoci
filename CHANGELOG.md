@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Re-enqueue pending builds on server startup so they are not stranded forever ([#399](https://github.com/PikoCI/pikoci/issues/399))
 - Error banner persists after backend reconnects: polling successes now clear errors, connection failures show "Connection lost. Retrying...", and polling errors are debounced ([#400](https://github.com/PikoCI/pikoci/issues/400))
 
 ## [0.2.1] - 2026-05-27
