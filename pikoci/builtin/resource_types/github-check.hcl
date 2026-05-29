@@ -4,6 +4,7 @@ resource_type "github-check" {
     "installation_id",
     "private_key",
     "repository",
+    "base_url",
   ]
   push "exec" {
     path = "/bin/sh"
@@ -20,6 +21,13 @@ resource_type "github-check" {
       HEAD_SHA="$put_head_sha"
       CHECK_NAME="$put_name"
       DETAILS_URL="$put_details_url"
+      BASE_URL="$param_base_url"
+      BASE_URL="$${BASE_URL%/}"
+
+      # Default details URL from base_url and build metadata
+      if [ -z "$DETAILS_URL" ] && [ -n "$BASE_URL" ]; then
+        DETAILS_URL="$${BASE_URL}/teams/$${BUILD_TEAM_NAME}/pipelines/$${BUILD_PIPELINE_NAME}/jobs/$${BUILD_JOB_NAME}/builds/$${BUILD_NUMBER}"
+      fi
 
       # Default check name from build metadata
       if [ -z "$CHECK_NAME" ]; then
