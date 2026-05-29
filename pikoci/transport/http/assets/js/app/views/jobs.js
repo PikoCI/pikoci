@@ -23,7 +23,9 @@ export var JobBuildsView = Backbone.View.extend({
     });
 
     this.intervalID = window.setInterval(function() {
-      that.collection.fetchNew();
+      that.collection.fetchNew({
+        success: function() { that.fetchActiveBuild(); }
+      });
     }, fetchInterval);
   },
   events: {
@@ -104,6 +106,13 @@ export var JobBuildsView = Backbone.View.extend({
         contEl.append(cont.render().el);
       }
     }
+  },
+  fetchActiveBuild: function() {
+    var active = this.collection.find(function(m) { return m.get("active"); });
+    if (!active) return;
+    var status = active.get("status");
+    if (status === "succeeded" || status === "failed" || status === "cancelled") return;
+    active.fetch();
   },
   clickTriggerJob: function(event) {
     event.preventDefault();

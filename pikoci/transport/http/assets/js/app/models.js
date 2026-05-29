@@ -1,5 +1,7 @@
 'use strict';
 
+import { durationToString } from './namespace.js';
+
 export var Session = Backbone.Model.extend({
   url: "login",
   parse: function(response) {
@@ -151,10 +153,17 @@ export var Job = Backbone.Model.extend({
 export var Build = Backbone.Model.extend({
   idAttribute: "build_number",
   parse: function(response) {
-    if (response.data){
-      return response.data;
+    var data = response.data ? response.data : response;
+    if (data.duration !== 0) {
+      data.duration = durationToString(data.duration);
     }
-    return response;
+    _.each(data.steps, function(s, i) {
+      data.steps[i].duration = durationToString(s.duration);
+    });
+    _.each(data.job, function(j, i) {
+      data.job[i].duration = durationToString(j.duration);
+    });
+    return data;
   }
 });
 

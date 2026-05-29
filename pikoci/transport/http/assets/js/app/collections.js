@@ -1,7 +1,6 @@
 'use strict';
 
 import { Session, ApiNotice, User, Team, Pipeline, PipelineImage, Job, Build, Resource, ResourceVersion, TeamMembers } from './models.js';
-import { durationToString } from './namespace.js';
 
 export var Users = Backbone.Collection.extend({
   model: User,
@@ -90,19 +89,7 @@ export var Builds = Backbone.Collection.extend({
         this.oldestID = response.meta.oldest_id;
       }
     }
-    var builds = response.data;
-    _.each(builds, function(data) {
-      if (data.duration  !== 0) {
-        data.duration = durationToString(data.duration);
-      }
-      _.each(data.steps, function(s, i) {
-        data.steps[i].duration = durationToString(s.duration);
-      });
-      _.each(data.job, function(j, i) {
-        data.job[i].duration = durationToString(j.duration);
-      });
-    });
-    return builds;
+    return response.data;
   },
   fetchMore: function() {
     if (this.loadingMore || !this.hasMore) return;
@@ -115,15 +102,16 @@ export var Builds = Backbone.Collection.extend({
       error: function() { that.loadingMore = false; },
     });
   },
-  fetchNew: function() {
+  fetchNew: function(opts) {
+    opts = opts || {};
     if (!this.newestID) {
-      this.fetch({ remove: false });
+      this.fetch(_.extend({ remove: false }, opts));
       return;
     }
-    this.fetch({
+    this.fetch(_.extend({
       remove: false,
       data: { after: this.newestID },
-    });
+    }, opts));
   },
   setActive: function(id) {
     if (!id && this.first()) {
