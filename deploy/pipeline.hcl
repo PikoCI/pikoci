@@ -391,6 +391,7 @@ resource "github-check" "ci" {
     installation_id = var.github_app_installation_id
     private_key     = var.pikoci_github_app_pem
     repository      = "PikoCI/pikoci"
+    base_url        = "https://${var.pikoci_domain}"
   }
 }
 
@@ -432,6 +433,13 @@ secret_type "pikoci_github_pem" {
   source = "pikoci://file"
   format = "raw"
   path   = "/etc/pikoci/pikoci_github_app.pem"
+}
+
+variable "pikoci_domain" {
+  type = string
+  secret "env" {
+    key = "PIKOCI_DOMAIN"
+  }
 }
 
 variable "go_image" {

@@ -411,6 +411,7 @@ job "test" {
 | `installation_id` | yes      | GitHub App installation ID                       |
 | `private_key`     | yes      | GitHub App private key content (PEM format). Use the `file` secret type with `format = "raw"` to read from a PEM file |
 | `repository`      | yes      | Repository in `owner/repo` format                |
+| `base_url`        | no       | PikoCI instance URL (e.g. `https://ci.pikoci.com`). When set, auto-constructs a `details_url` from `$BUILD_*` env vars if no explicit `put_details_url` is provided. The constructed URL follows the pattern: `{base_url}/teams/{team}/pipelines/{pipeline}/jobs/{job}/builds/{number}` |
 
 ### Put params
 
