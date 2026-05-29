@@ -369,8 +369,9 @@ func (r *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn
 		args = append(args, j)
 	}
 	args = append(args, stepName)
-	// Args for the NOT EXISTS subquery
+	// Args for the NOT EXISTS subqueries
 	args = append(args, downstreamJob)
+	args = append(args, downstreamJob, stepName)
 	// HAVING count
 	args = append(args, upstreamCount)
 
@@ -389,6 +390,14 @@ func (r *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn
 			  JOIN jobs j2 ON b2.job_id = j2.id
 			  WHERE j2.pipeline_id = p.id AND j2.name = ?
 				AND b2.version_id = bgv.version_id
+		  )
+		  AND NOT EXISTS (
+			  SELECT 1 FROM build_get_versions bgv2
+			  JOIN builds b3 ON bgv2.build_id = b3.id
+			  JOIN jobs j3 ON b3.job_id = j3.id
+			  WHERE j3.pipeline_id = p.id AND j3.name = ?
+				AND bgv2.step_name = ?
+				AND bgv2.version_id = bgv.version_id
 		  )
 		GROUP BY bgv.version_id
 		HAVING COUNT(DISTINCT j.name) = ?
