@@ -267,7 +267,7 @@ func TestFindReadyDownstreamVersion_AlreadyBuiltByDownstream(t *testing.T) {
 	require.NoError(t, err)
 
 	// Deploy already consumed version 10
-	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'succeeded', '1')`, deployJobID)
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number, version_id) VALUES (?, 'succeeded', '1', 10)`, deployJobID)
 	require.NoError(t, err)
 	deployBuildID, _ := res.LastInsertId()
 	_, err = db.ExecContext(ctx, `INSERT INTO build_get_versions (build_id, step_name, version_id) VALUES (?, 'repo', 10)`, deployBuildID)
