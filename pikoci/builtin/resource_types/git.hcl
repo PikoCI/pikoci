@@ -40,7 +40,13 @@ resource_type "git" {
           REPO=$(echo "$URL" | sed -E 's|https?://github\.com/||;s|\.git$||')
           curl -sf -H "Authorization: token $TOKEN" \
             "https://api.github.com/repos/$REPO/tags?per_page=$PER_PAGE" \
-            | jq -c '[.[] | {"ref": .commit.sha, "tag": .name}]'
+            | jq -c --arg known "$version_tag" \
+              'map({"ref": .commit.sha, "tag": .name})
+               | if $known == "" then .
+                 else reduce .[] as $t ({out:[], done:false};
+                   if .done then . else (if $t.tag == $known then .done=true else .out += [$t] end) end
+                 ) | .out
+                 end'
           exit 0
         fi
 
@@ -49,7 +55,13 @@ resource_type "git" {
           PROJECT=$(echo "$URL" | sed -E 's|https?://gitlab\.com/||;s|\.git$||' | sed 's|/|%2F|g')
           curl -sf -H "PRIVATE-TOKEN: $TOKEN" \
             "https://gitlab.com/api/v4/projects/$PROJECT/repository/tags?order_by=updated&sort=desc&per_page=$PER_PAGE" \
-            | jq -c '[.[] | {"ref": .commit.id, "tag": .name}]'
+            | jq -c --arg known "$version_tag" \
+              'map({"ref": .commit.id, "tag": .name})
+               | if $known == "" then .
+                 else reduce .[] as $t ({out:[], done:false};
+                   if .done then . else (if $t.tag == $known then .done=true else .out += [$t] end) end
+                 ) | .out
+                 end'
           exit 0
         fi
 
