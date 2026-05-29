@@ -50,13 +50,13 @@ Public pipelines can be embedded directly in READMEs, dashboards, or any HTML pa
 **Markdown:**
 
 ```markdown
-![Pipeline](https://ci.example.com/api/teams/main/pipelines/my-pipeline/image.svg)
+![Pipeline](https://ci.example.com/teams/main/pipelines/my-pipeline/image.svg)
 ```
 
 **HTML:**
 
 ```html
-<img src="https://ci.example.com/api/teams/main/pipelines/my-pipeline/image.svg" alt="Pipeline status" />
+<img src="https://ci.example.com/teams/main/pipelines/my-pipeline/image.svg" alt="Pipeline status" />
 ```
 
 ## Example
@@ -66,11 +66,11 @@ Public pipelines can be embedded directly in READMEs, dashboards, or any HTML pa
 curl http://localhost:8080/teams/main/pipelines/my-pipeline/public
 
 # Get the pipeline graph as SVG
-curl http://localhost:8080/api/teams/main/pipelines/my-pipeline/image.svg > status.svg
+curl http://localhost:8080/teams/main/pipelines/my-pipeline/image.svg > status.svg
 
 # Get as PNG
-curl http://localhost:8080/api/teams/main/pipelines/my-pipeline/image.png > status.png
+curl http://localhost:8080/teams/main/pipelines/my-pipeline/image.png > status.png
 
 # Get as DOT (JSON response, for piping to graphviz locally)
-curl http://localhost:8080/api/teams/main/pipelines/my-pipeline/image.dot
+curl http://localhost:8080/teams/main/pipelines/my-pipeline/image.dot
 ```
