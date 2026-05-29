@@ -534,12 +534,23 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 					}
 				}
 			}
-			// If all builds in the group are running, fall back to previous main build
+			// If all builds in the group are running, fall back to previous main build's group
 			if cb == nil {
+				var prevMain string
 				for _, b := range builds {
-					if b.Status != build.Started && b.Status != build.Pending && !strings.Contains(b.BuildNumber, ".") && b.BuildNumber != latestMain {
-						cb = b
+					if !strings.Contains(b.BuildNumber, ".") && b.BuildNumber != latestMain {
+						prevMain = b.BuildNumber
 						break
+					}
+				}
+				if prevMain != "" {
+					for _, b := range builds {
+						if b.BuildNumber == prevMain || strings.HasPrefix(b.BuildNumber, prevMain+".") {
+							if b.Status != build.Started && b.Status != build.Pending {
+								cb = b
+								break
+							}
+						}
 					}
 				}
 			}

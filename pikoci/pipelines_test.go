@@ -1556,6 +1556,17 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 			wantBorderColor: colorStartedBorder,
 		},
 		{
+			name: "new build running - fallback uses retry from previous group",
+			builds: []*build.Build{
+				{ID: 3, BuildNumber: "2", Status: build.Started},
+				{ID: 2, BuildNumber: "1.1", Status: build.Succeeded},
+				{ID: 1, BuildNumber: "1", Status: build.Cancelled},
+			},
+			wantFillColor:   colorSucceeded,
+			wantDashedStyle: true,
+			wantBorderColor: colorStartedBorder,
+		},
+		{
 			name: "pending build with previous success - shows previous color with gray dashed outline",
 			builds: []*build.Build{
 				{ID: 2, BuildNumber: "2", Status: build.Pending},

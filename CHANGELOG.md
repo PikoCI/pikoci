@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Git resource tag mode returns all tags on every check, triggering builds for every historical tag after pipeline recreation ([#419](https://github.com/PikoCI/pikoci/issues/419))
+- Pipeline graph shows original build color instead of successful retry when a new build is running ([#421](https://github.com/PikoCI/pikoci/issues/421))
 
 ## [0.2.2] - 2026-05-29
 
