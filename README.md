@@ -15,8 +15,7 @@
   [Documentation](https://docs.pikoci.com) · [Quick Start](#quick-start) · [Contributing](#contributing)
 </div>
 
-<!-- GIF goes here -->
-<!-- ![PikoCI demo](docs/images/pikoci.gif) -->
+![PikoCI pipeline](https://ci.pikoci.com/api/teams/main/pipelines/pikoci/image.svg)
 
 ## What is PikoCI?
 
@@ -41,7 +40,7 @@ Pipelines are defined in [HCL](https://github.com/hashicorp/hcl). The runner abs
 - **Public pipelines**: mark a pipeline as public so anyone can view its status without an account. Perfect for open source projects.
 - **Built-in UI**: visualize pipeline state, stream build logs, manage pipelines from a web interface.
 - **Teams and users**: multi-user support with team-based access control. [Granular role management planned (#207)](https://github.com/PikoCI/pikoci/issues/207).
-- **DOT graph output**: export pipeline state as a DOT graph and pipe it to Graphviz for terminal-native visualization.
+- **DOT graph output**: export pipeline state as a DOT graph, or as embeddable SVG/PNG images for READMEs and dashboards.
 
 
 ## Quick Start
