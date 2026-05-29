@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"regexp"
@@ -58,6 +59,42 @@ func (c *Client) Request(ctx context.Context, method, url string, body, resp int
 	}
 
 	return nil
+}
+
+// RequestRaw sends an authenticated HTTP request and returns the raw response body.
+// Unlike Request, it does not assume JSON encoding for the response.
+func (c *Client) RequestRaw(ctx context.Context, method, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request %q: %w", url, err)
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.jwt))
+
+	hresp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to do request %q: %w", url, err)
+	}
+	defer hresp.Body.Close()
+
+	if !successCodeRe.MatchString(strconv.Itoa(hresp.StatusCode)) {
+		var eresp thttp.ErrorResponse
+		err = json.NewDecoder(hresp.Body).Decode(&eresp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read error body on %q: %w", url, err)
+		}
+		return nil, fmt.Errorf("response error on %q: %s", url, eresp.Err)
+	}
+
+	body, err := io.ReadAll(hresp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read body on %q: %w", url, err)
+	}
+
+	if hresp.Header.Get("X-Refresh-Token") == "true" {
+		c.refreshToken(ctx)
+	}
+
+	return body, nil
 }
 
 func (c *Client) refreshToken(ctx context.Context) {

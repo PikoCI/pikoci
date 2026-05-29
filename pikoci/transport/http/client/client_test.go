@@ -422,10 +422,27 @@ func TestDeletePipeline(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestGetPipelineImage(t *testing.T) {
+func TestGetPipelineImage_DOT(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/teams/{tc}/pipelines/{pn}/image.{format}", func(w http.ResponseWriter, req *http.Request) {
-		jsonHandler(w, thttp.GetPipelineImageResponse{Image: "svg-data"})
+		jsonHandler(w, thttp.GetPipelineImageResponse{Image: "dot-data"})
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	img, err := c.GetPipelineImage(context.Background(), "team", "mypipe", "dot")
+	require.NoError(t, err)
+	assert.Equal(t, []byte("dot-data"), img)
+}
+
+func TestGetPipelineImage_SVG(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/pipelines/{pn}/image.{format}", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Write([]byte("svg-data"))
 	}).Methods("GET")
 	ts := httptest.NewServer(r)
 	defer ts.Close()
@@ -436,6 +453,23 @@ func TestGetPipelineImage(t *testing.T) {
 	img, err := c.GetPipelineImage(context.Background(), "team", "mypipe", "svg")
 	require.NoError(t, err)
 	assert.Equal(t, []byte("svg-data"), img)
+}
+
+func TestGetPipelineImage_PNG(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/pipelines/{pn}/image.{format}", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write([]byte("png-data"))
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	img, err := c.GetPipelineImage(context.Background(), "team", "mypipe", "png")
+	require.NoError(t, err)
+	assert.Equal(t, []byte("png-data"), img)
 }
 
 func TestCreatePipelineImage(t *testing.T) {

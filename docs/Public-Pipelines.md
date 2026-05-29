@@ -37,7 +37,27 @@ The following data is **removed** for security:
 | Endpoint | Description |
 |----------|-------------|
 | `GET /teams/{team}/pipelines/{pipeline}/public` | Sanitized pipeline data |
-| `GET /teams/{team}/pipelines/{pipeline}/public/image?format=dot` | Pipeline graph in DOT format |
+| `GET /teams/{team}/pipelines/{pipeline}/image.dot` | Pipeline graph in DOT format (JSON response) |
+| `GET /teams/{team}/pipelines/{pipeline}/image.svg` | Pipeline graph as SVG image |
+| `GET /teams/{team}/pipelines/{pipeline}/image.png` | Pipeline graph as PNG image |
+
+SVG and PNG endpoints return raw image data with the appropriate `Content-Type` header and `Access-Control-Allow-Origin: *` for cross-origin embedding. The pipeline must be public for unauthenticated access.
+
+## Embedding pipeline graphs
+
+Public pipelines can be embedded directly in READMEs, dashboards, or any HTML page. **The pipeline must be marked as public** (see above) for unauthenticated embedding to work — non-public pipelines require authentication and will return an error for anonymous requests.
+
+**Markdown:**
+
+```markdown
+![Pipeline](https://ci.example.com/api/teams/main/pipelines/my-pipeline/image.svg)
+```
+
+**HTML:**
+
+```html
+<img src="https://ci.example.com/api/teams/main/pipelines/my-pipeline/image.svg" alt="Pipeline status" />
+```
 
 ## Example
 
@@ -46,5 +66,11 @@ The following data is **removed** for security:
 curl http://localhost:8080/teams/main/pipelines/my-pipeline/public
 
 # Get the pipeline graph as SVG
-curl http://localhost:8080/teams/main/pipelines/my-pipeline/public/image?format=dot | dot -Tsvg > status.svg
+curl http://localhost:8080/api/teams/main/pipelines/my-pipeline/image.svg > status.svg
+
+# Get as PNG
+curl http://localhost:8080/api/teams/main/pipelines/my-pipeline/image.png > status.png
+
+# Get as DOT (JSON response, for piping to graphviz locally)
+curl http://localhost:8080/api/teams/main/pipelines/my-pipeline/image.dot
 ```

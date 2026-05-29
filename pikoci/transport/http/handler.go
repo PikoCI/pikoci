@@ -271,6 +271,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	binApi := r.PathPrefix("/").Subrouter()
 	binApi.Use(auth)
 	binApi.Methods(http.MethodGet).Path("/admin/export").Name(ExportDatabase.String()).Handler(exportDatabase(db, dbSystem))
+	binApi.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/image{ext}").Name(GetPipelineImage.String()).Handler(getPipelineImage(s))
 
 	r.PathPrefix("/css/").Handler(http.FileServer(http.FS(assets.Assets)))
 	r.PathPrefix("/js/").Handler(http.FileServer(http.FS(assets.Assets)))

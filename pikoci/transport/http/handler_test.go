@@ -3,6 +3,7 @@ package http
 import (
 	"database/sql"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -474,4 +475,214 @@ func TestXRefreshTokenHeader(t *testing.T) {
 
 		assert.Empty(t, resp.Header.Get("X-Refresh-Token"))
 	})
+}
+
+func TestGetPipelineImage_DOT_ReturnsJSON(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	dotOutput := []byte(`digraph "test" { A -> B; }`)
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".dot").Return(dotOutput, nil)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.dot", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Content-Type"), "application/json")
+
+	var result GetPipelineImageResponse
+	json.NewDecoder(resp.Body).Decode(&result)
+	assert.Equal(t, string(dotOutput), result.Image)
+	assert.Empty(t, result.Err)
+}
+
+func TestGetPipelineImage_SVG_ReturnsRawSVG(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	svgOutput := []byte(`<svg><text>hello</text></svg>`)
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg").Return(svgOutput, nil)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.svg", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "image/svg+xml", resp.Header.Get("Content-Type"))
+	assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
+
+	body, _ := io.ReadAll(resp.Body)
+	assert.Equal(t, string(svgOutput), string(body))
+}
+
+func TestGetPipelineImage_PNG_ReturnsRawPNG(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	pngOutput := []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".png").Return(pngOutput, nil)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.png", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "image/png", resp.Header.Get("Content-Type"))
+	assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
+
+	body, _ := io.ReadAll(resp.Body)
+	assert.Equal(t, pngOutput, body)
+}
+
+func TestGetPipelineImage_SVG_NoJSONHeaderRequired(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	svgOutput := []byte(`<svg><text>test</text></svg>`)
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg").Return(svgOutput, nil)
+
+	// No Content-Type header — simulates browser request
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.svg", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "image/svg+xml", resp.Header.Get("Content-Type"))
+}
+
+func TestGetPipelineImage_PublicFallback_SVG(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	svgOutput := []byte(`<svg><text>public</text></svg>`)
+	s.EXPECT().GetPublicPipeline(gomock.Any(), "main", "my-pipeline").Return(&pipeline.Pipeline{
+		Name: "my-pipeline", Canonical: "my-pipeline",
+	}, nil)
+	s.EXPECT().GetPublicPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg").Return(svgOutput, nil)
+
+	// No auth header — should fall back to public
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.svg", nil)
+	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "image/svg+xml", resp.Header.Get("Content-Type"))
+	assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
+
+	body, _ := io.ReadAll(resp.Body)
+	assert.Equal(t, string(svgOutput), string(body))
+}
+
+func TestGetPipelineImage_Error_ReturnsJSON(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg").Return(nil, assert.AnError)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.svg", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// Errors should still return JSON
+	assert.Contains(t, resp.Header.Get("Content-Type"), "application/json")
+
+	var result GetPipelineImageResponse
+	json.NewDecoder(resp.Body).Decode(&result)
+	assert.NotEmpty(t, result.Err)
 }

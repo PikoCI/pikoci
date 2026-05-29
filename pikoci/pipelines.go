@@ -1,8 +1,13 @@
 package pikoci
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"math"
+	"os/exec"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -430,7 +435,7 @@ func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string) 
 		format = strings.Split(format, ".")[1]
 	}
 
-	if format != "dot" {
+	if format != "dot" && format != "svg" && format != "png" {
 		return nil, fmt.Errorf("invalid image format %q", format)
 	}
 
@@ -444,7 +449,7 @@ func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string) 
 		return nil, fmt.Errorf("failed to generate image: %w", err)
 	}
 
-	return img, err
+	return convertDOTImage(ctx, img, format)
 }
 
 // generateImage builds a DOT-format directed graph representing the pipeline's
@@ -681,6 +686,204 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 	return []byte(str), nil
 }
 
+// convertDOTImage converts raw DOT bytes to the requested format.
+// For "dot" it returns the input unchanged. For "svg" or "png" it shells out
+// to graphviz and (for SVG) applies post-processing.
+func convertDOTImage(ctx context.Context, dot []byte, format string) ([]byte, error) {
+	if format == "dot" {
+		return dot, nil
+	}
+	img, err := renderDOT(ctx, dot, format)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render DOT to %s: %w", format, err)
+	}
+	if format == "svg" {
+		img, err = postProcessSVG(img)
+		if err != nil {
+			return nil, fmt.Errorf("failed to post-process SVG: %w", err)
+		}
+	}
+	return img, nil
+}
+
+// renderDOT converts DOT graph bytes to the specified format (svg or png)
+// by shelling out to the graphviz `dot` command with a 30-second timeout.
+func renderDOT(ctx context.Context, dot []byte, format string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "dot", "-T"+format)
+	cmd.Stdin = bytes.NewReader(dot)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("dot command failed: %s: %w", stderr.String(), err)
+	}
+	return stdout.Bytes(), nil
+}
+
+// Precompiled regexes for SVG post-processing.
+var (
+	svgStyleRe  = regexp.MustCompile(`(<svg[^>]*style=")`)
+	textRe      = regexp.MustCompile(`(<text\b)`)
+	nodeGroupRe = regexp.MustCompile(`(<g[^>]*class="node"[^>]*>)`)
+	polygonRe   = regexp.MustCompile(`<polygon\b([^>]*)/>`)
+	rectRe      = regexp.MustCompile(`<rect\b([^>]*)/>`)
+)
+
+// postProcessSVG applies styling transforms to match the frontend rendering:
+// transparent background, rounded rectangles, custom font, and pointer cursor on nodes.
+func postProcessSVG(svg []byte) ([]byte, error) {
+	s := string(svg)
+
+	// Set transparent background on root <svg> element
+	s = svgStyleRe.ReplaceAllString(s, `${1}background: transparent; `)
+	if !strings.Contains(s, `style="background: transparent`) {
+		s = strings.Replace(s, "<svg ", `<svg style="background: transparent" `, 1)
+	}
+
+	// Process polygon and rect elements: make background transparent, convert filled polygons to rounded rects
+	firstBgDone := false
+	s = processPolygonsAndRects(s, &firstBgDone)
+
+	// Set font-family on all <text> elements
+	s = textRe.ReplaceAllString(s, `<text style="font-family: 'Plus Jakarta Sans', system-ui, sans-serif"`)
+	// Fix double <text attributes if text already had style
+	s = strings.ReplaceAll(s, `<text style="font-family: 'Plus Jakarta Sans', system-ui, sans-serif" style="`, `<text style="font-family: 'Plus Jakarta Sans', system-ui, sans-serif; `)
+
+	// Set cursor: pointer on g.node elements
+	s = nodeGroupRe.ReplaceAllStringFunc(s, func(match string) string {
+		if strings.Contains(match, "style=") {
+			return strings.Replace(match, `style="`, `style="cursor: pointer; `, 1)
+		}
+		return strings.Replace(match, ">", ` style="cursor: pointer">`, 1)
+	})
+
+	return []byte(s), nil
+}
+
+// processPolygonsAndRects processes SVG polygon/rect elements to:
+// 1. Make the first polygon/rect (background) transparent
+// 2. Convert filled polygons that are axis-aligned rectangles into <rect> with rounded corners
+func processPolygonsAndRects(s string, firstBgDone *bool) string {
+	// Process polygons
+	s = polygonRe.ReplaceAllStringFunc(s, func(match string) string {
+		fill := extractAttr(match, "fill")
+
+		// First polygon or white-filled: make transparent (background)
+		if !*firstBgDone || strings.EqualFold(fill, "white") || strings.EqualFold(fill, "#ffffff") {
+			*firstBgDone = true
+			match = setAttr(match, "fill", "transparent")
+			match = setAttr(match, "stroke", "transparent")
+			return match
+		}
+
+		// Filled polygons (not none/transparent): convert to rounded rect if axis-aligned
+		if fill != "" && !strings.EqualFold(fill, "none") && !strings.EqualFold(fill, "transparent") {
+			points := extractAttr(match, "points")
+			if rect, ok := polygonToRoundedRect(points, match); ok {
+				return rect
+			}
+		}
+		return match
+	})
+
+	// Process rects similarly for the first-bg rule
+	s = rectRe.ReplaceAllStringFunc(s, func(match string) string {
+		fill := extractAttr(match, "fill")
+		if !*firstBgDone || strings.EqualFold(fill, "white") || strings.EqualFold(fill, "#ffffff") {
+			*firstBgDone = true
+			match = setAttr(match, "fill", "transparent")
+			match = setAttr(match, "stroke", "transparent")
+		}
+		return match
+	})
+
+	return s
+}
+
+// polygonToRoundedRect converts a polygon with 4-5 points forming an axis-aligned
+// rectangle into a <rect> element with rounded corners (rx=4, ry=4).
+func polygonToRoundedRect(points string, original string) (string, bool) {
+	if points == "" {
+		return "", false
+	}
+	parts := strings.Fields(strings.TrimSpace(points))
+	if len(parts) != 4 && len(parts) != 5 {
+		return "", false
+	}
+
+	type pt struct{ x, y float64 }
+	pts := make([]pt, len(parts))
+	for i, p := range parts {
+		xy := strings.Split(p, ",")
+		if len(xy) != 2 {
+			return "", false
+		}
+		x, err := strconv.ParseFloat(xy[0], 64)
+		if err != nil {
+			return "", false
+		}
+		y, err := strconv.ParseFloat(xy[1], 64)
+		if err != nil {
+			return "", false
+		}
+		pts[i] = pt{x, y}
+	}
+
+	// If 5 points, last must equal first (closed polygon)
+	if len(pts) == 5 && (pts[0].x != pts[4].x || pts[0].y != pts[4].y) {
+		return "", false
+	}
+
+	minX, maxX := pts[0].x, pts[0].x
+	minY, maxY := pts[0].y, pts[0].y
+	for _, p := range pts[:4] {
+		minX = math.Min(minX, p.x)
+		maxX = math.Max(maxX, p.x)
+		minY = math.Min(minY, p.y)
+		maxY = math.Max(maxY, p.y)
+	}
+
+	fill := extractAttr(original, "fill")
+	stroke := extractAttr(original, "stroke")
+	if stroke == "" {
+		stroke = "none"
+	}
+
+	return fmt.Sprintf(`<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" rx="4" ry="4" fill="%s" stroke="%s"/>`,
+		minX, minY, maxX-minX, maxY-minY, fill, stroke), true
+}
+
+// extractAttr extracts the value of an XML attribute from a tag string.
+func extractAttr(tag, name string) string {
+	prefix := name + `="`
+	idx := strings.Index(tag, prefix)
+	if idx < 0 {
+		return ""
+	}
+	start := idx + len(prefix)
+	end := strings.Index(tag[start:], `"`)
+	if end < 0 {
+		return ""
+	}
+	return tag[start : start+end]
+}
+
+// setAttr sets or replaces an XML attribute value in a tag string.
+func setAttr(tag, name, value string) string {
+	prefix := name + `="`
+	idx := strings.Index(tag, prefix)
+	if idx >= 0 {
+		start := idx + len(prefix)
+		end := strings.Index(tag[start:], `"`)
+		if end >= 0 {
+			return tag[:idx] + fmt.Sprintf(`%s="%s"`, name, value) + tag[start+end+1:]
+		}
+	}
+	return strings.Replace(tag, "/>", fmt.Sprintf(` %s="%s"/>`, name, value), 1)
+}
+
 // CreatePipelineImage generates a DOT graph image from raw pipeline configuration
 // bytes without persisting the pipeline. This is useful for previewing a pipeline
 // layout before creating it.
@@ -697,12 +900,22 @@ func (q *PikoCI) CreatePipelineImage(ctx context.Context, tc string, pipeline []
 	pp.Name = "pikoci"
 	pp.Canonical = "pikoci"
 
+	if format == "" {
+		format = "dot"
+	}
+	if strings.Contains(format, ".") {
+		format = strings.Split(format, ".")[1]
+	}
+	if format != "dot" && format != "svg" && format != "png" {
+		return nil, fmt.Errorf("invalid image format %q", format)
+	}
+
 	img, err := q.generateImage(ctx, tc, pp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate image: %w", err)
 	}
 
-	return img, err
+	return convertDOTImage(ctx, img, format)
 }
 
 // sanitizePipelineForPublic returns a copy of the pipeline with sensitive fields
@@ -779,11 +992,16 @@ func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pCan, format st
 	if strings.Contains(format, ".") {
 		format = strings.Split(format, ".")[1]
 	}
-	if format != "dot" {
+	if format != "dot" && format != "svg" && format != "png" {
 		return nil, fmt.Errorf("invalid image format %q", format)
 	}
 
-	return q.generateImage(ctx, tc, pp)
+	img, err := q.generateImage(ctx, tc, pp)
+	if err != nil {
+		return nil, err
+	}
+
+	return convertDOTImage(ctx, img, format)
 }
 
 // GetPublicPipelineJob retrieves a job from a public pipeline.
