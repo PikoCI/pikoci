@@ -9,6 +9,6 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     -o /pikoci .
 
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates git jq curl openssl docker-cli
+RUN apk add --no-cache ca-certificates git jq curl openssl docker-cli graphviz
 COPY --from=builder /pikoci /usr/local/bin/pikoci
 ENTRYPOINT ["pikoci"]

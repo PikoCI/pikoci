@@ -470,6 +470,10 @@ func (cl *Client) GetPipeline(ctx context.Context, tc, pn string) (*pipeline.Pip
 
 // GetPipelineImage retrieves the rendered image of a pipeline in the given format.
 func (cl *Client) GetPipelineImage(ctx context.Context, tc, pn, format string) ([]byte, error) {
+	if format == "svg" || format == "png" {
+		return cl.RequestRaw(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/image.%s", cl.url, tc, pn, format))
+	}
+
 	var resp thttp.GetPipelineImageResponse
 
 	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/image.%s", cl.url, tc, pn, format), nil, &resp)

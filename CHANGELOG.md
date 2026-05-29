@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- SVG and PNG pipeline graph formats for embedding in READMEs and dashboards ([#332](https://github.com/PikoCI/pikoci/issues/332))
+
 ### Fixed
 
 - Git resource tag mode returns all tags on every check, triggering builds for every historical tag after pipeline recreation ([#419](https://github.com/PikoCI/pikoci/issues/419))

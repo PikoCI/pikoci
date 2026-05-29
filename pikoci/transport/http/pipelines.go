@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/pikoci/pikoci/pikoci"
@@ -224,7 +225,7 @@ func getPipelineImage(s pikoci.Service) http.HandlerFunc {
 		vars := mux.Vars(r)
 		req.TeamCanonical = vars["team_canonical"]
 		req.Name = vars["pipeline_canonical"]
-		req.Format = vars["format"]
+		req.Format = vars["ext"]
 		var img []byte
 		var err error
 		if isPublic, _ := ctx.Value(IsPublicAccessKey).(bool); isPublic {
@@ -232,11 +233,11 @@ func getPipelineImage(s pikoci.Service) http.HandlerFunc {
 		} else {
 			img, err = s.GetPipelineImage(ctx, req.TeamCanonical, req.Name, req.Format)
 		}
-		var errs string
 		if err != nil {
-			errs = err.Error()
+			encodeResponse(GetPipelineImageResponse{Err: err.Error()}, w)
+			return
 		}
-		encodeResponse(GetPipelineImageResponse{Image: string(img), Err: errs}, w)
+		writeImageResponse(w, req.Format, img)
 	}
 }
 
@@ -261,17 +262,40 @@ func createPipelineImage(s pikoci.Service) http.HandlerFunc {
 		)
 		vars := mux.Vars(r)
 		req.TeamCanonical = vars["team_canonical"]
-		req.Format = vars["format"]
+		req.Format = vars["ext"]
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			encodeResponse(CreatePipelineImageResponse{Err: err.Error()}, w)
 			return
 		}
 		img, err := s.CreatePipelineImage(ctx, req.TeamCanonical, req.Config, req.Vars, req.Format)
-		var errs string
 		if err != nil {
-			errs = err.Error()
+			encodeResponse(CreatePipelineImageResponse{Err: err.Error()}, w)
+			return
 		}
-		encodeResponse(CreatePipelineImageResponse{Image: string(img), Err: errs}, w)
+		writeImageResponse(w, req.Format, img)
+	}
+}
+
+// writeImageResponse writes the image response with the appropriate Content-Type.
+// For SVG/PNG formats, it writes raw binary with CORS headers.
+// For DOT format (or empty), it writes JSON via encodeResponse.
+func writeImageResponse(w http.ResponseWriter, format string, img []byte) {
+	// Normalize the format (strip leading dot)
+	f := strings.TrimPrefix(format, ".")
+	if f == "" {
+		f = "dot"
+	}
+	switch f {
+	case "svg":
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Write(img)
+	case "png":
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Write(img)
+	default:
+		encodeResponse(GetPipelineImageResponse{Image: string(img)}, w)
 	}
 }
