@@ -297,11 +297,13 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 	}
 
 	b := build.Build{
-		ID:          nb.ID,
-		BuildNumber: nb.BuildNumber,
-		Status:      build.Started,
-		StartedAt:   nb.StartedAt,
-		Steps:       []build.Step{},
+		ID:                nb.ID,
+		BuildNumber:       nb.BuildNumber,
+		Status:            build.Started,
+		StartedAt:         nb.StartedAt,
+		Steps:             []build.Step{},
+		VersionID:         nb.VersionID,
+		ResourceCanonical: nb.ResourceCanonical,
 	}
 
 	// If the message doesn't carry version info, fall back to what was stored on the build
