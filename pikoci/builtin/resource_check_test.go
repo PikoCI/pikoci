@@ -234,7 +234,8 @@ func TestGitCheck_TagMode_GitHub_FirstCheck(t *testing.T) {
 }
 
 func TestGitCheck_TagMode_GitHub_SubsequentCheck(t *testing.T) {
-	cannedTags := `[{"name":"v3","commit":{"sha":"aaa"}},{"name":"v2","commit":{"sha":"bbb"}}]`
+	// v3 and v4 are newer than the known tag v2; v1 is older.
+	cannedTags := `[{"name":"v4","commit":{"sha":"ddd"}},{"name":"v3","commit":{"sha":"aaa"}},{"name":"v2","commit":{"sha":"bbb"}},{"name":"v1","commit":{"sha":"ccc"}}]`
 	curlDir, logFile := fakeCurlDir(t, cannedTags)
 	rts := builtin.ResourceTypes()
 	rt := rts["git"]
@@ -243,8 +244,8 @@ func TestGitCheck_TagMode_GitHub_SubsequentCheck(t *testing.T) {
 		"param_url":   "https://github.com/example/repo",
 		"param_token": "fake-token",
 		"param_tag":   "true",
-		"version_tag": "v1",
-		"version_ref": "old-sha",
+		"version_tag": "v2",
+		"version_ref": "bbb",
 		"PATH":        curlDir + ":" + os.Getenv("PATH"),
 	})
 	require.NoError(t, err, "git check (GitHub tag, subsequent) failed: %s", out)
@@ -256,7 +257,31 @@ func TestGitCheck_TagMode_GitHub_SubsequentCheck(t *testing.T) {
 
 	var versions []map[string]interface{}
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
-	assert.Len(t, versions, 2)
+	assert.Len(t, versions, 2, "should only return tags newer than known tag v2")
+	assert.Equal(t, "v4", versions[0]["tag"])
+	assert.Equal(t, "v3", versions[1]["tag"])
+}
+
+func TestGitCheck_TagMode_GitHub_SubsequentCheck_NoNewTags(t *testing.T) {
+	// Known tag is the latest — no new tags to return.
+	cannedTags := `[{"name":"v2","commit":{"sha":"bbb"}},{"name":"v1","commit":{"sha":"ccc"}}]`
+	curlDir, _ := fakeCurlDir(t, cannedTags)
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":   "https://github.com/example/repo",
+		"param_token": "fake-token",
+		"param_tag":   "true",
+		"version_tag": "v2",
+		"version_ref": "bbb",
+		"PATH":        curlDir + ":" + os.Getenv("PATH"),
+	})
+	require.NoError(t, err, "git check (GitHub tag, no new) failed: %s", out)
+
+	var versions []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 0, "should return empty list when no new tags exist")
 }
 
 func TestGitCheck_TagMode_GitLab_FirstCheck(t *testing.T) {
@@ -280,7 +305,8 @@ func TestGitCheck_TagMode_GitLab_FirstCheck(t *testing.T) {
 }
 
 func TestGitCheck_TagMode_GitLab_SubsequentCheck(t *testing.T) {
-	cannedTags := `[{"name":"v3","commit":{"id":"aaa"}},{"name":"v2","commit":{"id":"bbb"}}]`
+	// v4 and v3 are newer than the known tag v2; v1 is older.
+	cannedTags := `[{"name":"v4","commit":{"id":"ddd"}},{"name":"v3","commit":{"id":"aaa"}},{"name":"v2","commit":{"id":"bbb"}},{"name":"v1","commit":{"id":"ccc"}}]`
 	curlDir, logFile := fakeCurlDir(t, cannedTags)
 	rts := builtin.ResourceTypes()
 	rt := rts["git"]
@@ -289,8 +315,8 @@ func TestGitCheck_TagMode_GitLab_SubsequentCheck(t *testing.T) {
 		"param_url":   "https://gitlab.com/example/repo",
 		"param_token": "fake-token",
 		"param_tag":   "true",
-		"version_tag": "v1",
-		"version_ref": "old-sha",
+		"version_tag": "v2",
+		"version_ref": "bbb",
 		"PATH":        curlDir + ":" + os.Getenv("PATH"),
 	})
 	require.NoError(t, err, "git check (GitLab tag, subsequent) failed: %s", out)
@@ -301,7 +327,30 @@ func TestGitCheck_TagMode_GitLab_SubsequentCheck(t *testing.T) {
 
 	var versions []map[string]interface{}
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
-	assert.Len(t, versions, 2)
+	assert.Len(t, versions, 2, "should only return tags newer than known tag v2")
+	assert.Equal(t, "v4", versions[0]["tag"])
+	assert.Equal(t, "v3", versions[1]["tag"])
+}
+
+func TestGitCheck_TagMode_GitLab_SubsequentCheck_NoNewTags(t *testing.T) {
+	cannedTags := `[{"name":"v2","commit":{"id":"bbb"}},{"name":"v1","commit":{"id":"ccc"}}]`
+	curlDir, _ := fakeCurlDir(t, cannedTags)
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":   "https://gitlab.com/example/repo",
+		"param_token": "fake-token",
+		"param_tag":   "true",
+		"version_tag": "v2",
+		"version_ref": "bbb",
+		"PATH":        curlDir + ":" + os.Getenv("PATH"),
+	})
+	require.NoError(t, err, "git check (GitLab tag, no new) failed: %s", out)
+
+	var versions []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 0, "should return empty list when no new tags exist")
 }
 
 func TestGitCheck_PRMode_GitHub_FirstCheck(t *testing.T) {
