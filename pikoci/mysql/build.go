@@ -356,10 +356,9 @@ func (r *BuildRepository) InsertGetVersion(ctx context.Context, tc, pn, jn strin
 }
 
 // FindReadyDownstreamVersion finds the highest version_id that ALL upstream
-// jobs succeeded with but the downstream job hasn't built yet (regardless of
-// downstream build status). This means if a downstream build consumed a version
-// and then failed, that version will NOT be retried — preventing infinite retry
-// loops. Manual re-trigger can still be used for failed builds.
+// jobs succeeded with but the downstream job has no build for yet (regardless
+// of build status). Any existing build (pending, started, succeeded, failed,
+// cancelled) for the version on the downstream job prevents re-triggering.
 func (r *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn string, upstreamJobs []string, downstreamJob string, stepName string, upstreamCount int) (uint32, bool, error) {
 	// Build the IN clause placeholders
 	placeholders := make([]string, len(upstreamJobs))
@@ -370,8 +369,8 @@ func (r *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn
 		args = append(args, j)
 	}
 	args = append(args, stepName)
-	// Args for the NOT IN subquery
-	args = append(args, downstreamJob, stepName)
+	// Args for the NOT EXISTS subquery
+	args = append(args, downstreamJob)
 	// HAVING count
 	args = append(args, upstreamCount)
 
@@ -385,12 +384,11 @@ func (r *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn
 		WHERE t.canonical = ? AND p.canonical = ? AND b.status = 'succeeded'
 		  AND j.name IN (` + strings.Join(placeholders, ", ") + `)
 		  AND bgv.step_name = ?
-		  AND bgv.version_id NOT IN (
-			  SELECT bgv2.version_id FROM build_get_versions bgv2
-			  JOIN builds b2 ON bgv2.build_id = b2.id
+		  AND NOT EXISTS (
+			  SELECT 1 FROM builds b2
 			  JOIN jobs j2 ON b2.job_id = j2.id
 			  WHERE j2.pipeline_id = p.id AND j2.name = ?
-				AND bgv2.step_name = ?
+				AND b2.version_id = bgv.version_id
 		  )
 		GROUP BY bgv.version_id
 		HAVING COUNT(DISTINCT j.name) = ?
