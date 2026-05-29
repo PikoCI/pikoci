@@ -179,7 +179,7 @@ var JobBuildsContentView = Backbone.View.extend({
     var that = this;
     var bid = this.model.get("build_number");
     var url = this.model.collection.url() + "/" + bid + "/cancel";
-    $.ajax({ url: url, type: "POST", headers: { "Authorization": "Bearer " + session.get("jwt") },
+    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
       success: function() { that.model.fetch(); },
     });
   },
@@ -188,7 +188,7 @@ var JobBuildsContentView = Backbone.View.extend({
     var bid = this.model.get("build_number");
     var collection = this.model.collection;
     var url = collection.url() + "/" + bid + "/retry";
-    $.ajax({ url: url, type: "POST", headers: { "Authorization": "Bearer " + session.get("jwt") },
+    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
       success: function() { collection.fetchNew(); },
     });
   },
