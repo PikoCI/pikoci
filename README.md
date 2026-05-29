@@ -15,7 +15,7 @@
   [Documentation](https://docs.pikoci.com) · [Quick Start](#quick-start) · [Contributing](#contributing)
 </div>
 
-![PikoCI pipeline](https://ci.pikoci.com/api/teams/main/pipelines/pikoci/image.svg)
+![PikoCI pipeline](https://ci.pikoci.com/teams/main/pipelines/pikoci/image.svg)
 
 ## What is PikoCI?
 

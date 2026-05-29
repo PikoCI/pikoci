@@ -195,6 +195,11 @@ if ! ssh "$SSH_HOST" 'command -v jq &>/dev/null'; then
     ssh "$SSH_HOST" 'apt-get install -y jq || apk add jq || dnf install -y jq'
 fi
 
+if ! ssh "$SSH_HOST" 'command -v dot &>/dev/null'; then
+    echo "==> Installing graphviz on $SSH_HOST..."
+    ssh "$SSH_HOST" 'apt-get install -y graphviz || apk add graphviz || dnf install -y graphviz'
+fi
+
 if ! ssh "$SSH_HOST" 'command -v git &>/dev/null'; then
     echo "==> Installing git on $SSH_HOST..."
     ssh "$SSH_HOST" 'apt-get install -y git || apk add git || dnf install -y git'
