@@ -289,15 +289,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 		}
 	})
 
-	// Wrap the router: strip .json suffix and set Content-Type before
-	// mux route matching, so the jsonr subrouter matches correctly.
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if strings.HasSuffix(req.URL.Path, ".json") {
-			req.URL.Path = strings.TrimSuffix(req.URL.Path, ".json")
-			req.Header.Set("Content-Type", "application/json")
-		}
-		r.ServeHTTP(w, req)
-	})
+	return r
 }
 
 // encodeError writes an error response as JSON to the response writer.

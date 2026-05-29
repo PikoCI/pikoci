@@ -22,7 +22,7 @@ export var HeaderView = Backbone.View.extend({
     this.listenTo(session, "change", this.render);
     this.versionText = '';
     var self = this;
-    $.getJSON('/version.json').done(function(data) {
+    $.getJSON('/version').done(function(data) {
       self.versionText = 'Version: ' + data.version + ' (' + data.commit + ')';
       self.render();
     });

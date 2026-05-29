@@ -69,7 +69,7 @@ export var UserShowView = Backbone.View.extend({
     var that = this;
 
     $.ajax({
-      url: '/users/' + originalUsername + '.json',
+      url: '/users/' + originalUsername + '',
       type: 'PUT',
       headers: {
         'Authorization': 'Bearer ' + session.get("jwt"),
@@ -97,7 +97,7 @@ export var UserShowView = Backbone.View.extend({
     var username = this.model.get("username");
 
     $.ajax({
-      url: '/users/' + username + '.json',
+      url: '/users/' + username + '',
       type: 'PUT',
       headers: {
         'Authorization': 'Bearer ' + session.get("jwt"),
@@ -119,7 +119,7 @@ export var UserShowView = Backbone.View.extend({
     if (!confirm("Are you sure you want to delete user '" + username + "'?")) return;
 
     $.ajax({
-      url: '/users/' + username + '.json',
+      url: '/users/' + username + '',
       type: 'DELETE',
       headers: {
         'Authorization': 'Bearer ' + session.get("jwt"),
@@ -153,7 +153,7 @@ export var UsersNewView = Backbone.View.extend({
     var admin = this.$('#admin').is(':checked');
 
     $.ajax({
-      url: '/users.json',
+      url: '/users',
       type: 'POST',
       headers: {
         'Authorization': 'Bearer ' + session.get("jwt"),
@@ -195,7 +195,7 @@ export var ProfileView = Backbone.View.extend({
     var username = this.$('#username').val();
 
     $.ajax({
-      url: '/profile.json',
+      url: '/profile',
       type: 'PUT',
       headers: {
         'Authorization': 'Bearer ' + session.get("jwt"),
@@ -208,7 +208,7 @@ export var ProfileView = Backbone.View.extend({
           return;
         }
         $.ajax({
-          url: '/refresh-token.json',
+          url: '/refresh-token',
           type: 'POST',
           headers: {
             'Authorization': 'Bearer ' + session.get("jwt"),
@@ -238,7 +238,7 @@ export var ProfileView = Backbone.View.extend({
 
     var that = this;
     $.ajax({
-      url: '/users/change-password.json',
+      url: '/users/change-password',
       type: 'POST',
       headers: {
         'Authorization': 'Bearer ' + session.get("jwt"),
