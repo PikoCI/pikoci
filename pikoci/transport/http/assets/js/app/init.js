@@ -40,7 +40,7 @@ Backbone.sync = function (method, model, options) {
     }
     if (jqXHR && jqXHR.getResponseHeader('X-Refresh-Token') === 'true') {
       $.ajax({
-        url: '/refresh-token.json',
+        url: '/refresh-token',
         type: 'POST',
         headers: {
           'Authorization': 'Bearer ' + session.get("jwt"),

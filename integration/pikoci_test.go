@@ -873,8 +873,9 @@ job "gen" {
 			Username: "admin",
 			Password: "newadmin123",
 		})
-		loginReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login.json", bytes.NewReader(loginBody))
+		loginReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login", bytes.NewReader(loginBody))
 		require.NoError(t, err)
+		loginReq.Header.Set("Content-Type", "application/json")
 		loginResp, err := http.DefaultClient.Do(loginReq)
 		require.NoError(t, err)
 		defer loginResp.Body.Close()
@@ -888,8 +889,9 @@ job "gen" {
 		updateBody, _ := json.Marshal(struct {
 			Public *bool `json:"public"`
 		}{Public: &pub})
-		updateReq, err := http.NewRequest(http.MethodPut, pikoURL+"/teams/main/pipelines/cron.json", bytes.NewReader(updateBody))
+		updateReq, err := http.NewRequest(http.MethodPut, pikoURL+"/teams/main/pipelines/cron", bytes.NewReader(updateBody))
 		require.NoError(t, err)
+		updateReq.Header.Set("Content-Type", "application/json")
 		updateReq.Header.Set("Authorization", "Bearer "+adminJWT)
 		updateResp, err := http.DefaultClient.Do(updateReq)
 		require.NoError(t, err)
@@ -980,8 +982,9 @@ job "gen" {
 				Username: "pepito",
 				Password: "pepito",
 			})
-			pepitoReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login.json", bytes.NewReader(pepitoBody))
+			pepitoReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login", bytes.NewReader(pepitoBody))
 			require.NoError(t, err)
+			pepitoReq.Header.Set("Content-Type", "application/json")
 			pepitoResp, err := http.DefaultClient.Do(pepitoReq)
 			require.NoError(t, err)
 			defer pepitoResp.Body.Close()
@@ -1031,8 +1034,9 @@ job "gen" {
 			Username: "admin",
 			Password: "newadmin123",
 		})
-		loginReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login.json", bytes.NewReader(loginBody))
+		loginReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login", bytes.NewReader(loginBody))
 		require.NoError(t, err)
+		loginReq.Header.Set("Content-Type", "application/json")
 		loginResp, err := http.DefaultClient.Do(loginReq)
 		require.NoError(t, err)
 		defer loginResp.Body.Close()
@@ -1044,8 +1048,9 @@ job "gen" {
 
 		// Step 2: Promote pepito to admin on "main" team via HTTP
 		updateBody, _ := json.Marshal(thttp.UpdateTeamMemberRequest{Admin: true})
-		updateReq, err := http.NewRequest(http.MethodPut, pikoURL+"/teams/main/members/pepito.json", bytes.NewReader(updateBody))
+		updateReq, err := http.NewRequest(http.MethodPut, pikoURL+"/teams/main/members/pepito", bytes.NewReader(updateBody))
 		require.NoError(t, err)
+		updateReq.Header.Set("Content-Type", "application/json")
 		updateReq.Header.Set("Authorization", "Bearer "+adminJWT)
 		updateResp, err := http.DefaultClient.Do(updateReq)
 		require.NoError(t, err)
@@ -1059,8 +1064,9 @@ job "gen" {
 		require.NotNil(t, pepitoJWT)
 
 		// Verify the header is returned
-		checkReq, err := http.NewRequest(http.MethodGet, pikoURL+"/teams.json", nil)
+		checkReq, err := http.NewRequest(http.MethodGet, pikoURL+"/teams", nil)
 		require.NoError(t, err)
+		checkReq.Header.Set("Content-Type", "application/json")
 		checkReq.Header.Set("Authorization", "Bearer "+pepitoJWT.(string))
 		checkResp, err := http.DefaultClient.Do(checkReq)
 		require.NoError(t, err)

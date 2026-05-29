@@ -73,14 +73,7 @@ func LocalEditorHandler(s pikoci.Service, filePath string, l *slog.Logger) http.
 		w.Write([]byte(localEditorHTML))
 	})
 
-	// JSON content-type wrapper (same as main handler)
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if len(req.URL.Path) > 5 && req.URL.Path[len(req.URL.Path)-5:] == ".json" {
-			req.URL.Path = req.URL.Path[:len(req.URL.Path)-5]
-			req.Header.Set("Content-Type", "application/json")
-		}
-		r.ServeHTTP(w, req)
-	})
+	return r
 }
 
 const localEditorHTML = `<!DOCTYPE html>

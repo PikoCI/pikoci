@@ -216,8 +216,9 @@ func TestRefreshTokenEndpoint(t *testing.T) {
 	s.EXPECT().GetUser(gomock.Any(), "pepito").Return(updatedUM, nil)
 	s.EXPECT().RefreshToken(gomock.Any(), "pepito").Return(updatedUM, signJWT(t, secret, updatedUM), nil)
 
-	req, err := http.NewRequest(http.MethodPost, server.URL+"/refresh-token.json", nil)
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/refresh-token", nil)
 	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+jwtToken)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -244,8 +245,9 @@ func TestGetVersion(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	req, err := http.NewRequest(http.MethodGet, server.URL+"/version.json", nil)
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/version", nil)
 	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
@@ -411,8 +413,9 @@ func TestXRefreshTokenHeader(t *testing.T) {
 		s.EXPECT().GetUser(gomock.Any(), "pepito").Return(updatedUM, nil).Times(2)
 		s.EXPECT().ListTeams(gomock.Any(), "pepito").Return(nil, nil)
 
-		req, err := http.NewRequest(http.MethodGet, server.URL+"/teams.json", nil)
+		req, err := http.NewRequest(http.MethodGet, server.URL+"/teams", nil)
 		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+jwtToken)
 
 		resp, err := http.DefaultClient.Do(req)
@@ -438,8 +441,9 @@ func TestXRefreshTokenHeader(t *testing.T) {
 		s.EXPECT().GetUser(gomock.Any(), "pepito").Return(um, nil).Times(2)
 		s.EXPECT().ListTeams(gomock.Any(), "pepito").Return(nil, nil)
 
-		req, err := http.NewRequest(http.MethodGet, server.URL+"/teams.json", nil)
+		req, err := http.NewRequest(http.MethodGet, server.URL+"/teams", nil)
 		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+jwtToken)
 
 		resp, err := http.DefaultClient.Do(req)
@@ -465,8 +469,9 @@ func TestXRefreshTokenHeader(t *testing.T) {
 		// Workers skip authz and stale-check; the handler itself will fail
 		// because there's no username in context, but the important thing
 		// is that X-Refresh-Token is NOT set.
-		req, err := http.NewRequest(http.MethodGet, server.URL+"/teams.json", nil)
+		req, err := http.NewRequest(http.MethodGet, server.URL+"/teams", nil)
 		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+workerJWT)
 
 		resp, err := http.DefaultClient.Do(req)

@@ -42,7 +42,7 @@ export var ResourceVersionsView = Backbone.View.extend({
     })));
     if (webhookPanelOpen) {
       var token = this.collection.resource.get('webhook_token');
-      var url = window.location.origin + '/webhooks/' + token + '.json';
+      var url = window.location.origin + '/webhooks/' + token + '';
       this.$('#webhook-url').text(url);
       this.$('#webhook-panel').show();
     }
@@ -104,7 +104,7 @@ export var ResourceVersionsView = Backbone.View.extend({
       panel.hide();
     } else {
       var token = this.collection.resource.get('webhook_token');
-      var url = window.location.origin + '/webhooks/' + token + '.json';
+      var url = window.location.origin + '/webhooks/' + token + '';
       this.$('#webhook-url').text(url);
       panel.show();
     }
@@ -122,14 +122,14 @@ export var ResourceVersionsView = Backbone.View.extend({
     var pn = rs.collection.pipeline.get('canonical');
     var rCan = rs.get('canonical');
     $.ajax({
-      url: '/teams/' + tc + '/pipelines/' + pn + '/resources/' + rCan + '/webhook_token.json',
+      url: '/teams/' + tc + '/pipelines/' + pn + '/resources/' + rCan + '/webhook_token',
       type: 'POST',
       contentType: 'application/json',
       headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
       success: function(resp) {
         if (resp.token) {
           rs.set('webhook_token', resp.token);
-          var url = window.location.origin + '/webhooks/' + resp.token + '.json';
+          var url = window.location.origin + '/webhooks/' + resp.token + '';
           that.$('#webhook-url').text(url);
         }
       }

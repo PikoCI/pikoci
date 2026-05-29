@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - SVG and PNG pipeline graph formats for embedding in READMEs and dashboards ([#332](https://github.com/PikoCI/pikoci/issues/332))
 
+### Changed
+
+- Removed `.json` URL suffix trick from API endpoints ([#427](https://github.com/PikoCI/pikoci/issues/427))
+
 ### Fixed
 
 - Git resource tag mode returns all tags on every check, triggering builds for every historical tag after pipeline recreation ([#419](https://github.com/PikoCI/pikoci/issues/419))
