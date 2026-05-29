@@ -138,9 +138,6 @@ var serverCmd = &cobra.Command{
 		logger.Info("initializing service")
 		var svc = pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
 		svc.StartScheduler(ctx)
-		if err := svc.ReEnqueuePendingBuilds(ctx); err != nil {
-			logger.Error("failed to re-enqueue pending builds", "error", err)
-		}
 		logger.Info("initialized service")
 
 		logger.Info("initializing http handlers")
@@ -201,6 +198,10 @@ var serverCmd = &cobra.Command{
 				return fmt.Errorf("worker failed to start: %w", werr)
 			}
 			defer workerCleanup()
+
+			if err := svc.ReEnqueuePendingBuilds(ctx); err != nil {
+				logger.Error("failed to re-enqueue pending builds", "error", err)
+			}
 		}
 
 		pipelineName := serverViper.GetString("pipeline-name")
