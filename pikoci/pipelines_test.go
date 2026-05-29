@@ -1596,6 +1596,17 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 			wantDashedStyle: true,
 			wantBorderColor: colorDefaultBorder,
 		},
+		{
+			name: "pending + running + succeeded across 3 main builds - shows succeeded color",
+			builds: []*build.Build{
+				{ID: 3, BuildNumber: "3", Status: build.Pending},
+				{ID: 2, BuildNumber: "2", Status: build.Started},
+				{ID: 1, BuildNumber: "1", Status: build.Succeeded},
+			},
+			wantFillColor:   colorSucceeded,
+			wantDashedStyle: true,
+			wantBorderColor: colorStartedBorder,
+		},
 	}
 
 	for _, tt := range tests {

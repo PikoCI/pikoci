@@ -529,33 +529,27 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 				latestMain = b.BuildNumber
 			}
 		}
-		// Find the latest terminal build in that group (main + retries)
-		if latestMain != "" {
+		// Find the latest terminal build by walking back through main build
+		// groups until one with a completed (non-running, non-pending) build
+		// is found.
+		seen := map[string]bool{} // track which main groups we've checked
+		for cb == nil {
+			var mainBN string
 			for _, b := range builds {
-				if b.BuildNumber == latestMain || strings.HasPrefix(b.BuildNumber, latestMain+".") {
+				if !strings.Contains(b.BuildNumber, ".") && !seen[b.BuildNumber] {
+					mainBN = b.BuildNumber
+					break
+				}
+			}
+			if mainBN == "" {
+				break
+			}
+			seen[mainBN] = true
+			for _, b := range builds {
+				if b.BuildNumber == mainBN || strings.HasPrefix(b.BuildNumber, mainBN+".") {
 					if b.Status != build.Started && b.Status != build.Pending {
 						cb = b
 						break
-					}
-				}
-			}
-			// If all builds in the group are running, fall back to previous main build's group
-			if cb == nil {
-				var prevMain string
-				for _, b := range builds {
-					if !strings.Contains(b.BuildNumber, ".") && b.BuildNumber != latestMain {
-						prevMain = b.BuildNumber
-						break
-					}
-				}
-				if prevMain != "" {
-					for _, b := range builds {
-						if b.BuildNumber == prevMain || strings.HasPrefix(b.BuildNumber, prevMain+".") {
-							if b.Status != build.Started && b.Status != build.Pending {
-								cb = b
-								break
-							}
-						}
 					}
 				}
 			}
