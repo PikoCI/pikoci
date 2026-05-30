@@ -795,7 +795,7 @@ export var PipelinesNewView = Backbone.View.extend({
     if (dotIdx !== -1) {
       var rType = name.substring(0, dotIdx).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       var rLabel = name.substring(dotIdx + 1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      re = new RegExp('resource\\s+"' + rType + '"\\s+"' + rLabel + '"');
+      re = new RegExp('(?:resource|notification)\\s+"' + rType + '"\\s+"' + rLabel + '"');
     } else {
       re = new RegExp('(?:job|resource|resource_type|runner_type|secret_type|service_type|notification_type|notification)\\s+"' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"');
     }
