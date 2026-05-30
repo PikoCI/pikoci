@@ -8,6 +8,8 @@ import (
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/mysql"
+	"github.com/pikoci/pikoci/pikoci/notification"
+	"github.com/pikoci/pikoci/pikoci/notiftype"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
@@ -31,8 +33,10 @@ type unitOfWork struct {
 	resources     resource.Repository
 	resourceTypes restype.Repository
 	builds        build.Repository
-	runners       runner.Repository
-	secretTypes   sectype.Repository
+	runners           runner.Repository
+	secretTypes       sectype.Repository
+	notificationTypes notiftype.Repository
+	notifications     notification.Repository
 }
 
 // NewStartUnitOfWork returns a StartUnitOfWork backed by a real SQL database.
@@ -124,4 +128,18 @@ func (u *unitOfWork) SecretTypes() sectype.Repository {
 		u.secretTypes = mysql.NewSecretTypeRepository(u.tx)
 	}
 	return u.secretTypes
+}
+
+func (u *unitOfWork) NotificationTypes() notiftype.Repository {
+	if u.notificationTypes == nil {
+		u.notificationTypes = mysql.NewNotificationTypeRepository(u.tx)
+	}
+	return u.notificationTypes
+}
+
+func (u *unitOfWork) Notifications() notification.Repository {
+	if u.notifications == nil {
+		u.notifications = mysql.NewNotificationRepository(u.tx)
+	}
+	return u.notifications
 }

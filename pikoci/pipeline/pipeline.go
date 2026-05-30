@@ -12,6 +12,8 @@ import (
 	"github.com/hashicorp/hcl/v2/hclsimple"
 	"github.com/pikoci/pikoci/pikoci/builtin"
 	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/notification"
+	"github.com/pikoci/pikoci/pikoci/notiftype"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
@@ -55,10 +57,12 @@ type Pipeline struct {
 	Runners       []runner.Runner           `json:"runners" hcl:"runner_type,block"`
 	SecretTypes   []sectype.SecretType      `json:"secret_types" hcl:"secret_type,block"`
 	Services      []service.Service         `json:"services" hcl:"service_type,block"`
-	SecretVars    map[string]VariableSecret `json:"secret_vars,omitempty"`
-	Remain        hcl.Body                  `json:"-" hcl:",remain"`
-	Raw           []byte                    `json:"raw"`
-	LastBuildAt   *time.Time                `json:"last_build_at,omitempty"`
+	NotificationTypes []notiftype.NotificationType    `json:"notification_types" hcl:"notification_type,block"`
+	Notifications     []notification.Notification      `json:"notifications" hcl:"notification,block"`
+	SecretVars        map[string]VariableSecret        `json:"secret_vars,omitempty"`
+	Remain            hcl.Body                         `json:"-" hcl:",remain"`
+	Raw               []byte                           `json:"raw"`
+	LastBuildAt       *time.Time                       `json:"last_build_at,omitempty"`
 }
 
 // Variables holds the list of variable declarations parsed from pipeline HCL.
@@ -142,6 +146,35 @@ func (pp *Pipeline) SecretType(stn string) (sectype.SecretType, bool) {
 	}
 
 	return sectype.SecretType{}, false
+}
+
+// NotificationType looks up a notification type by name in the pipeline's configured
+// notification types, falling back to built-in notification types. It returns the
+// notification type and true if found, or an empty value and false otherwise.
+func (pp *Pipeline) NotificationType(ntn string) (notiftype.NotificationType, bool) {
+	for _, nt := range pp.NotificationTypes {
+		if nt.Name == ntn {
+			return nt, true
+		}
+	}
+
+	if bnt, ok := builtin.NotificationTypes()[ntn]; ok {
+		return bnt, true
+	}
+
+	return notiftype.NotificationType{}, false
+}
+
+// Notification looks up a notification by its canonical identifier. It returns the
+// notification and true if found, or an empty value and false otherwise.
+func (pp *Pipeline) Notification(nCan string) (notification.Notification, bool) {
+	for _, n := range pp.Notifications {
+		if n.Canonical == nCan {
+			return n, true
+		}
+	}
+
+	return notification.Notification{}, false
 }
 
 // Service looks up a service by name in the pipeline's configured services. It

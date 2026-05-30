@@ -1,0 +1,237 @@
+# Notifications
+
+Notifications are fire-and-forget messages sent during or after job execution. Unlike resources, notifications have no versioning, no check intervals, and no pull lifecycle. They are ideal for sending status updates to external services like GitHub Checks, Slack, or Discord.
+
+## Notification Types
+
+A `notification_type` defines **how** to send a notification. It specifies the runner command used to deliver the message.
+
+```hcl
+notification_type "slack" {
+  params = ["webhook_url"]
+  notify "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "curl -sf -X POST -H 'Content-Type: application/json' \"$param_webhook_url\" -d '{\"text\": \"'\"$NOTIFY_MESSAGE\"'\"}'"]
+  }
+}
+```
+
+Notification types can also be loaded from a remote source:
+
+```hcl
+notification_type "github-check" {
+  source = "pikoci://github-check"
+}
+```
+
+### Parameters
+
+- `params` - List of parameter names that notifications of this type can provide.
+- `notify` - A runner command block that executes the notification logic.
+
+## Notifications
+
+A `notification` defines **what** to send and **where**. It references a notification type and provides concrete parameter values.
+
+```hcl
+notification "slack" "deploys" {
+  params {
+    webhook_url = "https://hooks.slack.com/services/T00/B00/xxx"
+  }
+  message = "Deploy finished for ${var.app_name}"
+}
+```
+
+### Fields
+
+| Field | Description |
+|-------|-------------|
+| `type` | The notification type name (first label) |
+| `name` | A unique name for this notification (second label) |
+| `params` | Key-value parameters passed to the notification type |
+| `message` | Default message text (available as `$NOTIFY_MESSAGE`) |
+| `on` | List of events for automatic dispatch: `success`, `failure`, `cancel`, `all` |
+| `jobs` | Limit automatic dispatch to these job names only |
+| `exclude` | Exclude these job names from automatic dispatch |
+
+## Using Notify in Plans
+
+Use `notify` steps directly in a job plan, just like `put`:
+
+```hcl
+job "deploy" {
+  get "git" "repo" { trigger = true }
+
+  notify "github-check" "ci" { status = "in_progress" }
+
+  task "build" {
+    run "exec" {
+      path = "make"
+      args = ["build"]
+    }
+  }
+
+  on_success {
+    notify "github-check" "ci" { conclusion = "success" }
+  }
+  on_failure {
+    notify "github-check" "ci" { conclusion = "failure" }
+  }
+}
+```
+
+### Notify Step Parameters
+
+Attributes on a `notify` step are passed to the notification type's command with a `notify_` prefix. For example, `status = "in_progress"` becomes the environment variable `$notify_status`.
+
+The special `message` attribute overrides the notification's default message.
+
+## Using Notify in Hooks
+
+Notify steps work in all hook types (`on_success`, `on_failure`, `on_cancel`, `ensure`):
+
+```hcl
+on_success {
+  notify "slack" "deploys" { conclusion = "success" }
+}
+```
+
+## Automatic Notifications
+
+The `on` field enables automatic notification dispatch after job hooks complete, based on the final build status:
+
+```hcl
+notification "slack" "all-builds" {
+  params {
+    webhook_url = var.slack_webhook
+  }
+  on = ["success", "failure"]
+  message = "Build finished"
+}
+```
+
+### Event Mapping
+
+| Build Status | Event Name |
+|-------------|------------|
+| Succeeded | `success` |
+| Failed | `failure` |
+| Cancelled | `cancel` |
+
+Use `on = ["all"]` to match every event. `all` cannot be combined with other events.
+
+### Job Scoping
+
+By default, automatic notifications fire for every job. Use `jobs` or `exclude` (mutually exclusive) to limit scope:
+
+```hcl
+notification "slack" "deploy-only" {
+  params { webhook_url = var.slack_webhook }
+  on = ["success", "failure"]
+  jobs = ["deploy", "release"]
+}
+
+notification "slack" "skip-lint" {
+  params { webhook_url = var.slack_webhook }
+  on = ["failure"]
+  exclude = ["lint"]
+}
+```
+
+## Built-in Notification Types
+
+### github-check
+
+Creates and updates GitHub Check Runs via the GitHub App API.
+
+**Parameters:** `app_id`, `installation_id`, `private_key`, `repository`, `base_url`
+
+**Notify params:** `status` (set to `in_progress` to create), `conclusion` (set to `success`/`failure` to complete)
+
+```hcl
+notification_type "github-check" {
+  source = "pikoci://github-check"
+}
+
+notification "github-check" "ci" {
+  params {
+    app_id          = var.github_app_id
+    installation_id = var.github_app_installation_id
+    private_key     = var.github_app_pem
+    repository      = "org/repo"
+    base_url        = "https://ci.example.com"
+  }
+}
+```
+
+### slack
+
+Posts messages to a Slack incoming webhook.
+
+**Parameters:** `webhook_url`
+
+```hcl
+notification_type "slack" {
+  source = "pikoci://slack"
+}
+
+notification "slack" "builds" {
+  params {
+    webhook_url = var.slack_webhook
+  }
+  on = ["failure"]
+  message = "Build failed!"
+}
+```
+
+### discord
+
+Posts messages to a Discord webhook.
+
+**Parameters:** `webhook_url`
+
+```hcl
+notification_type "discord" {
+  source = "pikoci://discord"
+}
+
+notification "discord" "builds" {
+  params {
+    webhook_url = var.discord_webhook
+  }
+  on = ["failure"]
+  message = "Build failed!"
+}
+```
+
+## Message Resolution
+
+The message sent to the notification type is resolved in this order:
+
+1. `message` attribute on the `notify` step (highest priority)
+2. `message` field on the `notification` definition
+3. Empty (the notification type script provides a default)
+
+The resolved message is available as the `$NOTIFY_MESSAGE` environment variable.
+
+## Environment Variables
+
+Notify commands receive:
+
+- `$param_*` - Notification-level parameters
+- `$notify_*` - Step-level parameters
+- `$NOTIFY_MESSAGE` - Resolved message text
+- `$BUILD_NUMBER`, `$BUILD_JOB_NAME`, `$BUILD_PIPELINE_NAME`, `$BUILD_TEAM_NAME` - Build metadata
+- `$WORKDIR` - Working directory
+
+## Migration from Resource-Based Notifications
+
+If you previously used `resource_type`/`resource`/`put` for push-only resources like `github-check`, migrate to the notification system:
+
+| Before | After |
+|--------|-------|
+| `resource_type "github-check" { source = "pikoci://github-check" }` | `notification_type "github-check" { source = "pikoci://github-check" }` |
+| `resource "github-check" "ci" { params { ... } }` | `notification "github-check" "ci" { params { ... } }` |
+| `put "github-check" "ci" { status = "in_progress" }` | `notify "github-check" "ci" { status = "in_progress" }` |
+
+The `$put_*` environment variable prefix becomes `$notify_*` in notification type scripts.

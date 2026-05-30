@@ -13,6 +13,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2/hclsimple"
 	"github.com/pikoci/pikoci/pikoci/builtin"
+	"github.com/pikoci/pikoci/pikoci/notiftype"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
 	"github.com/pikoci/pikoci/pikoci/sectype"
@@ -35,6 +36,10 @@ type hclRunner struct {
 
 type hclSecretType struct {
 	SecretTypes []sectype.SecretType `hcl:"secret_type,block"`
+}
+
+type hclNotificationType struct {
+	NotificationTypes []notiftype.NotificationType `hcl:"notification_type,block"`
 }
 
 type hclServiceFile struct {
@@ -83,6 +88,25 @@ func (hs hclServiceBlock) toService() service.Service {
 		}
 	}
 	return s
+}
+
+// ResolveNotificationType fetches and decodes a notification type definition from the
+// given source URL. It returns the first notification_type block found in the HCL.
+func ResolveNotificationType(ctx context.Context, src string) (*notiftype.NotificationType, error) {
+	data, err := resolveHCL(ctx, src, "notification_types")
+	if err != nil {
+		return nil, err
+	}
+
+	var hnt hclNotificationType
+	err = hclsimple.Decode("source.hcl", data, nil, &hnt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode notification type from source %q: %w", src, err)
+	}
+	if len(hnt.NotificationTypes) == 0 {
+		return nil, fmt.Errorf("no notification_type block found in source %q", src)
+	}
+	return &hnt.NotificationTypes[0], nil
 }
 
 // ResolveResourceType fetches and decodes a resource type definition from the
@@ -177,6 +201,10 @@ func resolveHCL(ctx context.Context, src, kind string) ([]byte, error) {
 			}
 		case "secret_types":
 			if data, ok := builtin.SecretTypeHCL(name); ok {
+				return data, nil
+			}
+		case "notification_types":
+			if data, ok := builtin.NotificationTypeHCL(name); ok {
 				return data, nil
 			}
 		case "services":

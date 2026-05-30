@@ -33,6 +33,7 @@ nav:
   - Runners: Runners.md
   - Secret Types: Secret-Types.md
   - Services: Services.md
+  - Notifications: Notifications.md
   - Variables: Variables.md
   - Functions: Functions.md
   - CLI Reference: CLI.md

@@ -9,6 +9,8 @@ import (
 
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/notification"
+	"github.com/pikoci/pikoci/pikoci/notiftype"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
@@ -45,6 +47,10 @@ type UnitOfWork interface {
 	Runners() runner.Repository
 	// SecretTypes returns the secret type repository for this transaction.
 	SecretTypes() sectype.Repository
+	// NotificationTypes returns the notification type repository for this transaction.
+	NotificationTypes() notiftype.Repository
+	// Notifications returns the notification repository for this transaction.
+	Notifications() notification.Repository
 }
 
 // Repositories holds all repository interfaces, used to construct a noop UoW for testing.
@@ -57,5 +63,7 @@ type Repositories struct {
 	ResourceTypesRepo restype.Repository
 	BuildsRepo        build.Repository
 	RunnersRepo       runner.Repository
-	SecretTypesRepo   sectype.Repository
+	SecretTypesRepo        sectype.Repository
+	NotificationTypesRepo notiftype.Repository
+	NotificationsRepo     notification.Repository
 }

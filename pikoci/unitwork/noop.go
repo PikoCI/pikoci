@@ -5,6 +5,8 @@ import (
 
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/notification"
+	"github.com/pikoci/pikoci/pikoci/notiftype"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
@@ -42,3 +44,9 @@ func (u *noopUnitOfWork) ResourceTypes() restype.Repository {
 func (u *noopUnitOfWork) Builds() build.Repository        { return u.repos.BuildsRepo }
 func (u *noopUnitOfWork) Runners() runner.Repository      { return u.repos.RunnersRepo }
 func (u *noopUnitOfWork) SecretTypes() sectype.Repository { return u.repos.SecretTypesRepo }
+func (u *noopUnitOfWork) NotificationTypes() notiftype.Repository {
+	return u.repos.NotificationTypesRepo
+}
+func (u *noopUnitOfWork) Notifications() notification.Repository {
+	return u.repos.NotificationsRepo
+}

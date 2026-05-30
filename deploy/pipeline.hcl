@@ -4,7 +4,7 @@ job "lint" {
   get "git" "pikoci_pr" {
     trigger = true
   }
-  put "github-check" "ci" { status = "in_progress" }
+  notify "github-check" "ci" { status = "in_progress" }
   task "install-jq" {
     run "docker" {
       image = var.go_image
@@ -26,10 +26,10 @@ job "lint" {
     }
   }
   on_success {
-    put "github-check" "ci" { conclusion = "success" }
+    notify "github-check" "ci" { conclusion = "success" }
   }
   on_failure {
-    put "github-check" "ci" { conclusion = "failure" }
+    notify "github-check" "ci" { conclusion = "failure" }
   }
 }
 
@@ -37,7 +37,7 @@ job "test-mock" {
   get "git" "pikoci_pr" {
     trigger = true
   }
-  put "github-check" "ci" { status = "in_progress" }
+  notify "github-check" "ci" { status = "in_progress" }
   task "install-jq" {
     run "docker" {
       image = var.go_image
@@ -59,10 +59,10 @@ job "test-mock" {
     }
   }
   on_success {
-    put "github-check" "ci" { conclusion = "success" }
+    notify "github-check" "ci" { conclusion = "success" }
   }
   on_failure {
-    put "github-check" "ci" { conclusion = "failure" }
+    notify "github-check" "ci" { conclusion = "failure" }
   }
 }
 
@@ -70,7 +70,7 @@ job "test-integration" {
   get "git" "pikoci_pr" {
     trigger = true
   }
-  put "github-check" "ci" { status = "in_progress" }
+  notify "github-check" "ci" { status = "in_progress" }
   task "install-jq" {
     run "docker" {
       image = "ghcr.io/xescugc/pikoci-integration:latest"
@@ -97,10 +97,10 @@ job "test-integration" {
     }
   }
   on_success {
-    put "github-check" "ci" { conclusion = "success" }
+    notify "github-check" "ci" { conclusion = "success" }
   }
   on_failure {
-    put "github-check" "ci" { conclusion = "failure" }
+    notify "github-check" "ci" { conclusion = "failure" }
   }
 }
 
@@ -111,7 +111,7 @@ job "test-backends" {
     passed  = ["lint", "test-mock", "test-integration"]
   }
 
-  put "github-check" "ci" { status = "in_progress" }
+  notify "github-check" "ci" { status = "in_progress" }
 
   service "mariadb" {
     version       = "11.4.2"
@@ -165,10 +165,10 @@ job "test-backends" {
   }
 
   on_success {
-    put "github-check" "ci" { conclusion = "success" }
+    notify "github-check" "ci" { conclusion = "success" }
   }
   on_failure {
-    put "github-check" "ci" { conclusion = "failure" }
+    notify "github-check" "ci" { conclusion = "failure" }
   }
 }
 
@@ -381,11 +381,11 @@ resource "git" "pikoci_tag" {
   }
 }
 
-resource_type "github-check" {
+notification_type "github-check" {
   source = "pikoci://github-check"
 }
 
-resource "github-check" "ci" {
+notification "github-check" "ci" {
   params {
     app_id          = var.github_app_id
     installation_id = var.github_app_installation_id

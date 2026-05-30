@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/hcl/v2/hclsimple"
+	"github.com/pikoci/pikoci/pikoci/notiftype"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
 	"github.com/pikoci/pikoci/pikoci/sectype"
@@ -23,6 +24,9 @@ var runnerFS embed.FS
 //go:embed secret_types/*.hcl
 var secretTypeFS embed.FS
 
+//go:embed notification_types/*.hcl
+var notificationTypeFS embed.FS
+
 type hclResourceType struct {
 	ResourceTypes []restype.ResourceType `hcl:"resource_type,block"`
 }
@@ -35,6 +39,10 @@ type hclSecretType struct {
 	SecretTypes []sectype.SecretType `hcl:"secret_type,block"`
 }
 
+type hclNotificationType struct {
+	NotificationTypes []notiftype.NotificationType `hcl:"notification_type,block"`
+}
+
 var (
 	resourceTypes     map[string]restype.ResourceType
 	resourceTypesOnce sync.Once
@@ -44,6 +52,9 @@ var (
 
 	secretTypes     map[string]sectype.SecretType
 	secretTypesOnce sync.Once
+
+	notificationTypes     map[string]notiftype.NotificationType
+	notificationTypesOnce sync.Once
 )
 
 // ResourceTypes returns a map of all built-in resource types keyed by name.
@@ -148,6 +159,42 @@ func SecretTypeHCL(name string) ([]byte, bool) {
 // RunnerHCL returns the raw HCL bytes for a built-in runner, if it exists.
 func RunnerHCL(name string) ([]byte, bool) {
 	data, err := runnerFS.ReadFile("runners/" + name + ".hcl")
+	if err != nil {
+		return nil, false
+	}
+	return data, true
+}
+
+// NotificationTypes returns a map of all built-in notification types keyed by name.
+// The result is computed once and cached for subsequent calls.
+func NotificationTypes() map[string]notiftype.NotificationType {
+	notificationTypesOnce.Do(func() {
+		notificationTypes = make(map[string]notiftype.NotificationType)
+		entries, err := notificationTypeFS.ReadDir("notification_types")
+		if err != nil {
+			panic(fmt.Sprintf("failed to read embedded notification_types: %v", err))
+		}
+		for _, e := range entries {
+			data, err := notificationTypeFS.ReadFile("notification_types/" + e.Name())
+			if err != nil {
+				panic(fmt.Sprintf("failed to read embedded notification_type %s: %v", e.Name(), err))
+			}
+			var hnt hclNotificationType
+			err = hclsimple.Decode(e.Name(), data, nil, &hnt)
+			if err != nil {
+				panic(fmt.Sprintf("failed to decode embedded notification_type %s: %v", e.Name(), err))
+			}
+			for _, nt := range hnt.NotificationTypes {
+				notificationTypes[nt.Name] = nt
+			}
+		}
+	})
+	return notificationTypes
+}
+
+// NotificationTypeHCL returns the raw HCL bytes for a built-in notification type, if it exists.
+func NotificationTypeHCL(name string) ([]byte, bool) {
+	data, err := notificationTypeFS.ReadFile("notification_types/" + name + ".hcl")
 	if err != nil {
 		return nil, false
 	}

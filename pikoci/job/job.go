@@ -23,14 +23,17 @@ const (
 	StepTypeService StepType = "service"
 	// StepTypeRunner represents a step that executes a runner command.
 	StepTypeRunner StepType = "runner"
+	// StepTypeNotify represents a step that sends a notification.
+	StepTypeNotify StepType = "notify"
 )
 
 // HookStep represents a single step inside a hook (on_success, on_failure, on_cancel, ensure).
-// It can be either a runner command or a put step.
+// It can be a runner command, a put step, or a notify step.
 type HookStep struct {
 	Type   StepType             `json:"type"`
 	Runner *utils.RunnerCommand `json:"runner,omitempty"`
 	Put    *PutStep             `json:"put,omitempty"`
+	Notify *NotifyStep          `json:"notify,omitempty"`
 }
 
 // Job represents a named unit of work in a pipeline. It contains a plan of
@@ -118,6 +121,7 @@ type PlanStep struct {
 	Get       *GetStep      `json:"get,omitempty"`
 	Task      *TaskStep     `json:"task,omitempty"`
 	Put       *PutStep      `json:"put,omitempty"`
+	Notify    *NotifyStep   `json:"notify,omitempty"`
 	Service   *ServiceStep  `json:"service,omitempty"`
 	OnSuccess []HookStep    `json:"on_success,omitempty"`
 	OnFailure []HookStep    `json:"on_failure,omitempty"`
@@ -163,6 +167,21 @@ type PutStep struct {
 // referenced by this put step, combining the type and name.
 func (p *PutStep) ResourceCanonical() string {
 	return utils.ResourceCanonical(p.Type, p.Name)
+}
+
+// NotifyStep defines a step that sends a notification.
+// Params are passed to the notification type's notify command.
+type NotifyStep struct {
+	Type    string            `json:"type"`
+	Name    string            `json:"name"`
+	Params  map[string]string `json:"params,omitempty"`
+	Message string            `json:"message,omitempty"`
+}
+
+// NotificationCanonical returns the canonical identifier for the notification
+// referenced by this notify step, combining the type and name.
+func (n *NotifyStep) NotificationCanonical() string {
+	return utils.NotificationCanonical(n.Type, n.Name)
 }
 
 // ServiceStep defines a step that starts a sidecar service during job execution.

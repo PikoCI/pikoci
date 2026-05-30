@@ -33,3 +33,7 @@ func ValidateResourceCanonical(rc string) bool {
 // ResourceCanonical builds a resource canonical from a resource type name (rt)
 // and a resource name (rn), joining them with a dot separator.
 func ResourceCanonical(rt, rn string) string { return strings.Join([]string{rt, rn}, ".") }
+
+// NotificationCanonical builds a notification canonical from a notification type
+// name (nt) and a notification name (nn), joining them with a dot separator.
+func NotificationCanonical(nt, nn string) string { return strings.Join([]string{nt, nn}, ".") }

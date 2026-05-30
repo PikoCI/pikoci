@@ -185,7 +185,9 @@ func (r *PipelineRepository) FilterAll(ctx context.Context) ([]*pipeline.WithTea
 			r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check,
 			rt.id, rt.name, rt.`+"`check`"+`, rt.pull, rt.push, rt.params,
 			ru.id, ru.name, ru.run,
-			st.id, st.name, st.source, st.get, st.params, st.config
+			st.id, st.name, st.source, st.get, st.params, st.config,
+			nt.id, nt.name, nt.source, nt.notify, nt.params,
+			no.id, no.type, no.name, no.canonical, no.params, no.message, no.on_events, no.jobs, no.exclude_jobs
 		FROM pipelines AS p
 		JOIN teams AS t ON p.team_id = t.id
 		LEFT JOIN jobs AS j ON j.pipeline_id = p.id
@@ -193,6 +195,8 @@ func (r *PipelineRepository) FilterAll(ctx context.Context) ([]*pipeline.WithTea
 		LEFT JOIN resource_types AS rt ON rt.pipeline_id = p.id
 		LEFT JOIN runners AS ru ON ru.pipeline_id = p.id
 		LEFT JOIN secret_types AS st ON st.pipeline_id = p.id
+		LEFT JOIN notification_types AS nt ON nt.pipeline_id = p.id
+		LEFT JOIN notifications AS no ON no.pipeline_id = p.id
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query all Pipelines: %w", err)
@@ -226,6 +230,8 @@ func scanPipelinesWithTeam(rows *sql.Rows) ([]*pipeline.WithTeam, error) {
 			rt dbResourceType
 			ru dbRunner
 			st dbSecretType
+			nt dbNotificationType
+			no dbNotification
 		)
 
 		err := rows.Scan(
@@ -236,6 +242,8 @@ func scanPipelinesWithTeam(rows *sql.Rows) ([]*pipeline.WithTeam, error) {
 			&rt.ID, &rt.Name, &rt.Check, &rt.Pull, &rt.Push, &rt.Params,
 			&ru.ID, &ru.Name, &ru.Run,
 			&st.ID, &st.Name, &st.Source, &st.Get, &st.Params, &st.Config,
+			&nt.ID, &nt.Name, &nt.Source, &nt.Notify, &nt.Params,
+			&no.ID, &no.Type, &no.Name, &no.Canonical, &no.Params, &no.Message, &no.OnEvents, &no.Jobs, &no.ExcludeJobs,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan: %w", err)
@@ -287,6 +295,20 @@ func scanPipelinesWithTeam(rows *sql.Rows) ([]*pipeline.WithTeam, error) {
 				p.SecretTypes = append(p.SecretTypes, *st.toDomainEntity())
 			}
 		}
+		if nt.ID.Valid {
+			k := seenKey{ppID, "nt", uint32(nt.ID.Int64)}
+			if !seen[k] {
+				seen[k] = true
+				p.NotificationTypes = append(p.NotificationTypes, *nt.toDomainEntity())
+			}
+		}
+		if no.ID.Valid {
+			k := seenKey{ppID, "no", uint32(no.ID.Int64)}
+			if !seen[k] {
+				seen[k] = true
+				p.Notifications = append(p.Notifications, *no.toDomainEntity())
+			}
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate rows: %w", err)
@@ -333,7 +355,9 @@ const pipelineQuery = `
 		r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token,
 		rt.id, rt.name, rt.` + "`check`" + `, rt.pull, rt.push, rt.params,
 		ru.id, ru.name, ru.run,
-		st.id, st.name, st.source, st.get, st.params, st.config
+		st.id, st.name, st.source, st.get, st.params, st.config,
+		nt.id, nt.name, nt.source, nt.notify, nt.params,
+		no.id, no.type, no.name, no.canonical, no.params, no.message, no.on_events, no.jobs, no.exclude_jobs
 	FROM pipelines AS p
 	JOIN teams AS t ON p.team_id = t.id
 	LEFT JOIN jobs AS j ON j.pipeline_id = p.id
@@ -341,6 +365,8 @@ const pipelineQuery = `
 	LEFT JOIN resource_types AS rt ON rt.pipeline_id = p.id
 	LEFT JOIN runners AS ru ON ru.pipeline_id = p.id
 	LEFT JOIN secret_types AS st ON st.pipeline_id = p.id
+	LEFT JOIN notification_types AS nt ON nt.pipeline_id = p.id
+	LEFT JOIN notifications AS no ON no.pipeline_id = p.id
 `
 
 func scanPipelines(rows *sql.Rows) ([]*pipeline.Pipeline, error) {
@@ -363,6 +389,8 @@ func scanPipelines(rows *sql.Rows) ([]*pipeline.Pipeline, error) {
 			rt dbResourceType
 			ru dbRunner
 			st dbSecretType
+			nt dbNotificationType
+			no dbNotification
 		)
 
 		err := rows.Scan(
@@ -372,6 +400,8 @@ func scanPipelines(rows *sql.Rows) ([]*pipeline.Pipeline, error) {
 			&rt.ID, &rt.Name, &rt.Check, &rt.Pull, &rt.Push, &rt.Params,
 			&ru.ID, &ru.Name, &ru.Run,
 			&st.ID, &st.Name, &st.Source, &st.Get, &st.Params, &st.Config,
+			&nt.ID, &nt.Name, &nt.Source, &nt.Notify, &nt.Params,
+			&no.ID, &no.Type, &no.Name, &no.Canonical, &no.Params, &no.Message, &no.OnEvents, &no.Jobs, &no.ExcludeJobs,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan: %w", err)
@@ -418,6 +448,20 @@ func scanPipelines(rows *sql.Rows) ([]*pipeline.Pipeline, error) {
 			if !seen[k] {
 				seen[k] = true
 				p.SecretTypes = append(p.SecretTypes, *st.toDomainEntity())
+			}
+		}
+		if nt.ID.Valid {
+			k := seenKey{ppID, "nt", uint32(nt.ID.Int64)}
+			if !seen[k] {
+				seen[k] = true
+				p.NotificationTypes = append(p.NotificationTypes, *nt.toDomainEntity())
+			}
+		}
+		if no.ID.Valid {
+			k := seenKey{ppID, "no", uint32(no.ID.Int64)}
+			if !seen[k] {
+				seen[k] = true
+				p.Notifications = append(p.Notifications, *no.toDomainEntity())
 			}
 		}
 	}
