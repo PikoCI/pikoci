@@ -1925,23 +1925,24 @@ job "a" {
 	}
 }
 
-func TestCreatePipeline_NotificationSourceResolution(t *testing.T) {
+func TestCreatePipeline_NotificationInlineType(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
 	ctx := context.TODO()
 
 	hclConfig := []byte(`
 notification_type "github-check" {
-  source = "pikoci://github-check"
+  params = ["app_id", "repository"]
+  notify "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "echo check"]
+  }
 }
 
 notification "github-check" "ci" {
   params {
-    app_id          = "123"
-    installation_id = "456"
-    private_key     = "key"
-    repository      = "test/repo"
-    base_url        = "https://ci.example.com"
+    app_id     = "123"
+    repository = "test/repo"
   }
 }
 

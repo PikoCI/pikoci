@@ -15,6 +15,10 @@ import (
 	"github.com/pikoci/pikoci/pikoci/sectype"
 )
 
+// Note: notification type HCL files live in notification_types/ but are NOT
+// embedded. They are resolved via the pikoci:// source scheme, which falls
+// back to the GitHub raw URL when not found in the embedded FS.
+
 //go:embed resource_types/cron.hcl resource_types/git.hcl resource_types/trigger.hcl
 var resourceTypeFS embed.FS
 
@@ -23,9 +27,6 @@ var runnerFS embed.FS
 
 //go:embed secret_types/*.hcl
 var secretTypeFS embed.FS
-
-//go:embed notification_types/*.hcl
-var notificationTypeFS embed.FS
 
 type hclResourceType struct {
 	ResourceTypes []restype.ResourceType `hcl:"resource_type,block"`
@@ -39,10 +40,6 @@ type hclSecretType struct {
 	SecretTypes []sectype.SecretType `hcl:"secret_type,block"`
 }
 
-type hclNotificationType struct {
-	NotificationTypes []notiftype.NotificationType `hcl:"notification_type,block"`
-}
-
 var (
 	resourceTypes     map[string]restype.ResourceType
 	resourceTypesOnce sync.Once
@@ -52,9 +49,6 @@ var (
 
 	secretTypes     map[string]sectype.SecretType
 	secretTypesOnce sync.Once
-
-	notificationTypes     map[string]notiftype.NotificationType
-	notificationTypesOnce sync.Once
 )
 
 // ResourceTypes returns a map of all built-in resource types keyed by name.
@@ -165,40 +159,17 @@ func RunnerHCL(name string) ([]byte, bool) {
 	return data, true
 }
 
-// NotificationTypes returns a map of all built-in notification types keyed by name.
-// The result is computed once and cached for subsequent calls.
+// NotificationTypes returns an empty map. No notification types are embedded
+// in the binary. Use source = "pikoci://<name>" to resolve them from the
+// PikoCI registry.
 func NotificationTypes() map[string]notiftype.NotificationType {
-	notificationTypesOnce.Do(func() {
-		notificationTypes = make(map[string]notiftype.NotificationType)
-		entries, err := notificationTypeFS.ReadDir("notification_types")
-		if err != nil {
-			panic(fmt.Sprintf("failed to read embedded notification_types: %v", err))
-		}
-		for _, e := range entries {
-			data, err := notificationTypeFS.ReadFile("notification_types/" + e.Name())
-			if err != nil {
-				panic(fmt.Sprintf("failed to read embedded notification_type %s: %v", e.Name(), err))
-			}
-			var hnt hclNotificationType
-			err = hclsimple.Decode(e.Name(), data, nil, &hnt)
-			if err != nil {
-				panic(fmt.Sprintf("failed to decode embedded notification_type %s: %v", e.Name(), err))
-			}
-			for _, nt := range hnt.NotificationTypes {
-				notificationTypes[nt.Name] = nt
-			}
-		}
-	})
-	return notificationTypes
+	return nil
 }
 
-// NotificationTypeHCL returns the raw HCL bytes for a built-in notification type, if it exists.
+// NotificationTypeHCL returns nil. Notification type HCL files are not
+// embedded; the pikoci:// source scheme falls back to the GitHub raw URL.
 func NotificationTypeHCL(name string) ([]byte, bool) {
-	data, err := notificationTypeFS.ReadFile("notification_types/" + name + ".hcl")
-	if err != nil {
-		return nil, false
-	}
-	return data, true
+	return nil, false
 }
 
 // ServiceHCL returns the raw HCL bytes for a built-in service, if it exists.

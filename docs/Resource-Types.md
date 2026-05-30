@@ -341,103 +341,10 @@ job "release" {
 }
 ```
 
-## github-check
+## github-check (migrated to Notifications)
 
-The `github-check` resource type reports build status back to GitHub as check runs. It uses a GitHub App for authentication and only defines a `push` operation (no check or pull).
-
-To use it, declare the resource type with `source = "pikoci://github-check"`:
-
-```hcl
-# Read the PEM key using the file secret type with raw format
-secret_type "app-key" {
-  source = "pikoci://file"
-  format = "raw"
-  path   = "/etc/pikoci/github-app.pem"
-}
-
-variable "github_app_key" {
-  type = string
-  secret "app-key" {
-    key = "content"
-  }
-}
-
-resource_type "github-check" {
-  source = "pikoci://github-check"
-}
-
-resource "github-check" "ci" {
-  params {
-    app_id          = "12345"
-    installation_id = "67890"
-    private_key     = var.github_app_key
-    repository      = "org/repo"
-  }
-}
-
-job "test" {
-  get "git" "repo" { trigger = true }
-
-  put "github-check" "ci" {
-    status = "in_progress"
-  }
-
-  task "run-tests" {
-    run "exec" {
-      path = "make"
-      args = ["test"]
-    }
-  }
-
-  on_success {
-    put "github-check" "ci" {
-      conclusion = "success"
-    }
-  }
-
-  on_failure {
-    put "github-check" "ci" {
-      conclusion = "failure"
-    }
-  }
-}
-```
-
-### Resource params
-
-| Param             | Required | Description                                      |
-|-------------------|----------|--------------------------------------------------|
-| `app_id`          | yes      | GitHub App ID                                    |
-| `installation_id` | yes      | GitHub App installation ID                       |
-| `private_key`     | yes      | GitHub App private key content (PEM format). Use the `file` secret type with `format = "raw"` to read from a PEM file |
-| `repository`      | yes      | Repository in `owner/repo` format                |
-| `base_url`        | no       | PikoCI instance URL (e.g. `https://ci.pikoci.com`). When set, auto-constructs a `details_url` from `$BUILD_*` env vars if no explicit `put_details_url` is provided. The constructed URL follows the pattern: `{base_url}/teams/{team}/pipelines/{pipeline}/jobs/{job}/builds/{number}` |
-
-### Put params
-
-| Param        | Required | Description                                      |
-|--------------|----------|--------------------------------------------------|
-| `status`     | no       | Set to `in_progress` to create a check run       |
-| `conclusion` | no       | Set to `success`, `failure`, etc. to complete a check run |
-| `head_sha`   | no       | Commit SHA (defaults to `git rev-parse HEAD`)    |
-| `name`       | no       | Check run name (defaults to `pipeline/job`)      |
-| `details_url`| no       | URL linked from the check run                    |
-
-Either `status` or `conclusion` must be set. Use `status = "in_progress"` first to create the check run, then `conclusion` in hooks to update it.
-
-### GitHub App setup
-
-1. Go to **GitHub Settings > Developer settings > GitHub Apps > New GitHub App**
-2. Set the app name and homepage URL
-3. Under **Permissions**, grant **Checks** read & write
-4. Uncheck **Active** under Webhook (no webhook needed)
-5. Create the app and note the **App ID** from the settings page
-6. Click **Generate a private key** (downloads a `.pem` file)
-7. Copy the `.pem` file to the server (e.g. `/etc/pikoci/github-app.pem`)
-8. Install the app on the target repository or organization
-9. Note the **Installation ID** from the URL after installing, or via `GET /app/installations`
-
-Use the `file` secret type with `format = "raw"` to read the PEM key (see example above). Never hardcode the private key in the pipeline file.
+!!! note
+    `github-check` has been migrated from a resource type to a [notification type](Notifications.md#github-check). Use `notification_type` / `notification` / `notify` instead of `resource_type` / `resource` / `put`. See the [migration guide](Notifications.md#migration-from-resource-based-notifications).
 
 ## Built-in: trigger
 

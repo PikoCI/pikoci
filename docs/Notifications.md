@@ -148,37 +148,108 @@ notification "slack" "skip-lint" {
 }
 ```
 
-## Built-in Notification Types
+## github-check
 
-### github-check
+The `github-check` notification type reports build status back to GitHub as check runs. It uses a GitHub App for authentication.
 
-Creates and updates GitHub Check Runs via the GitHub App API.
-
-**Parameters:** `app_id`, `installation_id`, `private_key`, `repository`, `base_url`
-
-**Notify params:** `status` (set to `in_progress` to create), `conclusion` (set to `success`/`failure` to complete)
+To use it, declare the notification type with `source = "pikoci://github-check"`:
 
 ```hcl
+# Read the PEM key using the file secret type with raw format
+secret_type "app-key" {
+  source = "pikoci://file"
+  format = "raw"
+  path   = "/etc/pikoci/github-app.pem"
+}
+
+variable "github_app_key" {
+  type = string
+  secret "app-key" {
+    key = "content"
+  }
+}
+
 notification_type "github-check" {
   source = "pikoci://github-check"
 }
 
 notification "github-check" "ci" {
   params {
-    app_id          = var.github_app_id
-    installation_id = var.github_app_installation_id
-    private_key     = var.github_app_pem
+    app_id          = "12345"
+    installation_id = "67890"
+    private_key     = var.github_app_key
     repository      = "org/repo"
     base_url        = "https://ci.example.com"
   }
 }
+
+job "test" {
+  get "git" "repo" { trigger = true }
+
+  notify "github-check" "ci" {
+    status = "in_progress"
+  }
+
+  task "run-tests" {
+    run "exec" {
+      path = "make"
+      args = ["test"]
+    }
+  }
+
+  on_success {
+    notify "github-check" "ci" {
+      conclusion = "success"
+    }
+  }
+
+  on_failure {
+    notify "github-check" "ci" {
+      conclusion = "failure"
+    }
+  }
+}
 ```
 
-### slack
+### Notification params
 
-Posts messages to a Slack incoming webhook.
+| Param             | Required | Description                                      |
+|-------------------|----------|--------------------------------------------------|
+| `app_id`          | yes      | GitHub App ID                                    |
+| `installation_id` | yes      | GitHub App installation ID                       |
+| `private_key`     | yes      | GitHub App private key content (PEM format). Use the `file` secret type with `format = "raw"` to read from a PEM file |
+| `repository`      | yes      | Repository in `owner/repo` format                |
+| `base_url`        | no       | PikoCI instance URL (e.g. `https://ci.pikoci.com`). When set, auto-constructs a `details_url` from `$BUILD_*` env vars if no explicit `notify_details_url` is provided. The constructed URL follows the pattern: `{base_url}/teams/{team}/pipelines/{pipeline}/jobs/{job}/builds/{number}` |
 
-**Parameters:** `webhook_url`
+### Notify step params
+
+| Param        | Required | Description                                      |
+|--------------|----------|--------------------------------------------------|
+| `status`     | no       | Set to `in_progress` to create a check run       |
+| `conclusion` | no       | Set to `success`, `failure`, etc. to complete a check run |
+| `head_sha`   | no       | Commit SHA (defaults to `git rev-parse HEAD`)    |
+| `name`       | no       | Check run name (defaults to `pipeline/job`)      |
+| `details_url`| no       | URL linked from the check run                    |
+
+Either `status` or `conclusion` must be set. Use `status = "in_progress"` first to create the check run, then `conclusion` in hooks to update it.
+
+### GitHub App setup
+
+1. Go to **GitHub Settings > Developer settings > GitHub Apps > New GitHub App**
+2. Set the app name and homepage URL
+3. Under **Permissions**, grant **Checks** read & write
+4. Uncheck **Active** under Webhook (no webhook needed)
+5. Create the app and note the **App ID** from the settings page
+6. Click **Generate a private key** (downloads a `.pem` file)
+7. Copy the `.pem` file to the server (e.g. `/etc/pikoci/github-app.pem`)
+8. Install the app on the target repository or organization
+9. Note the **Installation ID** from the URL after installing, or via `GET /app/installations`
+
+Use the `file` secret type with `format = "raw"` to read the PEM key (see example above). Never hardcode the private key in the pipeline file.
+
+## slack
+
+The `slack` notification type posts messages to a Slack incoming webhook.
 
 ```hcl
 notification_type "slack" {
@@ -194,11 +265,78 @@ notification "slack" "builds" {
 }
 ```
 
-### discord
+### Notification params
 
-Posts messages to a Discord webhook.
+| Param         | Required | Description                           |
+|---------------|----------|---------------------------------------|
+| `webhook_url` | yes      | Slack incoming webhook URL            |
 
-**Parameters:** `webhook_url`
+### Webhook setup
+
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) and create a new app (or use an existing one)
+2. Under **Incoming Webhooks**, toggle it on
+3. Click **Add New Webhook to Workspace** and select a channel
+4. Copy the webhook URL and pass it via a pipeline variable
+
+```hcl
+variable "slack_webhook" {
+  type = string
+  secret "env" {
+    key = "SLACK_WEBHOOK_URL"
+  }
+}
+```
+
+### Examples
+
+Notify on all failures:
+
+```hcl
+notification "slack" "failures" {
+  params {
+    webhook_url = var.slack_webhook
+  }
+  on = ["failure"]
+}
+```
+
+Notify only for deploy jobs:
+
+```hcl
+notification "slack" "deploy-status" {
+  params {
+    webhook_url = var.slack_webhook
+  }
+  on = ["success", "failure"]
+  jobs = ["deploy"]
+  message = "Deploy finished"
+}
+```
+
+Manual notify in a hook:
+
+```hcl
+job "release" {
+  get "git" "tags" { trigger = true }
+
+  task "build" {
+    run "exec" {
+      path = "make"
+      args = ["release"]
+    }
+  }
+
+  on_success {
+    notify "slack" "builds" {
+      message = "Release published"
+    }
+  }
+}
+```
+
+## discord
+
+The `discord` notification type posts messages to a Discord webhook.
 
 ```hcl
 notification_type "discord" {
@@ -211,6 +349,27 @@ notification "discord" "builds" {
   }
   on = ["failure"]
   message = "Build failed!"
+}
+```
+
+### Notification params
+
+| Param         | Required | Description                           |
+|---------------|----------|---------------------------------------|
+| `webhook_url` | yes      | Discord webhook URL                   |
+
+### Webhook setup
+
+1. In Discord, go to **Server Settings > Integrations > Webhooks**
+2. Click **New Webhook**, select a channel, and copy the webhook URL
+3. Pass it via a pipeline variable
+
+```hcl
+variable "discord_webhook" {
+  type = string
+  secret "env" {
+    key = "DISCORD_WEBHOOK_URL"
+  }
 }
 ```
 
