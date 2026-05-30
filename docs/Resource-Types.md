@@ -341,11 +341,6 @@ job "release" {
 }
 ```
 
-## github-check (migrated to Notifications)
-
-!!! note
-    `github-check` has been migrated from a resource type to a [notification type](Notifications.md#github-check). Use `notification_type` / `notification` / `notify` instead of `resource_type` / `resource` / `put`. See the [migration guide](Notifications.md#migration-from-resource-based-notifications).
-
 ## Built-in: trigger
 
 The `trigger` resource type enables cross-pipeline and cross-job triggering without webhook tokens or external auth. It uses the internal database as a team-scoped event bus.

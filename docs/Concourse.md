@@ -121,7 +121,7 @@ Pipelines use HCL syntax, which supports variables, string interpolation, and is
 
 ## Known gaps vs Concourse
 
-- **No built-in resource registry**: Concourse ships with built-in resource types (git, s3, time, etc.). PikoCI ships with `cron`, `git`, `trigger`, and `github-check` resource types, but does not have the breadth of Concourse's registry. You can define your own resource types in HCL.
+- **No built-in resource registry**: Concourse ships with built-in resource types (git, s3, time, etc.). PikoCI ships with `cron`, `git`, and `trigger` resource types, plus `github-check`, `slack`, and `discord` notification types, but does not have the breadth of Concourse's registry. You can define your own resource types and notification types in HCL.
 
 ## Migration tips
 
