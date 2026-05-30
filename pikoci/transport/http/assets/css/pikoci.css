@@ -180,6 +180,51 @@ a:hover { color: var(--primary-hover); }
 }
 
 /* ============================================================
+   TOASTS
+   ============================================================ */
+.piko-toast {
+  position: fixed;
+  top: 70px;
+  right: 20px;
+  z-index: 1050;
+  min-width: 250px;
+  max-width: 400px;
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  word-wrap: break-word;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(20px);
+  transition: opacity 0.3s, transform 0.3s;
+}
+.piko-toast.show { opacity: 1; transform: translateX(0); }
+.piko-toast-success {
+  background: #d0f5d8;
+  border: 1px solid #a0e0b0;
+  border-left: 3px solid var(--success);
+  color: #006020;
+}
+.piko-toast-error {
+  background: #ffe0e8;
+  border: 1px solid #ffb0c8;
+  border-left: 3px solid var(--danger);
+  color: #cc003e;
+}
+[data-theme="dark"] .piko-toast-success {
+  background: #0a2a14;
+  border: 1px solid #1a5a30;
+  border-left: 3px solid #00E436;
+  color: #00E436;
+}
+[data-theme="dark"] .piko-toast-error {
+  background: #2a0a14;
+  border: 1px solid #5a1a2a;
+  border-left: 3px solid #FF004D;
+  color: #FF77A8;
+}
+
+/* ============================================================
    BUTTONS
    ============================================================ */
 .btn {

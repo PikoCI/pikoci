@@ -47,7 +47,27 @@ var NoticeView = Backbone.View.extend({
   },
   render: function() {
     this.$el.html(this.template(this.model.toJSON()));
+    var success = this.model.get('success');
+    if (success) {
+      this.showToast(success, 'success');
+      this.model.set({success: ''}, {silent: true});
+    }
+    var error = this.model.get('error');
+    if (error) {
+      this.showToast(error, 'error');
+      this.model.set({error: ''}, {silent: true});
+    }
     return this;
+  },
+  showToast: function(msg, type) {
+    $('.piko-toast').remove();
+    var toast = $('<div class="piko-toast"></div>').addClass('piko-toast-' + type).text(msg);
+    $('body').append(toast);
+    requestAnimationFrame(function() { toast.addClass('show'); });
+    setTimeout(function() {
+      toast.removeClass('show');
+      setTimeout(function() { toast.remove(); }, 300);
+    }, type === 'error' ? 8000 : 4000);
   },
 });
 

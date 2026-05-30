@@ -145,8 +145,8 @@ export var Job = Backbone.Model.extend({
     }
     return response;
   },
-  fetchTrigger: function() {
-    this.fetch({url: this.url()+"/trigger", type: "POST"});
+  fetchTrigger: function(opts) {
+    this.fetch(_.extend({url: this.url()+"/trigger", type: "POST"}, opts));
   },
 });
 
@@ -172,8 +172,8 @@ export var Resource = Backbone.Model.extend({
   parse: function(response) {
     return response.data;
   },
-  fetchTrigger: function() {
-    this.fetch({url: this.url()+"/trigger", type: "POST"});
+  fetchTrigger: function(opts) {
+    this.fetch(_.extend({url: this.url()+"/trigger", type: "POST"}, opts));
   },
 });
 

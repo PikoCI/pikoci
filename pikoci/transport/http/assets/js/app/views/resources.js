@@ -95,7 +95,7 @@ export var ResourceVersionsView = Backbone.View.extend({
   },
   clickTriggerResource: function(event) {
     event.preventDefault();
-    this.collection.resource.fetchTrigger();
+    this.collection.resource.fetchTrigger({success: function() { window.app.apiNotice.setSuccess("Resource check triggered"); }});
   },
   clickToggleWebhookPanel: function(event) {
     event.preventDefault();
@@ -131,6 +131,7 @@ export var ResourceVersionsView = Backbone.View.extend({
           rs.set('webhook_token', resp.token);
           var url = window.location.origin + '/webhooks/' + resp.token + '';
           that.$('#webhook-url').text(url);
+          window.app.apiNotice.setSuccess("Webhook token regenerated");
         }
       }
     });
