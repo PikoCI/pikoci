@@ -58,7 +58,7 @@ var TeamRowView = Backbone.View.extend({
     event.preventDefault();
     event.stopPropagation();
 
-    this.model.destroy();
+    this.model.destroy({success: function() { window.app.apiNotice.setSuccess("Team deleted"); }});
   },
 });
 
@@ -174,6 +174,7 @@ var TeamNewMemberRowView = Backbone.View.extend({
     }}, {url: this.members.url(), method: "POST",
       wait: true,
       success: function(){
+        window.app.apiNotice.setSuccess("Member added");
         Backbone.View.prototype.remove.call(that);
       },
     });
@@ -199,10 +200,11 @@ var TeamShowMemberRowView = Backbone.View.extend({
     event.preventDefault();
     this.model.save({admin: !this.model.get("admin")},{
       wait: true,
+      success: function() { window.app.apiNotice.setSuccess("Member role updated"); },
     });
   },
   deleteMember: function(event) {
     event.preventDefault();
-    this.model.destroy();
+    this.model.destroy({success: function() { window.app.apiNotice.setSuccess("Member removed"); }});
   },
 });

@@ -116,7 +116,7 @@ export var JobBuildsView = Backbone.View.extend({
   },
   clickTriggerJob: function(event) {
     event.preventDefault();
-    this.collection.job.fetchTrigger();
+    this.collection.job.fetchTrigger({success: function() { window.app.apiNotice.setSuccess("Job triggered"); }});
   },
   clickOnTab: function(event) {
     event.preventDefault();
@@ -180,7 +180,7 @@ var JobBuildsContentView = Backbone.View.extend({
     var bid = this.model.get("build_number");
     var url = this.model.collection.url() + "/" + bid + "/cancel";
     $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
-      success: function() { that.model.fetch(); },
+      success: function() { window.app.apiNotice.setSuccess("Build cancelled"); that.model.fetch(); },
     });
   },
   retryBuild: function(e) {
@@ -189,7 +189,7 @@ var JobBuildsContentView = Backbone.View.extend({
     var collection = this.model.collection;
     var url = collection.url() + "/" + bid + "/retry";
     $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
-      success: function() { collection.fetchNew(); },
+      success: function() { window.app.apiNotice.setSuccess("Build retried"); collection.fetchNew(); },
     });
   },
   toggleFollow: function(e) {

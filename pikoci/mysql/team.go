@@ -109,6 +109,10 @@ func (r *TeamRepository) Find(ctx context.Context, tc string) (*team.WithMembers
 		return nil, fmt.Errorf("failed to scan Team: %w", err)
 	}
 
+	if len(t) == 0 {
+		return nil, fmt.Errorf("team not found: %s", tc)
+	}
+
 	return t[0], nil
 }
 

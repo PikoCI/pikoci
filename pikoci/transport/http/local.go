@@ -109,18 +109,7 @@ const localEditorHTML = `<!DOCTYPE html>
     </script>
 
     <script type="text/template" id="notice-view">
-      <div>
-        <% if (error) { %>
-          <div class="alert alert-danger" role="alert">
-            <%- error %>
-          </div>
-        <% } %>
-        <% if (success) { %>
-          <div class="alert alert-success" role="alert">
-            <%- success %>
-          </div>
-        <% } %>
-      </div>
+      <div></div>
     </script>
 
     <script type="text/template" id="pipeline-graph-view">
