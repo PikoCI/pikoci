@@ -33,6 +33,8 @@ notification_type "github-check" {
 
 A `notification` defines **what** to send and **where**. It references a notification type and provides concrete parameter values.
 
+A notification without an `on` field is **manual-only** — it will never fire automatically. You must explicitly use `notify` steps in job plans or hooks to trigger it. This is useful for notifications like `github-check` where you need precise control over when each notification is sent (e.g., `status = "in_progress"` at the start, `conclusion = "success"` at the end).
+
 ```hcl
 notification "slack" "deploys" {
   params {
@@ -49,16 +51,30 @@ notification "slack" "deploys" {
 | `type` | The notification type name (first label) |
 | `name` | A unique name for this notification (second label) |
 | `params` | Key-value parameters passed to the notification type |
-| `message` | Default message text (available as `$NOTIFY_MESSAGE`) |
-| `on` | List of events for automatic dispatch: `success`, `failure`, `cancel`, `all` |
-| `jobs` | Limit automatic dispatch to these job names only |
-| `exclude` | Exclude these job names from automatic dispatch |
+| `message` | Default message text (available as `$NOTIFY_MESSAGE`). Supports HCL variables (`var.*`). |
+| `on` | List of events for automatic dispatch: `success`, `failure`, `cancel`, `all`. **If omitted, the notification is manual-only.** |
+| `jobs` | Limit automatic dispatch to these job names only (requires `on`) |
+| `exclude` | Exclude these job names from automatic dispatch (requires `on`) |
 
-## Using Notify in Plans
+## Using Notify in Plans and Hooks
 
-Use `notify` steps directly in a job plan, just like `put`:
+Use `notify` steps directly in a job plan or hooks to send notifications at specific points during execution. This is the only way to trigger notifications that don't have an `on` field.
 
 ```hcl
+notification_type "github-check" {
+  source = "pikoci://github-check"
+}
+
+notification "github-check" "ci" {
+  params {
+    app_id          = var.github_app_id
+    installation_id = var.github_app_installation_id
+    private_key     = var.github_app_pem
+    repository      = "org/repo"
+    base_url        = "https://ci.example.com"
+  }
+}
+
 job "deploy" {
   get "git" "repo" { trigger = true }
 
@@ -80,21 +96,15 @@ job "deploy" {
 }
 ```
 
+In this example, `notification "github-check" "ci"` has no `on` field, so it only fires when explicitly called via `notify` steps in the plan and hooks.
+
 ### Notify Step Parameters
 
 Attributes on a `notify` step are passed to the notification type's command with a `notify_` prefix. For example, `status = "in_progress"` becomes the environment variable `$notify_status`.
 
 The special `message` attribute overrides the notification's default message.
 
-## Using Notify in Hooks
-
-Notify steps work in all hook types (`on_success`, `on_failure`, `on_cancel`, `ensure`):
-
-```hcl
-on_success {
-  notify "slack" "deploys" { conclusion = "success" }
-}
-```
+Notify steps work in all hook types (`on_success`, `on_failure`, `on_cancel`, `ensure`) and at the top level of a job plan.
 
 ## Automatic Notifications
 
@@ -210,19 +220,28 @@ The message sent to the notification type is resolved in this order:
 
 1. `message` attribute on the `notify` step (highest priority)
 2. `message` field on the `notification` definition
-3. Empty (the notification type script provides a default)
+3. Empty — `$NOTIFY_MESSAGE` is not set
+
+When `$NOTIFY_MESSAGE` is empty, the notification type script is responsible for providing a default. The built-in `slack` and `discord` types default to `[$BUILD_PIPELINE_NAME/$BUILD_JOB_NAME] Build #$BUILD_NUMBER`.
+
+The `message` field in HCL supports pipeline variables (`${var.app_name}`), which are resolved at pipeline parse time. Runtime build metadata (`$BUILD_NUMBER`, etc.) is **not** available in the HCL `message` field — it is available as separate environment variables in the notification type script, which can use them to construct or enrich the message.
 
 The resolved message is available as the `$NOTIFY_MESSAGE` environment variable.
 
 ## Environment Variables
 
-Notify commands receive:
+Notify commands receive all of the following as environment variables:
 
-- `$param_*` - Notification-level parameters
-- `$notify_*` - Step-level parameters
-- `$NOTIFY_MESSAGE` - Resolved message text
-- `$BUILD_NUMBER`, `$BUILD_JOB_NAME`, `$BUILD_PIPELINE_NAME`, `$BUILD_TEAM_NAME` - Build metadata
-- `$WORKDIR` - Working directory
+- `$param_*` — Notification-level parameters (from the `notification` block's `params`)
+- `$notify_*` — Step-level parameters (from the `notify` step's attributes)
+- `$NOTIFY_MESSAGE` — Resolved message text (may be empty)
+- `$BUILD_NUMBER` — Current build number
+- `$BUILD_JOB_NAME` — Job name
+- `$BUILD_PIPELINE_NAME` — Pipeline canonical name
+- `$BUILD_TEAM_NAME` — Team canonical name
+- `$WORKDIR` — Working directory (shared with get/task steps)
+
+These environment variables are available inside the notification type's `notify` command script. For example, you can reference `$BUILD_NUMBER` in your script even if it wasn't part of `$NOTIFY_MESSAGE`.
 
 ## Migration from Resource-Based Notifications
 
