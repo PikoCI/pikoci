@@ -194,13 +194,26 @@ secret_type "my-file" {
 
 | Attribute | Required | Default | Description                                      |
 |-----------|----------|---------|--------------------------------------------------|
-| `format`  | no       | `json`  | File format: `json`, `env`, or `raw`              |
+| `format`  | no       | auto    | File format: `json`, `yaml`, `env`, or `raw`. When omitted, inferred from the file extension (see below). |
 | `path`    | no       |         | Default file path; can be overridden per-variable. Relative paths resolve from the server's working directory. |
+
+### Format auto-detection
+
+When `format` is not explicitly set, it is inferred from the file extension of `path`:
+
+| Extension        | Inferred format |
+|------------------|-----------------|
+| `.json`          | `json`          |
+| `.env`           | `env`           |
+| `.yml`, `.yaml`  | `yaml`          |
+| anything else    | `raw`           |
+
+An explicit `format` always takes precedence over auto-detection. This is useful for files whose extension doesn't match their content (e.g. a JSON file without a `.json` extension).
 
 The file path can be set on the `secret_type` block as a default, on each variable's `secret` block, or both (the variable-level `path` takes precedence):
 
 ```hcl
-# Default path on the secret_type — variables just pick keys
+# Default path on the secret_type — format is inferred from extension
 secret_type "db-file" {
   source = "pikoci://file"
   path   = "/run/secrets/db.json"
@@ -246,12 +259,24 @@ variable "db_user" {
 }
 ```
 
-### JSON format (default)
+### JSON format
 
-When `format` is omitted or set to `"json"`, the file must contain a JSON object:
+When `format` is `"json"` (or inferred from a `.json` extension), the file must contain a JSON object:
 
 ```json
 {"username": "admin", "password": "s3cret", "host": "db.example.com"}
+```
+
+Multi-line JSON is fully supported — the entire file content is parsed as a single JSON object.
+
+### YAML format
+
+When `format` is `"yaml"` (or inferred from a `.yml`/`.yaml` extension), the file must contain a YAML mapping with string values:
+
+```yaml
+username: admin
+password: s3cret
+host: db.example.com
 ```
 
 ### `.env` format
@@ -261,7 +286,6 @@ When `format = "env"`, the file is parsed as a `.env` file with `KEY=VALUE` line
 ```hcl
 secret_type "env-creds" {
   source = "pikoci://file"
-  format = "env"
 }
 
 variable "db_password" {
@@ -289,7 +313,6 @@ When `format = "raw"`, the entire file content is returned as a single value und
 ```hcl
 secret_type "app-key" {
   source = "pikoci://file"
-  format = "raw"
   path   = "/etc/pikoci/github-app.pem"
 }
 
@@ -301,7 +324,7 @@ variable "github_app_key" {
 }
 ```
 
-The variable receives the full file content as-is.
+The variable receives the full file content as-is. The `.pem` extension is automatically detected as `raw`, so no explicit `format` is needed.
 
 ## Example: custom secret type
 

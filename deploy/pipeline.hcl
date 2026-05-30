@@ -425,13 +425,11 @@ service_type "vault" {
 
 secret_type "env" {
   source = "pikoci://file"
-  format = "env"
   path   = "/etc/pikoci/pikoci.env"
 }
 
 secret_type "pikoci_github_pem" {
   source = "pikoci://file"
-  format = "raw"
   path   = "/etc/pikoci/pikoci_github_app.pem"
 }
 
