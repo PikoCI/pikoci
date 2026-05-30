@@ -71,7 +71,7 @@ func TestPikoCI(t *testing.T) {
 			err = changeBtn.Click()
 			require.NoError(t, err)
 
-			waitFor(t, wd, eqText(selenium.ByCSSSelector, ".alert-success", "Password changed successfully"), 15*time.Second)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, ".piko-toast", "Password changed successfully"), 15*time.Second)
 
 			// Navigate to teams
 			wd.Get(pikoURL + "/")

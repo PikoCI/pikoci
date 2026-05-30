@@ -193,6 +193,7 @@ a:hover { color: var(--primary-hover); }
   border-radius: var(--radius);
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   word-wrap: break-word;
+  pointer-events: none;
   opacity: 0;
   transform: translateX(20px);
   transition: opacity 0.3s, transform 0.3s;
