@@ -10,7 +10,7 @@
   [![Go Report Card](https://goreportcard.com/badge/github.com/pikoci/pikoci)](https://goreportcard.com/report/github.com/pikoci/pikoci)
   [![Go Reference](https://pkg.go.dev/badge/github.com/pikoci/pikoci.svg)](https://pkg.go.dev/github.com/pikoci/pikoci)
   [![GitHub Release](https://img.shields.io/github/v/release/PikoCI/pikoci)](https://github.com/PikoCI/pikoci/releases/latest)
-  [![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Fpikoci%2Fpikoci-blue?logo=docker)](https://github.com/PikoCI/pikoci/pkgs/container/pikoci)
+  [![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Fpikoci%2Fpikoci-blue?logo=docker)](https://github.com/orgs/PikoCI/packages/container/package/pikoci)
 
   [Documentation](https://docs.pikoci.com) · [Quick Start](#quick-start) · [Contributing](#contributing)
 </div>
