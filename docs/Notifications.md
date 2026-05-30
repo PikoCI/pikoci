@@ -249,7 +249,7 @@ Use the `file` secret type with `format = "raw"` to read the PEM key (see exampl
 
 ## slack
 
-The `slack` notification type posts messages to a Slack incoming webhook.
+The `slack` notification type posts messages to a Slack incoming webhook. By default, messages are plain text. When `base_url` is provided, the default message includes a clickable link to the build.
 
 ```hcl
 notification_type "slack" {
@@ -259,9 +259,9 @@ notification_type "slack" {
 notification "slack" "builds" {
   params {
     webhook_url = var.slack_webhook
+    base_url    = "https://ci.example.com"
   }
   on = ["failure"]
-  message = "Build failed!"
 }
 ```
 
@@ -270,6 +270,23 @@ notification "slack" "builds" {
 | Param         | Required | Description                           |
 |---------------|----------|---------------------------------------|
 | `webhook_url` | yes      | Slack incoming webhook URL            |
+| `base_url`    | no       | PikoCI instance URL. When set, the default message includes a clickable link to the build (e.g. `<url|View build>`). |
+
+### Default message
+
+Without `base_url`:
+
+```
+✅ [my-pipeline/deploy] Build #42 - success
+```
+
+With `base_url`:
+
+```
+✅ [my-pipeline/deploy] Build #42 - success - https://ci.example.com/teams/main/pipelines/my-pipeline/jobs/deploy/builds/42
+```
+
+When a custom `message` is provided (on the notification or notify step), it is used as-is — `base_url` only affects the default message.
 
 ### Webhook setup
 
@@ -289,12 +306,13 @@ variable "slack_webhook" {
 
 ### Examples
 
-Notify on all failures:
+Notify on all failures with build link:
 
 ```hcl
 notification "slack" "failures" {
   params {
     webhook_url = var.slack_webhook
+    base_url    = "https://ci.example.com"
   }
   on = ["failure"]
 }
@@ -306,6 +324,7 @@ Notify only for deploy jobs:
 notification "slack" "deploy-status" {
   params {
     webhook_url = var.slack_webhook
+    base_url    = "https://ci.example.com"
   }
   on = ["success", "failure"]
   jobs = ["deploy"]
@@ -336,7 +355,7 @@ job "release" {
 
 ## discord
 
-The `discord` notification type posts messages to a Discord webhook.
+The `discord` notification type posts messages to a Discord webhook. By default, messages are plain text. When `base_url` is provided, the default message includes a link to the build (Discord auto-links URLs).
 
 ```hcl
 notification_type "discord" {
@@ -346,9 +365,9 @@ notification_type "discord" {
 notification "discord" "builds" {
   params {
     webhook_url = var.discord_webhook
+    base_url    = "https://ci.example.com"
   }
   on = ["failure"]
-  message = "Build failed!"
 }
 ```
 
@@ -357,6 +376,23 @@ notification "discord" "builds" {
 | Param         | Required | Description                           |
 |---------------|----------|---------------------------------------|
 | `webhook_url` | yes      | Discord webhook URL                   |
+| `base_url`    | no       | PikoCI instance URL. When set, the default message includes a link to the build (Discord auto-links URLs). |
+
+### Default message
+
+Without `base_url`:
+
+```
+✅ [my-pipeline/deploy] Build #42 - success
+```
+
+With `base_url`:
+
+```
+✅ [my-pipeline/deploy] Build #42 - success - https://ci.example.com/teams/main/pipelines/my-pipeline/jobs/deploy/builds/42
+```
+
+When a custom `message` is provided, it is used as-is — `base_url` only affects the default message.
 
 ### Webhook setup
 
@@ -384,10 +420,10 @@ The message sent to the notification type is resolved in this order:
 When `$NOTIFY_MESSAGE` is empty, the notification type script is responsible for providing a default. The built-in `slack` and `discord` types default to:
 
 ```
-[my-pipeline/deploy] Build #42 - success
+✅ [my-pipeline/deploy] Build #42 - success
 ```
 
-When triggered by automatic notifications (via the `on` field), the build status is included. For manual `notify` steps without a status, the default is:
+When triggered by automatic notifications (via the `on` field), the build status and a status icon are included (✅ success, ❌ failure, ⚠️ cancel). For manual `notify` steps without a status, the default is:
 
 ```
 [my-pipeline/deploy] Build #42
