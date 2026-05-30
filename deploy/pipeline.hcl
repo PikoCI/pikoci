@@ -245,8 +245,7 @@ job "deploy-docs" {
         python3 -m venv .venv
         .venv/bin/pip install --quiet mkdocs-material
         .venv/bin/mkdocs build --clean
-        rm -rf /var/www/docs.pikoci.com
-        mkdir -p /var/www/docs.pikoci.com
+        rm -rf /var/www/docs.pikoci.com/*
         cp -a site/. /var/www/docs.pikoci.com/
         EOT
       ]
