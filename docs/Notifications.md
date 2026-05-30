@@ -56,7 +56,7 @@ notification "slack" "deploys" {
 | `jobs` | Limit automatic dispatch to these job names only (requires `on`) |
 | `exclude` | Exclude these job names from automatic dispatch (requires `on`) |
 
-## Using Notify in Plans and Hooks
+## Using Notify
 
 Use `notify` steps directly in a job plan or hooks to send notifications at specific points during execution. This is the only way to trigger notifications that don't have an `on` field.
 
