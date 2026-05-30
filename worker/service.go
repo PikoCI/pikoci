@@ -33,6 +33,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/service"
 	"github.com/pikoci/pikoci/pikoci/utils"
 	"gocloud.dev/pubsub"
+	"gopkg.in/yaml.v3"
 )
 
 // Service is the interface for running the worker event loop. Implementations
@@ -1912,6 +1913,20 @@ func (w *Worker) fetchSecrets(ctx context.Context, cwd string, pp *pipeline.Pipe
 
 		// Parse output based on format config
 		format := st.Config["format"]
+		if format == "" {
+			if p := st.Config["path"]; p != "" {
+				switch strings.ToLower(filepath.Ext(p)) {
+				case ".json":
+					format = "json"
+				case ".env":
+					format = "env"
+				case ".yml", ".yaml":
+					format = "yaml"
+				default:
+					format = "raw"
+				}
+			}
+		}
 		var secretData map[string]string
 		switch format {
 		case "env":
@@ -1919,6 +1934,14 @@ func (w *Worker) fetchSecrets(ctx context.Context, cwd string, pp *pipeline.Pipe
 		case "raw":
 			// Raw format: entire file content as a single "content" key.
 			secretData = map[string]string{"content": out}
+		case "json":
+			if err := json.Unmarshal([]byte(out), &secretData); err != nil {
+				return nil, fmt.Errorf("failed to parse secret output from %q as JSON: %w", stName, err)
+			}
+		case "yaml", "yml":
+			if err := yaml.Unmarshal([]byte(out), &secretData); err != nil {
+				return nil, fmt.Errorf("failed to parse secret output from %q as YAML: %w", stName, err)
+			}
 		default:
 			// Default: parse last line of stdout as JSON object
 			sout := strings.Split(strings.Trim(out, "\n"), "\n")
