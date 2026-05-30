@@ -1262,6 +1262,7 @@ func (w *Worker) runAutoNotifications(ctx context.Context, m queue.Body, b *buil
 			Notify: &job.NotifyStep{
 				Type:    n.Type,
 				Name:    n.Name,
+				Params:  map[string]string{"build_status": event},
 				Message: n.Message,
 			},
 		}

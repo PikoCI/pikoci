@@ -225,10 +225,16 @@ The message sent to the notification type is resolved in this order:
 When `$NOTIFY_MESSAGE` is empty, the notification type script is responsible for providing a default. The built-in `slack` and `discord` types default to:
 
 ```
+[my-pipeline/deploy] Build #42 - success
+```
+
+When triggered by automatic notifications (via the `on` field), the build status is included. For manual `notify` steps without a status, the default is:
+
+```
 [my-pipeline/deploy] Build #42
 ```
 
-This is constructed from the build metadata variables: `[$BUILD_PIPELINE_NAME/$BUILD_JOB_NAME] Build #$BUILD_NUMBER`.
+These are constructed from build metadata variables (`$BUILD_PIPELINE_NAME`, `$BUILD_JOB_NAME`, `$BUILD_NUMBER`) and the `$notify_build_status` variable (automatically set by automatic notifications).
 
 The `message` field in HCL supports pipeline variables (`${var.app_name}`), which are resolved at pipeline parse time. Runtime build metadata (`$BUILD_NUMBER`, etc.) is **not** available in the HCL `message` field — it is available as separate environment variables in the notification type script, which can use them to construct or enrich the message.
 

@@ -11,7 +11,12 @@ notification_type "slack" {
       MESSAGE="$NOTIFY_MESSAGE"
 
       if [ -z "$MESSAGE" ]; then
-        MESSAGE="[$BUILD_PIPELINE_NAME/$BUILD_JOB_NAME] Build #$BUILD_NUMBER"
+        STATUS="$notify_build_status"
+        if [ -n "$STATUS" ]; then
+          MESSAGE="[$BUILD_PIPELINE_NAME/$BUILD_JOB_NAME] Build #$BUILD_NUMBER - $STATUS"
+        else
+          MESSAGE="[$BUILD_PIPELINE_NAME/$BUILD_JOB_NAME] Build #$BUILD_NUMBER"
+        fi
       fi
 
       if [ -z "$WEBHOOK_URL" ]; then
