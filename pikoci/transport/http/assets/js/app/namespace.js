@@ -148,8 +148,10 @@ export var blockTypes = [
   {type: 'job',           label: 'Jobs',            icon: 'jb', letter: 'J'},
   {type: 'secret_type',   label: 'Secret Types',    icon: 'st', letter: 'S'},
   {type: 'runner_type',   label: 'Runner Types',    icon: 'rn', letter: 'R'},
-  {type: 'service_type',  label: 'Service Types',   icon: 'sv', letter: 'S'},
-  {type: 'variable',      label: 'Variables',       icon: 'vr', letter: 'V'},
+  {type: 'service_type',       label: 'Service Types',       icon: 'sv', letter: 'S'},
+  {type: 'notification_type', label: 'Notification Types', icon: 'nt', letter: 'N'},
+  {type: 'notification',      label: 'Notifications',      icon: 'no', letter: 'N'},
+  {type: 'variable',          label: 'Variables',           icon: 'vr', letter: 'V'},
 ];
 
 // Set up window.app and expose globals for HTML templates

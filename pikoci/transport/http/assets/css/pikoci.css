@@ -925,6 +925,8 @@ body.piko-fullscreen .btn-primary { display: none; }
 .piko-block-icon.st { background: var(--warning); }
 .piko-block-icon.rn { background: #AB5236; }
 .piko-block-icon.sv { background: #FF77A8; }
+.piko-block-icon.nt { background: #29ADFF; }
+.piko-block-icon.no { background: #29ADFF; }
 .piko-block-icon.vr { background: var(--text-muted); }
 
 /* Editor body */

@@ -346,6 +346,8 @@
                 <a href="https://docs.pikoci.com/Pipeline#runner_type" target="_blank" rel="noopener"><span class="piko-block-icon rn">R</span> runner_type</a>
                 <a href="https://docs.pikoci.com/Pipeline#secret_type" target="_blank" rel="noopener"><span class="piko-block-icon st">S</span> secret_type</a>
                 <a href="https://docs.pikoci.com/Pipeline#service_type" target="_blank" rel="noopener"><span class="piko-block-icon sv">S</span> service_type</a>
+                <a href="https://docs.pikoci.com/Notifications#notification-types" target="_blank" rel="noopener"><span class="piko-block-icon nt">N</span> notification_type</a>
+                <a href="https://docs.pikoci.com/Notifications#notifications" target="_blank" rel="noopener"><span class="piko-block-icon no">N</span> notification</a>
                 <a href="https://docs.pikoci.com/Pipeline#variable" target="_blank" rel="noopener"><span class="piko-block-icon vr">V</span> variable</a>
               </div>
             </div>
@@ -499,7 +501,7 @@
         <% _.each(_steps, function(s, i) { %>
           <div class="piko-step-row" data-status="<%= s.status %>">
             <div class="piko-step-row-header" onclick="var body=this.nextElementSibling;body.style.display=body.style.display==='none'?'block':'none'">
-              <span><span class="piko-step-label"><i class="bi <%= ({get:'bi-cloud-download',task:'bi-terminal',put:'bi-cloud-upload',service:'bi-hdd-stack',runner:'bi-gear'})[s.type] || 'bi-terminal' %>"></i> <%- s.type || "step" %></span> <%- s.name %> <span style="color:var(--text-muted);">(<%- s.duration %>)</span></span>
+              <span><span class="piko-step-label"><i class="bi <%= ({get:'bi-cloud-download',task:'bi-terminal',put:'bi-cloud-upload',notify:'bi-bell',service:'bi-hdd-stack',runner:'bi-gear'})[s.type] || 'bi-terminal' %>"></i> <%- s.type || "step" %></span> <%- s.name %> <span style="color:var(--text-muted);">(<%- s.duration %>)</span></span>
               <span style="display:flex;align-items:center;gap:6px;">
                 <% if (s.logs) { %>
                   <button class="piko-copy-logs-header-btn" onclick="event.stopPropagation();var pre=this.closest('.piko-step-row').querySelector('pre');navigator.clipboard.writeText(pre.textContent.trim());var icon=this.querySelector('i');icon.className='bi bi-check2';setTimeout(function(){icon.className='bi bi-clipboard';},1500);" title="Copy logs">

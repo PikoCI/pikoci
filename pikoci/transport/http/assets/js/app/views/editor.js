@@ -484,7 +484,7 @@ export var PipelineGraphView = Backbone.View.extend({
 // HCL stream language for CodeMirror
 export var hclLanguage = function() {
   var CM = window.PikoCM;
-  var keywords = 'job resource resource_type runner_type secret_type service_type variable get put task service plan params start stop ready_check secret on_success on_failure on_cancel ensure concurrency';
+  var keywords = 'job resource resource_type runner_type secret_type service_type notification_type notification variable get put notify task service plan params start stop ready_check secret on_success on_failure on_cancel ensure concurrency';
   var keywordSet = {};
   keywords.split(' ').forEach(function(k){ keywordSet[k] = true; });
   var atoms = {true:true, false:true, null:true};
@@ -730,13 +730,14 @@ export var PipelinesNewView = Backbone.View.extend({
     var html = '';
     var errorLines = this._errorLines || {};
     blockTypes.forEach(function(bt) {
-      var re = bt.type === 'resource'
+      var twoLabel = bt.type === 'resource' || bt.type === 'notification';
+      var re = twoLabel
         ? new RegExp(bt.type + '\\s+"([^"]+)"\\s+"([^"]+)"', 'g')
         : new RegExp(bt.type + '\\s+"([^"]+)"', 'g');
       var matches = [];
       var m;
       while ((m = re.exec(doc)) !== null) {
-        var displayName = bt.type === 'resource' ? m[1] + '.' + m[2] : m[1];
+        var displayName = twoLabel ? m[1] + '.' + m[2] : m[1];
         matches.push({name: displayName, pos: m.index});
       }
       if (matches.length === 0) return;
@@ -796,7 +797,7 @@ export var PipelinesNewView = Backbone.View.extend({
       var rLabel = name.substring(dotIdx + 1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       re = new RegExp('resource\\s+"' + rType + '"\\s+"' + rLabel + '"');
     } else {
-      re = new RegExp('(?:job|resource|resource_type|runner_type|secret_type|service_type)\\s+"' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"');
+      re = new RegExp('(?:job|resource|resource_type|runner_type|secret_type|service_type|notification_type|notification)\\s+"' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"');
     }
     var match = re.exec(doc);
     if (match) {
@@ -834,7 +835,7 @@ export var PipelinesNewView = Backbone.View.extend({
       } else {
         if (d.line < 1 || d.line > doc.lines) continue;
         var lineOffset = doc.line(d.line).from;
-        var blockRe = /(?:job|resource|resource_type|runner_type|secret_type|service_type|variable)\s+"([^"]+)"/g;
+        var blockRe = /(?:job|resource|resource_type|runner_type|secret_type|service_type|notification_type|notification|variable)\s+"([^"]+)"/g;
         var bm, lastBlock = null;
         while ((bm = blockRe.exec(docText)) !== null) {
           if (bm.index <= lineOffset) lastBlock = bm;
