@@ -10,6 +10,8 @@ import (
 	"github.com/hashicorp/hcl/v2/hclsimple"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/notification"
+	"github.com/pikoci/pikoci/pikoci/notiftype"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
@@ -64,14 +66,15 @@ type hclPutStep struct {
 	Remain hcl.Body `hcl:",remain"`
 }
 
-// hclJob is the intermediate HCL-decoded job with separate get/task/put arrays.
+// hclJob is the intermediate HCL-decoded job with separate get/task/put/notify arrays.
 type hclJob struct {
-	Name        string          `hcl:"name,label"`
-	Concurrency int             `hcl:"concurrency,optional"`
-	Get         []hclGetStep    `hcl:"get,block"`
-	Task        []hclTaskStep   `hcl:"task,block"`
-	Put         []hclPutStep    `hcl:"put,block"`
-	Service     []hclServiceRef `hcl:"service,block"`
+	Name        string           `hcl:"name,label"`
+	Concurrency int              `hcl:"concurrency,optional"`
+	Get         []hclGetStep     `hcl:"get,block"`
+	Task        []hclTaskStep    `hcl:"task,block"`
+	Put         []hclPutStep     `hcl:"put,block"`
+	Notify      []hclNotifyStep  `hcl:"notify,block"`
+	Service     []hclServiceRef  `hcl:"service,block"`
 
 	Remain hcl.Body `hcl:",remain"` // absorbs hook blocks; parsed by parseHooks from AST
 }
@@ -195,6 +198,37 @@ func (hs hclService) toService() service.Service {
 	return s
 }
 
+// hclNotificationType is an intermediate struct that allows optional notify block
+// when source is provided.
+type hclNotificationType struct {
+	Name   string   `json:"name" hcl:"name,label"`
+	Source string   `json:"source,omitempty" hcl:"source,optional"`
+	Params []string `json:"params" hcl:"params,optional"`
+
+	Notify []utils.RunnerCommand `json:"notify" hcl:"notify,block"`
+}
+
+func (hnt hclNotificationType) toNotificationType() notiftype.NotificationType {
+	nt := notiftype.NotificationType{
+		Name:   hnt.Name,
+		Source: hnt.Source,
+		Params: hnt.Params,
+	}
+	if len(hnt.Notify) > 0 {
+		nt.Notify = &hnt.Notify[0]
+	}
+	return nt
+}
+
+// hclNotifyStep is the HCL-decoded notify step.
+type hclNotifyStep struct {
+	Type    string `hcl:"type,label"`
+	Name    string `hcl:"name,label"`
+	Message string `hcl:"message,optional"`
+
+	Remain hcl.Body `hcl:",remain"`
+}
+
 // hclServiceRef is a service reference inside a job block.
 // Only param overrides are allowed (via Remain), no inline start/stop.
 type hclServiceRef struct {
@@ -204,14 +238,16 @@ type hclServiceRef struct {
 
 // hclPipeline is the intermediate HCL-decoded pipeline.
 type hclPipeline struct {
-	Name          string              `json:"name"`
-	Jobs          []hclJob            `hcl:"job,block"`
-	Resources     []resource.Resource `hcl:"resource,block"`
-	ResourceTypes []hclResourceType   `hcl:"resource_type,block"`
-	Runners       []hclRunnerDef      `hcl:"runner_type,block"`
-	SecretTypes   []hclSecretType     `hcl:"secret_type,block"`
-	Services      []hclService        `hcl:"service_type,block"`
-	Remain        hcl.Body            `hcl:",remain"`
+	Name              string                        `json:"name"`
+	Jobs              []hclJob                      `hcl:"job,block"`
+	Resources         []resource.Resource           `hcl:"resource,block"`
+	ResourceTypes     []hclResourceType             `hcl:"resource_type,block"`
+	NotificationTypes []hclNotificationType         `hcl:"notification_type,block"`
+	Notifications     []notification.Notification   `hcl:"notification,block"`
+	Runners           []hclRunnerDef                `hcl:"runner_type,block"`
+	SecretTypes       []hclSecretType               `hcl:"secret_type,block"`
+	Services          []hclService                  `hcl:"service_type,block"`
+	Remain            hcl.Body                      `hcl:",remain"`
 }
 
 // hclFunctions returns the set of built-in HCL functions available in pipeline
@@ -488,6 +524,53 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 		}
 	}
 
+	// Convert notification types and resolve sources
+	var notificationTypes []notiftype.NotificationType
+	for _, hnt := range hp.NotificationTypes {
+		if hnt.Source != "" {
+			hasInline := len(hnt.Notify) > 0
+			if hasInline {
+				return nil, fmt.Errorf("notification_type %q has both source and inline commands, which is not allowed", hnt.Name)
+			}
+			resolved, err := source.ResolveNotificationType(ctx, hnt.Source)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve source for notification_type %q: %w", hnt.Name, err)
+			}
+			resolved.Name = hnt.Name
+			resolved.Source = hnt.Source
+			notificationTypes = append(notificationTypes, *resolved)
+		} else {
+			notificationTypes = append(notificationTypes, hnt.toNotificationType())
+		}
+	}
+
+	// Compute notification canonicals and validate
+	notifications := hp.Notifications
+	for i, n := range notifications {
+		notifications[i].Canonical = utils.NotificationCanonical(n.Type, n.Name)
+		// Validate on/jobs/exclude
+		if len(n.Jobs) > 0 && len(n.Exclude) > 0 {
+			return nil, fmt.Errorf("notification %q: jobs and exclude are mutually exclusive", notifications[i].Canonical)
+		}
+		if (len(n.Jobs) > 0 || len(n.Exclude) > 0) && len(n.On) == 0 {
+			return nil, fmt.Errorf("notification %q: jobs/exclude requires on field", notifications[i].Canonical)
+		}
+		for _, ev := range n.On {
+			switch ev {
+			case "success", "failure", "cancel", "all":
+			default:
+				return nil, fmt.Errorf("notification %q: invalid on event %q (valid: success, failure, cancel, all)", notifications[i].Canonical, ev)
+			}
+		}
+		if len(n.On) > 1 {
+			for _, ev := range n.On {
+				if ev == "all" {
+					return nil, fmt.Errorf("notification %q: 'all' cannot be combined with other events", notifications[i].Canonical)
+				}
+			}
+		}
+	}
+
 	// Parse the raw HCL to determine block ordering within each job.
 	jobPlans, jobHooksMap, expandedServices, err := parseJobPlans(rpp, ectx, hp.Jobs, services)
 	if err != nil {
@@ -495,12 +578,14 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 	}
 
 	pp := pipeline.Pipeline{
-		Resources:     hp.Resources,
-		ResourceTypes: resourceTypes,
-		Runners:       runners,
-		SecretTypes:   secretTypes,
-		Services:      expandedServices,
-		SecretVars:    secretVars,
+		Resources:         hp.Resources,
+		ResourceTypes:     resourceTypes,
+		NotificationTypes: notificationTypes,
+		Notifications:     notifications,
+		Runners:           runners,
+		SecretTypes:       secretTypes,
+		Services:          expandedServices,
+		SecretVars:        secretVars,
 	}
 
 	for _, hj := range hp.Jobs {
@@ -575,29 +660,53 @@ func parseHooks(block *hclsyntax.Block, ectx *hcl.EvalContext, hookType string) 
 				Runner: &rc,
 			})
 		} else if len(b.Labels) == 0 {
-			// Unlabeled hook: contains put blocks
+			// Unlabeled hook: contains put and/or notify blocks
 			for _, inner := range b.Body.Blocks {
-				if inner.Type != "put" || len(inner.Labels) != 2 {
-					continue
-				}
-				putType := inner.Labels[0]
-				putName := inner.Labels[1]
-				params := make(map[string]string)
-				for name, attr := range inner.Body.Attributes {
-					val, vdiags := attr.Expr.Value(ectx)
-					if vdiags.HasErrors() {
-						continue
+				if inner.Type == "put" && len(inner.Labels) == 2 {
+					putType := inner.Labels[0]
+					putName := inner.Labels[1]
+					params := make(map[string]string)
+					for name, attr := range inner.Body.Attributes {
+						val, vdiags := attr.Expr.Value(ectx)
+						if vdiags.HasErrors() {
+							continue
+						}
+						params[name] = val.AsString()
 					}
-					params[name] = val.AsString()
+					steps = append(steps, job.HookStep{
+						Type: job.StepTypePut,
+						Put: &job.PutStep{
+							Type:   putType,
+							Name:   putName,
+							Params: params,
+						},
+					})
+				} else if inner.Type == "notify" && len(inner.Labels) == 2 {
+					notifyType := inner.Labels[0]
+					notifyName := inner.Labels[1]
+					params := make(map[string]string)
+					var message string
+					for name, attr := range inner.Body.Attributes {
+						val, vdiags := attr.Expr.Value(ectx)
+						if vdiags.HasErrors() {
+							continue
+						}
+						if name == "message" {
+							message = val.AsString()
+						} else {
+							params[name] = val.AsString()
+						}
+					}
+					steps = append(steps, job.HookStep{
+						Type: job.StepTypeNotify,
+						Notify: &job.NotifyStep{
+							Type:    notifyType,
+							Name:    notifyName,
+							Params:  params,
+							Message: message,
+						},
+					})
 				}
-				steps = append(steps, job.HookStep{
-					Type: job.StepTypePut,
-					Put: &job.PutStep{
-						Type:   putType,
-						Name:   putName,
-						Params: params,
-					},
-				})
 			}
 		}
 	}
@@ -634,7 +743,7 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 		}
 
 		var plan []job.PlanStep
-		getIdx, taskIdx, putIdx, serviceIdx := 0, 0, 0, 0
+		getIdx, taskIdx, putIdx, notifyIdx, serviceIdx := 0, 0, 0, 0, 0
 
 		for _, innerBlock := range block.Body.Blocks {
 			switch innerBlock.Type {
@@ -777,6 +886,38 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 						Type:   p.Type,
 						Name:   p.Name,
 						Params: putParams,
+					},
+					OnSuccess: parseHooks(innerBlock, ectx, "on_success"),
+					OnFailure: parseHooks(innerBlock, ectx, "on_failure"),
+					OnCancel:  parseHooks(innerBlock, ectx, "on_cancel"),
+					Ensure:    parseHooks(innerBlock, ectx, "ensure"),
+				})
+			case "notify":
+				if notifyIdx >= len(hj.Notify) {
+					continue
+				}
+				n := hj.Notify[notifyIdx]
+				notifyIdx++
+				// Extract notify params from AST attributes (exclude known fields)
+				notifyParams := make(map[string]string)
+				for name, attr := range innerBlock.Body.Attributes {
+					if name == "message" {
+						continue
+					}
+					val, vdiags := attr.Expr.Value(ectx)
+					if vdiags.HasErrors() {
+						continue
+					}
+					notifyParams[name] = val.AsString()
+				}
+
+				plan = append(plan, job.PlanStep{
+					Type: job.StepTypeNotify,
+					Notify: &job.NotifyStep{
+						Type:    n.Type,
+						Name:    n.Name,
+						Params:  notifyParams,
+						Message: n.Message,
 					},
 					OnSuccess: parseHooks(innerBlock, ectx, "on_success"),
 					OnFailure: parseHooks(innerBlock, ectx, "on_failure"),

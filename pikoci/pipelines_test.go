@@ -1641,3 +1641,395 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 		})
 	}
 }
+
+func TestCreatePipeline_WithNotificationType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+notification_type "slack" {
+  params = ["webhook_url"]
+  notify "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "echo notifying"]
+  }
+}
+
+notification "slack" "deploys" {
+  params {
+    webhook_url = "https://hooks.slack.com/test"
+  }
+  message = "Deploy complete"
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "build" {
+  get "cron" "timer" {
+    trigger = true
+  }
+  task "echo" {
+    run "exec" {
+      path = "echo"
+      args = ["hello"]
+    }
+  }
+}
+`)
+
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.Resources.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.NotificationTypes.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.Notifications.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "test-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "test-pipeline", Canonical: "test-pipeline"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "test-pipeline", hclConfig, nil)
+	require.NoError(t, err)
+}
+
+func TestCreatePipeline_NotifyInPlan(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+notification_type "slack" {
+  params = ["webhook_url"]
+  notify "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "echo notifying"]
+  }
+}
+
+notification "slack" "deploys" {
+  params {
+    webhook_url = "https://hooks.slack.com/test"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "deploy" {
+  get "cron" "timer" {
+    trigger = true
+  }
+  notify "slack" "deploys" {
+    status = "in_progress"
+  }
+  task "build" {
+    run "exec" {
+      path = "echo"
+      args = ["building"]
+    }
+  }
+}
+`)
+
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).DoAndReturn(
+		func(ctx context.Context, tc, pn string, j job.Job) (uint32, error) {
+			require.Len(t, j.Plan, 3)
+			assert.Equal(t, job.StepTypeGet, j.Plan[0].Type)
+			assert.Equal(t, job.StepTypeNotify, j.Plan[1].Type)
+			assert.Equal(t, "deploys", j.Plan[1].Notify.Name)
+			assert.Equal(t, "slack", j.Plan[1].Notify.Type)
+			assert.Equal(t, "in_progress", j.Plan[1].Notify.Params["status"])
+			assert.Equal(t, job.StepTypeTask, j.Plan[2].Type)
+			return uint32(1), nil
+		})
+	s.Resources.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.NotificationTypes.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.Notifications.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "test-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "test-pipeline", Canonical: "test-pipeline"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "test-pipeline", hclConfig, nil)
+	require.NoError(t, err)
+}
+
+func TestCreatePipeline_NotifyInHooks(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+notification_type "slack" {
+  params = ["webhook_url"]
+  notify "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "echo notifying"]
+  }
+}
+
+notification "slack" "deploys" {
+  params {
+    webhook_url = "https://hooks.slack.com/test"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "deploy" {
+  get "cron" "timer" {
+    trigger = true
+  }
+  task "build" {
+    run "exec" {
+      path = "echo"
+      args = ["building"]
+    }
+  }
+  on_success {
+    notify "slack" "deploys" { conclusion = "success" }
+  }
+  on_failure {
+    notify "slack" "deploys" { conclusion = "failure" }
+  }
+}
+`)
+
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).DoAndReturn(
+		func(ctx context.Context, tc, pn string, j job.Job) (uint32, error) {
+			require.Len(t, j.OnSuccess, 1)
+			assert.Equal(t, job.StepTypeNotify, j.OnSuccess[0].Type)
+			assert.Equal(t, "deploys", j.OnSuccess[0].Notify.Name)
+			assert.Equal(t, "success", j.OnSuccess[0].Notify.Params["conclusion"])
+
+			require.Len(t, j.OnFailure, 1)
+			assert.Equal(t, job.StepTypeNotify, j.OnFailure[0].Type)
+			assert.Equal(t, "deploys", j.OnFailure[0].Notify.Name)
+			assert.Equal(t, "failure", j.OnFailure[0].Notify.Params["conclusion"])
+			return uint32(1), nil
+		})
+	s.Resources.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.NotificationTypes.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.Notifications.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "test-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "test-pipeline", Canonical: "test-pipeline"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "test-pipeline", hclConfig, nil)
+	require.NoError(t, err)
+}
+
+func TestCreatePipeline_NotificationValidation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	tests := []struct {
+		name    string
+		hcl     string
+		wantErr string
+	}{
+		{
+			name: "jobs and exclude mutual exclusion",
+			hcl: `
+notification_type "slack" {
+  notify "exec" {
+    path = "echo"
+  }
+}
+notification "slack" "n" {
+  on = ["success"]
+  jobs = ["a"]
+  exclude = ["b"]
+}
+job "a" {
+  task "t" {
+    run "exec" {
+      path = "echo"
+    }
+  }
+}
+`,
+			wantErr: "jobs and exclude are mutually exclusive",
+		},
+		{
+			name: "jobs requires on",
+			hcl: `
+notification_type "slack" {
+  notify "exec" {
+    path = "echo"
+  }
+}
+notification "slack" "n" {
+  jobs = ["a"]
+}
+job "a" {
+  task "t" {
+    run "exec" {
+      path = "echo"
+    }
+  }
+}
+`,
+			wantErr: "jobs/exclude requires on field",
+		},
+		{
+			name: "invalid on event",
+			hcl: `
+notification_type "slack" {
+  notify "exec" {
+    path = "echo"
+  }
+}
+notification "slack" "n" {
+  on = ["invalid"]
+}
+job "a" {
+  task "t" {
+    run "exec" {
+      path = "echo"
+    }
+  }
+}
+`,
+			wantErr: "invalid on event",
+		},
+		{
+			name: "all cannot combine",
+			hcl: `
+notification_type "slack" {
+  notify "exec" {
+    path = "echo"
+  }
+}
+notification "slack" "n" {
+  on = ["all", "success"]
+}
+job "a" {
+  task "t" {
+    run "exec" {
+      path = "echo"
+    }
+  }
+}
+`,
+			wantErr: "'all' cannot be combined",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := s.S.CreatePipeline(ctx, "main", "test-pipeline", []byte(tt.hcl), nil)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+func TestCreatePipeline_NotificationInlineType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+notification_type "github-check" {
+  params = ["app_id", "repository"]
+  notify "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "echo check"]
+  }
+}
+
+notification "github-check" "ci" {
+  params {
+    app_id     = "123"
+    repository = "test/repo"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "build" {
+  get "cron" "timer" {
+    trigger = true
+  }
+  notify "github-check" "ci" {
+    status = "in_progress"
+  }
+  task "echo" {
+    run "exec" {
+      path = "echo"
+      args = ["hello"]
+    }
+  }
+}
+`)
+
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).DoAndReturn(
+		func(ctx context.Context, tc, pn string, j job.Job) (uint32, error) {
+			require.Len(t, j.Plan, 3)
+			assert.Equal(t, job.StepTypeNotify, j.Plan[1].Type)
+			assert.Equal(t, "github-check", j.Plan[1].Notify.Type)
+			assert.Equal(t, "ci", j.Plan[1].Notify.Name)
+			return uint32(1), nil
+		})
+	s.Resources.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.NotificationTypes.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.Notifications.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "test-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "test-pipeline", Canonical: "test-pipeline"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "test-pipeline", hclConfig, nil)
+	require.NoError(t, err)
+}
+
+func TestCreatePipeline_NotificationAutoOn(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+notification_type "slack" {
+  params = ["webhook_url"]
+  notify "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "echo notifying"]
+  }
+}
+
+notification "slack" "deploys" {
+  params {
+    webhook_url = "https://hooks.slack.com/test"
+  }
+  on = ["success", "failure"]
+  message = "Build finished"
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "build" {
+  get "cron" "timer" {
+    trigger = true
+  }
+  task "echo" {
+    run "exec" {
+      path = "echo"
+      args = ["hello"]
+    }
+  }
+}
+`)
+
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.Resources.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.NotificationTypes.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.Notifications.EXPECT().Create(ctx, "main", "test-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "test-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "test-pipeline", Canonical: "test-pipeline"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "test-pipeline", hclConfig, nil)
+	require.NoError(t, err)
+}

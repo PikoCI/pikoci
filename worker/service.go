@@ -379,6 +379,7 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 			w.updateBuild(ctx, m, b)
 			w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnCancel, "on_cancel", resolved, "cancelled")
 			w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.Ensure, "ensure", resolved, "cancelled")
+			w.runAutoNotifications(ctx, m, &b, cwd, pp, resolved)
 			return
 		}
 	}
@@ -403,6 +404,9 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 		status = "failed"
 	}
 	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.Ensure, "ensure", resolved, status)
+
+	// Fire automatic notifications based on build status
+	w.runAutoNotifications(ctx, m, &b, cwd, pp, resolved)
 }
 
 func (w *Worker) notifyNextPendingBuild(ctx context.Context, m queue.Body) {
@@ -590,6 +594,13 @@ func (w *Worker) runPlan(ctx context.Context, m queue.Body, b *build.Build, cwd 
 				continue
 			}
 			if w.runPutStep(ctx, m, b, cwd, pp, *ps.Put, ps, resolved) {
+				return true, resolved
+			}
+		case job.StepTypeNotify:
+			if ps.Notify == nil {
+				continue
+			}
+			if w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, resolved) {
 				return true, resolved
 			}
 		}
@@ -1038,6 +1049,227 @@ func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, c
 	return false
 }
 
+// runNotifyStep runs a single notify step (fire-and-forget notification).
+// Returns true if the step failed.
+func (w *Worker) runNotifyStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, n job.NotifyStep, ps job.PlanStep, resolved ...map[string]string) bool {
+	if w.LocalMode {
+		nCan := utils.NotificationCanonical(n.Type, n.Name)
+		logMsg := fmt.Sprintf("skipping notify step (local execution): %s", nCan)
+		b.Steps = append(b.Steps, build.Step{Type: "notify", Name: n.Name, Logs: logMsg, Status: build.Succeeded})
+		w.updateBuild(ctx, m, *b)
+		return false
+	}
+
+	var secretResolved map[string]string
+	if len(resolved) > 0 {
+		secretResolved = resolved[0]
+	}
+
+	nCan := utils.NotificationCanonical(n.Type, n.Name)
+	notif, ok := pp.Notification(nCan)
+	if !ok {
+		w.logger.Warn("notification not found in pipeline", "notification", nCan)
+		return false
+	}
+	nt, ok := pp.NotificationType(n.Type)
+	if !ok {
+		w.logger.Warn("notification type not found", "type", n.Type)
+		return false
+	}
+
+	if nt.Notify == nil {
+		return false
+	}
+
+	params := make(map[string]string)
+	// Type-level params from the notify command
+	for k, v := range nt.Notify.Params {
+		params[k] = v
+	}
+	// Notification-level params (param_ prefix)
+	for k, v := range notif.GetParams() {
+		if slices.Contains(nt.Params, k) {
+			params["param_"+k] = v
+		}
+	}
+	// Step-level params (notify_ prefix)
+	for k, v := range n.Params {
+		params["notify_"+k] = v
+	}
+	// Message: step message > notification message > empty
+	msg := n.Message
+	if msg == "" {
+		msg = notif.Message
+	}
+	if msg != "" {
+		params["NOTIFY_MESSAGE"] = msg
+	}
+	// Build metadata
+	for k, v := range buildMetadataParams(b, m) {
+		params[k] = v
+	}
+
+	ru, ok := pp.Runner(nt.Notify.Runner)
+	if !ok {
+		w.logger.Warn("runner not found for notification type", "runner", nt.Notify.Runner)
+		return false
+	}
+
+	replaceSecretPlaceholders(params, secretResolved)
+
+	notifyArgs := make([]string, len(nt.Notify.Args))
+	copy(notifyArgs, nt.Notify.Args)
+	replaceSecretPlaceholdersInSlice(notifyArgs, secretResolved)
+
+	rc := utils.RunnerCommand{
+		Runner: nt.Notify.Runner,
+		Args:   notifyArgs,
+		Params: params,
+	}
+
+	maxAttempts := ps.Attempts
+	if maxAttempts <= 0 {
+		maxAttempts = 1
+	}
+
+	// Append a "running" step and persist it
+	stepIdx := len(b.Steps)
+	b.Steps = append(b.Steps, build.Step{Type: "notify", Name: n.Name, Status: build.Started})
+	w.updateBuild(ctx, m, *b)
+
+	var out string
+	var d time.Duration
+	var err error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if attempt > 1 && maxAttempts > 1 {
+			out += fmt.Sprintf("\n--- attempt %d/%d ---\n", attempt, maxAttempts)
+		}
+
+		prefix := out
+		onPartialLog := func(partial string) {
+			b.Steps[stepIdx].Logs = prefix + partial
+			w.updateBuild(ctx, m, *b)
+		}
+
+		runCtx := ctx
+		var cancel context.CancelFunc
+		if ps.Timeout > 0 {
+			runCtx, cancel = context.WithTimeout(ctx, ps.Timeout)
+		}
+
+		var attemptOut string
+		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, onPartialLog)
+		out += attemptOut
+
+		if cancel != nil {
+			cancel()
+		}
+
+		if err == nil {
+			break
+		}
+
+		if runCtx.Err() == context.DeadlineExceeded {
+			out += fmt.Sprintf("\nstep timed out after %s", ps.Timeout)
+		}
+	}
+
+	if err != nil {
+		b.Steps[stepIdx] = build.Step{Type: "notify", Name: n.Name, Logs: out, Duration: d, Status: build.Failed}
+		b.Status = build.Failed
+		w.failBuild(ctx, m, *b, nil)
+		w.logger.Error("failed to run notify step", "step", n.Name, "error", err)
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, n.Name, ps.OnFailure, "on_failure", secretResolved)
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, n.Name, ps.Ensure, "ensure", secretResolved)
+		return true
+	}
+
+	b.Steps[stepIdx] = build.Step{Type: "notify", Name: n.Name, Logs: out, Duration: d, Status: build.Succeeded}
+	if err := w.updateBuild(ctx, m, *b); err != nil {
+		return true
+	}
+	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, n.Name, ps.OnSuccess, "on_success", secretResolved)
+	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, n.Name, ps.Ensure, "ensure", secretResolved)
+	return false
+}
+
+// runAutoNotifications fires automatic notifications based on the build status
+// and the notification's on/jobs/exclude configuration.
+func (w *Worker) runAutoNotifications(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, resolved map[string]string) {
+	if len(pp.Notifications) == 0 {
+		return
+	}
+
+	// Map build status to event name
+	var event string
+	switch b.Status {
+	case build.Succeeded:
+		event = "success"
+	case build.Failed:
+		event = "failure"
+	case build.Cancelled:
+		event = "cancel"
+	default:
+		return
+	}
+
+	for _, n := range pp.Notifications {
+		if len(n.On) == 0 {
+			continue
+		}
+
+		// Check if event matches
+		matched := false
+		for _, ev := range n.On {
+			if ev == "all" || ev == event {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+
+		// Check job scope
+		if len(n.Jobs) > 0 {
+			found := false
+			for _, jn := range n.Jobs {
+				if jn == m.JobName {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+		if len(n.Exclude) > 0 {
+			excluded := false
+			for _, jn := range n.Exclude {
+				if jn == m.JobName {
+					excluded = true
+					break
+				}
+			}
+			if excluded {
+				continue
+			}
+		}
+
+		ps := job.PlanStep{
+			Type: job.StepTypeNotify,
+			Notify: &job.NotifyStep{
+				Type:    n.Type,
+				Name:    n.Name,
+				Params:  map[string]string{"build_status": event},
+				Message: n.Message,
+			},
+		}
+		w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, resolved)
+	}
+}
+
 // buildPullParams assembles the environment parameters needed to pull a resource version.
 // Returns (nil, 0) if an error occurred (error is already handled via failBuild).
 // The second return value is the version ID actually used.
@@ -1170,6 +1402,16 @@ func (w *Worker) runHooks(ctx context.Context, m queue.Body, b *build.Build, ste
 				Put:  h.Put,
 			}
 			w.runPutStep(ctx, m, b, cwd, pp, *h.Put, ps, resolved)
+			continue
+		case job.StepTypeNotify:
+			if h.Notify == nil {
+				continue
+			}
+			ps := job.PlanStep{
+				Type:   job.StepTypeNotify,
+				Notify: h.Notify,
+			}
+			w.runNotifyStep(ctx, m, b, cwd, pp, *h.Notify, ps, resolved)
 			continue
 		default:
 			continue

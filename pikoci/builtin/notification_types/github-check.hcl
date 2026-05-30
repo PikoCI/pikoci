@@ -1,4 +1,4 @@
-resource_type "github-check" {
+notification_type "github-check" {
   params = [
     "app_id",
     "installation_id",
@@ -6,7 +6,7 @@ resource_type "github-check" {
     "repository",
     "base_url",
   ]
-  push "exec" {
+  notify "exec" {
     path = "/bin/sh"
     args = [
       "-ec",
@@ -16,11 +16,11 @@ resource_type "github-check" {
       PRIVATE_KEY="$param_private_key"
       REPO="$param_repository"
 
-      STATUS="$put_status"
-      CONCLUSION="$put_conclusion"
-      HEAD_SHA="$put_head_sha"
-      CHECK_NAME="$put_name"
-      DETAILS_URL="$put_details_url"
+      STATUS="$notify_status"
+      CONCLUSION="$notify_conclusion"
+      HEAD_SHA="$notify_head_sha"
+      CHECK_NAME="$notify_name"
+      DETAILS_URL="$notify_details_url"
       BASE_URL="$param_base_url"
       BASE_URL="$${BASE_URL%/}"
 
@@ -77,7 +77,7 @@ resource_type "github-check" {
         exit 1
       fi
 
-      RESOURCE_NAME=$(echo "$put_name" | tr ' ' '-')
+      RESOURCE_NAME=$(echo "$notify_name" | tr ' ' '-')
       if [ -z "$RESOURCE_NAME" ]; then
         RESOURCE_NAME="github-check"
       fi
@@ -127,7 +127,7 @@ resource_type "github-check" {
 
         echo "Updated check run $CHECK_RUN_ID with conclusion=$CONCLUSION"
       else
-        echo "error: either put_status or put_conclusion must be set" >&2
+        echo "error: either notify_status or notify_conclusion must be set" >&2
         exit 1
       fi
       EOT

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- First-class notification entities: `notification_type`, `notification`, and `notify` steps for fire-and-forget notifications with automatic dispatch, job scoping, and `github-check`/`slack`/`discord` notification types ([#154](https://github.com/PikoCI/pikoci/issues/154))
 - SVG and PNG pipeline graph formats for embedding in READMEs and dashboards ([#332](https://github.com/PikoCI/pikoci/issues/332))
 
 ### Changed

@@ -1,6 +1,6 @@
 # Pipeline Reference
 
-Pipelines are defined in [HCL](https://github.com/hashicorp/hcl). A pipeline file contains `variable`, `resource_type`, `resource`, `runner`, `secret_type`, `secret`, `service`, and `job` blocks.
+Pipelines are defined in [HCL](https://github.com/hashicorp/hcl). A pipeline file contains `variable`, `resource_type`, `resource`, `notification_type`, `notification`, `runner`, `secret_type`, `secret`, `service`, and `job` blocks.
 
 ## variable
 
@@ -81,6 +81,55 @@ resource "cron" "every_10s" {
 | `name`           | yes      | Label, unique name for this resource              |
 | `params`         | no       | Block with key/value pairs passed to the resource type |
 | `check_interval` | no       | Cron expression or `@every <duration>` for automatic checks |
+
+## notification_type
+
+Defines how to send a fire-and-forget notification. See [Notifications](Notifications.md).
+
+```hcl
+notification_type "slack" {
+  source = "pikoci://slack"
+}
+
+notification_type "custom" {
+  params = ["webhook_url"]
+  notify "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "curl -sf -X POST \"$param_webhook_url\" -d '{\"text\": \"'\"$NOTIFY_MESSAGE\"'\"}'"]
+  }
+}
+```
+
+| Field    | Required | Description                                                      |
+|----------|----------|------------------------------------------------------------------|
+| `name`   | yes      | Label on the block                                               |
+| `source` | no       | URL to fetch the definition from (mutually exclusive with inline `notify`) |
+| `params` | no       | List of parameter names the notification type accepts            |
+| `notify` | no       | Runner command block that executes the notification logic        |
+
+## notification
+
+An instance of a notification type. See [Notifications](Notifications.md).
+
+```hcl
+notification "slack" "deploys" {
+  params {
+    webhook_url = var.slack_webhook
+  }
+  on      = ["success", "failure"]
+  message = "Build finished"
+}
+```
+
+| Field     | Required | Description                                                                |
+|-----------|----------|----------------------------------------------------------------------------|
+| `type`    | yes      | Label, must match a `notification_type` name                              |
+| `name`    | yes      | Label, unique name for this notification                                  |
+| `params`  | no       | Block with key/value pairs passed to the notification type                |
+| `message` | no       | Default message text (available as `$NOTIFY_MESSAGE`)                     |
+| `on`      | no       | Events for automatic dispatch: `success`, `failure`, `cancel`, `all`. If omitted, manual-only. |
+| `jobs`    | no       | Limit automatic dispatch to these job names (requires `on`)               |
+| `exclude` | no       | Exclude these job names from automatic dispatch (requires `on`)           |
 
 ## runner_type
 
@@ -190,7 +239,7 @@ The `ready_check` block accepts `interval` (default `"1s"`) and `timeout` (defau
 
 ## job
 
-Jobs contain a plan of steps executed in order. Each step is one of `get`, `task`, `put`, or `service`.
+Jobs contain a plan of steps executed in order. Each step is one of `get`, `task`, `put`, `notify`, or `service`.
 
 The optional `concurrency` attribute limits how many builds of the job can run simultaneously. When the limit is reached, new builds are re-queued and wait until a slot frees up. The default value `0` means unlimited.
 
@@ -324,6 +373,26 @@ put "git" "my_repo" {
 | `attempts` | no       | Maximum number of times to try the step (default `1`, no retry) |
 | `secrets`  | no       | Map of secret_type name to path (e.g. `{"vault" = "secret/data/db"}`) |
 
+### notify
+
+Sends a fire-and-forget notification. See [Notifications](Notifications.md).
+
+```hcl
+notify "github-check" "ci" {
+  status = "in_progress"
+}
+```
+
+| Field     | Required | Description                                    |
+|-----------|----------|------------------------------------------------|
+| `type`     | yes      | Label, notification type name                  |
+| `name`     | yes      | Label, notification name                       |
+| `message`  | no       | Overrides the notification's default message   |
+
+Any other attributes are passed to the notification type's command with a `notify_` prefix.
+
+Notify steps also work in hooks (`on_success`, `on_failure`, `on_cancel`, `ensure`).
+
 ### service
 
 References a top-level `service_type` for the job. Services are started before tasks and stopped unconditionally after.
@@ -355,7 +424,7 @@ Each step (and the job itself) can have `on_success`, `on_failure`, `on_cancel`,
 - `on_cancel` runs when the build is cancelled (via UI, CLI, or API)
 - `ensure` always runs, regardless of success, failure, or cancellation
 
-Hooks can contain runner commands or `put` steps:
+Hooks can contain runner commands, `put` steps, or `notify` steps:
 
 ```hcl
 task "deploy" {
@@ -370,7 +439,7 @@ task "deploy" {
 }
 ```
 
-Put steps in hooks use an unlabeled hook block:
+Put and notify steps in hooks use an unlabeled hook block:
 
 ```hcl
 job "test" {
@@ -382,13 +451,13 @@ job "test" {
   }
 
   on_success {
-    put "github-check" "ci" {
+    notify "github-check" "ci" {
       conclusion = "success"
     }
   }
 
   on_failure {
-    put "github-check" "ci" {
+    notify "github-check" "ci" {
       conclusion = "failure"
     }
   }

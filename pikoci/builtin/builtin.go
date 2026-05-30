@@ -9,10 +9,15 @@ import (
 	"sync"
 
 	"github.com/hashicorp/hcl/v2/hclsimple"
+	"github.com/pikoci/pikoci/pikoci/notiftype"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
 	"github.com/pikoci/pikoci/pikoci/sectype"
 )
+
+// Note: notification type HCL files live in notification_types/ but are NOT
+// embedded. They are resolved via the pikoci:// source scheme, which falls
+// back to the GitHub raw URL when not found in the embedded FS.
 
 //go:embed resource_types/cron.hcl resource_types/git.hcl resource_types/trigger.hcl
 var resourceTypeFS embed.FS
@@ -152,6 +157,19 @@ func RunnerHCL(name string) ([]byte, bool) {
 		return nil, false
 	}
 	return data, true
+}
+
+// NotificationTypes returns an empty map. No notification types are embedded
+// in the binary. Use source = "pikoci://<name>" to resolve them from the
+// PikoCI registry.
+func NotificationTypes() map[string]notiftype.NotificationType {
+	return nil
+}
+
+// NotificationTypeHCL returns nil. Notification type HCL files are not
+// embedded; the pikoci:// source scheme falls back to the GitHub raw URL.
+func NotificationTypeHCL(name string) ([]byte, bool) {
+	return nil, false
 }
 
 // ServiceHCL returns the raw HCL bytes for a built-in service, if it exists.

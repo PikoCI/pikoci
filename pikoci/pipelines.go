@@ -15,6 +15,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/notification"
+	"github.com/pikoci/pikoci/pikoci/notiftype"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
@@ -113,6 +115,26 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 			_, err = uow.SecretTypes().Create(ctx, tc, pCan, st)
 			if err != nil {
 				return fmt.Errorf("failed to create SecretType %q: %w", st.Name, err)
+			}
+		}
+
+		for _, nt := range pp.NotificationTypes {
+			if !utils.ValidateCanonical(nt.Name) {
+				return fmt.Errorf("invalid NotificationType Name format %q", nt.Name)
+			}
+			_, err = uow.NotificationTypes().Create(ctx, tc, pCan, nt)
+			if err != nil {
+				return fmt.Errorf("failed to create NotificationType %q: %w", nt.Name, err)
+			}
+		}
+
+		for _, n := range pp.Notifications {
+			if !utils.ValidateCanonical(n.Name) {
+				return fmt.Errorf("invalid Notification Name format %q", n.Name)
+			}
+			_, err = uow.Notifications().Create(ctx, tc, pCan, n)
+			if err != nil {
+				return fmt.Errorf("failed to create Notification %q: %w", n.Canonical, err)
 			}
 		}
 
@@ -338,6 +360,62 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pCan string, rpp []byte
 			err = uow.SecretTypes().Delete(ctx, tc, pCan, stn)
 			if err != nil {
 				return fmt.Errorf("failed to delete SecretType %q: %w", stn, err)
+			}
+		}
+
+		dbnts := make(map[string]struct{})
+		for _, nt := range dbpp.NotificationTypes {
+			dbnts[nt.Name] = struct{}{}
+		}
+		for _, nt := range pp.NotificationTypes {
+			if !utils.ValidateCanonical(nt.Name) {
+				return fmt.Errorf("invalid NotificationType Name format %q", nt.Name)
+			}
+			if _, ok := dbnts[nt.Name]; ok {
+				delete(dbnts, nt.Name)
+				err = uow.NotificationTypes().Update(ctx, tc, pCan, nt.Name, nt)
+				if err != nil {
+					return fmt.Errorf("failed to update NotificationType %q: %w", nt.Name, err)
+				}
+			} else {
+				_, err = uow.NotificationTypes().Create(ctx, tc, pCan, nt)
+				if err != nil {
+					return fmt.Errorf("failed to create NotificationType %q: %w", nt.Name, err)
+				}
+			}
+		}
+		for ntn := range dbnts {
+			err = uow.NotificationTypes().Delete(ctx, tc, pCan, ntn)
+			if err != nil {
+				return fmt.Errorf("failed to delete NotificationType %q: %w", ntn, err)
+			}
+		}
+
+		dbns := make(map[string]notification.Notification)
+		for _, n := range dbpp.Notifications {
+			dbns[n.Canonical] = n
+		}
+		for _, n := range pp.Notifications {
+			if !utils.ValidateCanonical(n.Name) {
+				return fmt.Errorf("invalid Notification Name format %q", n.Name)
+			}
+			if _, ok := dbns[n.Canonical]; ok {
+				delete(dbns, n.Canonical)
+				err = uow.Notifications().Update(ctx, tc, pCan, n.Canonical, n)
+				if err != nil {
+					return fmt.Errorf("failed to update Notification %q: %w", n.Canonical, err)
+				}
+			} else {
+				_, err = uow.Notifications().Create(ctx, tc, pCan, n)
+				if err != nil {
+					return fmt.Errorf("failed to create Notification %q: %w", n.Canonical, err)
+				}
+			}
+		}
+		for nc := range dbns {
+			err = uow.Notifications().Delete(ctx, tc, pCan, nc)
+			if err != nil {
+				return fmt.Errorf("failed to delete Notification %q: %w", nc, err)
 			}
 		}
 
@@ -940,6 +1018,28 @@ func sanitizePipelineForPublic(pp *pipeline.Pipeline) *pipeline.Pipeline {
 		}
 	}
 	cp.SecretTypes = sts
+	nts := make([]notiftype.NotificationType, len(cp.NotificationTypes))
+	for i, nt := range cp.NotificationTypes {
+		nts[i] = notiftype.NotificationType{
+			ID:     nt.ID,
+			Name:   nt.Name,
+			Source: nt.Source,
+		}
+	}
+	cp.NotificationTypes = nts
+	ns := make([]notification.Notification, len(cp.Notifications))
+	for i, n := range cp.Notifications {
+		ns[i] = notification.Notification{
+			ID:        n.ID,
+			Type:      n.Type,
+			Name:      n.Name,
+			Canonical: n.Canonical,
+			On:        n.On,
+			Jobs:      n.Jobs,
+			Exclude:   n.Exclude,
+		}
+	}
+	cp.Notifications = ns
 	return &cp
 }
 

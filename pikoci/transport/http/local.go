@@ -161,6 +161,8 @@ const localEditorHTML = `<!DOCTYPE html>
                 <a href="https://docs.pikoci.com/Pipeline#runner_type" target="_blank" rel="noopener"><span class="piko-block-icon rn">R</span> runner_type</a>
                 <a href="https://docs.pikoci.com/Pipeline#secret_type" target="_blank" rel="noopener"><span class="piko-block-icon st">S</span> secret_type</a>
                 <a href="https://docs.pikoci.com/Pipeline#service_type" target="_blank" rel="noopener"><span class="piko-block-icon sv">S</span> service_type</a>
+                <a href="https://docs.pikoci.com/Notifications#notification-types" target="_blank" rel="noopener"><span class="piko-block-icon nt">N</span> notification_type</a>
+                <a href="https://docs.pikoci.com/Notifications#notifications" target="_blank" rel="noopener"><span class="piko-block-icon no">N</span> notification</a>
                 <a href="https://docs.pikoci.com/Pipeline#variable" target="_blank" rel="noopener"><span class="piko-block-icon vr">V</span> variable</a>
               </div>
             </div>
