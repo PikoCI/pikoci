@@ -3764,3 +3764,48 @@ func TestApplyRunnerOverride_ExecNilArgs(t *testing.T) {
 	assert.Equal(t, "/opt/check", rc.Params["cmd"])
 	assert.Nil(t, rc.Args)
 }
+
+func TestResourceCacheEnabled(t *testing.T) {
+	t.Run("type true, resource nil", func(t *testing.T) {
+		rt := restype.ResourceType{Cache: true}
+		r := resource.Resource{}
+		assert.True(t, resourceCacheEnabled(rt, r))
+	})
+
+	t.Run("type false, resource nil", func(t *testing.T) {
+		rt := restype.ResourceType{Cache: false}
+		r := resource.Resource{}
+		assert.False(t, resourceCacheEnabled(rt, r))
+	})
+
+	t.Run("type true, resource false", func(t *testing.T) {
+		rt := restype.ResourceType{Cache: true}
+		f := false
+		r := resource.Resource{Cache: &f}
+		assert.False(t, resourceCacheEnabled(rt, r))
+	})
+
+	t.Run("type false, resource true", func(t *testing.T) {
+		rt := restype.ResourceType{Cache: false}
+		tr := true
+		r := resource.Resource{Cache: &tr}
+		assert.True(t, resourceCacheEnabled(rt, r))
+	})
+}
+
+func TestCacheDir(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _, _ := newTestWorker(ctrl)
+
+	dir, err := w.cacheDir("myteam", "mypipeline", "git.myrepo")
+	require.NoError(t, err)
+	assert.Contains(t, dir, filepath.Join("pikoci", "cache", "myteam", "mypipeline", "git.myrepo"))
+
+	// Verify the directory was actually created
+	info, err := os.Stat(dir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+
+	// Clean up
+	os.RemoveAll(dir)
+}

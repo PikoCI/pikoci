@@ -17,6 +17,7 @@ func TestResourceTypes(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "cron", rt.Name)
 		assert.Equal(t, "exec", rt.Check.Runner)
+		assert.False(t, rt.Cache)
 	})
 
 	t.Run("git", func(t *testing.T) {
@@ -26,6 +27,7 @@ func TestResourceTypes(t *testing.T) {
 		assert.Equal(t, "exec", rt.Check.Runner)
 		assert.Equal(t, "exec", rt.Pull.Runner)
 		assert.Equal(t, "exec", rt.Push.Runner)
+		assert.True(t, rt.Cache)
 		assert.Contains(t, rt.Params, "url")
 		assert.Contains(t, rt.Params, "name")
 		assert.Contains(t, rt.Params, "token")

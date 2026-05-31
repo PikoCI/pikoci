@@ -85,6 +85,7 @@ type hclResourceType struct {
 	Name   string   `json:"name" hcl:"name,label"`
 	Source string   `json:"source,omitempty" hcl:"source,optional"`
 	Params []string `json:"params" hcl:"params,optional"`
+	Cache  bool     `json:"cache" hcl:"cache,optional"`
 
 	Check  []utils.RunnerCommand  `json:"check" hcl:"check,block"`
 	Pull   []utils.RunnerCommand  `json:"pull" hcl:"pull,block"`
@@ -97,6 +98,7 @@ func (hrt hclResourceType) toResourceType() restype.ResourceType {
 		Name:   hrt.Name,
 		Source: hrt.Source,
 		Params: hrt.Params,
+		Cache:  hrt.Cache,
 	}
 	if len(hrt.Check) > 0 {
 		rt.Check = &hrt.Check[0]
@@ -428,6 +430,9 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 			}
 			resolved.Name = hrt.Name
 			resolved.Source = hrt.Source
+			if hrt.Cache {
+				resolved.Cache = true
+			}
 			if len(hrt.Runner) > 0 {
 				resolved.Runner = &hrt.Runner[0]
 			}

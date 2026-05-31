@@ -71,6 +71,21 @@ type Worker struct {
 	LocalMode bool
 }
 
+func (w *Worker) cacheDir(teamCanonical, pipelineCanonical, resourceCanonical string) (string, error) {
+	p, err := xdg.CacheFile(filepath.Join("pikoci", "cache", teamCanonical, pipelineCanonical, resourceCanonical, ".keep"))
+	if err != nil {
+		return "", fmt.Errorf("failed to create cache dir: %w", err)
+	}
+	return filepath.Dir(p), nil
+}
+
+func resourceCacheEnabled(rt restype.ResourceType, r resource.Resource) bool {
+	if r.Cache != nil {
+		return *r.Cache
+	}
+	return rt.Cache
+}
+
 // New creates a new Worker with the given PikoCI service, job topic, job and
 // check subscriptions, and logger. The returned Worker is ready to be started
 // with Run.
@@ -703,6 +718,15 @@ func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, c
 	}
 	if rt.Runner != nil {
 		delete(rc.Params, "path")
+	}
+
+	if resourceCacheEnabled(rt, r) {
+		cd, err := w.cacheDir(m.TeamCanonical, m.PipelineCanonical, rCan)
+		if err != nil {
+			w.logger.Error("failed to create cache dir for pull", "error", err)
+		} else {
+			rc.Params["CACHE_DIR"] = cd
+		}
 	}
 
 	replaceSecretPlaceholders(rc.Params, secretResolved)
@@ -1518,6 +1542,15 @@ func (w *Worker) processResourceCheck(ctx context.Context, m queue.Body, cwd str
 
 	for k, v := range params {
 		rc.Params[k] = v
+	}
+
+	if resourceCacheEnabled(rt, r) {
+		cd, err := w.cacheDir(m.TeamCanonical, m.PipelineCanonical, r.Canonical)
+		if err != nil {
+			w.logger.Error("failed to create cache dir", "error", err)
+		} else {
+			rc.Params["CACHE_DIR"] = cd
+		}
 	}
 
 	replaceSecretPlaceholders(rc.Params, resolved)

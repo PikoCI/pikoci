@@ -1,4 +1,5 @@
 resource_type "git" {
+  cache = true
   params = [
     "url",
     "branch",
@@ -17,6 +18,21 @@ resource_type "git" {
       TOKEN="$param_token"
       PR="$param_pr"
       TAG="$param_tag"
+
+      # Maintain a bare clone in CACHE_DIR for faster operations
+      if [ -n "$CACHE_DIR" ]; then
+        if [ -n "$TOKEN" ]; then
+          CACHE_URL=$(echo "$URL" | sed -E "s|https://|https://oauth2:$TOKEN@|")
+        else
+          CACHE_URL="$URL"
+        fi
+        if [ -d "$CACHE_DIR/repo" ]; then
+          git -C "$CACHE_DIR/repo" remote set-url origin "$CACHE_URL" 2>/dev/null || true
+          git -C "$CACHE_DIR/repo" fetch --prune 2>/dev/null || true
+        else
+          git clone --bare "$CACHE_URL" "$CACHE_DIR/repo" 2>/dev/null || true
+        fi
+      fi
 
       # First check: version vars are empty when no previous versions exist.
       # Return only the latest item to avoid triggering a build per historical entry.
@@ -158,21 +174,28 @@ resource_type "git" {
         URL=$(echo "$URL" | sed -E "s|https://|https://oauth2:$TOKEN@|")
       fi
 
+      # Use local cache as reference for faster clones
+      REFERENCE_ARGS=""
+      if [ -n "$CACHE_DIR" ] && [ -d "$CACHE_DIR/repo" ]; then
+        git -C "$CACHE_DIR/repo" fetch --prune 2>/dev/null || true
+        REFERENCE_ARGS="--reference-if-able $CACHE_DIR/repo"
+      fi
+
       if [ "$TAG" = "true" ] && [ -n "$version_tag" ]; then
         # Tag mode: clone at the specific tag
-        git clone -b "$version_tag" --depth 1 "$URL" "$param_name"
+        git clone $REFERENCE_ARGS -b "$version_tag" --depth 1 "$URL" "$param_name"
       elif [ "$PR" = "true" ] && [ -n "$version_pr" ]; then
         # PR mode: fetch the PR head ref
-        git clone "$URL" "$param_name"
+        git clone $REFERENCE_ARGS "$URL" "$param_name"
         cd "$param_name"
         git fetch origin "pull/$version_pr/head:pr-$version_pr"
         git checkout "pr-$version_pr"
       elif [ -n "$BRANCH" ]; then
-        git clone -b "$BRANCH" "$URL" "$param_name"
+        git clone $REFERENCE_ARGS -b "$BRANCH" "$URL" "$param_name"
         cd "$param_name"
         git checkout "$version_ref"
       else
-        git clone "$URL" "$param_name"
+        git clone $REFERENCE_ARGS "$URL" "$param_name"
         cd "$param_name"
         git checkout "$version_ref"
       fi

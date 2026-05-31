@@ -14,6 +14,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/sectype"
 	"go.uber.org/mock/gomock"
 )
@@ -2429,4 +2430,124 @@ job "test" {
 
 	_, err := s.S.CreatePipeline(ctx, "main", "sourced-override", hclConfig, nil)
 	require.NoError(t, err)
+}
+
+func TestCreatePipeline_CacheOnResourceType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+resource_type "git" {
+  cache  = true
+  params = ["url"]
+  check "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "echo '[{\"ref\":\"abc\"}]'"]
+  }
+  pull "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "echo pull"]
+  }
+  push "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "echo push"]
+  }
+}
+
+resource "git" "repo" {
+  params {
+    url = "http://example.com"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  get "cron" "timer" {
+    trigger = true
+  }
+}
+`)
+
+	var capturedRT interface{}
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "cache-test", gomock.Any()).Return(uint32(1), nil)
+	s.ResourceTypes.EXPECT().Create(ctx, "main", "cache-test", gomock.Any()).DoAndReturn(
+		func(ctx context.Context, tc, pn string, rt interface{}) (uint32, error) {
+			capturedRT = rt
+			return uint32(1), nil
+		})
+	s.Resources.EXPECT().Create(ctx, "main", "cache-test", gomock.Any()).Return(uint32(1), nil).Times(2)
+	s.Pipelines.EXPECT().Find(ctx, "main", "cache-test").Return(&pipeline.Pipeline{ID: 1, Name: "cache-test", Canonical: "cache-test"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "cache-test", hclConfig, nil)
+	require.NoError(t, err)
+
+	rt, ok := capturedRT.(restype.ResourceType)
+	require.True(t, ok)
+	assert.True(t, rt.Cache)
+}
+
+func TestCreatePipeline_CacheResourceOverridesType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+resource_type "git" {
+  cache  = true
+  params = ["url"]
+  check "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "echo '[{\"ref\":\"abc\"}]'"]
+  }
+  pull "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "echo pull"]
+  }
+  push "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "echo push"]
+  }
+}
+
+resource "git" "repo" {
+  cache = false
+  params {
+    url = "http://example.com"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  get "cron" "timer" {
+    trigger = true
+  }
+}
+`)
+
+	var capturedResource resource.Resource
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "cache-override", gomock.Any()).Return(uint32(1), nil)
+	s.ResourceTypes.EXPECT().Create(ctx, "main", "cache-override", gomock.Any()).Return(uint32(1), nil)
+	s.Resources.EXPECT().Create(ctx, "main", "cache-override", gomock.Any()).DoAndReturn(
+		func(ctx context.Context, tc, pn string, r resource.Resource) (uint32, error) {
+			if r.Name == "repo" {
+				capturedResource = r
+			}
+			return uint32(1), nil
+		}).Times(2)
+	s.Pipelines.EXPECT().Find(ctx, "main", "cache-override").Return(&pipeline.Pipeline{ID: 1, Name: "cache-override", Canonical: "cache-override"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "cache-override", hclConfig, nil)
+	require.NoError(t, err)
+
+	require.NotNil(t, capturedResource.Cache)
+	assert.False(t, *capturedResource.Cache)
 }
