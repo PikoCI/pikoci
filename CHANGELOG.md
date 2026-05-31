@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Persistent resource caching: `cache = true` on `resource_type` enables a persistent `$CACHE_DIR` for check and pull scripts, with per-resource override support. The built-in `git` resource type uses caching by default — maintaining a bare clone for faster `git fetch` checks and `--reference-if-able` pulls ([#216](https://github.com/PikoCI/pikoci/issues/216))
 - Type-level runner overrides: `resource_type`, `notification_type`, `secret_type`, and `service_type` definitions can specify a `runner` block to override where their exec commands execute, e.g. run inside Docker without modifying the type's command definitions ([#221](https://github.com/PikoCI/pikoci/issues/221))
 - Floating toast notifications for success and error feedback on all mutating actions (trigger, delete, retry, cancel, etc.) with auto-dismiss and dark mode support ([#351](https://github.com/PikoCI/pikoci/issues/351))
 - File secret type: auto-detect format from file extension (`json`, `yaml`, `env`, `raw`), add `json` and `yaml` as explicit format options, and fix multi-line JSON parsing ([#435](https://github.com/PikoCI/pikoci/issues/435))

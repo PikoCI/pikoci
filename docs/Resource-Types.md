@@ -30,6 +30,7 @@ resource_type "git" {
 | `name`   | yes      | Label on the block                                  |
 | `source` | no       | URL to fetch the definition from (mutually exclusive with inline commands) |
 | `params` | no       | List of parameter names the resource type accepts   |
+| `cache`  | no       | Enable persistent cache for check/pull (see [Caching](#caching)) |
 | `check`  | no       | Runner command to detect new versions               |
 | `pull`   | no       | Runner command to fetch a specific version           |
 | `push`   | no       | Runner command to publish (used by `put` steps)     |
@@ -65,6 +66,7 @@ Inside `check`, `pull`, and `push` commands, PikoCI exposes:
 | `$BUILD_PIPELINE_NAME` | Name of the current pipeline              |
 | `$BUILD_TEAM_NAME`   | Canonical name of the team                   |
 | `$BUILD_STATUS`      | Build status: `succeeded` or `failed` (hooks only) |
+| `$CACHE_DIR`         | Persistent cache directory (check/pull only, when [caching](#caching) is enabled) |
 | `$path`, `$args`     | Runner `run` block values (for the exec runner) |
 
 ## Sourcing from URL
@@ -135,6 +137,7 @@ resource "git" "my_repo" {
 | `name`           | yes      | Unique name for this resource instance                |
 | `params`         | yes      | Key/value pairs matching the resource type's `params` |
 | `check_interval` | no       | Schedule for automatic checks (cron syntax or `@every <duration>`) |
+| `cache`          | no       | Override the resource type's cache setting (`true`/`false`) |
 
 ### Webhook triggers
 
@@ -149,6 +152,74 @@ You can regenerate a webhook token via the API:
 ```
 POST /teams/{team}/pipelines/{pipeline}/resources/{resource}/webhook_token
 ```
+
+## Caching
+
+Resource types can enable persistent caching so that check and pull scripts can reuse state across runs instead of starting from scratch every time. This is especially useful for large Git repositories where a full clone on every pull is slow.
+
+### Enabling cache
+
+Set `cache = true` on a `resource_type` to enable caching for all resources of that type:
+
+```hcl
+resource_type "git" {
+  source = "pikoci://git"
+  cache  = true
+}
+```
+
+Individual resources can override the type default:
+
+```hcl
+resource "git" "small-repo" {
+  cache = false   # opt out even though type defaults to true
+  params {
+    url = "https://github.com/small/repo"
+  }
+}
+```
+
+### How it works
+
+When caching is enabled, PikoCI creates a persistent directory for each resource instance and passes it as the `$CACHE_DIR` environment variable to **check** and **pull** scripts (not push). The directory is namespaced per team, pipeline, and resource:
+
+```
+~/.cache/pikoci/cache/{team}/{pipeline}/{resource_canonical}/
+```
+
+Scripts are responsible for managing the cache contents. PikoCI only creates the directory and passes the path — it does not manage the data inside.
+
+### Writing cache-aware scripts
+
+A cache-aware check script should populate the cache as a side effect:
+
+```sh
+if [ -n "$CACHE_DIR" ]; then
+  if [ -d "$CACHE_DIR/repo" ]; then
+    git -C "$CACHE_DIR/repo" fetch --prune
+  else
+    git clone --bare "$URL" "$CACHE_DIR/repo"
+  fi
+fi
+```
+
+A cache-aware pull script can use `--reference-if-able` to avoid re-downloading objects:
+
+```sh
+if [ -n "$CACHE_DIR" ] && [ -d "$CACHE_DIR/repo" ]; then
+  git clone --reference-if-able "$CACHE_DIR/repo" "$URL" "$name"
+else
+  git clone "$URL" "$name"
+fi
+```
+
+The built-in `git` resource type has `cache = true` by default and uses this pattern automatically.
+
+### Notes
+
+- Each worker has its own cache — there is no shared state between workers.
+- Cache directories persist indefinitely. No automatic cleanup is performed in the current version.
+- If `$CACHE_DIR` is not set (caching disabled), scripts should fall back to their normal behavior.
 
 ## Built-in: cron
 

@@ -16,6 +16,8 @@ type Resource struct {
 	Params        *Params `json:"params,omitempty" hcl:"params,block"`
 	CheckInterval string  `json:"check_interval" hcl:"check_interval,optional"`
 
+	Cache *bool `json:"cache,omitempty" hcl:"cache,optional"`
+
 	Canonical    string    `json:"canonical"`
 	Logs         string    `json:"logs"`
 	LastCheck    time.Time `json:"last_check"`

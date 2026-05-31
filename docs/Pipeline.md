@@ -56,6 +56,7 @@ resource_type "git" {
 | `source` | no       | URL to fetch definition (e.g. `pikoci://git`)       |
 | `params` | no       | List of parameter names                             |
 | `runner` | no       | Override runner for all commands (see [Runners](Runners.md#type-level-runner-overrides)) |
+| `cache`  | no       | Enable persistent cache for check/pull (see [Resource Types](Resource-Types.md#caching)) |
 
 When `source` is set, inline commands are not needed. The source is resolved once when the pipeline is created or updated — if the remote definition changes, you must re-set the pipeline to pick up the new version. This applies to all block types that support `source` (`resource_type`, `runner_type`, `secret_type`, `service_type`).
 
@@ -82,6 +83,7 @@ resource "cron" "every_10s" {
 | `name`           | yes      | Label, unique name for this resource              |
 | `params`         | no       | Block with key/value pairs passed to the resource type |
 | `check_interval` | no       | Cron expression or `@every <duration>` for automatic checks |
+| `cache`          | no       | Override the resource type's cache setting (see [Resource Types](Resource-Types.md#caching)) |
 
 ## notification_type
 
