@@ -86,9 +86,10 @@ type hclResourceType struct {
 	Source string   `json:"source,omitempty" hcl:"source,optional"`
 	Params []string `json:"params" hcl:"params,optional"`
 
-	Check []utils.RunnerCommand `json:"check" hcl:"check,block"`
-	Pull  []utils.RunnerCommand `json:"pull" hcl:"pull,block"`
-	Push  []utils.RunnerCommand `json:"push" hcl:"push,block"`
+	Check  []utils.RunnerCommand  `json:"check" hcl:"check,block"`
+	Pull   []utils.RunnerCommand  `json:"pull" hcl:"pull,block"`
+	Push   []utils.RunnerCommand  `json:"push" hcl:"push,block"`
+	Runner []utils.RunnerOverride `json:"runner" hcl:"runner,block"`
 }
 
 func (hrt hclResourceType) toResourceType() restype.ResourceType {
@@ -105,6 +106,9 @@ func (hrt hclResourceType) toResourceType() restype.ResourceType {
 	}
 	if len(hrt.Push) > 0 {
 		rt.Push = &hrt.Push[0]
+	}
+	if len(hrt.Runner) > 0 {
+		rt.Runner = &hrt.Runner[0]
 	}
 	return rt
 }
@@ -136,8 +140,9 @@ type hclSecretType struct {
 	Source string   `json:"source,omitempty" hcl:"source,optional"`
 	Params []string `json:"params" hcl:"params,optional"`
 
-	Get    []utils.RunnerCommand `json:"get" hcl:"get,block"`
-	Remain hcl.Body              `hcl:",remain"`
+	Get    []utils.RunnerCommand  `json:"get" hcl:"get,block"`
+	Runner []utils.RunnerOverride `json:"runner" hcl:"runner,block"`
+	Remain hcl.Body               `hcl:",remain"`
 }
 
 func (hst hclSecretType) toSecretType() sectype.SecretType {
@@ -148,6 +153,9 @@ func (hst hclSecretType) toSecretType() sectype.SecretType {
 	}
 	if len(hst.Get) > 0 {
 		st.Get = hst.Get[0]
+	}
+	if len(hst.Runner) > 0 {
+		st.Runner = &hst.Runner[0]
 	}
 	return st
 }
@@ -163,12 +171,13 @@ type hclReadyCheck struct {
 
 // hclService is the HCL-decoded top-level service block.
 type hclService struct {
-	Name       string                `hcl:"name,label"`
-	Source     string                `hcl:"source,optional"`
-	Params     []string              `hcl:"params,optional"`
-	Start      []utils.RunnerCommand `hcl:"start,block"`
-	ReadyCheck []hclReadyCheck       `hcl:"ready_check,block"`
-	Stop       []utils.RunnerCommand `hcl:"stop,block"`
+	Name       string                 `hcl:"name,label"`
+	Source     string                 `hcl:"source,optional"`
+	Params     []string               `hcl:"params,optional"`
+	Start      []utils.RunnerCommand  `hcl:"start,block"`
+	ReadyCheck []hclReadyCheck        `hcl:"ready_check,block"`
+	Stop       []utils.RunnerCommand  `hcl:"stop,block"`
+	Runner     []utils.RunnerOverride `hcl:"runner,block"`
 }
 
 func (hs hclService) toService() service.Service {
@@ -195,6 +204,9 @@ func (hs hclService) toService() service.Service {
 			Timeout:  rc.Timeout,
 		}
 	}
+	if len(hs.Runner) > 0 {
+		s.Runner = &hs.Runner[0]
+	}
 	return s
 }
 
@@ -205,7 +217,8 @@ type hclNotificationType struct {
 	Source string   `json:"source,omitempty" hcl:"source,optional"`
 	Params []string `json:"params" hcl:"params,optional"`
 
-	Notify []utils.RunnerCommand `json:"notify" hcl:"notify,block"`
+	Notify []utils.RunnerCommand  `json:"notify" hcl:"notify,block"`
+	Runner []utils.RunnerOverride `json:"runner" hcl:"runner,block"`
 }
 
 func (hnt hclNotificationType) toNotificationType() notiftype.NotificationType {
@@ -216,6 +229,9 @@ func (hnt hclNotificationType) toNotificationType() notiftype.NotificationType {
 	}
 	if len(hnt.Notify) > 0 {
 		nt.Notify = &hnt.Notify[0]
+	}
+	if len(hnt.Runner) > 0 {
+		nt.Runner = &hnt.Runner[0]
 	}
 	return nt
 }
@@ -412,6 +428,9 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 			}
 			resolved.Name = hrt.Name
 			resolved.Source = hrt.Source
+			if len(hrt.Runner) > 0 {
+				resolved.Runner = &hrt.Runner[0]
+			}
 			resourceTypes = append(resourceTypes, *resolved)
 		} else {
 			resourceTypes = append(resourceTypes, hrt.toResourceType())
@@ -486,6 +505,9 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 			if cfg, ok := secretTypeConfigs[i]; ok {
 				resolved.Config = cfg
 			}
+			if len(hst.Runner) > 0 {
+				resolved.Runner = &hst.Runner[0]
+			}
 			secretTypes = append(secretTypes, *resolved)
 		} else {
 			st := hst.toSecretType()
@@ -511,6 +533,9 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 			resolved.Source = hs.Source
 			if hs.Params != nil {
 				resolved.Params = hs.Params
+			}
+			if len(hs.Runner) > 0 {
+				resolved.Runner = &hs.Runner[0]
 			}
 			services = append(services, *resolved)
 		} else {
@@ -538,9 +563,53 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 			}
 			resolved.Name = hnt.Name
 			resolved.Source = hnt.Source
+			if len(hnt.Runner) > 0 {
+				resolved.Runner = &hnt.Runner[0]
+			}
 			notificationTypes = append(notificationTypes, *resolved)
 		} else {
 			notificationTypes = append(notificationTypes, hnt.toNotificationType())
+		}
+	}
+
+	// Validate runner overrides: only exec commands can be overridden
+	for _, rt := range resourceTypes {
+		if rt.Runner == nil {
+			continue
+		}
+		for _, cmd := range []*utils.RunnerCommand{rt.Check, rt.Pull, rt.Push} {
+			if cmd != nil && cmd.Runner != "exec" {
+				return nil, fmt.Errorf("resource_type %q has runner override but command uses non-exec runner %q", rt.Name, cmd.Runner)
+			}
+		}
+	}
+	for _, nt := range notificationTypes {
+		if nt.Runner == nil {
+			continue
+		}
+		if nt.Notify != nil && nt.Notify.Runner != "exec" {
+			return nil, fmt.Errorf("notification_type %q has runner override but command uses non-exec runner %q", nt.Name, nt.Notify.Runner)
+		}
+	}
+	for _, st := range secretTypes {
+		if st.Runner == nil {
+			continue
+		}
+		if st.Get.Runner != "" && st.Get.Runner != "exec" {
+			return nil, fmt.Errorf("secret_type %q has runner override but command uses non-exec runner %q", st.Name, st.Get.Runner)
+		}
+	}
+	for _, svc := range services {
+		if svc.Runner == nil {
+			continue
+		}
+		for _, cmd := range []utils.RunnerCommand{svc.Start, svc.Stop} {
+			if cmd.Runner != "" && cmd.Runner != "exec" {
+				return nil, fmt.Errorf("service_type %q has runner override but command uses non-exec runner %q", svc.Name, cmd.Runner)
+			}
+		}
+		if svc.ReadyCheck != nil && svc.ReadyCheck.Runner != "exec" {
+			return nil, fmt.Errorf("service_type %q has runner override but ready_check uses non-exec runner %q", svc.Name, svc.ReadyCheck.Runner)
 		}
 	}
 

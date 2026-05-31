@@ -93,6 +93,50 @@ func (w *Worker) Drain() {
 	}
 }
 
+// applyRunnerOverride resolves the runner for a type command, applying a
+// runner override when present. When the override is set and the command
+// uses "exec", the command is transformed to run under the override runner
+// (e.g. docker) instead. Returns the resolved runner, the transformed
+// command, and whether the runner was found.
+func applyRunnerOverride(pp *pipeline.Pipeline, typeCmd *utils.RunnerCommand, override *utils.RunnerOverride) (runner.Runner, utils.RunnerCommand, bool) {
+	runnerName := typeCmd.Runner
+	rc := utils.RunnerCommand{
+		Runner: typeCmd.Runner,
+		Args:   make([]string, len(typeCmd.Args)),
+		Params: make(map[string]string),
+	}
+	copy(rc.Args, typeCmd.Args)
+	for k, v := range typeCmd.Params {
+		rc.Params[k] = v
+	}
+
+	if override != nil && typeCmd.Runner == "exec" {
+		runnerName = override.Runner
+		rc.Runner = override.Runner
+		for k, v := range override.Params {
+			rc.Params[k] = v
+		}
+		// Transform exec path+args into cmd for target runner
+		if path, ok := rc.Params["path"]; ok {
+			cmd := path
+			if len(typeCmd.Args) > 0 {
+				cmd += " " + strings.Join(typeCmd.Args, " ")
+			}
+			rc.Params["cmd"] = cmd
+			delete(rc.Params, "path")
+		}
+		// Override args replace exec args (used as extra runner flags, e.g. docker flags)
+		if len(override.Args) > 0 {
+			rc.Args = override.Args
+		} else {
+			rc.Args = nil
+		}
+	}
+
+	ru, ok := pp.Runner(runnerName)
+	return ru, rc, ok
+}
+
 // Run starts the worker event loop. It launches goroutines that receive
 // messages from the job and check subscriptions and process them concurrently.
 // Run blocks until the context is cancelled or an unrecoverable error occurs.
@@ -646,26 +690,23 @@ func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, c
 		return true
 	}
 
-	ru, ok := pp.Runner(rt.Pull.Runner)
+	ru, rc, ok := applyRunnerOverride(pp, rt.Pull, rt.Runner)
 	if !ok {
 		return false
 	}
 
-	replaceSecretPlaceholders(params, secretResolved)
-
+	for k, v := range params {
+		rc.Params[k] = v
+	}
 	for k, v := range buildMetadataParams(b, m) {
-		params[k] = v
+		rc.Params[k] = v
+	}
+	if rt.Runner != nil {
+		delete(rc.Params, "path")
 	}
 
-	pullArgs := make([]string, len(rt.Pull.Args))
-	copy(pullArgs, rt.Pull.Args)
-	replaceSecretPlaceholdersInSlice(pullArgs, secretResolved)
-
-	rc := utils.RunnerCommand{
-		Runner: rt.Pull.Runner,
-		Args:   pullArgs,
-		Params: params,
-	}
+	replaceSecretPlaceholders(rc.Params, secretResolved)
+	replaceSecretPlaceholdersInSlice(rc.Args, secretResolved)
 
 	maxAttempts := ps.Attempts
 	if maxAttempts <= 0 {
@@ -966,22 +1007,20 @@ func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, c
 		params[k] = v
 	}
 
-	ru, ok := pp.Runner(rt.Push.Runner)
+	ru, rc, ok := applyRunnerOverride(pp, rt.Push, rt.Runner)
 	if !ok {
 		return false
 	}
 
-	replaceSecretPlaceholders(params, secretResolved)
-
-	pushArgs := make([]string, len(rt.Push.Args))
-	copy(pushArgs, rt.Push.Args)
-	replaceSecretPlaceholdersInSlice(pushArgs, secretResolved)
-
-	rc := utils.RunnerCommand{
-		Runner: rt.Push.Runner,
-		Args:   pushArgs,
-		Params: params,
+	for k, v := range params {
+		rc.Params[k] = v
 	}
+	if rt.Runner != nil {
+		delete(rc.Params, "path")
+	}
+
+	replaceSecretPlaceholders(rc.Params, secretResolved)
+	replaceSecretPlaceholdersInSlice(rc.Args, secretResolved)
 
 	maxAttempts := ps.Attempts
 	if maxAttempts <= 0 {
@@ -1110,23 +1149,21 @@ func (w *Worker) runNotifyStep(ctx context.Context, m queue.Body, b *build.Build
 		params[k] = v
 	}
 
-	ru, ok := pp.Runner(nt.Notify.Runner)
+	ru, rc, ok := applyRunnerOverride(pp, nt.Notify, nt.Runner)
 	if !ok {
 		w.logger.Warn("runner not found for notification type", "runner", nt.Notify.Runner)
 		return false
 	}
 
-	replaceSecretPlaceholders(params, secretResolved)
-
-	notifyArgs := make([]string, len(nt.Notify.Args))
-	copy(notifyArgs, nt.Notify.Args)
-	replaceSecretPlaceholdersInSlice(notifyArgs, secretResolved)
-
-	rc := utils.RunnerCommand{
-		Runner: nt.Notify.Runner,
-		Args:   notifyArgs,
-		Params: params,
+	for k, v := range params {
+		rc.Params[k] = v
 	}
+	if nt.Runner != nil {
+		delete(rc.Params, "path")
+	}
+
+	replaceSecretPlaceholders(rc.Params, secretResolved)
+	replaceSecretPlaceholdersInSlice(rc.Args, secretResolved)
 
 	maxAttempts := ps.Attempts
 	if maxAttempts <= 0 {
@@ -1474,22 +1511,18 @@ func (w *Worker) processResourceCheck(ctx context.Context, m queue.Body, cwd str
 		}
 		return
 	}
-	replaceSecretPlaceholders(params, resolved)
-
-	ru, ok := pp.Runner(rt.Check.Runner)
+	ru, rc, ok := applyRunnerOverride(pp, rt.Check, rt.Runner)
 	if !ok {
 		return
 	}
 
-	checkArgs := make([]string, len(rt.Check.Args))
-	copy(checkArgs, rt.Check.Args)
-	replaceSecretPlaceholdersInSlice(checkArgs, resolved)
-
-	rc := utils.RunnerCommand{
-		Runner: rt.Check.Runner,
-		Args:   checkArgs,
-		Params: params,
+	for k, v := range params {
+		rc.Params[k] = v
 	}
+
+	replaceSecretPlaceholders(rc.Params, resolved)
+	replaceSecretPlaceholdersInSlice(rc.Args, resolved)
+
 	out, _, err := w.runRunner(ctx, ru, cwd, rc)
 	if err != nil {
 		r.Logs = out
@@ -1886,7 +1919,7 @@ func (w *Worker) fetchSecrets(ctx context.Context, cwd string, pp *pipeline.Pipe
 			params["param_path"] = path
 		}
 
-		ru, ok := pp.Runner(st.Get.Runner)
+		ru, rc, ok := applyRunnerOverride(pp, &st.Get, st.Runner)
 		if !ok {
 			return nil, fmt.Errorf("runner %q not found for secret_type %q", st.Get.Runner, st.Name)
 		}
@@ -1900,10 +1933,8 @@ func (w *Worker) fetchSecrets(ctx context.Context, cwd string, pp *pipeline.Pipe
 			}
 		}
 
-		rc := utils.RunnerCommand{
-			Runner: st.Get.Runner,
-			Args:   st.Get.Args,
-			Params: params,
+		for k, v := range params {
+			rc.Params[k] = v
 		}
 
 		out, _, err := w.runRunner(ctx, ru, cwd, rc)
@@ -1970,7 +2001,7 @@ func (w *Worker) startServices(ctx context.Context, m queue.Body, b *build.Build
 			return started
 		}
 
-		ru, ok := pp.Runner(svc.Start.Runner)
+		ru, rc, ok := applyRunnerOverride(pp, &svc.Start, svc.Runner)
 		if !ok {
 			w.logger.Error("runner not found for service start", "runner", svc.Start.Runner, "service", ss.Name)
 			b.Status = build.Failed
@@ -1979,11 +2010,11 @@ func (w *Worker) startServices(ctx context.Context, m queue.Body, b *build.Build
 		}
 
 		params := w.serviceParams(b, m, svc.Start.Params, ss.Params)
-
-		rc := utils.RunnerCommand{
-			Runner: svc.Start.Runner,
-			Args:   svc.Start.Args,
-			Params: params,
+		for k, v := range params {
+			rc.Params[k] = v
+		}
+		if svc.Runner != nil {
+			delete(rc.Params, "path")
 		}
 
 		// Append a "running" step and persist it
@@ -2062,7 +2093,11 @@ func (w *Worker) waitForServices(ctx context.Context, m queue.Body, b *build.Bui
 		if !ok || svc.ReadyCheck == nil {
 			continue
 		}
-		if _, ok := pp.Runner(svc.ReadyCheck.Runner); !ok {
+		rcRunnerName := svc.ReadyCheck.Runner
+		if svc.Runner != nil && svc.ReadyCheck.Runner == "exec" {
+			rcRunnerName = svc.Runner.Runner
+		}
+		if _, ok := pp.Runner(rcRunnerName); !ok {
 			continue
 		}
 		idx := len(b.Steps)
@@ -2088,14 +2123,15 @@ func (w *Worker) waitForServices(ctx context.Context, m queue.Body, b *build.Bui
 			continue
 		}
 
-		ru, ok := pp.Runner(svc.ReadyCheck.Runner)
+		rcCmd := &svc.ReadyCheck.RunnerCommand
+		ru, readyRC, ok := applyRunnerOverride(pp, rcCmd, svc.Runner)
 		if !ok {
 			continue
 		}
 
 		buildNumber := b.BuildNumber
 		wg.Add(1)
-		go func(svcName string, rc service.ReadyCheck, ru runner.Runner, overrides map[string]string) {
+		go func(svcName string, rc service.ReadyCheck, ru runner.Runner, readyRC utils.RunnerCommand, overrides map[string]string) {
 			defer wg.Done()
 
 			interval := 1 * time.Second
@@ -2111,23 +2147,15 @@ func (w *Worker) waitForServices(ctx context.Context, m queue.Body, b *build.Bui
 				}
 			}
 
-			params := make(map[string]string)
-			for k, v := range rc.Params {
-				params[k] = v
-			}
 			bm := buildMetadataParams(&build.Build{BuildNumber: buildNumber}, m)
 			for k, v := range bm {
-				params[k] = v
+				readyRC.Params[k] = v
 			}
 			for k, v := range overrides {
-				params["param_"+k] = v
+				readyRC.Params["param_"+k] = v
 			}
 
-			runCmd := utils.RunnerCommand{
-				Runner: rc.Runner,
-				Args:   rc.Args,
-				Params: params,
-			}
+			runCmd := readyRC
 
 			deadline := time.After(timeout)
 			start := time.Now()
@@ -2165,7 +2193,7 @@ func (w *Worker) waitForServices(ctx context.Context, m queue.Body, b *build.Bui
 				}
 				time.Sleep(interval)
 			}
-		}(ss.Name, *svc.ReadyCheck, ru, ss.Params)
+		}(ss.Name, *svc.ReadyCheck, ru, readyRC, ss.Params)
 	}
 
 	go func() {
@@ -2206,18 +2234,18 @@ func (w *Worker) stopServices(m queue.Body, b *build.Build, cwd string, pp *pipe
 			continue
 		}
 
-		ru, ok := pp.Runner(svc.Stop.Runner)
+		ru, rc, ok := applyRunnerOverride(pp, &svc.Stop, svc.Runner)
 		if !ok {
 			w.logger.Error("runner not found for service stop", "runner", svc.Stop.Runner, "service", ss.Name)
 			continue
 		}
 
 		params := w.serviceParams(b, m, svc.Stop.Params, ss.Params)
-
-		rc := utils.RunnerCommand{
-			Runner: svc.Stop.Runner,
-			Args:   svc.Stop.Args,
-			Params: params,
+		for k, v := range params {
+			rc.Params[k] = v
+		}
+		if svc.Runner != nil {
+			delete(rc.Params, "path")
 		}
 
 		// Append a "running" step and persist it

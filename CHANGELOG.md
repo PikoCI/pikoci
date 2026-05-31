@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Type-level runner overrides: `resource_type`, `notification_type`, `secret_type`, and `service_type` definitions can specify a `runner` block to override where their exec commands execute, e.g. run inside Docker without modifying the type's command definitions ([#221](https://github.com/PikoCI/pikoci/issues/221))
 - Floating toast notifications for success and error feedback on all mutating actions (trigger, delete, retry, cancel, etc.) with auto-dismiss and dark mode support ([#351](https://github.com/PikoCI/pikoci/issues/351))
 - File secret type: auto-detect format from file extension (`json`, `yaml`, `env`, `raw`), add `json` and `yaml` as explicit format options, and fix multi-line JSON parsing ([#435](https://github.com/PikoCI/pikoci/issues/435))
 - First-class notification entities: `notification_type`, `notification`, and `notify` steps for fire-and-forget notifications with automatic dispatch, job scoping, and `github-check`/`slack`/`discord` notification types ([#154](https://github.com/PikoCI/pikoci/issues/154))

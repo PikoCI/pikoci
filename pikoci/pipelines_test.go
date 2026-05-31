@@ -2033,3 +2033,400 @@ job "build" {
 	_, err := s.S.CreatePipeline(ctx, "main", "test-pipeline", hclConfig, nil)
 	require.NoError(t, err)
 }
+
+func TestCreatePipeline_RunnerOverride_ResourceType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+resource_type "git" {
+  params = ["url"]
+  check "exec" {
+    path = "/opt/git/check"
+    args = ["-v"]
+  }
+  pull "exec" {
+    path = "/opt/git/pull"
+  }
+  push "exec" {
+    path = "/opt/git/push"
+  }
+  runner "docker" {
+    image = "alpine/git:latest"
+  }
+}
+
+resource "git" "repo" {
+  params {
+    url = "http://example.com"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  get "cron" "timer" {
+    trigger = true
+  }
+  task "echo" {
+    run "exec" {
+      path = "echo"
+      args = ["hello"]
+    }
+  }
+}
+`)
+
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "runner-override", gomock.Any()).Return(uint32(1), nil)
+	s.ResourceTypes.EXPECT().Create(ctx, "main", "runner-override", gomock.Any()).DoAndReturn(
+		func(ctx context.Context, tc, pn string, rt interface{}) (uint32, error) {
+			return uint32(1), nil
+		})
+	s.Resources.EXPECT().Create(ctx, "main", "runner-override", gomock.Any()).Return(uint32(1), nil).Times(2)
+	s.Pipelines.EXPECT().Find(ctx, "main", "runner-override").Return(&pipeline.Pipeline{ID: 1, Name: "runner-override", Canonical: "runner-override"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "runner-override", hclConfig, nil)
+	require.NoError(t, err)
+}
+
+func TestCreatePipeline_RunnerOverride_RejectsNonExec(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+resource_type "custom" {
+  check "docker" {
+    image = "foo"
+    cmd   = "check"
+  }
+  pull "docker" {
+    image = "foo"
+    cmd   = "pull"
+  }
+  runner "docker" {
+    image = "alpine/git:latest"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  get "cron" "timer" {
+    trigger = true
+  }
+}
+`)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "reject-pipeline", hclConfig, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "runner override but command uses non-exec runner")
+}
+
+func TestCreatePipeline_RunnerOverride_NotificationType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+notification_type "slack" {
+  source = "pikoci://slack"
+  runner "docker" {
+    image = "curlimages/curl:latest"
+  }
+}
+
+notification "slack" "alerts" {
+  params {
+    webhook_url = "http://example.com"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  get "cron" "timer" {
+    trigger = true
+  }
+}
+`)
+
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "notif-override", gomock.Any()).Return(uint32(1), nil)
+	s.NotificationTypes.EXPECT().Create(ctx, "main", "notif-override", gomock.Any()).Return(uint32(1), nil)
+	s.Notifications.EXPECT().Create(ctx, "main", "notif-override", gomock.Any()).Return(uint32(1), nil)
+	s.Resources.EXPECT().Create(ctx, "main", "notif-override", gomock.Any()).Return(uint32(1), nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "notif-override").Return(&pipeline.Pipeline{ID: 1, Name: "notif-override", Canonical: "notif-override"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "notif-override", hclConfig, nil)
+	require.NoError(t, err)
+}
+
+func TestCreatePipeline_RunnerOverride_SecretType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+secret_type "vault" {
+  source = "pikoci://vault"
+  runner "docker" {
+    image = "hashicorp/vault:latest"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  get "cron" "timer" {
+    trigger = true
+  }
+}
+`)
+
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "secret-override", gomock.Any()).Return(uint32(1), nil)
+	s.SecretTypes.EXPECT().Create(ctx, "main", "secret-override", gomock.Any()).Return(uint32(1), nil)
+	s.Resources.EXPECT().Create(ctx, "main", "secret-override", gomock.Any()).Return(uint32(1), nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "secret-override").Return(&pipeline.Pipeline{ID: 1, Name: "secret-override", Canonical: "secret-override"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "secret-override", hclConfig, nil)
+	require.NoError(t, err)
+}
+
+func TestCreatePipeline_RunnerOverride_ServiceType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+service_type "postgresql" {
+  source = "pikoci://postgresql"
+  runner "docker" {
+    image = "docker:latest"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  service "postgresql" {}
+  get "cron" "timer" {
+    trigger = true
+  }
+}
+`)
+
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "svc-override", gomock.Any()).Return(uint32(1), nil)
+	s.Resources.EXPECT().Create(ctx, "main", "svc-override", gomock.Any()).Return(uint32(1), nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "svc-override").Return(&pipeline.Pipeline{ID: 1, Name: "svc-override", Canonical: "svc-override"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "svc-override", hclConfig, nil)
+	require.NoError(t, err)
+}
+
+func TestCreatePipeline_RunnerOverride_RejectsNonExec_NotificationType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+notification_type "custom" {
+  notify "docker" {
+    image = "foo"
+    cmd   = "send"
+  }
+  runner "docker" {
+    image = "bar:latest"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  get "cron" "timer" {
+    trigger = true
+  }
+}
+`)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "reject-notif", hclConfig, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "notification_type")
+	assert.Contains(t, err.Error(), "runner override but command uses non-exec runner")
+}
+
+func TestCreatePipeline_RunnerOverride_RejectsNonExec_SecretType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+secret_type "custom" {
+  get "docker" {
+    image = "foo"
+    cmd   = "get-secret"
+  }
+  runner "docker" {
+    image = "bar:latest"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  get "cron" "timer" {
+    trigger = true
+  }
+}
+`)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "reject-secret", hclConfig, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "secret_type")
+	assert.Contains(t, err.Error(), "runner override but command uses non-exec runner")
+}
+
+func TestCreatePipeline_RunnerOverride_RejectsNonExec_ServiceType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+service_type "svc" {
+  start "docker" {
+    image = "foo"
+    cmd   = "start"
+  }
+  stop "exec" {
+    path = "echo"
+    args = ["stop"]
+  }
+  runner "docker" {
+    image = "bar:latest"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  get "cron" "timer" {
+    trigger = true
+  }
+}
+`)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "reject-svc", hclConfig, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "service_type")
+	assert.Contains(t, err.Error(), "runner override but command uses non-exec runner")
+}
+
+func TestCreatePipeline_RunnerOverride_ResourceTypeWithArgs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+resource_type "git" {
+  params = ["url"]
+  check "exec" {
+    path = "/opt/git/check"
+  }
+  pull "exec" {
+    path = "/opt/git/pull"
+  }
+  push "exec" {
+    path = "/opt/git/push"
+  }
+  runner "docker" {
+    image = "alpine/git:latest"
+    args  = ["-v", "/var/run/docker.sock:/var/run/docker.sock"]
+  }
+}
+
+resource "git" "repo" {
+  params {
+    url = "http://example.com"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  get "cron" "timer" {
+    trigger = true
+  }
+}
+`)
+
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "args-override", gomock.Any()).Return(uint32(1), nil)
+	s.ResourceTypes.EXPECT().Create(ctx, "main", "args-override", gomock.Any()).Return(uint32(1), nil)
+	s.Resources.EXPECT().Create(ctx, "main", "args-override", gomock.Any()).Return(uint32(1), nil).Times(2)
+	s.Pipelines.EXPECT().Find(ctx, "main", "args-override").Return(&pipeline.Pipeline{ID: 1, Name: "args-override", Canonical: "args-override"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "args-override", hclConfig, nil)
+	require.NoError(t, err)
+}
+
+func TestCreatePipeline_RunnerOverride_SourcedResourceType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+resource_type "git" {
+  source = "pikoci://git"
+  runner "docker" {
+    image = "alpine/git:latest"
+  }
+}
+
+resource "git" "repo" {
+  params {
+    url = "http://example.com"
+  }
+}
+
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  get "cron" "timer" {
+    trigger = true
+  }
+}
+`)
+
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "sourced-override", gomock.Any()).Return(uint32(1), nil)
+	s.ResourceTypes.EXPECT().Create(ctx, "main", "sourced-override", gomock.Any()).Return(uint32(1), nil)
+	s.Resources.EXPECT().Create(ctx, "main", "sourced-override", gomock.Any()).Return(uint32(1), nil).Times(2)
+	s.Pipelines.EXPECT().Find(ctx, "main", "sourced-override").Return(&pipeline.Pipeline{ID: 1, Name: "sourced-override", Canonical: "sourced-override"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "sourced-override", hclConfig, nil)
+	require.NoError(t, err)
+}
