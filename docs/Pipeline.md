@@ -55,6 +55,7 @@ resource_type "git" {
 | `name`   | yes      | Label on the block                                  |
 | `source` | no       | URL to fetch definition (e.g. `pikoci://git`)       |
 | `params` | no       | List of parameter names                             |
+| `runner` | no       | Override runner for all commands (see [Runners](Runners.md#type-level-runner-overrides)) |
 
 When `source` is set, inline commands are not needed. The source is resolved once when the pipeline is created or updated — if the remote definition changes, you must re-set the pipeline to pick up the new version. This applies to all block types that support `source` (`resource_type`, `runner_type`, `secret_type`, `service_type`).
 
@@ -106,6 +107,7 @@ notification_type "custom" {
 | `source` | no       | URL to fetch the definition from (mutually exclusive with inline `notify`) |
 | `params` | no       | List of parameter names the notification type accepts            |
 | `notify` | no       | Runner command block that executes the notification logic        |
+| `runner` | no       | Override runner for all commands (see [Runners](Runners.md#type-level-runner-overrides)) |
 
 ## notification
 
@@ -174,6 +176,7 @@ secret_type "vault" {
 | `name`   | yes      | Label on the block                                  |
 | `source` | no       | URL to fetch definition (e.g. `pikoci://vault`)     |
 | `params` | no       | List of parameter names the get command accepts      |
+| `runner` | no       | Override runner for all commands (see [Runners](Runners.md#type-level-runner-overrides)) |
 | other    | no       | Config attributes passed as `param_<key>` env vars to the get command |
 
 When `source` is set, inline `get` block is not needed. Use secret-backed variables to consume secrets:
@@ -232,6 +235,7 @@ service_type "postgres" {
 | `start`       | yes*     | Runner command to start the service                              |
 | `ready_check` | no       | Runner command polled until exit 0 or timeout                    |
 | `stop`        | yes*     | Runner command to stop the service (always runs)                 |
+| `runner`      | no       | Override runner for all commands (see [Runners](Runners.md#type-level-runner-overrides)) |
 
 \* Not required when `source` is set.
 

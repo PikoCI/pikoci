@@ -17,6 +17,8 @@ type Service struct {
 	Start      utils.RunnerCommand `json:"start"`
 	ReadyCheck *ReadyCheck         `json:"ready_check,omitempty"`
 	Stop       utils.RunnerCommand `json:"stop"`
+
+	Runner *utils.RunnerOverride `json:"runner,omitempty"`
 }
 
 // ReadyCheck defines a health check that determines when a service is ready

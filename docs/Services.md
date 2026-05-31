@@ -75,6 +75,8 @@ When `source` is set, you must not define inline `start`, `stop`, or `ready_chec
 
 > **Note:** The source is resolved once when the pipeline is created or updated. If the remote HCL file changes, you must re-set the pipeline to pick up the new definition.
 
+You can override the runner used for all commands (`start`, `stop`, `ready_check`) by adding a `runner` block. See [Runners — Type-level runner overrides](Runners.md#type-level-runner-overrides).
+
 ## Referencing service types in jobs
 
 Reference a top-level service type by name in a job:

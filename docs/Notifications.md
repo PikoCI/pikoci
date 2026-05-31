@@ -28,6 +28,7 @@ notification_type "github-check" {
 
 - `params` - List of parameter names that notifications of this type can provide.
 - `notify` - A runner command block that executes the notification logic.
+- `runner` - Optional runner override for the notify command. See [Runners — Type-level runner overrides](Runners.md#type-level-runner-overrides).
 
 ## Notifications
 

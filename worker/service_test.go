@@ -3577,3 +3577,190 @@ func TestDrain_UnblocksReceiveImmediately(t *testing.T) {
 
 // Silence the unused import warnings
 var _ = time.Now
+
+func TestApplyRunnerOverride_NilOverride(t *testing.T) {
+	pp := &pipeline.Pipeline{
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	typeCmd := &utils.RunnerCommand{
+		Runner: "exec",
+		Args:   []string{"-ec", "echo hello"},
+		Params: map[string]string{"path": "/bin/sh"},
+	}
+
+	ru, rc, ok := applyRunnerOverride(pp, typeCmd, nil)
+	require.True(t, ok)
+	assert.Equal(t, "exec", ru.Name)
+	assert.Equal(t, "exec", rc.Runner)
+	assert.Equal(t, "/bin/sh", rc.Params["path"])
+	assert.Equal(t, []string{"-ec", "echo hello"}, rc.Args)
+}
+
+func TestApplyRunnerOverride_ExecToDocker(t *testing.T) {
+	pp := &pipeline.Pipeline{
+		Runners: []runner.Runner{
+			{Name: "docker", Run: utils.RunCommand{
+				Path: "docker",
+				Args: []string{"run", "--rm", "-v", "$WORKDIR:/workdir", "$args", "$image", "/bin/sh", "-ec", "$cmd"},
+			}},
+		},
+	}
+	typeCmd := &utils.RunnerCommand{
+		Runner: "exec",
+		Args:   []string{"-ec", "curl http://example.com"},
+		Params: map[string]string{"path": "/bin/sh"},
+	}
+	override := &utils.RunnerOverride{
+		Runner: "docker",
+		Params: map[string]string{"image": "curlimages/curl:latest"},
+	}
+
+	ru, rc, ok := applyRunnerOverride(pp, typeCmd, override)
+	require.True(t, ok)
+	assert.Equal(t, "docker", ru.Name)
+	assert.Equal(t, "docker", rc.Runner)
+	assert.Equal(t, "curlimages/curl:latest", rc.Params["image"])
+	assert.Equal(t, "/bin/sh -ec curl http://example.com", rc.Params["cmd"])
+	assert.Empty(t, rc.Params["path"]) // path should be deleted
+	assert.Nil(t, rc.Args)            // no override args
+}
+
+func TestApplyRunnerOverride_ExecToDockerWithArgs(t *testing.T) {
+	pp := &pipeline.Pipeline{
+		Runners: []runner.Runner{
+			{Name: "docker", Run: utils.RunCommand{
+				Path: "docker",
+				Args: []string{"run", "--rm", "$args", "$image", "/bin/sh", "-ec", "$cmd"},
+			}},
+		},
+	}
+	typeCmd := &utils.RunnerCommand{
+		Runner: "exec",
+		Params: map[string]string{"path": "/opt/check"},
+	}
+	override := &utils.RunnerOverride{
+		Runner: "docker",
+		Args:   []string{"-v", "/data:/data", "--privileged"},
+		Params: map[string]string{"image": "alpine:latest"},
+	}
+
+	ru, rc, ok := applyRunnerOverride(pp, typeCmd, override)
+	require.True(t, ok)
+	assert.Equal(t, "docker", ru.Name)
+	assert.Equal(t, "docker", rc.Runner)
+	assert.Equal(t, "alpine:latest", rc.Params["image"])
+	assert.Equal(t, "/opt/check", rc.Params["cmd"])
+	assert.Equal(t, []string{"-v", "/data:/data", "--privileged"}, rc.Args)
+}
+
+func TestApplyRunnerOverride_NonExecIgnored(t *testing.T) {
+	pp := &pipeline.Pipeline{
+		Runners: []runner.Runner{
+			{Name: "docker", Run: utils.RunCommand{Path: "docker", Args: []string{"run"}}},
+		},
+	}
+	typeCmd := &utils.RunnerCommand{
+		Runner: "docker",
+		Params: map[string]string{"image": "golang:1.25", "cmd": "make test"},
+	}
+	override := &utils.RunnerOverride{
+		Runner: "docker",
+		Params: map[string]string{"image": "other:latest"},
+	}
+
+	ru, rc, ok := applyRunnerOverride(pp, typeCmd, override)
+	require.True(t, ok)
+	assert.Equal(t, "docker", ru.Name)
+	// Override should NOT be applied since typeCmd is not exec
+	assert.Equal(t, "golang:1.25", rc.Params["image"])
+	assert.Equal(t, "make test", rc.Params["cmd"])
+}
+
+func TestApplyRunnerOverride_PathDeletedAfterMerge(t *testing.T) {
+	// Simulates the full flow: applyRunnerOverride transforms path→cmd,
+	// then caller merges params (which re-introduces path from typeCmd.Params),
+	// then caller deletes path when override is active.
+	pp := &pipeline.Pipeline{
+		Runners: []runner.Runner{
+			{Name: "docker", Run: utils.RunCommand{
+				Path: "docker",
+				Args: []string{"run", "--rm", "$args", "$image", "/bin/sh", "-ec", "$cmd"},
+			}},
+		},
+	}
+	typeCmd := &utils.RunnerCommand{
+		Runner: "exec",
+		Args:   []string{"-ec", "git clone $param_url"},
+		Params: map[string]string{"path": "/bin/sh"},
+	}
+	override := &utils.RunnerOverride{
+		Runner: "docker",
+		Params: map[string]string{"image": "alpine/git:latest"},
+	}
+
+	_, rc, ok := applyRunnerOverride(pp, typeCmd, override)
+	require.True(t, ok)
+
+	// Simulate what buildPullParams does: copies typeCmd.Params (including path)
+	externalParams := map[string]string{
+		"path":      "/bin/sh",         // re-introduced from typeCmd.Params
+		"param_url": "http://repo.git", // resource instance param
+	}
+	for k, v := range externalParams {
+		rc.Params[k] = v
+	}
+
+	// This is what the call sites do after merge when override is active
+	delete(rc.Params, "path")
+
+	assert.Equal(t, "docker", rc.Runner)
+	assert.Equal(t, "alpine/git:latest", rc.Params["image"])
+	assert.Equal(t, "/bin/sh -ec git clone $param_url", rc.Params["cmd"])
+	assert.Equal(t, "http://repo.git", rc.Params["param_url"])
+	assert.Empty(t, rc.Params["path"], "path must not be present after override")
+}
+
+func TestApplyRunnerOverride_RunnerNotFound(t *testing.T) {
+	pp := &pipeline.Pipeline{
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	typeCmd := &utils.RunnerCommand{
+		Runner: "exec",
+		Params: map[string]string{"path": "/bin/sh"},
+	}
+	override := &utils.RunnerOverride{
+		Runner: "nonexistent",
+		Params: map[string]string{"image": "foo"},
+	}
+
+	_, _, ok := applyRunnerOverride(pp, typeCmd, override)
+	assert.False(t, ok, "should return false when override runner is not found")
+}
+
+func TestApplyRunnerOverride_ExecNilArgs(t *testing.T) {
+	pp := &pipeline.Pipeline{
+		Runners: []runner.Runner{
+			{Name: "docker", Run: utils.RunCommand{
+				Path: "docker",
+				Args: []string{"run", "--rm", "$image", "/bin/sh", "-ec", "$cmd"},
+			}},
+		},
+	}
+	typeCmd := &utils.RunnerCommand{
+		Runner: "exec",
+		Params: map[string]string{"path": "/opt/check"},
+	}
+	override := &utils.RunnerOverride{
+		Runner: "docker",
+		Params: map[string]string{"image": "alpine:latest"},
+	}
+
+	_, rc, ok := applyRunnerOverride(pp, typeCmd, override)
+	require.True(t, ok)
+	assert.Equal(t, "/opt/check", rc.Params["cmd"])
+	assert.Nil(t, rc.Args)
+}

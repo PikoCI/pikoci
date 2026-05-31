@@ -86,6 +86,10 @@ When `source` is set, you must not define inline `check`, `pull`, or `push` bloc
 
 > **Note:** The source is resolved once when the pipeline is created or updated. If the remote HCL file changes, you must re-set the pipeline to pick up the new definition.
 
+## Runner overrides
+
+You can override the runner used for all commands of a resource type by adding a `runner` block. This lets you run sourced or inline exec commands inside Docker without modifying the type's command definitions. See [Runners — Type-level runner overrides](Runners.md#type-level-runner-overrides) for details.
+
 ## Overriding built-ins
 
 All built-in resource types (`cron`, `git`) can be overridden by defining a `resource_type` block with the same name in your pipeline. Inline definitions always take precedence over built-ins.

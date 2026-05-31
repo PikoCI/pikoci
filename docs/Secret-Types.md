@@ -65,6 +65,8 @@ When `source` is set, you must not define an inline `get` block. PikoCI will err
 
 > **Note:** The source is resolved once when the pipeline is created or updated. If the remote HCL file changes, you must re-set the pipeline to pick up the new definition.
 
+You can override the runner used for the `get` command by adding a `runner` block. See [Runners — Type-level runner overrides](Runners.md#type-level-runner-overrides).
+
 ## Using secrets via variables
 
 Secrets are consumed through **secret-backed variables**. Declare a variable with a `secret` block referencing a secret type, then use `var.<name>` anywhere in your pipeline:

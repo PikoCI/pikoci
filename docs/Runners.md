@@ -84,6 +84,79 @@ runner_type "docker" {
 
 This replaces the built-in `docker` runner entirely for this pipeline.
 
+## Type-level runner overrides
+
+By default, a type's commands run using the runner specified in their command blocks (e.g. `check "exec" { ... }`). You can override this for all commands of a type by adding a `runner` block to the type definition.
+
+This is useful when a type uses `exec` to run commands directly on the host, but you want all its operations to run inside Docker — for example, to provide the right CLI tools without installing them on the host.
+
+### Resource type
+
+```hcl
+resource_type "git" {
+  source = "pikoci://git"
+  runner "docker" {
+    image = "alpine/git:latest"
+  }
+}
+```
+
+All `check`, `pull`, and `push` commands for this resource type will run inside the specified Docker image instead of directly on the host.
+
+### Notification type
+
+```hcl
+notification_type "slack" {
+  source = "pikoci://slack"
+  runner "docker" {
+    image = "curlimages/curl:latest"
+  }
+}
+```
+
+### Secret type
+
+```hcl
+secret_type "vault" {
+  source = "pikoci://vault"
+  runner "docker" {
+    image = "hashicorp/vault:latest"
+  }
+}
+```
+
+### Service type
+
+```hcl
+service_type "postgresql" {
+  source = "pikoci://postgresql"
+  runner "docker" {
+    image = "docker:latest"
+  }
+}
+```
+
+### Passing extra Docker flags
+
+Override params are passed to the runner template as variables. The built-in `docker` runner supports `image`, `cmd`, and `args`. Use `args` to pass extra `docker run` flags like volumes, environment variables, or privileged mode:
+
+```hcl
+resource_type "git" {
+  source = "pikoci://git"
+  runner "docker" {
+    image = "alpine/git:latest"
+    args  = ["-v", "/var/run/docker.sock:/var/run/docker.sock", "-e", "GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no"]
+  }
+}
+```
+
+### Restrictions
+
+- **Only exec commands can be overridden.** If any command in the type already uses a non-exec runner, specifying a runner override is an error.
+- The override applies to **all commands** of the type (check/pull/push for resource types, start/stop/ready_check for services, etc.).
+- Override parameters (like `image`, `args`) are merged with the command's parameters.
+- Works with sourced types: you can use `source = "pikoci://git"` and add a `runner` block to change where the sourced commands execute.
+
 ## Using a runner
 
 Reference a runner by name in `task`, `on_success`, `on_failure`, `ensure`, and resource type `check`/`pull`/`push` blocks:
