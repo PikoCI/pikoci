@@ -127,7 +127,7 @@ export var JobBuildsView = Backbone.View.extend({
     $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
       success: function() {
         window.app.apiNotice.setSuccess("Job paused");
-        that.collection.job.fetch({ success: function() { that.render(); } });
+        that.collection.job.fetch({ success: function() { that.render(); that.addBuilds(); that.collection.setActive(that.currentBuildID); } });
       },
     });
   },
@@ -138,7 +138,7 @@ export var JobBuildsView = Backbone.View.extend({
     $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
       success: function() {
         window.app.apiNotice.setSuccess("Job unpaused");
-        that.collection.job.fetch({ success: function() { that.render(); } });
+        that.collection.job.fetch({ success: function() { that.render(); that.addBuilds(); that.collection.setActive(that.currentBuildID); } });
       },
     });
   },
