@@ -250,6 +250,7 @@ export var ProfileView = Backbone.View.extend({
           window.app.apiNotice.set({error: resp.error});
           return;
         }
+        var wasForcedChange = that.mustChangePassword;
         that.mustChangePassword = false;
         that.$('#must-change-password-banner').remove();
         var u = session.get("user");
@@ -259,6 +260,9 @@ export var ProfileView = Backbone.View.extend({
           window.localStorage.setItem(userSessionKey, JSON.stringify(session.toJSON()));
         }
         window.app.apiNotice.setSuccess("Password changed successfully");
+        if (wasForcedChange) {
+          window.app.router.navigate('', { trigger: true });
+        }
       },
       error: function(response) {
         var msg = (response.responseJSON && response.responseJSON.error) || response.statusText || "Unknown error";

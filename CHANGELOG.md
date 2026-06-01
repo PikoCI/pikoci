@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- After first-login forced password change, user stays on profile page instead of being redirected to the teams page ([#442](https://github.com/PikoCI/pikoci/issues/442))
 - Build status transitions not visible in real-time on non-active build tabs in the job builds page ([#444](https://github.com/PikoCI/pikoci/issues/444))
 - Toast notifications overlap action buttons on wide screens and cannot be dismissed by clicking ([#443](https://github.com/PikoCI/pikoci/issues/443))
 - Job builds view defaults to newest build instead of navigating to the running/pending build ([#441](https://github.com/PikoCI/pikoci/issues/441))
