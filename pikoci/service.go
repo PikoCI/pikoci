@@ -175,6 +175,13 @@ type Service interface {
 	// during a build.
 	InsertBuildGetVersion(ctx context.Context, tc, pn, jn string, buildID uint32, stepName string, versionID uint32) error
 
+	// PinResourceVersion pins a resource to a specific version, preventing the scheduler from advancing.
+	PinResourceVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error
+	// UnpinResourceVersion removes the version pin from a resource.
+	UnpinResourceVersion(ctx context.Context, tc, pn, rCan string) error
+	// TriggerResourceVersion triggers immediate downstream jobs with a specific resource version.
+	TriggerResourceVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error
+
 	// WebhookTrigger triggers a resource check using the resource's unique
 	// webhook token.
 	WebhookTrigger(ctx context.Context, token string) error

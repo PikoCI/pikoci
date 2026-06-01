@@ -109,6 +109,8 @@ func TestTriggerPipelineJob_PinsLatestVersion(t *testing.T) {
 	rCan := j.GetSteps()[0].ResourceCanonical()
 
 	s.Jobs.EXPECT().Find(ctx, tc, ppc, jn).Return(j, nil)
+	// Resource is not pinned — falls through to latest version
+	s.Resources.EXPECT().Find(ctx, tc, ppc, rCan).Return(&resource.Resource{}, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, tc, ppc, rCan, (*uint32)(nil), (*uint32)(nil), uint32(0)).Return(versions, nil)
 	// TriggerPipelineJob now creates a pending build first
 	s.Builds.EXPECT().Create(ctx, tc, ppc, jn, gomock.Any()).Return(uint32(5), "1", nil)
@@ -123,6 +125,47 @@ func TestTriggerPipelineJob_PinsLatestVersion(t *testing.T) {
 		assert.Equal(t, rCan, body.ResourceCanonical)
 		assert.Equal(t, uint32(30), body.VersionID)
 		assert.Equal(t, uint32(5), body.BuildID)
+		return nil
+	})
+
+	err := s.S.TriggerPipelineJob(ctx, tc, ppc, jn)
+	require.NoError(t, err)
+}
+
+func TestTriggerPipelineJob_UsesPinnedVersion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	ppc := "pp"
+	jn := "jn"
+
+	j := &job.Job{
+		ID:   1,
+		Name: jn,
+		Plan: []job.PlanStep{
+			{
+				Type: job.StepTypeGet,
+				Get:  &job.GetStep{Type: "git", Name: "my-repo", Trigger: true},
+			},
+		},
+	}
+
+	rCan := j.GetSteps()[0].ResourceCanonical()
+	pinnedVersion := uint32(20)
+
+	s.Jobs.EXPECT().Find(ctx, tc, ppc, jn).Return(j, nil)
+	// Resource is pinned to version 20
+	s.Resources.EXPECT().Find(ctx, tc, ppc, rCan).Return(&resource.Resource{PinnedVersionID: &pinnedVersion}, nil)
+	// FilterVersions should NOT be called — pinned version is used directly
+	s.Builds.EXPECT().Create(ctx, tc, ppc, jn, gomock.Any()).Return(uint32(5), "1", nil)
+
+	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, rCan, body.ResourceCanonical)
+		assert.Equal(t, uint32(20), body.VersionID)
 		return nil
 	})
 

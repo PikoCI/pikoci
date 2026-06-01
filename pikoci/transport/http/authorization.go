@@ -63,6 +63,10 @@ var (
 		CreateResourceVersion:   admin,
 		ListResourceVersions:    member,
 
+		PinResourceVersion:     member,
+		UnpinResourceVersion:   member,
+		TriggerResourceVersion: member,
+
 		WebhookTrigger:         nothing,
 		RegenerateWebhookToken: admin,
 

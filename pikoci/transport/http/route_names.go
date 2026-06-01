@@ -102,6 +102,13 @@ const (
 	// ListResourceVersions is the route for listing all versions of a resource.
 	ListResourceVersions
 
+	// PinResourceVersion is the route for pinning a resource to a specific version.
+	PinResourceVersion
+	// UnpinResourceVersion is the route for unpinning a resource version.
+	UnpinResourceVersion
+	// TriggerResourceVersion is the route for triggering downstream jobs with a specific version.
+	TriggerResourceVersion
+
 	// WebhookTrigger is the route for incoming webhook triggers.
 	WebhookTrigger
 	// RegenerateWebhookToken is the route for regenerating a resource's webhook token.

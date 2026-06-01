@@ -611,16 +611,20 @@
       <div class="piko-resource-info">
         <span class="piko-build-label">Last checked</span> (<%- resource.check_interval||"@every 1m" %>)<%= (!resource.last_check || resource.last_check.startsWith('0001-01-01')) ? ':' : ' at:' %> <span class="piko-time-ago" data-time="<%= resource.last_check %>" title="<%= new Date(resource.last_check).toLocaleString() %>" style="color: var(--text-primary);"><%= pikoTimeAgo(resource.last_check) %></span>
       </div>
+      <div id="pinned-version-banner"></div>
       <div id="resource-versions">
       </div>
     </script>
 
     <script type="text/template" id="resource-version-view">
       <div class="piko-version-row">
-        <div class="piko-version-row-header" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+        <div class="piko-version-row-header" onclick="if (!event.target.closest('.piko-version-actions')) { this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'; }">
           <span style="display:flex;align-items:center;gap:8px;">
             <% if (isFirst) { %>
               <span class="piko-badge piko-badge-succeeded">latest</span>
+            <% } %>
+            <% if (pinned_version_id === id) { %>
+              <span class="piko-badge piko-badge-pending">pinned</span>
             <% } %>
             <span class="piko-version-kv">
               <% _.mapObject(version, function(v, k) { %>
@@ -628,6 +632,12 @@
               <% }) %>
             </span>
           </span>
+          <% if (isMember) { %>
+            <span class="piko-version-actions">
+              <button class="btn btn-sm btn-outline-warning trigger-version" title="Trigger downstream jobs with this version"><i class="bi bi-play-fill"></i></button>
+              <button class="btn btn-sm <%= pinned_version_id === id ? 'btn-warning' : 'btn-outline-secondary' %> pin-version" title="<%= pinned_version_id === id ? 'Unpin version' : 'Pin to this version' %>"><i class="bi <%= pinned_version_id === id ? 'bi-pin-fill' : 'bi-pin' %>"></i></button>
+            </span>
+          <% } %>
         </div>
         <div class="piko-version-row-body" style="display:none;">
           <table class="piko-version-table">

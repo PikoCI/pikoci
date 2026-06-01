@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/pikoci/pikoci/pikoci"
@@ -229,6 +230,84 @@ func regenerateWebhookToken(s pikoci.Service) http.HandlerFunc {
 			errs = err.Error()
 		}
 		encodeResponse(RegenerateWebhookTokenResponse{Token: token, Err: errs}, w)
+	}
+}
+
+type PinResourceVersionRequest struct {
+	VersionID uint32 `json:"version_id"`
+}
+type PinResourceVersionResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r PinResourceVersionResponse) Error() string { return r.Err }
+
+func pinResourceVersion(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		rCan := vars["resource_canonical"]
+		var req PinResourceVersionRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			encodeResponse(PinResourceVersionResponse{Err: err.Error()}, w)
+			return
+		}
+		err = s.PinResourceVersion(r.Context(), tc, pc, rCan, req.VersionID)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(PinResourceVersionResponse{Err: errs}, w)
+	}
+}
+
+type UnpinResourceVersionResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r UnpinResourceVersionResponse) Error() string { return r.Err }
+
+func unpinResourceVersion(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		rCan := vars["resource_canonical"]
+		err := s.UnpinResourceVersion(r.Context(), tc, pc, rCan)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(UnpinResourceVersionResponse{Err: errs}, w)
+	}
+}
+
+type TriggerResourceVersionResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r TriggerResourceVersionResponse) Error() string { return r.Err }
+
+func triggerResourceVersion(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		rCan := vars["resource_canonical"]
+		versionIDStr := vars["version_id"]
+		versionID, err := strconv.ParseUint(versionIDStr, 10, 32)
+		if err != nil {
+			encodeResponse(TriggerResourceVersionResponse{Err: "invalid version_id"}, w)
+			return
+		}
+		err = s.TriggerResourceVersion(r.Context(), tc, pc, rCan, uint32(versionID))
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(TriggerResourceVersionResponse{Err: errs}, w)
 	}
 }
 

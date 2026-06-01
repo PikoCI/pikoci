@@ -641,6 +641,20 @@ func (mr *ServiceMockRecorder) PausePipeline(ctx, tc, pCan any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PausePipeline", reflect.TypeOf((*Service)(nil).PausePipeline), ctx, tc, pCan)
 }
 
+// PinResourceVersion mocks base method.
+func (m *Service) PinResourceVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PinResourceVersion", ctx, tc, pn, rCan, versionID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PinResourceVersion indicates an expected call of PinResourceVersion.
+func (mr *ServiceMockRecorder) PinResourceVersion(ctx, tc, pn, rCan, versionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PinResourceVersion", reflect.TypeOf((*Service)(nil).PinResourceVersion), ctx, tc, pn, rCan, versionID)
+}
+
 // RefreshToken mocks base method.
 func (m *Service) RefreshToken(ctx context.Context, un string) (*user.WithMemberships, string, error) {
 	m.ctrl.T.Helper()
@@ -743,6 +757,20 @@ func (mr *ServiceMockRecorder) TriggerPipelineResource(ctx, tc, pn, rCan any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TriggerPipelineResource", reflect.TypeOf((*Service)(nil).TriggerPipelineResource), ctx, tc, pn, rCan)
 }
 
+// TriggerResourceVersion mocks base method.
+func (m *Service) TriggerResourceVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TriggerResourceVersion", ctx, tc, pn, rCan, versionID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// TriggerResourceVersion indicates an expected call of TriggerResourceVersion.
+func (mr *ServiceMockRecorder) TriggerResourceVersion(ctx, tc, pn, rCan, versionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TriggerResourceVersion", reflect.TypeOf((*Service)(nil).TriggerResourceVersion), ctx, tc, pn, rCan, versionID)
+}
+
 // UnpauseJob mocks base method.
 func (m *Service) UnpauseJob(ctx context.Context, tc, pCan, jn string) error {
 	m.ctrl.T.Helper()
@@ -769,6 +797,20 @@ func (m *Service) UnpausePipeline(ctx context.Context, tc, pCan string) error {
 func (mr *ServiceMockRecorder) UnpausePipeline(ctx, tc, pCan any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpausePipeline", reflect.TypeOf((*Service)(nil).UnpausePipeline), ctx, tc, pCan)
+}
+
+// UnpinResourceVersion mocks base method.
+func (m *Service) UnpinResourceVersion(ctx context.Context, tc, pn, rCan string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnpinResourceVersion", ctx, tc, pn, rCan)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UnpinResourceVersion indicates an expected call of UnpinResourceVersion.
+func (mr *ServiceMockRecorder) UnpinResourceVersion(ctx, tc, pn, rCan any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpinResourceVersion", reflect.TypeOf((*Service)(nil).UnpinResourceVersion), ctx, tc, pn, rCan)
 }
 
 // UpdateJobBuild mocks base method.

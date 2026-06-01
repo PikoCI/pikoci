@@ -219,6 +219,10 @@ func TestTickJobs_TriggersWhenCommonVersionExists(t *testing.T) {
 		[]string{"lint", "test-mock"}, "test-backends", "repo", 2,
 	).Return(uint32(42), true, nil)
 
+	// Pin check — resource is not pinned
+	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
+		Return(&resource.Resource{}, nil)
+
 	// Check for existing pending build (none)
 	br.EXPECT().FindOldestPending(gomock.Any(), "main", "my-pipeline", "test-backends").
 		Return(nil, nil)
@@ -319,6 +323,10 @@ func TestTickJobs_SkipsWhenPendingBuildExists(t *testing.T) {
 		gomock.Any(), "main", "my-pipeline",
 		[]string{"lint"}, "deploy", "repo", 1,
 	).Return(uint32(42), true, nil)
+
+	// Pin check — resource is not pinned
+	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
+		Return(&resource.Resource{}, nil)
 
 	// A pending build already exists — should skip creating another
 	br.EXPECT().FindOldestPending(gomock.Any(), "main", "my-pipeline", "deploy").
@@ -448,6 +456,10 @@ func TestTickJobs_MultipleGetSteps_AllMustBeReady(t *testing.T) {
 		[]string{"lint"}, "deploy", "repo", 1,
 	).Return(uint32(42), true, nil)
 
+	// Pin check — resource is not pinned
+	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
+		Return(&resource.Resource{}, nil)
+
 	// Second get step is NOT ready
 	br.EXPECT().FindReadyDownstreamVersion(
 		gomock.Any(), "main", "my-pipeline",
@@ -504,10 +516,18 @@ func TestTickJobs_MultipleGetSteps_BothReady_TriggersOnce(t *testing.T) {
 		[]string{"lint"}, "deploy", "repo", 1,
 	).Return(uint32(42), true, nil)
 
+	// Pin check — resource is not pinned
+	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
+		Return(&resource.Resource{}, nil)
+
 	br.EXPECT().FindReadyDownstreamVersion(
 		gomock.Any(), "main", "my-pipeline",
 		[]string{"build"}, "deploy", "image", 1,
 	).Return(uint32(99), true, nil)
+
+	// Pin check — resource is not pinned
+	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "docker.image").
+		Return(&resource.Resource{}, nil)
 
 	// Check for existing pending build (none)
 	br.EXPECT().FindOldestPending(gomock.Any(), "main", "my-pipeline", "deploy").
@@ -528,6 +548,98 @@ func TestTickJobs_MultipleGetSteps_BothReady_TriggersOnce(t *testing.T) {
 		return nil
 	})
 
+	s.tick(context.Background())
+}
+
+func TestTickJobs_SkipsWhenResourcePinnedToDifferentVersion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, rr, pr, br, _, _ := newTestScheduler(ctrl)
+
+	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
+
+	pps := []*pipeline.WithTeam{
+		{
+			Pipeline: pipeline.Pipeline{
+				Name: "my-pipeline", Canonical: "my-pipeline",
+				Jobs: []job.Job{
+					{
+						Name: "deploy",
+						Plan: []job.PlanStep{
+							{
+								Type: job.StepTypeGet,
+								Get: &job.GetStep{
+									Type:    "git",
+									Name:    "repo",
+									Passed:  []string{"lint"},
+									Trigger: true,
+								},
+							},
+						},
+					},
+				},
+			},
+			Team: team.Team{Canonical: "main"},
+		},
+	}
+	pr.EXPECT().FilterAll(gomock.Any()).Return(pps, nil)
+
+	// Version 42 is ready downstream
+	br.EXPECT().FindReadyDownstreamVersion(
+		gomock.Any(), "main", "my-pipeline",
+		[]string{"lint"}, "deploy", "repo", 1,
+	).Return(uint32(42), true, nil)
+
+	// But the resource is pinned to version 99 — should skip
+	pinnedVersion := uint32(99)
+	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
+		Return(&resource.Resource{PinnedVersionID: &pinnedVersion}, nil)
+
+	// No build should be created, no message sent
+	s.tick(context.Background())
+}
+
+func TestTickJobs_SkipsWhenPinCheckFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, rr, pr, br, _, _ := newTestScheduler(ctrl)
+
+	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
+
+	pps := []*pipeline.WithTeam{
+		{
+			Pipeline: pipeline.Pipeline{
+				Name: "my-pipeline", Canonical: "my-pipeline",
+				Jobs: []job.Job{
+					{
+						Name: "deploy",
+						Plan: []job.PlanStep{
+							{
+								Type: job.StepTypeGet,
+								Get: &job.GetStep{
+									Type:    "git",
+									Name:    "repo",
+									Passed:  []string{"lint"},
+									Trigger: true,
+								},
+							},
+						},
+					},
+				},
+			},
+			Team: team.Team{Canonical: "main"},
+		},
+	}
+	pr.EXPECT().FilterAll(gomock.Any()).Return(pps, nil)
+
+	br.EXPECT().FindReadyDownstreamVersion(
+		gomock.Any(), "main", "my-pipeline",
+		[]string{"lint"}, "deploy", "repo", 1,
+	).Return(uint32(42), true, nil)
+
+	// Find fails — should skip the job (fail-closed)
+	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
+		Return(nil, assert.AnError)
+
+	// No build should be created, no message sent
 	s.tick(context.Background())
 }
 

@@ -8,6 +8,14 @@ resource_type "cron" {
       EOT
     ]
   }
-  pull "exec" { }
+  pull "exec" {
+    path = "/bin/sh"
+    args = [
+      "-ec",
+      <<-EOT
+      echo "date: $version_date"
+      EOT
+    ]
+  }
   push "exec" { }
 }

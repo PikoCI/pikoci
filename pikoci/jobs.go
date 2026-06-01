@@ -35,16 +35,22 @@ func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) erro
 
 	bb := build.Build{Status: build.Pending}
 
-	// Pin the latest version of the first get-step resource so the version
-	// is locked at trigger time rather than at execution time.
+	// Use the pinned version if the resource is pinned, otherwise use the
+	// latest version of the first get-step resource.
 	getSteps := j.GetSteps()
 	if len(getSteps) > 0 {
 		g := getSteps[0]
 		rCan := g.ResourceCanonical()
-		vers, err := q.Resources.FilterVersions(ctx, tc, pc, rCan, nil, nil, 0)
-		if err == nil && len(vers) > 0 {
+		r, rerr := q.Resources.Find(ctx, tc, pc, rCan)
+		if rerr == nil && r.PinnedVersionID != nil {
 			bb.ResourceCanonical = rCan
-			bb.VersionID = vers[0].ID
+			bb.VersionID = *r.PinnedVersionID
+		} else {
+			vers, err := q.Resources.FilterVersions(ctx, tc, pc, rCan, nil, nil, 0)
+			if err == nil && len(vers) > 0 {
+				bb.ResourceCanonical = rCan
+				bb.VersionID = vers[0].ID
+			}
 		}
 	}
 

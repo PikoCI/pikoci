@@ -175,6 +175,23 @@ export var Resource = Backbone.Model.extend({
   fetchTrigger: function(opts) {
     this.fetch(_.extend({url: this.url()+"/trigger", type: "POST"}, opts));
   },
+  pinVersion: function(versionID, opts) {
+    opts = opts || {};
+    $.ajax(_.extend({
+      url: this.url()+"/pin",
+      type: "POST",
+      contentType: "application/json",
+      data: JSON.stringify({version_id: versionID}),
+    }, opts));
+  },
+  unpinVersion: function(opts) {
+    opts = opts || {};
+    $.ajax(_.extend({
+      url: this.url()+"/unpin",
+      type: "POST",
+      contentType: "application/json",
+    }, opts));
+  },
 });
 
 export var ResourceVersion = Backbone.Model.extend({
