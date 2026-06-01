@@ -99,6 +99,7 @@ export var TeamShowView = Backbone.View.extend({
   events: {
     'submit form': 'clickUpdate',
     'click #new-member': 'clickNewMember',
+    'click a.btn-primary': 'clickLink',
   },
   render: function () {
     this.$el.html(this.template(addSessionFunctions(this.model.toJSON())));
@@ -118,6 +119,11 @@ export var TeamShowView = Backbone.View.extend({
   renderMember: function(m) {
     var view = new TeamShowMemberRowView({team: this.model, model: m});
     this.$el.find('tbody').append(view.render().el);
+  },
+  clickLink: function(event) {
+    event.preventDefault();
+    var url = new URL(event.currentTarget.href);
+    window.app.router.navigate(url.pathname, { trigger: true });
   },
   clickUpdate: function(event){
     event.preventDefault();
