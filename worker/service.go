@@ -1701,7 +1701,15 @@ func (w *Worker) runPutStepTrigger(ctx context.Context, m queue.Body, b *build.B
 }
 
 // triggerResourceJobs triggers jobs that depend on a resource via "get" with trigger=true.
+// If the resource is pinned to a specific version, only that version triggers builds.
 func (w *Worker) triggerResourceJobs(ctx context.Context, m queue.Body, pp *pipeline.Pipeline, r resource.Resource, cv *resource.Version) {
+	// Check if the resource is pinned to a different version
+	if r.PinnedVersionID != nil && cv.ID != *r.PinnedVersionID {
+		w.logger.Info("resource is pinned, skipping job triggers",
+			"resource", r.Canonical, "pinned_version", *r.PinnedVersionID, "new_version", cv.ID)
+		return
+	}
+
 	for _, j := range pp.Jobs {
 		if j.Paused {
 			continue

@@ -18,6 +18,10 @@ type Repository interface {
 	Filter(ctx context.Context, tc, pn string) ([]*Resource, error)
 	// FilterDueResources returns all resources whose next check time has passed, across all pipelines.
 	FilterDueResources(ctx context.Context) ([]*ResourceWithPipeline, error)
+	// PinVersion pins a resource to a specific version, preventing the scheduler from using newer versions.
+	PinVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error
+	// UnpinVersion removes the version pin from a resource, allowing the scheduler to use newer versions.
+	UnpinVersion(ctx context.Context, tc, pn, rCan string) error
 	// Delete removes a resource identified by team, pipeline, and resource canonical.
 	Delete(ctx context.Context, tc, pn, rCan string) error
 

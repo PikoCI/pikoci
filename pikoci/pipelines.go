@@ -498,6 +498,7 @@ var (
 	colorError          = `"#FF004D"`
 	colorPaused         = `"#29ADFF"`
 	colorPausedBorder   = `"#1D8BD1"`
+	colorPinned         = `"#FFA300"`
 )
 
 // GetPipelineImage generates a DOT graph representation of a pipeline's jobs
@@ -555,26 +556,41 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 	}
 
 	resourceBorders := make(map[string]string)
+	resourceStyles := make(map[string]string)
+	resourcePenwidths := make(map[string]string)
 	// Print all the resources
 	for _, r := range pp.Resources {
 		borderColor := colorResourceBorder
 		if r.Logs != "" {
 			borderColor = colorError
 		}
+		style := "filled"
+		penwidth := ""
+		if r.PinnedVersionID != nil {
+			borderColor = colorPinned
+			style = `"filled,bold"`
+			penwidth = "3.0"
+		}
 		resourceBorders[r.Canonical] = borderColor
+		resourceStyles[r.Canonical] = style
+		resourcePenwidths[r.Canonical] = penwidth
 		if !referencedResources[r.Canonical] {
 			continue
 		}
 		vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Canonical, r.Canonical)
-		err = graph.AddNode(pn, fmt.Sprintf(`"%s"`, r.Canonical), map[string]string{
+		attrs := map[string]string{
 			string(gographviz.Margin):    "0.2",
 			string(gographviz.Shape):     "cds",
 			string(gographviz.FillColor): colorResource,
-			string(gographviz.Style):     "filled",
+			string(gographviz.Style):     style,
 			string(gographviz.FontColor): "white",
 			string(gographviz.URL):       vurl,
 			string(gographviz.Color):     borderColor,
-		})
+		}
+		if penwidth != "" {
+			attrs["penwidth"] = penwidth
+		}
+		err = graph.AddNode(pn, fmt.Sprintf(`"%s"`, r.Canonical), attrs)
 		if err != nil {
 			return nil, fmt.Errorf("failed to add node to Graph: %w", err)
 		}
@@ -702,16 +718,24 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 			nn := fmt.Sprintf(`"%s-%s-out"`, j.Name, rCan)
 			vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Canonical, rCan)
 			border := resourceBorders[rCan]
-			err = graph.AddNode(pn, nn, map[string]string{
+			rStyle := resourceStyles[rCan]
+			if rStyle == "" {
+				rStyle = "filled"
+			}
+			putAttrs := map[string]string{
 				string(gographviz.Label):     fmt.Sprintf(`"%s"`, rCan),
 				string(gographviz.Margin):    "0.2",
 				string(gographviz.Shape):     "cds",
 				string(gographviz.FillColor): colorResource,
-				string(gographviz.Style):     "filled",
+				string(gographviz.Style):     rStyle,
 				string(gographviz.FontColor): "white",
 				string(gographviz.URL):       vurl,
 				string(gographviz.Color):     border,
-			})
+			}
+			if pw := resourcePenwidths[rCan]; pw != "" {
+				putAttrs["penwidth"] = pw
+			}
+			err = graph.AddNode(pn, nn, putAttrs)
 			if err != nil {
 				return nil, fmt.Errorf("failed to add node to Graph: %w", err)
 			}
@@ -734,16 +758,24 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 					rCan := fmt.Sprintf("%s.%s", g.Type, g.Name)
 					vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Canonical, rCan)
 					border := resourceBorders[rCan]
-					err = graph.AddNode(pn, nn, map[string]string{
+					rStyle := resourceStyles[rCan]
+					if rStyle == "" {
+						rStyle = "filled"
+					}
+					passedAttrs := map[string]string{
 						string(gographviz.Label):     fmt.Sprintf(`"%s"`, rCan),
 						string(gographviz.Margin):    "0.2",
 						string(gographviz.Shape):     "cds",
 						string(gographviz.FillColor): colorResource,
-						string(gographviz.Style):     "filled",
+						string(gographviz.Style):     rStyle,
 						string(gographviz.FontColor): "white",
 						string(gographviz.URL):       vurl,
 						string(gographviz.Color):     border,
-					})
+					}
+					if pw := resourcePenwidths[rCan]; pw != "" {
+						passedAttrs["penwidth"] = pw
+					}
+					err = graph.AddNode(pn, nn, passedAttrs)
 					if err != nil {
 						return nil, fmt.Errorf("failed to add node to Graph: %w", err)
 					}

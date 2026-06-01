@@ -933,6 +933,56 @@ func (cl *Client) TriggerPipelineResource(ctx context.Context, tc, pn, rCan stri
 	return nil
 }
 
+// PinResourceVersion pins a resource to a specific version via the API.
+func (cl *Client) PinResourceVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error {
+	var resp thttp.PinResourceVersionResponse
+
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/resources/%s/pin", cl.url, tc, pn, rCan), thttp.PinResourceVersionRequest{
+		VersionID: versionID,
+	}, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return nil
+}
+
+// UnpinResourceVersion removes a version pin from a resource via the API.
+func (cl *Client) UnpinResourceVersion(ctx context.Context, tc, pn, rCan string) error {
+	var resp thttp.UnpinResourceVersionResponse
+
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/resources/%s/unpin", cl.url, tc, pn, rCan), nil, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return nil
+}
+
+// TriggerResourceVersion triggers downstream jobs with a specific resource version via the API.
+func (cl *Client) TriggerResourceVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error {
+	var resp thttp.TriggerResourceVersionResponse
+
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/resources/%s/versions/%d/trigger", cl.url, tc, pn, rCan, versionID), nil, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return nil
+}
+
 // WebhookTrigger sends a webhook trigger request using the given token.
 func (cl *Client) WebhookTrigger(ctx context.Context, token string) error {
 	var resp thttp.WebhookTriggerResponse

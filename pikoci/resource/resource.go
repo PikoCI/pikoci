@@ -18,6 +18,8 @@ type Resource struct {
 
 	Cache *bool `json:"cache,omitempty" hcl:"cache,optional"`
 
+	PinnedVersionID *uint32 `json:"pinned_version_id,omitempty"`
+
 	Canonical    string    `json:"canonical"`
 	Logs         string    `json:"logs"`
 	LastCheck    time.Time `json:"last_check"`

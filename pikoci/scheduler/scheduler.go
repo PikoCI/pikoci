@@ -165,6 +165,19 @@ func (s *Scheduler) evaluateJob(ctx context.Context, pwt *pipeline.WithTeam, j *
 		if !ready {
 			return
 		}
+
+		// Check if the resource is pinned to a different version
+		rCan := g.ResourceCanonical()
+		res, resErr := s.resources.Find(ctx, pwt.Team.Canonical, pwt.Canonical, rCan)
+		if resErr != nil {
+			s.logger.Error("failed to find resource for pin check, skipping job",
+				"pipeline", pwt.Canonical, "job", j.Name, "resource", rCan, "error", resErr)
+			return
+		}
+		if res.PinnedVersionID != nil && versionID != *res.PinnedVersionID {
+			return // resource is pinned to a different version, skip
+		}
+
 		candidates = append(candidates, candidate{g.Name, g.Passed, versionID})
 	}
 

@@ -162,6 +162,34 @@ func (mr *ResourceRepositoryMockRecorder) FindByWebhookToken(ctx, token any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByWebhookToken", reflect.TypeOf((*ResourceRepository)(nil).FindByWebhookToken), ctx, token)
 }
 
+// PinVersion mocks base method.
+func (m *ResourceRepository) PinVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PinVersion", ctx, tc, pn, rCan, versionID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PinVersion indicates an expected call of PinVersion.
+func (mr *ResourceRepositoryMockRecorder) PinVersion(ctx, tc, pn, rCan, versionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PinVersion", reflect.TypeOf((*ResourceRepository)(nil).PinVersion), ctx, tc, pn, rCan, versionID)
+}
+
+// UnpinVersion mocks base method.
+func (m *ResourceRepository) UnpinVersion(ctx context.Context, tc, pn, rCan string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnpinVersion", ctx, tc, pn, rCan)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UnpinVersion indicates an expected call of UnpinVersion.
+func (mr *ResourceRepositoryMockRecorder) UnpinVersion(ctx, tc, pn, rCan any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpinVersion", reflect.TypeOf((*ResourceRepository)(nil).UnpinVersion), ctx, tc, pn, rCan)
+}
+
 // Update mocks base method.
 func (m *ResourceRepository) Update(ctx context.Context, tc, pn, rCan string, r resource.Resource) error {
 	m.ctrl.T.Helper()

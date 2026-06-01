@@ -10,11 +10,13 @@ export var ResourceVersionsView = Backbone.View.extend({
     'click #toggle-webhook-panel': 'clickToggleWebhookPanel',
     'click #copy-webhook': 'clickCopyWebhook',
     'click #regenerate-webhook': 'clickRegenerateWebhook',
+    'click #unpin-banner': 'clickUnpinBanner',
   },
   initialize: function() {
     this.listenTo(this.collection, "add", this.addVersion);
     this.listenTo(this.collection, "reset", this.resetVersions);
     this.listenTo(this.model, "change", this.render);
+    this.listenTo(this.collection.resource, "change:pinned_version_id", this.renderPinnedBanner);
 
     var that = this;
     this.collection.fetch({
@@ -47,6 +49,7 @@ export var ResourceVersionsView = Backbone.View.extend({
       this.$('#webhook-panel').show();
     }
     this.resetVersions();
+    this.renderPinnedBanner();
     if (Object.keys(expandedVersions).length > 0) {
       this.$el.find('.piko-version-row-body').each(function(i) {
         if (expandedVersions[i]) {
@@ -62,9 +65,43 @@ export var ResourceVersionsView = Backbone.View.extend({
       this.addVersion(m, true);
     }, this);
   },
+  renderPinnedBanner: function() {
+    var banner = this.$('#pinned-version-banner');
+    var pinnedID = this.collection.resource.get('pinned_version_id');
+    if (!pinnedID) {
+      banner.empty();
+      return;
+    }
+    var pinnedModel = this.collection.findWhere({id: pinnedID});
+    var versionKV = '';
+    if (pinnedModel) {
+      _.each(pinnedModel.get('version'), function(v, k) {
+        versionKV += k + ': ' + v + '  ';
+      });
+    }
+    var isMember = session.isMember(this.collection.resource.collection.pipeline.collection.team.get('canonical'));
+    var html = '<div class="piko-pinned-banner">' +
+      '<span><i class="bi bi-pin-fill"></i> Pinned to version #' + pinnedID +
+      (versionKV ? ' — <span class="piko-version-kv">' + _.escape(versionKV.trim()) + '</span>' : '') +
+      '</span>' +
+      (isMember ? '<button id="unpin-banner" class="btn btn-sm btn-outline-warning">Unpin</button>' : '') +
+      '</div>';
+    banner.html(html);
+  },
+  clickUnpinBanner: function(event) {
+    event.preventDefault();
+    var rs = this.collection.resource;
+    rs.unpinVersion({
+      headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+      success: function() {
+        rs.set('pinned_version_id', null);
+        window.app.apiNotice.setSuccess("Resource unpinned");
+      },
+    });
+  },
   addVersion: function(m, isReset) {
     var isFirst = $('#resource-versions').children().length === 0;
-    var ver = new ResourceVersionView({model: m, isFirst: isFirst});
+    var ver = new ResourceVersionView({model: m, isFirst: isFirst, resource: this.collection.resource});
     if (isReset) {
       $('#resource-versions').append(ver.render().el);
     } else {
@@ -140,13 +177,63 @@ export var ResourceVersionsView = Backbone.View.extend({
 
 var ResourceVersionView = Backbone.View.extend({
   template: _.template($('#resource-version-view').html()),
+  events: {
+    'click .trigger-version': 'clickTriggerVersion',
+    'click .pin-version': 'clickPinVersion',
+  },
   initialize: function(opts) {
     this.isFirst = opts.isFirst || false;
+    this.resource = opts.resource;
+    this.listenTo(this.resource, 'change:pinned_version_id', this.render);
   },
   render: function () {
     var data = this.model.toJSON();
     data.isFirst = this.isFirst;
+    data.pinned_version_id = this.resource.get('pinned_version_id');
+    data.isMember = session.isMember(this.resource.collection.pipeline.collection.team.get('canonical'));
     this.$el.html(this.template(data));
     return this;
+  },
+  clickTriggerVersion: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var versionID = this.model.get('id');
+    var rs = this.resource;
+    var tc = rs.collection.pipeline.collection.team.get('canonical');
+    var pn = rs.collection.pipeline.get('canonical');
+    var rCan = rs.get('canonical');
+    $.ajax({
+      url: '/teams/' + tc + '/pipelines/' + pn + '/resources/' + rCan + '/versions/' + versionID + '/trigger',
+      type: 'POST',
+      contentType: 'application/json',
+      headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+      success: function() {
+        window.app.apiNotice.setSuccess("Triggered downstream jobs with version #" + versionID);
+      },
+    });
+  },
+  clickPinVersion: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var versionID = this.model.get('id');
+    var rs = this.resource;
+    var isPinned = rs.get('pinned_version_id') === versionID;
+    if (isPinned) {
+      rs.unpinVersion({
+        headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+        success: function() {
+          rs.set('pinned_version_id', null);
+          window.app.apiNotice.setSuccess("Resource unpinned");
+        },
+      });
+    } else {
+      rs.pinVersion(versionID, {
+        headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+        success: function() {
+          rs.set('pinned_version_id', versionID);
+          window.app.apiNotice.setSuccess("Resource pinned to version #" + versionID);
+        },
+      });
+    }
   },
 });

@@ -2590,6 +2590,86 @@ func TestTriggerResourceJobs_MultipleJobsSameResource(t *testing.T) {
 	w.triggerResourceJobs(ctx, m, pp, r, cv)
 }
 
+func TestTriggerResourceJobs_SkipsWhenResourcePinned(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+
+	pinnedVersion := uint32(99)
+	r := resource.Resource{
+		ID:              1,
+		Name:            "my-repo",
+		Type:            "git",
+		Canonical:       "git.my-repo",
+		PinnedVersionID: &pinnedVersion,
+	}
+	// New version discovered (ID=42) doesn't match pinned version (99)
+	cv := &resource.Version{ID: 42}
+
+	pp := &pipeline.Pipeline{
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "lint",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "my-repo", Trigger: true}},
+				},
+			},
+		},
+	}
+
+	m := queue.Body{
+		TeamCanonical:     "tc",
+		PipelineCanonical: "test-pipeline",
+	}
+
+	// topic.Send should NOT be called — resource is pinned to a different version
+	w.triggerResourceJobs(ctx, m, pp, r, cv)
+}
+
+func TestTriggerResourceJobs_TriggersWhenPinnedVersionMatches(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _, topic := newTestWorker(ctrl)
+
+	ctx := context.Background()
+
+	pinnedVersion := uint32(42)
+	r := resource.Resource{
+		ID:              1,
+		Name:            "my-repo",
+		Type:            "git",
+		Canonical:       "git.my-repo",
+		PinnedVersionID: &pinnedVersion,
+	}
+	// New version matches pinned version
+	cv := &resource.Version{ID: 42}
+
+	pp := &pipeline.Pipeline{
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "lint",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "my-repo", Trigger: true}},
+				},
+			},
+		},
+	}
+
+	m := queue.Body{
+		TeamCanonical:     "tc",
+		PipelineCanonical: "test-pipeline",
+	}
+
+	// topic.Send SHOULD be called — pinned version matches
+	topic.EXPECT().Send(gomock.Any(), gomock.Any()).Return(nil)
+
+	w.triggerResourceJobs(ctx, m, pp, r, cv)
+}
+
 func TestProcessJob_TaskInputMissing(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc, _ := newTestWorker(ctrl)

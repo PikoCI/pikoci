@@ -256,6 +256,9 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}").Name(GetPipelineResource.String()).Handler(getPipelineResource(s))
 	api.Methods(http.MethodPut).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}").Name(UpdatePipelineResource.String()).Handler(updatePipelineResource(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/trigger").Name(TriggerPipelineResource.String()).Handler(triggerPipelineResource(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/pin").Name(PinResourceVersion.String()).Handler(pinResourceVersion(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/unpin").Name(UnpinResourceVersion.String()).Handler(unpinResourceVersion(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/versions/{version_id}/trigger").Name(TriggerResourceVersion.String()).Handler(triggerResourceVersion(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/webhook_token").Name(RegenerateWebhookToken.String()).Handler(regenerateWebhookToken(s))
 
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/triggers/{trigger_name}").Name(CreateTrigger.String()).Handler(createTrigger(s))

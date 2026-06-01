@@ -33,8 +33,9 @@ type dbResource struct {
 	CheckInterval sql.NullString
 	LastCheck     sql.NullTime
 	NextCheck     sql.NullTime
-	WebhookToken  sql.NullString
-	Cache         sql.NullBool
+	WebhookToken    sql.NullString
+	Cache           sql.NullBool
+	PinnedVersionID sql.NullInt64
 }
 
 type dbResourceVersion struct {
@@ -79,6 +80,11 @@ func (dbr *dbResource) toDomainEntity() *resource.Resource {
 	if dbr.Cache.Valid {
 		c := dbr.Cache.Bool
 		r.Cache = &c
+	}
+
+	if dbr.PinnedVersionID.Valid {
+		v := uint32(dbr.PinnedVersionID.Int64)
+		r.PinnedVersionID = &v
 	}
 
 	return r
@@ -155,7 +161,7 @@ func (r *ResourceRepository) Update(ctx context.Context, tc, pn, rCan string, rs
 
 func (r *ResourceRepository) Find(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.cache
+		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.cache, r.pinned_version_id
 		FROM resources AS r
 		JOIN pipelines AS p
 			ON r.pipeline_id = p.id
@@ -175,7 +181,7 @@ func (r *ResourceRepository) Find(ctx context.Context, tc, pn, rCan string) (*re
 func (r *ResourceRepository) FindByWebhookToken(ctx context.Context, token string) (*resource.Resource, string, string, error) {
 	var tc, pn sql.NullString
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.cache,
+		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.cache, r.pinned_version_id,
 			t.canonical, p.canonical
 		FROM resources AS r
 		JOIN pipelines AS p
@@ -198,6 +204,7 @@ func (r *ResourceRepository) FindByWebhookToken(ctx context.Context, token strin
 		&dbr.NextCheck,
 		&dbr.WebhookToken,
 		&dbr.Cache,
+		&dbr.PinnedVersionID,
 		&tc,
 		&pn,
 	)
@@ -213,7 +220,7 @@ func (r *ResourceRepository) FindByWebhookToken(ctx context.Context, token strin
 
 func (r *ResourceRepository) Filter(ctx context.Context, tc, pn string) ([]*resource.Resource, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.cache
+		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.cache, r.pinned_version_id
 		FROM resources AS r
 		JOIN pipelines AS p
 			ON r.pipeline_id = p.id
@@ -235,7 +242,7 @@ func (r *ResourceRepository) Filter(ctx context.Context, tc, pn string) ([]*reso
 
 func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resource.ResourceWithPipeline, error) {
 	q := `
-		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.cache,
+		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.cache, r.pinned_version_id,
 			t.canonical, p.canonical
 		FROM resources AS r
 		JOIN pipelines AS p
@@ -273,6 +280,7 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 			&dbr.NextCheck,
 			&dbr.WebhookToken,
 			&dbr.Cache,
+			&dbr.PinnedVersionID,
 			&tc,
 			&pn,
 		)
@@ -363,6 +371,60 @@ func (r *ResourceRepository) FilterVersions(ctx context.Context, tc, pn, rCan st
 	return rvs, nil
 }
 
+func (r *ResourceRepository) PinVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error {
+	res, err := r.querier.ExecContext(ctx, `
+		UPDATE resources AS r
+		SET pinned_version_id = ?
+		FROM (
+			SELECT r.id
+			FROM resources AS r
+			JOIN pipelines AS p
+				ON r.pipeline_id = p.id
+			JOIN teams AS t
+				ON p.team_id = t.id
+			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
+		) AS rr
+		WHERE rr.id = r.id
+	`, versionID, tc, pn, rCan)
+	if err != nil {
+		return fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	err = isEntityFound(res)
+	if err != nil {
+		return fmt.Errorf("failed to pin resource version: %w", err)
+	}
+
+	return nil
+}
+
+func (r *ResourceRepository) UnpinVersion(ctx context.Context, tc, pn, rCan string) error {
+	res, err := r.querier.ExecContext(ctx, `
+		UPDATE resources AS r
+		SET pinned_version_id = NULL
+		FROM (
+			SELECT r.id
+			FROM resources AS r
+			JOIN pipelines AS p
+				ON r.pipeline_id = p.id
+			JOIN teams AS t
+				ON p.team_id = t.id
+			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
+		) AS rr
+		WHERE rr.id = r.id
+	`, tc, pn, rCan)
+	if err != nil {
+		return fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	err = isEntityFound(res)
+	if err != nil {
+		return fmt.Errorf("failed to unpin resource version: %w", err)
+	}
+
+	return nil
+}
+
 func (r *ResourceRepository) Delete(ctx context.Context, tc, pn, rCan string) error {
 	res, err := r.querier.ExecContext(ctx, `
 		DELETE
@@ -404,6 +466,7 @@ func scanResource(s sqlr.Scanner) (*resource.Resource, error) {
 		&r.NextCheck,
 		&r.WebhookToken,
 		&r.Cache,
+		&r.PinnedVersionID,
 	)
 
 	if err != nil {

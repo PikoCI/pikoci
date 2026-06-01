@@ -824,6 +824,23 @@ textarea.form-control {
   justify-content: space-between;
 }
 .piko-version-row-header:hover { background: var(--bg-muted); }
+.piko-version-actions { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+.piko-version-actions .btn { padding: 0.15rem 0.4rem; font-size: 0.8rem; line-height: 1; }
+.piko-pinned-banner {
+  background: rgba(255,163,0,0.1);
+  border: 2px solid #FFA300;
+  border-radius: var(--radius);
+  padding: 0.5rem 1rem;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.piko-pinned-banner i { color: #FFA300; }
 .piko-version-row-body {
   border-top: 1px solid var(--border);
   padding: 0.75rem 1rem;
