@@ -337,8 +337,8 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 
 	nb, err := w.pikoci.StartPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID)
 	if err != nil {
-		if errors.Is(err, pikoci.ErrConcurrencyLimit) {
-			w.logger.Info("concurrency limit, re-queuing",
+		if errors.Is(err, pikoci.ErrConcurrencyLimit) || errors.Is(err, pikoci.ErrJobPaused) {
+			w.logger.Info("concurrency limit or job paused, re-queuing",
 				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID)
 			mb, _ := json.Marshal(m)
 			if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {

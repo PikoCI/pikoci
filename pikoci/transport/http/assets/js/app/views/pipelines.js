@@ -211,7 +211,8 @@ export var PipelineShowView = Backbone.View.extend({
   clickPausePipeline: function(event) {
     event.preventDefault();
     var that = this;
-    this.model.fetchPause({
+    var url = this.model.url() + "/pause";
+    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
       success: function() {
         window.app.apiNotice.setSuccess("Pipeline paused");
         that.model.fetch({ success: function() { that.render(); } });
@@ -221,7 +222,8 @@ export var PipelineShowView = Backbone.View.extend({
   clickUnpausePipeline: function(event) {
     event.preventDefault();
     var that = this;
-    this.model.fetchUnpause({
+    var url = this.model.url() + "/unpause";
+    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
       success: function() {
         window.app.apiNotice.setSuccess("Pipeline unpaused");
         that.model.fetch({ success: function() { that.render(); } });

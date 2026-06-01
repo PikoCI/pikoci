@@ -123,7 +123,8 @@ export var JobBuildsView = Backbone.View.extend({
   clickPauseJob: function(event) {
     event.preventDefault();
     var that = this;
-    this.collection.job.fetchPause({
+    var url = this.collection.job.url() + "/pause";
+    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
       success: function() {
         window.app.apiNotice.setSuccess("Job paused");
         that.collection.job.fetch({ success: function() { that.render(); } });
@@ -133,7 +134,8 @@ export var JobBuildsView = Backbone.View.extend({
   clickUnpauseJob: function(event) {
     event.preventDefault();
     var that = this;
-    this.collection.job.fetchUnpause({
+    var url = this.collection.job.url() + "/unpause";
+    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
       success: function() {
         window.app.apiNotice.setSuccess("Job unpaused");
         that.collection.job.fetch({ success: function() { that.render(); } });
