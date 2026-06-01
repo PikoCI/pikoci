@@ -111,10 +111,21 @@ export var JobBuildsView = Backbone.View.extend({
   },
   fetchActiveBuild: function() {
     var active = this.collection.find(function(m) { return m.get("active"); });
-    if (!active) return;
-    var status = active.get("status");
-    if (status === "succeeded" || status === "failed" || status === "cancelled") return;
-    active.fetch();
+    // Fetch the active build if it's in a non-terminal state
+    if (active) {
+      var status = active.get("status");
+      if (status !== "succeeded" && status !== "failed" && status !== "cancelled") {
+        active.fetch();
+      }
+    }
+    // Also fetch any other non-terminal builds so their tabs update
+    this.collection.each(function(m) {
+      if (m === active) return;
+      var s = m.get("status");
+      if (s === "started" || s === "pending") {
+        m.fetch();
+      }
+    });
   },
   clickTriggerJob: function(event) {
     event.preventDefault();
