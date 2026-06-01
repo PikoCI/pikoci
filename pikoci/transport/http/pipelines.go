@@ -277,6 +277,46 @@ func createPipelineImage(s pikoci.Service) http.HandlerFunc {
 	}
 }
 
+type PausePipelineResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r PausePipelineResponse) Error() string { return r.Err }
+
+func pausePipeline(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		err := s.PausePipeline(r.Context(), tc, pc)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(PausePipelineResponse{Err: errs}, w)
+	}
+}
+
+type UnpausePipelineResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r UnpausePipelineResponse) Error() string { return r.Err }
+
+func unpausePipeline(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		err := s.UnpausePipeline(r.Context(), tc, pc)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(UnpausePipelineResponse{Err: errs}, w)
+	}
+}
+
 // writeImageResponse writes the image response with the appropriate Content-Type.
 // For SVG/PNG formats, it writes raw binary with CORS headers.
 // For DOT format (or empty), it writes JSON via encodeResponse.

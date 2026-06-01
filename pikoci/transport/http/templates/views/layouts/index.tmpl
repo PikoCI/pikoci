@@ -267,6 +267,13 @@
             <button type="button" id="delete-pipeline" class="btn btn-danger"><i class="bi bi-trash"></i> Delete</button>
           </div>
         <% } %>
+        <% if (isMember(team.canonical) && pipeline.jobs && pipeline.jobs.length > 0) { %>
+          <% if (pipeline.jobs.some(function(j) { return j.paused; })) { %>
+            <button type="button" id="unpause-pipeline" class="btn btn-primary ms-2"><i class="bi bi-play-circle"></i> Unpause</button>
+          <% } else { %>
+            <button type="button" id="pause-pipeline" class="btn btn-primary ms-2"><i class="bi bi-pause-circle"></i> Pause</button>
+          <% } %>
+        <% } %>
       </div>
       <div class="piko-graph-container" id="graphviz"></div>
       <div class="piko-graph-legend">
@@ -293,6 +300,10 @@
         <span class="piko-graph-legend-item">
           <span class="piko-graph-legend-swatch" style="background:#83769C;"></span>
           No builds
+        </span>
+        <span class="piko-graph-legend-item">
+          <span class="piko-graph-legend-swatch" style="background:#29ADFF;"></span>
+          Paused
         </span>
       </div>
     </script>
@@ -389,7 +400,12 @@
       <div class="d-flex align-items-center justify-content-between mb-3">
         <h1 class="h4 fw-bold mb-0"><%- job.name %></h1>
         <% if (isMember(team.canonical)) { %>
-          <button type="button" id="trigger-job" class="btn btn-warning"><i class="bi bi-play-circle"></i> Trigger Job</button>
+          <% if (job.paused) { %>
+            <button type="button" id="unpause-job" class="btn btn-primary"><i class="bi bi-play-circle"></i> Unpause Job</button>
+          <% } else { %>
+            <button type="button" id="trigger-job" class="btn btn-warning"><i class="bi bi-play-circle"></i> Trigger Job</button>
+            <button type="button" id="pause-job" class="btn btn-primary ms-2"><i class="bi bi-pause-circle"></i> Pause Job</button>
+          <% } %>
         <% } %>
       </div>
       <div class="piko-build-tabs" id="builds-tabs">

@@ -92,6 +92,15 @@ type Service interface {
 	// SetPipelinePublic toggles the public visibility of a pipeline.
 	SetPipelinePublic(ctx context.Context, tc, pn string, public bool) error
 
+	// PausePipeline pauses a pipeline, preventing all its jobs from being triggered.
+	PausePipeline(ctx context.Context, tc, pCan string) error
+	// UnpausePipeline unpauses a pipeline and unpauses all its jobs.
+	UnpausePipeline(ctx context.Context, tc, pCan string) error
+	// PauseJob pauses a specific job within a pipeline.
+	PauseJob(ctx context.Context, tc, pCan, jn string) error
+	// UnpauseJob unpauses a specific job within a pipeline.
+	UnpauseJob(ctx context.Context, tc, pCan, jn string) error
+
 	// GetPublicPipeline retrieves a public pipeline with sensitive fields sanitized.
 	GetPublicPipeline(ctx context.Context, tc, pn string) (*pipeline.Pipeline, error)
 	// GetPublicPipelineImage generates a DOT graph image for a public pipeline.

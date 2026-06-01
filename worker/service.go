@@ -337,8 +337,8 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 
 	nb, err := w.pikoci.StartPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID)
 	if err != nil {
-		if errors.Is(err, pikoci.ErrConcurrencyLimit) {
-			w.logger.Info("concurrency limit, re-queuing",
+		if errors.Is(err, pikoci.ErrConcurrencyLimit) || errors.Is(err, pikoci.ErrJobPaused) {
+			w.logger.Info("concurrency limit or job paused, re-queuing",
 				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID)
 			mb, _ := json.Marshal(m)
 			if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
@@ -1703,6 +1703,9 @@ func (w *Worker) runPutStepTrigger(ctx context.Context, m queue.Body, b *build.B
 // triggerResourceJobs triggers jobs that depend on a resource via "get" with trigger=true.
 func (w *Worker) triggerResourceJobs(ctx context.Context, m queue.Body, pp *pipeline.Pipeline, r resource.Resource, cv *resource.Version) {
 	for _, j := range pp.Jobs {
+		if j.Paused {
+			continue
+		}
 		for _, ps := range j.Plan {
 			if ps.Type != job.StepTypeGet || ps.Get == nil {
 				continue

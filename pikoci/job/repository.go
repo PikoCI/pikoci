@@ -16,4 +16,10 @@ type Repository interface {
 	Filter(ctx context.Context, tc, pn string) ([]*Job, error)
 	// Delete removes a job identified by team, pipeline, and job name.
 	Delete(ctx context.Context, tc, pn, jn string) error
+	// SetPaused updates the paused flag for a job.
+	SetPaused(ctx context.Context, tc, pn, jn string, paused bool) error
+	// PauseAll sets the paused flag for all jobs in a pipeline.
+	PauseAll(ctx context.Context, tc, pn string) error
+	// UnpauseAll clears the paused flag for all jobs in a pipeline.
+	UnpauseAll(ctx context.Context, tc, pn string) error
 }

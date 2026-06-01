@@ -74,3 +74,45 @@ func getPipelineJob(s pikoci.Service) http.HandlerFunc {
 		encodeResponse(GetPipelineJobResponse{Job: j, Err: errs}, w)
 	}
 }
+
+type PauseJobResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r PauseJobResponse) Error() string { return r.Err }
+
+func pauseJob(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		jn := vars["job_name"]
+		err := s.PauseJob(r.Context(), tc, pc, jn)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(PauseJobResponse{Err: errs}, w)
+	}
+}
+
+type UnpauseJobResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r UnpauseJobResponse) Error() string { return r.Err }
+
+func unpauseJob(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		jn := vars["job_name"]
+		err := s.UnpauseJob(r.Context(), tc, pc, jn)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(UnpauseJobResponse{Err: errs}, w)
+	}
+}

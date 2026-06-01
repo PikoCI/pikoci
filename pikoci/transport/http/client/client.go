@@ -555,6 +555,54 @@ func (cl *Client) TriggerPipelineJob(ctx context.Context, tc, pn, jn string) err
 	return nil
 }
 
+func (cl *Client) PausePipeline(ctx context.Context, tc, pn string) error {
+	var resp thttp.PausePipelineResponse
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/pause", cl.url, tc, pn), nil, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+	return nil
+}
+
+func (cl *Client) UnpausePipeline(ctx context.Context, tc, pn string) error {
+	var resp thttp.UnpausePipelineResponse
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/unpause", cl.url, tc, pn), nil, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+	return nil
+}
+
+func (cl *Client) PauseJob(ctx context.Context, tc, pn, jn string) error {
+	var resp thttp.PauseJobResponse
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/pause", cl.url, tc, pn, jn), nil, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+	return nil
+}
+
+func (cl *Client) UnpauseJob(ctx context.Context, tc, pn, jn string) error {
+	var resp thttp.UnpauseJobResponse
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/unpause", cl.url, tc, pn, jn), nil, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+	return nil
+}
+
 // GetPipelineJob retrieves a single job from a pipeline.
 func (cl *Client) GetPipelineJob(ctx context.Context, tc, pn, jn string) (*job.Job, error) {
 	var resp thttp.GetPipelineJobResponse

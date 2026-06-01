@@ -23,6 +23,8 @@ var (
 	// ErrBuildNotPending is returned when attempting to start a build that is not
 	// in the pending state.
 	ErrBuildNotPending = build.ErrNotPending
+	// ErrJobPaused is returned when attempting to start a build for a paused job.
+	ErrJobPaused = errors.New("job is paused")
 )
 
 // CreateJobBuild creates a new pending build for the specified job within a unit
@@ -324,6 +326,9 @@ func (q *PikoCI) StartPendingBuild(ctx context.Context, tc, pn, jn string, build
 		j, err := uow.Jobs().Find(ctx, tc, pn, jn)
 		if err != nil {
 			return fmt.Errorf("failed to find job: %w", err)
+		}
+		if j.Paused {
+			return ErrJobPaused
 		}
 		if j.Concurrency > 0 {
 			running, err := uow.Builds().CountRunning(ctx, tc, pn, jn)

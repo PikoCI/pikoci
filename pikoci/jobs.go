@@ -29,6 +29,10 @@ func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) erro
 		return fmt.Errorf("failed to Find Job %q on Pipeline %q: %w", jn, pc, err)
 	}
 
+	if j.Paused {
+		return fmt.Errorf("job %q is paused", jn)
+	}
+
 	bb := build.Build{Status: build.Pending}
 
 	// Pin the latest version of the first get-step resource so the version
@@ -71,6 +75,30 @@ func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) erro
 	}
 
 	return nil
+}
+
+// PauseJob pauses a specific job within a pipeline.
+func (q *PikoCI) PauseJob(ctx context.Context, tc, pc, jn string) error {
+	if !utils.ValidateCanonical(tc) {
+		return fmt.Errorf("invalid Team Canonical format %q", tc)
+	} else if !utils.ValidateCanonical(pc) {
+		return fmt.Errorf("invalid Pipeline Canonical format %q", pc)
+	} else if !utils.ValidateCanonical(jn) {
+		return fmt.Errorf("invalid Job Name format %q", jn)
+	}
+	return q.Jobs.SetPaused(ctx, tc, pc, jn, true)
+}
+
+// UnpauseJob unpauses a specific job within a pipeline.
+func (q *PikoCI) UnpauseJob(ctx context.Context, tc, pc, jn string) error {
+	if !utils.ValidateCanonical(tc) {
+		return fmt.Errorf("invalid Team Canonical format %q", tc)
+	} else if !utils.ValidateCanonical(pc) {
+		return fmt.Errorf("invalid Pipeline Canonical format %q", pc)
+	} else if !utils.ValidateCanonical(jn) {
+		return fmt.Errorf("invalid Job Name format %q", jn)
+	}
+	return q.Jobs.SetPaused(ctx, tc, pc, jn, false)
 }
 
 // GetPipelineJob retrieves a job by its name within a pipeline.

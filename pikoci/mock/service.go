@@ -613,6 +613,34 @@ func (mr *ServiceMockRecorder) ListUsers(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListUsers", reflect.TypeOf((*Service)(nil).ListUsers), ctx)
 }
 
+// PauseJob mocks base method.
+func (m *Service) PauseJob(ctx context.Context, tc, pCan, jn string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PauseJob", ctx, tc, pCan, jn)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PauseJob indicates an expected call of PauseJob.
+func (mr *ServiceMockRecorder) PauseJob(ctx, tc, pCan, jn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseJob", reflect.TypeOf((*Service)(nil).PauseJob), ctx, tc, pCan, jn)
+}
+
+// PausePipeline mocks base method.
+func (m *Service) PausePipeline(ctx context.Context, tc, pCan string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PausePipeline", ctx, tc, pCan)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PausePipeline indicates an expected call of PausePipeline.
+func (mr *ServiceMockRecorder) PausePipeline(ctx, tc, pCan any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PausePipeline", reflect.TypeOf((*Service)(nil).PausePipeline), ctx, tc, pCan)
+}
+
 // RefreshToken mocks base method.
 func (m *Service) RefreshToken(ctx context.Context, un string) (*user.WithMemberships, string, error) {
 	m.ctrl.T.Helper()
@@ -713,6 +741,34 @@ func (m *Service) TriggerPipelineResource(ctx context.Context, tc, pn, rCan stri
 func (mr *ServiceMockRecorder) TriggerPipelineResource(ctx, tc, pn, rCan any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TriggerPipelineResource", reflect.TypeOf((*Service)(nil).TriggerPipelineResource), ctx, tc, pn, rCan)
+}
+
+// UnpauseJob mocks base method.
+func (m *Service) UnpauseJob(ctx context.Context, tc, pCan, jn string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnpauseJob", ctx, tc, pCan, jn)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UnpauseJob indicates an expected call of UnpauseJob.
+func (mr *ServiceMockRecorder) UnpauseJob(ctx, tc, pCan, jn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseJob", reflect.TypeOf((*Service)(nil).UnpauseJob), ctx, tc, pCan, jn)
+}
+
+// UnpausePipeline mocks base method.
+func (m *Service) UnpausePipeline(ctx context.Context, tc, pCan string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnpausePipeline", ctx, tc, pCan)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UnpausePipeline indicates an expected call of UnpausePipeline.
+func (mr *ServiceMockRecorder) UnpausePipeline(ctx, tc, pCan any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpausePipeline", reflect.TypeOf((*Service)(nil).UnpausePipeline), ctx, tc, pCan)
 }
 
 // UpdateJobBuild mocks base method.

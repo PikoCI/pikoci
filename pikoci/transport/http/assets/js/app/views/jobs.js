@@ -30,6 +30,8 @@ export var JobBuildsView = Backbone.View.extend({
   },
   events: {
     'click #trigger-job': 'clickTriggerJob',
+    'click #pause-job': 'clickPauseJob',
+    'click #unpause-job': 'clickUnpauseJob',
     'click .piko-build-tab': 'clickOnTab',
   },
   addBuilds: function() {
@@ -117,6 +119,28 @@ export var JobBuildsView = Backbone.View.extend({
   clickTriggerJob: function(event) {
     event.preventDefault();
     this.collection.job.fetchTrigger({success: function() { window.app.apiNotice.setSuccess("Job triggered"); }});
+  },
+  clickPauseJob: function(event) {
+    event.preventDefault();
+    var that = this;
+    var url = this.collection.job.url() + "/pause";
+    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
+      success: function() {
+        window.app.apiNotice.setSuccess("Job paused");
+        that.collection.job.fetch({ success: function() { that.render(); that.addBuilds(); that.collection.setActive(that.currentBuildID); } });
+      },
+    });
+  },
+  clickUnpauseJob: function(event) {
+    event.preventDefault();
+    var that = this;
+    var url = this.collection.job.url() + "/unpause";
+    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
+      success: function() {
+        window.app.apiNotice.setSuccess("Job unpaused");
+        that.collection.job.fetch({ success: function() { that.render(); that.addBuilds(); that.collection.setActive(that.currentBuildID); } });
+      },
+    });
   },
   clickOnTab: function(event) {
     event.preventDefault();

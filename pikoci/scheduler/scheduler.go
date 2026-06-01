@@ -123,6 +123,9 @@ func (s *Scheduler) tickJobs(ctx context.Context) {
 
 	for _, pwt := range pps {
 		for _, j := range pwt.Jobs {
+			if j.Paused {
+				continue
+			}
 			s.evaluateJob(ctx, pwt, &j)
 		}
 	}

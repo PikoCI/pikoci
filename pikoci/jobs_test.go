@@ -129,3 +129,37 @@ func TestTriggerPipelineJob_PinsLatestVersion(t *testing.T) {
 	err := s.S.TriggerPipelineJob(ctx, tc, ppc, jn)
 	require.NoError(t, err)
 }
+
+func TestTriggerPipelineJob_JobPaused(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(&job.Job{ID: 1, Paused: true}, nil)
+
+	err := s.S.TriggerPipelineJob(ctx, "main", "pp", "jn")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is paused")
+}
+
+func TestPausePipeline_PausesAllJobs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().PauseAll(ctx, "main", "pp").Return(nil)
+
+	err := s.S.PausePipeline(ctx, "main", "pp")
+	require.NoError(t, err)
+}
+
+func TestUnpausePipeline_UnpausesAllJobs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().UnpauseAll(ctx, "main", "pp").Return(nil)
+
+	err := s.S.UnpausePipeline(ctx, "main", "pp")
+	require.NoError(t, err)
+}
