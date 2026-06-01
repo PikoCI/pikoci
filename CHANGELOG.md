@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Build status transitions not visible in real-time on non-active build tabs in the job builds page ([#444](https://github.com/PikoCI/pikoci/issues/444))
 - Toast notifications overlap action buttons on wide screens and cannot be dismissed by clicking ([#443](https://github.com/PikoCI/pikoci/issues/443))
 - Job builds view defaults to newest build instead of navigating to the running/pending build ([#441](https://github.com/PikoCI/pikoci/issues/441))
 - Pipelines link on team edit page causes full page reload instead of client-side navigation ([#445](https://github.com/PikoCI/pikoci/issues/445))
