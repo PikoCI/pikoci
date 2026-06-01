@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Job builds view defaults to newest build instead of navigating to the running/pending build ([#441](https://github.com/PikoCI/pikoci/issues/441))
 - Pipelines link on team edit page causes full page reload instead of client-side navigation ([#445](https://github.com/PikoCI/pikoci/issues/445))
 - Git resource tag mode returns all tags on every check, triggering builds for every historical tag after pipeline recreation ([#419](https://github.com/PikoCI/pikoci/issues/419))
 - Pipeline graph shows original build color instead of successful retry when a new build is running ([#421](https://github.com/PikoCI/pikoci/issues/421))

@@ -114,8 +114,12 @@ export var Builds = Backbone.Collection.extend({
     }, opts));
   },
   setActive: function(id) {
-    if (!id && this.first()) {
-      id = this.first().get("build_number");
+    if (!id) {
+      var started = this.filter(function(m) { return m.get("status") === "started"; });
+      var pending = this.filter(function(m) { return m.get("status") === "pending"; });
+      var running = (started.length ? started[started.length - 1] : null)
+        || (pending.length ? pending[pending.length - 1] : null);
+      id = running ? running.get("build_number") : (this.first() ? this.first().get("build_number") : null);
     }
     this.each(function(m){
       m.set("active", m.get("build_number") === id);
