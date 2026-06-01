@@ -185,10 +185,9 @@ a:hover { color: var(--primary-hover); }
 .piko-toast {
   position: fixed;
   top: 70px;
-  right: 20px;
+  right: 10px;
   z-index: 1050;
-  min-width: 250px;
-  max-width: 400px;
+  max-width: calc((100vw - 1320px) / 2 - 20px);
   padding: 12px 20px;
   border-radius: var(--radius);
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
@@ -197,6 +196,26 @@ a:hover { color: var(--primary-hover); }
   opacity: 0;
   transform: translateX(20px);
   transition: opacity 0.3s, transform 0.3s;
+}
+.piko-toast-close {
+  pointer-events: auto;
+  cursor: pointer;
+  background: none;
+  border: none;
+  float: right;
+  font-size: 18px;
+  line-height: 1;
+  margin: -4px -8px 0 8px;
+  padding: 0;
+  color: inherit;
+  opacity: 0.6;
+}
+.piko-toast-close::after { content: "\00d7"; }
+.piko-toast-close:hover { opacity: 1; }
+@media (max-width: 1720px) {
+  .piko-toast {
+    max-width: 280px;
+  }
 }
 .piko-toast.show { opacity: 1; transform: translateX(0); }
 .piko-toast-success {

@@ -88,13 +88,20 @@ export var NoticeView = Backbone.View.extend({
   },
   showToast: function(msg, type) {
     $('.piko-toast').remove();
-    var toast = $('<div class="piko-toast"></div>').addClass('piko-toast-' + type).text(msg);
+    var toast = $('<div class="piko-toast"></div>').addClass('piko-toast-' + type);
+    var closeBtn = $('<button class="piko-toast-close" aria-label="Dismiss"></button>');
+    toast.append(document.createTextNode(msg)).append(closeBtn);
     $('body').append(toast);
     requestAnimationFrame(function() { toast.addClass('show'); });
-    setTimeout(function() {
+    var dismissTimer = setTimeout(function() {
       toast.removeClass('show');
       setTimeout(function() { toast.remove(); }, 300);
     }, type === "error" ? 8000 : 4000);
+    closeBtn.on('click', function() {
+      clearTimeout(dismissTimer);
+      toast.removeClass('show');
+      setTimeout(function() { toast.remove(); }, 300);
+    });
   },
 });
 
