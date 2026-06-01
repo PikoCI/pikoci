@@ -496,6 +496,8 @@ var (
 	colorDefault        = `"#83769C"`
 	colorDefaultBorder  = `"#5F574F"`
 	colorError          = `"#FF004D"`
+	colorPaused         = `"#29ADFF"`
+	colorPausedBorder   = `"#1D8BD1"`
 )
 
 // GetPipelineImage generates a DOT graph representation of a pipeline's jobs
@@ -640,6 +642,11 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 			if c, ok := jobBorderColors[cb.Status]; ok {
 				borderColor = c
 			}
+		}
+
+		if j.Paused {
+			color = colorPaused
+			borderColor = colorPausedBorder
 		}
 
 		style := "invis"
@@ -1061,6 +1068,26 @@ func (q *PikoCI) SetPipelinePublic(ctx context.Context, tc, pCan string, public 
 	}
 
 	return q.Pipelines.SetPublic(ctx, tc, pCan, public)
+}
+
+// PausePipeline pauses all jobs in a pipeline.
+func (q *PikoCI) PausePipeline(ctx context.Context, tc, pCan string) error {
+	if !utils.ValidateCanonical(tc) {
+		return fmt.Errorf("invalid Team Canonical format %q", tc)
+	} else if !utils.ValidateCanonical(pCan) {
+		return fmt.Errorf("invalid Pipeline Canonical format %q", pCan)
+	}
+	return q.Jobs.PauseAll(ctx, tc, pCan)
+}
+
+// UnpausePipeline unpauses all jobs in a pipeline.
+func (q *PikoCI) UnpausePipeline(ctx context.Context, tc, pCan string) error {
+	if !utils.ValidateCanonical(tc) {
+		return fmt.Errorf("invalid Team Canonical format %q", tc)
+	} else if !utils.ValidateCanonical(pCan) {
+		return fmt.Errorf("invalid Pipeline Canonical format %q", pCan)
+	}
+	return q.Jobs.UnpauseAll(ctx, tc, pCan)
 }
 
 // GetPublicPipeline retrieves a public pipeline with sensitive fields sanitized.

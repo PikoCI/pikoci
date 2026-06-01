@@ -115,6 +115,15 @@ const (
 	// ExportDatabase is the route for exporting the database as a binary dump.
 	ExportDatabase
 
+	// PausePipeline is the route for pausing a pipeline.
+	PausePipeline
+	// UnpausePipeline is the route for unpausing a pipeline.
+	UnpausePipeline
+	// PauseJob is the route for pausing a job.
+	PauseJob
+	// UnpauseJob is the route for unpausing a job.
+	UnpauseJob
+
 	// GetVersion is the route for retrieving the application version.
 	GetVersion
 )

@@ -70,6 +70,11 @@ var (
 		ListTriggersAfter: member,
 
 		ExportDatabase: admin,
+
+		PausePipeline:   member,
+		UnpausePipeline: member,
+		PauseJob:        member,
+		UnpauseJob:      member,
 	}
 )
 

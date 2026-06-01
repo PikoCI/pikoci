@@ -164,6 +164,8 @@ export var PipelineShowView = Backbone.View.extend({
     'click': 'clickPipeline',
     'click #edit-pipeline': 'clickEdit',
     'click #delete-pipeline': 'clickDelete',
+    'click #pause-pipeline': 'clickPausePipeline',
+    'click #unpause-pipeline': 'clickUnpausePipeline',
   },
   render: function () {
     this.$el.html(this.template(addSessionFunctions({ pipeline: this.model.toJSON(), team: this.model.collection.team.toJSON() })));
@@ -205,5 +207,25 @@ export var PipelineShowView = Backbone.View.extend({
         },
       });
     }
+  },
+  clickPausePipeline: function(event) {
+    event.preventDefault();
+    var that = this;
+    this.model.fetchPause({
+      success: function() {
+        window.app.apiNotice.setSuccess("Pipeline paused");
+        that.model.fetch({ success: function() { that.render(); } });
+      },
+    });
+  },
+  clickUnpausePipeline: function(event) {
+    event.preventDefault();
+    var that = this;
+    this.model.fetchUnpause({
+      success: function() {
+        window.app.apiNotice.setSuccess("Pipeline unpaused");
+        that.model.fetch({ success: function() { that.render(); } });
+      },
+    });
   },
 });

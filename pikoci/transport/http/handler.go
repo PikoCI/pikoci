@@ -232,6 +232,10 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}").Name(GetPipeline.String()).Handler(getPipeline(s))
 	api.Methods(http.MethodPut).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}").Name(UpdatePipeline.String()).Handler(updatePipeline(s))
 	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}").Name(DeletePipeline.String()).Handler(deletePipeline(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/pause").Name(PausePipeline.String()).Handler(pausePipeline(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/unpause").Name(UnpausePipeline.String()).Handler(unpausePipeline(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/pause").Name(PauseJob.String()).Handler(pauseJob(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/unpause").Name(UnpauseJob.String()).Handler(unpauseJob(s))
 
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/trigger").Name(TriggerPipelineJob.String()).Handler(triggerPipelineJob(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}").Name(GetPipelineJob.String()).Handler(getPipelineJob(s))

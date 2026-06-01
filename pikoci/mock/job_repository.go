@@ -100,6 +100,48 @@ func (mr *JobRepositoryMockRecorder) Find(ctx, tc, pn, jn any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Find", reflect.TypeOf((*JobRepository)(nil).Find), ctx, tc, pn, jn)
 }
 
+// PauseAll mocks base method.
+func (m *JobRepository) PauseAll(ctx context.Context, tc, pn string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PauseAll", ctx, tc, pn)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PauseAll indicates an expected call of PauseAll.
+func (mr *JobRepositoryMockRecorder) PauseAll(ctx, tc, pn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseAll", reflect.TypeOf((*JobRepository)(nil).PauseAll), ctx, tc, pn)
+}
+
+// SetPaused mocks base method.
+func (m *JobRepository) SetPaused(ctx context.Context, tc, pn, jn string, paused bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetPaused", ctx, tc, pn, jn, paused)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetPaused indicates an expected call of SetPaused.
+func (mr *JobRepositoryMockRecorder) SetPaused(ctx, tc, pn, jn, paused any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPaused", reflect.TypeOf((*JobRepository)(nil).SetPaused), ctx, tc, pn, jn, paused)
+}
+
+// UnpauseAll mocks base method.
+func (m *JobRepository) UnpauseAll(ctx context.Context, tc, pn string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnpauseAll", ctx, tc, pn)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UnpauseAll indicates an expected call of UnpauseAll.
+func (mr *JobRepositoryMockRecorder) UnpauseAll(ctx, tc, pn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseAll", reflect.TypeOf((*JobRepository)(nil).UnpauseAll), ctx, tc, pn)
+}
+
 // Update mocks base method.
 func (m *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job) error {
 	m.ctrl.T.Helper()

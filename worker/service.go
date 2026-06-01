@@ -1703,6 +1703,9 @@ func (w *Worker) runPutStepTrigger(ctx context.Context, m queue.Body, b *build.B
 // triggerResourceJobs triggers jobs that depend on a resource via "get" with trigger=true.
 func (w *Worker) triggerResourceJobs(ctx context.Context, m queue.Body, pp *pipeline.Pipeline, r resource.Resource, cv *resource.Version) {
 	for _, j := range pp.Jobs {
+		if j.Paused {
+			continue
+		}
 		for _, ps := range j.Plan {
 			if ps.Type != job.StepTypeGet || ps.Get == nil {
 				continue

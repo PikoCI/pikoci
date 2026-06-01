@@ -124,7 +124,13 @@ export var Pipeline = Backbone.Model.extend({
       return response.data;
     }
     return response;
-  }
+  },
+  fetchPause: function(opts) {
+    this.fetch(_.extend({url: this.url()+"/pause", type: "POST"}, opts));
+  },
+  fetchUnpause: function(opts) {
+    this.fetch(_.extend({url: this.url()+"/unpause", type: "POST"}, opts));
+  },
 });
 
 export var PipelineImage = Backbone.Model.extend({
@@ -147,6 +153,12 @@ export var Job = Backbone.Model.extend({
   },
   fetchTrigger: function(opts) {
     this.fetch(_.extend({url: this.url()+"/trigger", type: "POST"}, opts));
+  },
+  fetchPause: function(opts) {
+    this.fetch(_.extend({url: this.url()+"/pause", type: "POST"}, opts));
+  },
+  fetchUnpause: function(opts) {
+    this.fetch(_.extend({url: this.url()+"/unpause", type: "POST"}, opts));
   },
 });
 

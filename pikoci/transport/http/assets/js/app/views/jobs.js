@@ -30,6 +30,8 @@ export var JobBuildsView = Backbone.View.extend({
   },
   events: {
     'click #trigger-job': 'clickTriggerJob',
+    'click #pause-job': 'clickPauseJob',
+    'click #unpause-job': 'clickUnpauseJob',
     'click .piko-build-tab': 'clickOnTab',
   },
   addBuilds: function() {
@@ -117,6 +119,26 @@ export var JobBuildsView = Backbone.View.extend({
   clickTriggerJob: function(event) {
     event.preventDefault();
     this.collection.job.fetchTrigger({success: function() { window.app.apiNotice.setSuccess("Job triggered"); }});
+  },
+  clickPauseJob: function(event) {
+    event.preventDefault();
+    var that = this;
+    this.collection.job.fetchPause({
+      success: function() {
+        window.app.apiNotice.setSuccess("Job paused");
+        that.collection.job.fetch({ success: function() { that.render(); } });
+      },
+    });
+  },
+  clickUnpauseJob: function(event) {
+    event.preventDefault();
+    var that = this;
+    this.collection.job.fetchUnpause({
+      success: function() {
+        window.app.apiNotice.setSuccess("Job unpaused");
+        that.collection.job.fetch({ success: function() { that.render(); } });
+      },
+    });
   },
   clickOnTab: function(event) {
     event.preventDefault();

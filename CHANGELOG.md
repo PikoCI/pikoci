@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Pause/unpause pipelines and jobs: temporarily stop build triggering without deleting configuration or history. Pausing a pipeline pauses all its jobs; unpausing individual jobs is supported. Resource checks continue running while paused. Paused jobs appear blue in the pipeline graph ([#148](https://github.com/PikoCI/pikoci/issues/148))
 - Persistent resource caching: `cache = true` on `resource_type` enables a persistent `$CACHE_DIR` for check and pull scripts, with per-resource override support. The built-in `git` resource type uses caching by default — maintaining a bare clone for faster `git fetch` checks and `--reference-if-able` pulls ([#216](https://github.com/PikoCI/pikoci/issues/216))
 - Type-level runner overrides: `resource_type`, `notification_type`, `secret_type`, and `service_type` definitions can specify a `runner` block to override where their exec commands execute, e.g. run inside Docker without modifying the type's command definitions ([#221](https://github.com/PikoCI/pikoci/issues/221))
 - Floating toast notifications for success and error feedback on all mutating actions (trigger, delete, retry, cancel, etc.) with auto-dismiss and dark mode support ([#351](https://github.com/PikoCI/pikoci/issues/351))
