@@ -249,9 +249,12 @@ Jobs contain a plan of steps executed in order. Each step is one of `get`, `task
 
 The optional `concurrency` attribute limits how many builds of the job can run simultaneously. When the limit is reached, new builds are re-queued and wait until a slot frees up. The default value `0` means unlimited.
 
+The optional `timeout` attribute limits the total wall-clock time for a build's plan steps. When the timeout is reached, the build fails with a "job timed out" error and `on_cancel`/`ensure` hooks still run. If not set, the job runs with no time limit.
+
 ```hcl
 job "deploy" {
   concurrency = 1
+  timeout     = "30m"
 
   get "git" "my_repo" {
     trigger = true
@@ -489,6 +492,27 @@ task "long-build" {
   }
 }
 ```
+
+### Job timeout
+
+Jobs can set a `timeout` to limit the total wall-clock time for all plan steps. The value is a Go duration string (e.g. `"30m"`, `"1h"`, `"2h30m"`). If the build exceeds the timeout, the running step is killed, the build is marked as failed with a "job timed out after ..." message, and `on_cancel`/`ensure` hooks still run — just like user-initiated cancellation. If no timeout is set, the job runs with no time limit.
+
+```hcl
+job "integration" {
+  timeout = "2h"
+
+  get "git" "my-repo" { trigger = true }
+  task "test" {
+    timeout = "30m"
+    run "exec" {
+      path = "make"
+      args = ["integration-test"]
+    }
+  }
+}
+```
+
+When both a job timeout and a step timeout are set, whichever expires first takes effect.
 
 ### Step retry
 
