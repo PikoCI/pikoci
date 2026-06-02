@@ -482,6 +482,72 @@ job "test" {
 	assert.Contains(t, err.Error(), "invalid timeout")
 }
 
+func TestCreatePipeline_WithJobTimeout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  timeout = "30m"
+  get "cron" "timer" {
+    trigger = true
+  }
+  task "build" {
+    run "exec" {
+      path = "echo"
+      args = ["building"]
+    }
+  }
+}
+`)
+
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "job-timeout-pipeline", gomock.Any()).DoAndReturn(
+		func(ctx context.Context, tc, pn string, j job.Job) (uint32, error) {
+			assert.Equal(t, 30*time.Minute, j.Timeout)
+			return uint32(1), nil
+		})
+	s.Resources.EXPECT().Create(ctx, "main", "job-timeout-pipeline", gomock.Any()).Return(uint32(1), nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "job-timeout-pipeline").Return(&pipeline.Pipeline{ID: 1, Name: "job-timeout-pipeline", Canonical: "job-timeout-pipeline"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "job-timeout-pipeline", hclConfig, nil)
+	require.NoError(t, err)
+}
+
+func TestCreatePipeline_InvalidJobTimeout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+resource "cron" "timer" {
+  check_interval = "@every 1h"
+}
+
+job "test" {
+  timeout = "bad"
+  get "cron" "timer" {
+    trigger = true
+  }
+  task "build" {
+    run "exec" {
+      path = "echo"
+      args = ["building"]
+    }
+  }
+}
+`)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "invalid-job-timeout-pipeline", hclConfig, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid timeout")
+}
+
 func TestCreatePipeline_WithAttempts(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)

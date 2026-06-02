@@ -70,6 +70,7 @@ type hclPutStep struct {
 type hclJob struct {
 	Name        string           `hcl:"name,label"`
 	Concurrency int              `hcl:"concurrency,optional"`
+	Timeout     string           `hcl:"timeout,optional"`
 	Get         []hclGetStep     `hcl:"get,block"`
 	Task        []hclTaskStep    `hcl:"task,block"`
 	Put         []hclPutStep     `hcl:"put,block"`
@@ -666,10 +667,18 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 		if hj.Concurrency < 0 {
 			return nil, fmt.Errorf("job %q: concurrency must be >= 0", hj.Name)
 		}
+		var jobTimeout time.Duration
+		if hj.Timeout != "" {
+			jobTimeout, err = time.ParseDuration(hj.Timeout)
+			if err != nil {
+				return nil, fmt.Errorf("invalid timeout %q on job %q: %w", hj.Timeout, hj.Name, err)
+			}
+		}
 		jh := jobHooksMap[hj.Name]
 		j := job.Job{
 			Name:        hj.Name,
 			Concurrency: hj.Concurrency,
+			Timeout:     jobTimeout,
 			Plan:        jobPlans[hj.Name],
 			OnSuccess:   jh.OnSuccess,
 			OnFailure:   jh.OnFailure,

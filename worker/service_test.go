@@ -3889,3 +3889,126 @@ func TestCacheDir(t *testing.T) {
 	// Clean up
 	os.RemoveAll(dir)
 }
+
+func TestProcessJob_JobTimeout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "job-timeout-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:      1,
+				Name:    "job-timeout-job",
+				Timeout: 2 * time.Second,
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "slow-task",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"10"},
+								Params: map[string]string{
+									"path": "sleep",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 100, BuildNumber: "100", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "100", gomock.Any()).
+		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Failed, capturedBuild.Status)
+	assert.Contains(t, capturedBuild.Error, "job timed out after 2s")
+}
+
+func TestProcessJob_JobTimeout_NotReached(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "job-timeout-ok",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:      1,
+				Name:    "job-timeout-ok",
+				Timeout: 10 * time.Second,
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "fast-task",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"hello"},
+								Params: map[string]string{
+									"path": "echo",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 100, BuildNumber: "100", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "100", gomock.Any()).
+		DoAndReturn(func(ctx context.Context, tc, pn, jn string, bID string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+}

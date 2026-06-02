@@ -43,8 +43,9 @@ type Job struct {
 	ID          uint32     `json:"id"`
 	Name        string     `json:"name" hcl:"name,label"`
 	Concurrency int        `json:"concurrency,omitempty"`
-	Paused      bool       `json:"paused"`
-	Plan        []PlanStep `json:"plan"`
+	Paused      bool          `json:"paused"`
+	Timeout     time.Duration `json:"timeout,omitempty"`
+	Plan        []PlanStep    `json:"plan"`
 
 	OnSuccess []HookStep `json:"on_success,omitempty"`
 	OnFailure []HookStep `json:"on_failure,omitempty"`

@@ -394,6 +394,12 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 		return
 	}
 
+	if j.Timeout > 0 {
+		var timeoutCancel context.CancelFunc
+		jobCtx, timeoutCancel = context.WithTimeout(jobCtx, j.Timeout)
+		defer timeoutCancel()
+	}
+
 	var resolvedVersions map[string]uint32
 	if w.LocalMode {
 		resolvedVersions = make(map[string]uint32)
@@ -430,6 +436,15 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 	}
 
 	failed, resolved := w.runPlan(jobCtx, m, &b, cwd, pp, j, resolvedVersions)
+
+	// Handle job-level timeout
+	if jobCtx.Err() == context.DeadlineExceeded {
+		w.failBuild(ctx, m, b, fmt.Errorf("job timed out after %s", j.Timeout))
+		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnCancel, "on_cancel", resolved, "cancelled")
+		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.Ensure, "ensure", resolved, "cancelled")
+		w.runAutoNotifications(ctx, m, &b, cwd, pp, resolved)
+		return
+	}
 
 	// Handle user-initiated cancellation
 	if jobCtx.Err() == context.Canceled {

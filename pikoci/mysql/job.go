@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/cycloidio/sqlr"
 	"github.com/pikoci/pikoci/pikoci/job"
@@ -30,6 +31,7 @@ type dbJob struct {
 	Ensure      sql.NullString
 	Concurrency sql.NullInt64
 	Paused      sql.NullBool
+	Timeout     sql.NullInt64
 }
 
 func newDBJob(p job.Job) dbJob {
@@ -38,7 +40,7 @@ func newDBJob(p job.Job) dbJob {
 	f, _ := json.Marshal(p.OnFailure)
 	c, _ := json.Marshal(p.OnCancel)
 	e, _ := json.Marshal(p.Ensure)
-	return dbJob{
+	dbj := dbJob{
 		Name:        toNullString(p.Name),
 		Plan:        toNullString(string(pl)),
 		OnSuccess:   toNullString(string(s)),
@@ -48,6 +50,10 @@ func newDBJob(p job.Job) dbJob {
 		Concurrency: sql.NullInt64{Int64: int64(p.Concurrency), Valid: true},
 		Paused:      sql.NullBool{Bool: p.Paused, Valid: true},
 	}
+	if p.Timeout > 0 {
+		dbj.Timeout = sql.NullInt64{Int64: int64(p.Timeout), Valid: true}
+	}
+	return dbj
 }
 
 func (dbp *dbJob) toDomainEntity() *job.Job {
@@ -56,6 +62,9 @@ func (dbp *dbJob) toDomainEntity() *job.Job {
 		Name:        dbp.Name.String,
 		Concurrency: int(dbp.Concurrency.Int64),
 		Paused:      dbp.Paused.Bool,
+	}
+	if dbp.Timeout.Valid {
+		j.Timeout = time.Duration(dbp.Timeout.Int64)
 	}
 
 	_ = json.Unmarshal([]byte(dbp.Plan.String), &j.Plan)
@@ -70,8 +79,8 @@ func (dbp *dbJob) toDomainEntity() *job.Job {
 func (r *JobRepository) Create(ctx context.Context, tc, pn string, j job.Job) (uint32, error) {
 	dbj := newDBJob(j)
 	res, err := r.querier.ExecContext(ctx, `
-		INSERT INTO jobs(name, plan, on_success, on_failure, on_cancel, ensure, concurrency, paused, pipeline_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?,
+		INSERT INTO jobs(name, plan, on_success, on_failure, on_cancel, ensure, concurrency, paused, timeout, pipeline_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
 			-- pipeline_id
 			(
 				SELECT p.id
@@ -79,7 +88,7 @@ func (r *JobRepository) Create(ctx context.Context, tc, pn string, j job.Job) (u
 				JOIN teams AS t
 					ON p.team_id = t.id
 				WHERE t.canonical = ? AND p.canonical = ?
-			))`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, tc, pn)
+			))`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, dbj.Timeout, tc, pn)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -96,7 +105,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 	dbj := newDBJob(j)
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE jobs AS j
-		SET name = ?, plan = ?, on_success = ?, on_failure = ?, on_cancel = ?, ensure = ?, concurrency = ?, paused = ?
+		SET name = ?, plan = ?, on_success = ?, on_failure = ?, on_cancel = ?, ensure = ?, concurrency = ?, paused = ?, timeout = ?
 		FROM (
 			SELECT j.id
 			FROM jobs AS j
@@ -107,7 +116,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 		) AS jj
 		WHERE jj.id = j.id
-	`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, tc, pn, jn)
+	`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, dbj.Timeout, tc, pn, jn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -122,7 +131,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 
 func (r *JobRepository) Find(ctx context.Context, tc, pn, jn string) (*job.Job, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused
+		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout
 		FROM jobs AS j
 		JOIN pipelines AS p
 			ON j.pipeline_id = p.id
@@ -141,7 +150,7 @@ func (r *JobRepository) Find(ctx context.Context, tc, pn, jn string) (*job.Job, 
 
 func (r *JobRepository) Filter(ctx context.Context, tc, pn string) ([]*job.Job, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused
+		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout
 		FROM jobs AS j
 		JOIN pipelines AS p
 			ON j.pipeline_id = p.id
@@ -269,6 +278,7 @@ func scanJob(s sqlr.Scanner) (*job.Job, error) {
 		&j.Ensure,
 		&j.Concurrency,
 		&j.Paused,
+		&j.Timeout,
 	)
 
 	if err != nil {
