@@ -1510,6 +1510,62 @@ func TestGetPipelineImage_ShowsLinkedResources(t *testing.T) {
 	assert.True(t, strings.Contains(dot, `"git.repo"`), "second linked resource should appear")
 }
 
+func TestGetPipelineImage_PassedReusesPutOutputNode(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	pp := &pipeline.Pipeline{
+		Name:      "artifact-pipeline",
+		Canonical: "artifact-pipeline",
+		Resources: []resource.Resource{
+			{ID: 1, Canonical: "cron.timer"},
+			{ID: 2, Canonical: "artifact.output"},
+		},
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "build",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get:  &job.GetStep{Type: "cron", Name: "timer", Trigger: true},
+					},
+					{
+						Type: job.StepTypePut,
+						Put:  &job.PutStep{Type: "artifact", Name: "output"},
+					},
+				},
+			},
+			{
+				ID:   2,
+				Name: "deploy",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get:  &job.GetStep{Type: "artifact", Name: "output", Trigger: true, Passed: []string{"build"}},
+					},
+				},
+			},
+		},
+	}
+
+	s.Pipelines.EXPECT().Find(ctx, "main", "artifact-pipeline").Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, "main", "artifact-pipeline", "build", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
+	s.Builds.EXPECT().Filter(ctx, "main", "artifact-pipeline", "deploy", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
+
+	img, err := s.S.GetPipelineImage(ctx, "main", "artifact-pipeline", "dot")
+	require.NoError(t, err)
+
+	dot := string(img)
+	// The put output node should exist
+	assert.Contains(t, dot, `"build-artifact.output-out"`, "put output node should exist")
+	// The passed edge should reuse the put output node (edge from put-out to deploy)
+	assert.Contains(t, dot, `"build-artifact.output-out"--"deploy"`, "passed edge should reuse put output node")
+	// There should NOT be a separate passed node for the same resource
+	assert.NotContains(t, dot, `"build-output-deploy"`, "should not create a separate passed node when put output exists")
+}
+
 func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 	// Helper to build a simple pipeline with one job triggered by a cron resource.
 	makePipeline := func() *pipeline.Pipeline {

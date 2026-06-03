@@ -18,23 +18,51 @@ variable "env" {
 }
 
 resource "cron" "my_cron" {
-  check_interval = "@every 10s"
+  check_interval = "@every 20s"
+}
+
+resource "artifact" "cron_output" {
+  params {
+    dir = "cron-output"
+  }
 }
 
 job "gen" {
   get "cron" "my_cron" {
     trigger = true
   }
-  task "logs" {
+  task "create-file" {
     run "exec" {
       path = "/bin/sh"
-      args = ["-c", "for i in $(seq 1 120); do echo \"Log line $i at $(date)\"; sleep 0.5; done"]
+      args = ["-ec", "mkdir -p output && echo \"cron triggered at: $(date)\" > output/timestamp.txt && cat output/timestamp.txt"]
     }
   }
-  task "echo" {
+  put "artifact" "cron_output" {
+    dir = "output"
+  }
+}
+
+job "by-passed" {
+  get "artifact" "cron_output" {
+    trigger = true
+    passed  = ["gen"]
+  }
+  task "print-file" {
     run "exec" {
-      path = "echo"
-      args = ["greeting=${var.greeting} env=${var.env}"]
+      path = "/bin/sh"
+      args = ["-ec", "echo '--- by-passed job ---' && cat cron-output/timestamp.txt"]
+    }
+  }
+}
+
+job "by-check" {
+  get "artifact" "cron_output" {
+    trigger = true
+  }
+  task "print-file" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo '--- by-check job ---' && cat cron-output/timestamp.txt"]
     }
   }
 }

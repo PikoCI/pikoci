@@ -533,6 +533,68 @@ task "flaky-test" {
 }
 ```
 
+## Built-in resource type: artifact
+
+The `artifact` resource type passes build outputs (compiled binaries, test reports, etc.) between jobs in the same pipeline. It stores tarballs on the local filesystem using the cache directory, so no external storage service is required for single-worker setups.
+
+### Parameters
+
+| Parameter  | Level    | Description                                                    |
+|------------|----------|----------------------------------------------------------------|
+| `dir`      | resource | Directory to extract artifacts into during pull                |
+| `base_dir` | resource | Override the default storage directory (defaults to `$CACHE_DIR`) |
+| `dir`      | put      | Source directory to archive and push as an artifact             |
+
+### Usage example
+
+```hcl
+resource "artifact" "build-output" {
+  params {
+    dir = "build-output"
+  }
+}
+
+job "build" {
+  task "compile" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "mkdir -p output && echo 'hello' > output/result.txt"]
+    }
+  }
+
+  put "artifact" "build-output" {
+    dir = "output"
+  }
+}
+
+job "deploy" {
+  get "artifact" "build-output" {
+    trigger = true
+    passed  = ["build"]
+  }
+
+  task "deploy" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "cat build-output/result.txt"]
+    }
+  }
+}
+```
+
+### Multi-worker deployments
+
+By default, artifacts are stored under the worker's XDG cache directory. In multi-worker setups, use a shared filesystem (NFS, GlusterFS, etc.) and set the `base_dir` parameter to point to the shared mount:
+
+```hcl
+resource "artifact" "build-output" {
+  params {
+    dir      = "build-output"
+    base_dir = "/mnt/shared/artifacts/build-output"
+  }
+}
+```
+
 ## Full example
 
 Using built-in `git` and `docker` (no inline resource_type or runner blocks needed):
