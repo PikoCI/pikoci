@@ -20,6 +20,56 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func TestSPAFallback_BrowserNavigation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	// Simulate browser navigation (no Content-Type, no Authorization)
+	// to SPA URLs that share paths with API endpoints.
+	paths := []string{
+		"/",
+		"/teams",
+		"/teams/main",
+		"/teams/main/pipelines",
+		"/teams/main/pipelines/my-pipeline",
+		"/teams/main/pipelines/my-pipeline/jobs/build/builds",
+		"/teams/main/pipelines/my-pipeline/resources/my-res/versions",
+		"/login",
+		"/users",
+		"/profile",
+	}
+
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodGet, server.URL+path, nil)
+			require.NoError(t, err)
+			// No Content-Type, no Authorization — just like a browser
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			body, _ := io.ReadAll(resp.Body)
+			assert.Equal(t, http.StatusOK, resp.StatusCode, "path %s should return 200", path)
+			assert.Contains(t, string(body), "<!DOCTYPE html>", "path %s should return SPA HTML, not JSON", path)
+		})
+	}
+}
+
+func TestEncodeResponse_CacheControl(t *testing.T) {
+	w := httptest.NewRecorder()
+	resp := ErrorResponse{Err: ""}
+	encodeResponse(resp, w)
+
+	assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
+}
+
 func TestEncodeResponse_WithError(t *testing.T) {
 	w := httptest.NewRecorder()
 	resp := ErrorResponse{Err: "something went wrong"}
