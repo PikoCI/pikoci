@@ -197,6 +197,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	jsonr.Methods(http.MethodPost).Path("/login").Handler(userLogin(s))
 	jsonr.Methods(http.MethodGet).Path("/version").Name(GetVersion.String()).HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
 		json.NewEncoder(w).Encode(map[string]string{
 			"version": version,
 			"commit":  commit,
@@ -269,6 +270,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.NotFoundHandler = http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, `{"error": "Path not found"}`)
 		},
@@ -360,6 +362,7 @@ func membershipsDiffer(jwtUser map[string]interface{}, dbUser *user.WithMembersh
 
 func encodeResponse(r interface{}, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	e, ok := r.(Errorer)
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
