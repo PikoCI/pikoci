@@ -748,14 +748,35 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		}
 	}
 
+	// Collect put output node names per job+resource so passed edges can reuse them
+	putOutputNodes := make(map[string]string) // key: "jobName-type.name" → node name
+	for _, j := range pp.Jobs {
+		for _, p := range j.AllPutSteps() {
+			rCan := fmt.Sprintf("%s.%s", p.Type, p.Name)
+			key := fmt.Sprintf("%s-%s", j.Name, rCan)
+			putOutputNodes[key] = fmt.Sprintf(`"%s-%s-out"`, j.Name, rCan)
+		}
+	}
+
 	// Now we print all the jobs interconnections depending on resources
 	for _, j := range pp.Jobs {
 		quotedJobName := fmt.Sprintf(`"%s"`, j.Name)
 		for _, g := range j.GetSteps() {
 			if len(g.Passed) != 0 {
 				for _, p := range g.Passed {
-					nn := fmt.Sprintf(`"%s-%s-%s"`, p, g.Name, j.Name)
 					rCan := fmt.Sprintf("%s.%s", g.Type, g.Name)
+
+					// Reuse the put output node if the passed job already has one for this resource
+					key := fmt.Sprintf("%s-%s", p, rCan)
+					if nn, ok := putOutputNodes[key]; ok {
+						err = graph.AddEdge(nn, quotedJobName, false, nil)
+						if err != nil {
+							return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
+						}
+						continue
+					}
+
+					nn := fmt.Sprintf(`"%s-%s-%s"`, p, g.Name, j.Name)
 					vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Canonical, rCan)
 					border := resourceBorders[rCan]
 					rStyle := resourceStyles[rCan]

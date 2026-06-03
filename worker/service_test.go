@@ -1156,6 +1156,117 @@ func TestCheckPassedConstraints_NoPassedField(t *testing.T) {
 	assert.Equal(t, map[string]uint32{}, resolved)
 }
 
+func TestCheckPassedConstraints_PutStepSatisfiesPassed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "downstream-job",
+		BuildID:           10,
+	}
+	b := build.Build{ID: 54, BuildNumber: "54"}
+	j := &job.Job{
+		Name: "downstream-job",
+		Plan: []job.PlanStep{
+			{
+				Type: job.StepTypeGet,
+				Get: &job.GetStep{
+					Type:   "artifact",
+					Name:   "my-artifact",
+					Passed: []string{"upstream-job"},
+				},
+			},
+		},
+	}
+
+	// The upstream job has a put step (not a get step) with the version
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "upstream-job", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+		Return([]*build.Build{{ID: 1, Status: build.Succeeded, Steps: []build.Step{
+			{Type: "put", Name: "my-artifact", VersionID: 7},
+		}}}, false, nil)
+
+	ok, resolved := w.checkPassedConstraints(ctx, m, &b, j)
+	assert.True(t, ok)
+	assert.Equal(t, map[string]uint32{"artifact.my-artifact": 7}, resolved)
+}
+
+func TestImplicitGetAfterPut_CreatesVersionAndRecords(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "gen-job",
+		BuildID:           10,
+	}
+	b := &build.Build{
+		ID:          60,
+		BuildNumber: "60",
+		Steps: []build.Step{
+			{Type: "put", Name: "my-artifact", Status: build.Succeeded, Logs: "some logs"},
+		},
+	}
+	pp := &pipeline.Pipeline{
+		ID:        1,
+		Name:      "test-pipeline",
+		Canonical: "test-pipeline",
+		Jobs:      []job.Job{{ID: 1, Name: "gen-job"}},
+	}
+	p := job.PutStep{Type: "artifact", Name: "my-artifact"}
+	rCan := "artifact.my-artifact"
+	r := resource.Resource{ID: 1, Name: "my-artifact", Type: "artifact", Canonical: rCan}
+
+	// Push script output with valid JSON version on last line
+	out := "some tar output\n[{\"sha\":\"abc123\",\"timestamp\":\"20260603120000\"}]"
+
+	svc.EXPECT().CreateResourceVersion(gomock.Any(), "main", "test-pipeline", rCan, gomock.Any()).
+		Return(&resource.Version{ID: 42, Version: map[string]interface{}{"sha": "abc123", "timestamp": "20260603120000"}}, nil)
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), "main", "test-pipeline", "gen-job", "60", gomock.Any()).
+		Return(nil).AnyTimes()
+
+	w.implicitGetAfterPut(ctx, m, b, pp, p, rCan, r, out, 0)
+
+	// Verify the step's VersionID was set
+	assert.Equal(t, uint32(42), b.Steps[0].VersionID)
+}
+
+func TestImplicitGetAfterPut_InvalidJSON_Skips(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "gen-job",
+		BuildID:           10,
+	}
+	b := &build.Build{
+		ID:          61,
+		BuildNumber: "61",
+		Steps: []build.Step{
+			{Type: "put", Name: "repo", Status: build.Succeeded},
+		},
+	}
+	pp := &pipeline.Pipeline{ID: 1, Name: "test-pipeline", Canonical: "test-pipeline"}
+	p := job.PutStep{Type: "git", Name: "repo"}
+	r := resource.Resource{ID: 1, Name: "repo", Type: "git", Canonical: "git.repo"}
+
+	// Push output is not JSON (e.g. git push output)
+	out := "Everything up-to-date"
+
+	// Should not call CreateResourceVersion or InsertBuildGetVersion
+	w.implicitGetAfterPut(ctx, m, b, pp, p, "git.repo", r, out, 0)
+
+	// VersionID should remain 0
+	assert.Equal(t, uint32(0), b.Steps[0].VersionID)
+}
+
 func TestRunHooks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc, _ := newTestWorker(ctrl)
@@ -1587,6 +1698,88 @@ func TestProcessJob_PutStep_Success(t *testing.T) {
 
 	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
+}
+
+func TestProcessJob_PutStep_CacheDirSet(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "artifact-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "artifact-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "build",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"building"},
+								Params: map[string]string{"path": "echo"},
+							},
+						},
+					},
+					{
+						Type: job.StepTypePut,
+						Put: &job.PutStep{
+							Type:   "artifact",
+							Name:   "my-artifact",
+							Params: map[string]string{"dir": "output"},
+						},
+					},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Name: "my-artifact", Type: "artifact", Canonical: "artifact.my-artifact", Params: &resource.Params{Params: map[string]string{"dir": "output"}}},
+		},
+		ResourceTypes: []restype.ResourceType{
+			{
+				ID: 1, Name: "artifact",
+				Cache:  true,
+				Params: []string{"dir", "base_dir"},
+				Push: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"pushing"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	var capturedBuild *build.Build
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 81, BuildNumber: "81", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "81", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = &b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	// The build should have completed successfully (task + put steps)
+	require.NotNil(t, capturedBuild)
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
 }
 
 func TestProcessJob_OrderedPlan_GetTaskPut(t *testing.T) {

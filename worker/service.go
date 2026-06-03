@@ -538,7 +538,7 @@ func (w *Worker) checkPassedConstraints(ctx context.Context, m queue.Body, b *bu
 				}
 				hasSucceeded = true
 				for _, step := range bu.Steps {
-					if step.Type == "get" && step.Name == g.Name && step.VersionID != 0 {
+					if (step.Type == "get" || step.Type == "put") && step.Name == g.Name && step.VersionID != 0 {
 						versionSet[step.VersionID] = true
 					}
 				}
@@ -1058,6 +1058,15 @@ func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, c
 		delete(rc.Params, "path")
 	}
 
+	if resourceCacheEnabled(rt, r) {
+		cd, err := w.cacheDir(m.TeamCanonical, m.PipelineCanonical, rCan)
+		if err != nil {
+			w.logger.Error("failed to create cache dir for push", "error", err)
+		} else {
+			rc.Params["CACHE_DIR"] = cd
+		}
+	}
+
 	replaceSecretPlaceholders(rc.Params, secretResolved)
 	replaceSecretPlaceholdersInSlice(rc.Args, secretResolved)
 
@@ -1123,9 +1132,65 @@ func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, c
 	if err := w.updateBuild(ctx, m, *b); err != nil {
 		return true
 	}
+
+	// Implicit get-after-put: parse the version from the push script output,
+	// create it in the DB, record it as fetched by this build, and trigger
+	// downstream jobs. This mirrors Concourse's implicit get after put.
+	w.implicitGetAfterPut(ctx, m, b, pp, p, rCan, r, out, stepIdx)
+
 	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, p.Name, ps.OnSuccess, "on_success", secretResolved)
 	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, p.Name, ps.Ensure, "ensure", secretResolved)
 	return false
+}
+
+// implicitGetAfterPut parses the version JSON from the push script output,
+// creates the resource version in the DB, records it as fetched by this build
+// (so that "passed" constraints are satisfied), and triggers downstream jobs.
+func (w *Worker) implicitGetAfterPut(ctx context.Context, m queue.Body, b *build.Build, pp *pipeline.Pipeline, p job.PutStep, rCan string, r resource.Resource, out string, stepIdx int) {
+	sout := strings.Split(strings.Trim(out, "\n"), "\n")
+	rawVers := sout[len(sout)-1]
+	if rawVers == "" {
+		return
+	}
+
+	vers := make([]map[string]interface{}, 0)
+	if err := json.Unmarshal([]byte(rawVers), &vers); err != nil {
+		w.logger.Warn("put step output is not valid version JSON, skipping implicit get", "step", p.Name, "error", err)
+		return
+	}
+
+	for _, v := range vers {
+		cv, err := w.pikoci.CreateResourceVersion(ctx, m.TeamCanonical, m.PipelineCanonical, rCan, resource.Version{
+			Version: v,
+		})
+		if err != nil {
+			if isDuplicateKeyError(err) {
+				w.logger.Info("put: duplicate version skipped", "resource", rCan, "version", v)
+				continue
+			}
+			w.logger.Error("put: failed to create resource version", "resource", rCan, "error", err)
+			return
+		}
+
+		// Record the version on the put step so checkPassedConstraints can find it
+		b.Steps[stepIdx] = build.Step{
+			Type:      b.Steps[stepIdx].Type,
+			Name:      b.Steps[stepIdx].Name,
+			Logs:      b.Steps[stepIdx].Logs,
+			Duration:  b.Steps[stepIdx].Duration,
+			Status:    b.Steps[stepIdx].Status,
+			VersionID: cv.ID,
+		}
+		w.updateBuild(ctx, m, *b)
+
+		if err := w.pikoci.InsertBuildGetVersion(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.ID, p.Name, cv.ID); err != nil {
+			w.logger.Error("put: failed to insert build get version", "step", p.Name, "error", err)
+		}
+
+		w.logger.Info("put: version created, triggering downstream jobs",
+			"pipeline", m.PipelineCanonical, "resource", rCan, "version_id", cv.ID)
+		w.triggerResourceJobs(ctx, m, pp, r, cv)
+	}
 }
 
 // runNotifyStep runs a single notify step (fire-and-forget notification).

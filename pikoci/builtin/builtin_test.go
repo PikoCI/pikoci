@@ -35,6 +35,18 @@ func TestResourceTypes(t *testing.T) {
 		assert.Contains(t, rt.Params, "pr")
 	})
 
+	t.Run("artifact", func(t *testing.T) {
+		rt, ok := rts["artifact"]
+		require.True(t, ok)
+		assert.Equal(t, "artifact", rt.Name)
+		assert.True(t, rt.Cache)
+		assert.Equal(t, "exec", rt.Check.Runner)
+		assert.Equal(t, "exec", rt.Pull.Runner)
+		assert.Equal(t, "exec", rt.Push.Runner)
+		assert.Contains(t, rt.Params, "dir")
+		assert.Contains(t, rt.Params, "base_dir")
+	})
+
 	t.Run("trigger", func(t *testing.T) {
 		rt, ok := rts["trigger"]
 		require.True(t, ok)
