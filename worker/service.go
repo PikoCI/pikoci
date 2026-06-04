@@ -1917,7 +1917,55 @@ func (sw *streamWriter) String() string {
 	return sw.buf.String()
 }
 
+// prepareShellRunner adjusts the runner and command for the built-in "shell"
+// runner. It handles defaulting the shell to /bin/sh, validates that exactly
+// one of cmd/file is set, and rewrites the runner for file mode execution.
+func prepareShellRunner(ru *runner.Runner, rc *utils.RunnerCommand, cwd string) error {
+	_, cmdSet := rc.Params["cmd"]
+	_, fileSet := rc.Params["file"]
+	if cmdSet && fileSet {
+		return fmt.Errorf("shell runner: cannot set both \"cmd\" and \"file\"")
+	}
+	if !cmdSet && !fileSet {
+		return fmt.Errorf("shell runner: must set either \"cmd\" or \"file\"")
+	}
+
+	_, shellExplicit := rc.Params["shell"]
+
+	if !shellExplicit {
+		if rc.Params == nil {
+			rc.Params = make(map[string]string)
+		}
+		rc.Params["shell"] = "/bin/sh"
+	}
+
+	if fileSet {
+		file := rc.Params["file"]
+		if !filepath.IsAbs(file) {
+			file = filepath.Join(cwd, file)
+		}
+		if shellExplicit {
+			ru.Run = utils.RunCommand{Path: rc.Params["shell"], Args: []string{file}}
+		} else {
+			if err := os.Chmod(file, 0755); err != nil {
+				return fmt.Errorf("shell runner: chmod file: %w", err)
+			}
+			ru.Run = utils.RunCommand{Path: file, Args: nil}
+		}
+		// Remove file param so it doesn't leak into env vars.
+		delete(rc.Params, "file")
+	}
+
+	return nil
+}
+
 func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc utils.RunnerCommand, onPartialLog ...func(string)) (string, time.Duration, error) {
+	if ru.Name == "shell" {
+		if err := prepareShellRunner(&ru, &rc, cwd); err != nil {
+			return err.Error(), 0, err
+		}
+	}
+
 	envs := map[string]string{"WORKDIR": cwd}
 	for k, v := range rc.Params {
 		envs[k] = v

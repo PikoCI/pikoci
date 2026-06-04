@@ -79,6 +79,14 @@ func TestRunners(t *testing.T) {
 		assert.Contains(t, ru.Run.Args, "run")
 		assert.Contains(t, ru.Run.Args, "--rm")
 	})
+
+	t.Run("shell", func(t *testing.T) {
+		ru, ok := rus["shell"]
+		require.True(t, ok)
+		assert.Equal(t, "shell", ru.Name)
+		assert.Equal(t, "$shell", ru.Run.Path)
+		assert.Equal(t, []string{"-ec", "$cmd"}, ru.Run.Args)
+	})
 }
 
 func TestResourceTypeHCL(t *testing.T) {

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Built-in `shell` runner for simplified shell command execution. Supports inline `cmd` mode (`run "shell" { cmd = "..." }`) and script `file` mode (`run "shell" { file = "script.sh" }`), with optional `shell` param to override the default `/bin/sh` ([#458](https://github.com/PikoCI/pikoci/issues/458))
+
 ## [0.3.0] - 2026-06-03
 
 ### Added

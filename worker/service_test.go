@@ -4205,3 +4205,176 @@ func TestProcessJob_JobTimeout_NotReached(t *testing.T) {
 
 	assert.Equal(t, build.Succeeded, capturedBuild.Status)
 }
+
+func TestPrepareShellRunner_CmdModeDefaultShell(t *testing.T) {
+	ru := runner.Runner{
+		Name: "shell",
+		Run:  utils.RunCommand{Path: "$shell", Args: []string{"-ec", "$cmd"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "shell",
+		Params: map[string]string{"cmd": "echo hello"},
+	}
+	cwd := t.TempDir()
+
+	err := prepareShellRunner(&ru, &rc, cwd)
+	require.NoError(t, err)
+	assert.Equal(t, "/bin/sh", rc.Params["shell"])
+	// Run command should remain unchanged (template handles cmd mode)
+	assert.Equal(t, "$shell", ru.Run.Path)
+	assert.Equal(t, []string{"-ec", "$cmd"}, ru.Run.Args)
+}
+
+func TestPrepareShellRunner_CmdModeCustomShell(t *testing.T) {
+	ru := runner.Runner{
+		Name: "shell",
+		Run:  utils.RunCommand{Path: "$shell", Args: []string{"-ec", "$cmd"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "shell",
+		Params: map[string]string{"cmd": "echo hello", "shell": "/bin/bash"},
+	}
+	cwd := t.TempDir()
+
+	err := prepareShellRunner(&ru, &rc, cwd)
+	require.NoError(t, err)
+	assert.Equal(t, "/bin/bash", rc.Params["shell"])
+}
+
+func TestPrepareShellRunner_FileModeNoShell(t *testing.T) {
+	cwd := t.TempDir()
+	scriptPath := filepath.Join(cwd, "test.sh")
+	os.WriteFile(scriptPath, []byte("#!/bin/sh\necho hello\n"), 0644)
+
+	ru := runner.Runner{
+		Name: "shell",
+		Run:  utils.RunCommand{Path: "$shell", Args: []string{"-ec", "$cmd"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "shell",
+		Params: map[string]string{"file": "test.sh"},
+	}
+
+	err := prepareShellRunner(&ru, &rc, cwd)
+	require.NoError(t, err)
+	assert.Equal(t, scriptPath, ru.Run.Path)
+	assert.Nil(t, ru.Run.Args)
+	// file param should be removed from params
+	_, hasFile := rc.Params["file"]
+	assert.False(t, hasFile)
+}
+
+func TestPrepareShellRunner_FileModeWithShell(t *testing.T) {
+	cwd := t.TempDir()
+	scriptPath := filepath.Join(cwd, "test.sh")
+	os.WriteFile(scriptPath, []byte("echo hello\n"), 0644)
+
+	ru := runner.Runner{
+		Name: "shell",
+		Run:  utils.RunCommand{Path: "$shell", Args: []string{"-ec", "$cmd"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "shell",
+		Params: map[string]string{"file": "test.sh", "shell": "/bin/bash"},
+	}
+
+	err := prepareShellRunner(&ru, &rc, cwd)
+	require.NoError(t, err)
+	assert.Equal(t, "/bin/bash", ru.Run.Path)
+	assert.Equal(t, []string{scriptPath}, ru.Run.Args)
+}
+
+func TestPrepareShellRunner_FileModeAbsolutePath(t *testing.T) {
+	cwd := t.TempDir()
+	scriptPath := filepath.Join(cwd, "abs.sh")
+	os.WriteFile(scriptPath, []byte("#!/bin/sh\necho abs\n"), 0644)
+
+	ru := runner.Runner{
+		Name: "shell",
+		Run:  utils.RunCommand{Path: "$shell", Args: []string{"-ec", "$cmd"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "shell",
+		Params: map[string]string{"file": scriptPath},
+	}
+
+	err := prepareShellRunner(&ru, &rc, cwd)
+	require.NoError(t, err)
+	// Absolute path should be used as-is
+	assert.Equal(t, scriptPath, ru.Run.Path)
+}
+
+func TestPrepareShellRunner_ErrorBothCmdAndFile(t *testing.T) {
+	ru := runner.Runner{
+		Name: "shell",
+		Run:  utils.RunCommand{Path: "$shell", Args: []string{"-ec", "$cmd"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "shell",
+		Params: map[string]string{"cmd": "echo hello", "file": "test.sh"},
+	}
+
+	err := prepareShellRunner(&ru, &rc, t.TempDir())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot set both")
+}
+
+func TestPrepareShellRunner_ErrorNeitherCmdNorFile(t *testing.T) {
+	ru := runner.Runner{
+		Name: "shell",
+		Run:  utils.RunCommand{Path: "$shell", Args: []string{"-ec", "$cmd"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "shell",
+		Params: map[string]string{},
+	}
+
+	err := prepareShellRunner(&ru, &rc, t.TempDir())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must set either")
+}
+
+func TestRunRunner_ShellCmdMode(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	cwd := t.TempDir()
+
+	ru := runner.Runner{
+		Name: "shell",
+		Run:  utils.RunCommand{Path: "$shell", Args: []string{"-ec", "$cmd"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "shell",
+		Params: map[string]string{"cmd": "echo shell_works"},
+	}
+
+	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	require.NoError(t, err)
+	assert.Contains(t, out, "shell_works")
+}
+
+func TestRunRunner_ShellFileMode(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	cwd := t.TempDir()
+
+	scriptPath := filepath.Join(cwd, "hello.sh")
+	os.WriteFile(scriptPath, []byte("#!/bin/sh\necho file_works\n"), 0644)
+
+	ru := runner.Runner{
+		Name: "shell",
+		Run:  utils.RunCommand{Path: "$shell", Args: []string{"-ec", "$cmd"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "shell",
+		Params: map[string]string{"file": "hello.sh"},
+	}
+
+	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	require.NoError(t, err)
+	assert.Contains(t, out, "file_works")
+}

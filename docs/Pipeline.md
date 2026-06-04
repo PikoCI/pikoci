@@ -161,6 +161,65 @@ runner_type "docker" {
 
 When `source` is set, inline `run` block is not needed.
 
+## Built-in runner: shell
+
+The `shell` runner simplifies running shell commands in tasks and hooks. It has two mutually exclusive modes: **inline** (`cmd`) and **file** (`file`).
+
+### Inline mode (`cmd`)
+
+Runs a shell command string via `<shell> -ec "<cmd>"`:
+
+```hcl
+task "test" {
+  run "shell" {
+    cmd = <<-EOT
+      cd app
+      make test
+      make lint
+    EOT
+  }
+}
+```
+
+### File mode (`file`)
+
+Runs a script file. Relative paths are resolved against the build working directory:
+
+```hcl
+task "deploy" {
+  run "shell" {
+    file = "app/scripts/deploy.sh"
+  }
+}
+```
+
+When no `shell` param is set, the file is executed directly (chmod +x is applied), so the OS uses the script's shebang line. When `shell` is set, the file is passed as an argument to the specified shell.
+
+### Shell selection (optional)
+
+Both modes accept an optional `shell` param. Default is `/bin/sh`:
+
+```hcl
+task "test" {
+  run "shell" {
+    shell = "/bin/bash"
+    cmd   = "set -o pipefail; make test 2>&1 | tee test.log"
+  }
+}
+```
+
+| Param   | Required | Description                                              |
+|---------|----------|----------------------------------------------------------|
+| `cmd`   | no*      | Shell command string to run inline                       |
+| `file`  | no*      | Path to a script file to execute                         |
+| `shell` | no       | Shell binary to use (default `/bin/sh`)                  |
+
+\* Exactly one of `cmd` or `file` must be set.
+
+### Comparison with `exec`
+
+The `shell` runner replaces the common pattern of `run "exec" { path = "/bin/sh" args = ["-ec", "..."] }`. Use `shell` for shell commands and scripts. Use `exec` when you need to run a binary directly with specific arguments.
+
 ## secret_type
 
 Defines how to fetch secrets. See [Secret Types](Secret-Types.md). The `get` command should print a JSON object on its last stdout line with key-value pairs that become `secret_<key>` environment variables. Connection config (address, token, etc.) is set as attributes on the block.

@@ -179,26 +179,21 @@ job "build-latest" {
     trigger = true
   }
   task "docker-build-push-latest" {
-    run "exec" {
-      path = "/bin/sh"
-      args = [
-        "-ec",
-        <<-EOT
+    run "shell" {
+      cmd = <<-EOT
         cd ${var.git_name}
 
         echo "${var.ghcr_token}" | docker login ghcr.io -u "${var.ghcr_username}" --password-stdin
 
         docker buildx create --use --name pikoci-builder 2>/dev/null || docker buildx use pikoci-builder
         docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/pikoci/pikoci:latest --push .
-        EOT
-      ]
+      EOT
     }
   }
   ensure {
     task "docker-prune" {
-      run "exec" {
-        path = "/bin/sh"
-        args = ["-ec", "docker buildx prune -f && docker image prune -f"]
+      run "shell" {
+        cmd = "docker buildx prune -f && docker image prune -f"
       }
     }
   }
@@ -225,9 +220,8 @@ job "deploy" {
       ]
     }
   }
-  on_success "exec" {
-    path = "/bin/sh"
-    args = ["-ec", "kill -QUIT $(pidof pikoci)"]
+  on_success "shell" {
+    cmd = "kill -QUIT $(pidof pikoci)"
   }
 }
 
@@ -236,19 +230,15 @@ job "deploy-docs" {
     trigger = true
   }
   task "build-and-deploy" {
-    run "exec" {
-      path = "/bin/sh"
-      args = [
-        "-ec",
-        <<-EOT
+    run "shell" {
+      cmd = <<-EOT
         cd ${var.git_name}
         python3 -m venv .venv
         .venv/bin/pip install --quiet mkdocs-material
         .venv/bin/mkdocs build --clean
         rm -rf /var/www/docs.pikoci.com/*
         cp -a site/. /var/www/docs.pikoci.com/
-        EOT
-      ]
+      EOT
     }
   }
 }
@@ -258,15 +248,11 @@ job "deploy-website" {
     trigger = true
   }
   task "copy-to-server" {
-    run "exec" {
-      path = "/bin/sh"
-      args = [
-        "-ec",
-        <<-EOT
+    run "shell" {
+      cmd = <<-EOT
         mkdir -p /var/www/pikoci.com
         cp -a pikoci.com/. /var/www/pikoci.com/
-        EOT
-      ]
+      EOT
     }
   }
 }
@@ -276,11 +262,8 @@ job "build-release" {
     trigger = true
   }
   task "docker-build-push-tag" {
-    run "exec" {
-      path = "/bin/sh"
-      args = [
-        "-ec",
-        <<-EOT
+    run "shell" {
+      cmd = <<-EOT
         cd ${var.git_name}
         TAG=$(git describe --tags --exact-match)
 
@@ -288,15 +271,13 @@ job "build-release" {
 
         docker buildx create --use --name pikoci-builder 2>/dev/null || docker buildx use pikoci-builder
         docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/pikoci/pikoci:$TAG --push .
-        EOT
-      ]
+      EOT
     }
   }
   ensure {
     task "docker-prune" {
-      run "exec" {
-        path = "/bin/sh"
-        args = ["-ec", "docker buildx prune -f && docker image prune -f"]
+      run "shell" {
+        cmd = "docker buildx prune -f && docker image prune -f"
       }
     }
   }
