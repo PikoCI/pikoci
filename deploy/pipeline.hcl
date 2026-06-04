@@ -90,14 +90,16 @@ job "test-mock" {
       cmd   = <<-EOT
         export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH
         cd ${var.git_name}
+        SHA=$${GET_PIKOCI_PR_REF:-$(git rev-parse HEAD)}
+        BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
         codecov upload-process \
           --token "${var.codecov_token}" \
           --file coverage.out \
           --flag unit \
           --git-service github \
           --slug PikoCI/pikoci \
-          --sha "$GET_PIKOCI_PR_REF" \
-          --branch "$GET_PIKOCI_PR_BRANCH"
+          --sha "$$SHA" \
+          --branch "$$BRANCH"
       EOT
       args = [
         "-v", "pikoci-go-mod:/go/pkg/mod",
@@ -243,14 +245,16 @@ job "test-backends" {
       cmd   = <<-EOT
         export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH
         cd ${var.git_name}
+        SHA=$${GET_PIKOCI_PR_REF:-$(git rev-parse HEAD)}
+        BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
         codecov upload-process \
           --token "${var.codecov_token}" \
           --file coverage-backends.out \
           --flag backends \
           --git-service github \
           --slug PikoCI/pikoci \
-          --sha "$GET_PIKOCI_PR_REF" \
-          --branch "$GET_PIKOCI_PR_BRANCH"
+          --sha "$$SHA" \
+          --branch "$$BRANCH"
       EOT
       args = [
         "--network=host",
