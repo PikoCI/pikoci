@@ -180,18 +180,23 @@ var TeamNewMemberRowView = Backbone.View.extend({
     var username = this.$el.find("#username").get(0).value;
     var admin = this.$el.find("#admin").get(0).checked;
     var that = this;
-    withLoading(this.$('#create'), function() {
-      var member = new Backbone.Model({admin: admin, user: {username: username}});
-      member.url = that.members.url();
-      return member.save(null, {
-        type: "POST",
-        wait: true,
-        success: function(m) {
-          that.members.add(m, {team: that.members.team});
-          window.app.apiNotice.setSuccess("Member added");
-          Backbone.View.prototype.remove.call(that);
-        },
-      });
+    var $btn = this.$('#create');
+    var originalHTML = $btn.html();
+    var loadingText = $btn.attr('data-loading-text') || 'Loading...';
+    $btn.html(loadingText + ' <span class="spinner-border spinner-border-sm" role="status"></span>');
+    $btn.prop('disabled', true).addClass('piko-btn-loading');
+    this.members.create({admin: admin, user: {
+      username: username,
+    }}, {url: this.members.url(), method: "POST",
+      wait: true,
+      success: function(){
+        window.app.apiNotice.setSuccess("Member added");
+        Backbone.View.prototype.remove.call(that);
+      },
+      error: function() {
+        $btn.html(originalHTML);
+        $btn.prop('disabled', false).removeClass('piko-btn-loading');
+      },
     });
   },
 });
