@@ -633,6 +633,10 @@ func (w *Worker) runPlan(ctx context.Context, m queue.Body, b *build.Build, cwd 
 		return true, nil
 	}
 
+	// exportedVars accumulates key-value pairs exported by get and task steps
+	// so that subsequent steps can consume them as environment variables.
+	exportedVars := make(map[string]string)
+
 	// Run plan steps in declaration order
 	for _, ps := range j.Plan {
 		switch ps.Type {
@@ -654,28 +658,28 @@ func (w *Worker) runPlan(ctx context.Context, m queue.Body, b *build.Build, cwd 
 			if ps.Get == nil {
 				continue
 			}
-			if w.runGetStep(ctx, m, b, cwd, pp, *ps.Get, ps, resolvedVersions, resolved) {
+			if w.runGetStep(ctx, m, b, cwd, pp, *ps.Get, ps, resolvedVersions, exportedVars, resolved) {
 				return true, resolved
 			}
 		case job.StepTypeTask:
 			if ps.Task == nil {
 				continue
 			}
-			if w.runTaskStep(ctx, m, b, cwd, pp, *ps.Task, ps, resolved) {
+			if w.runTaskStep(ctx, m, b, cwd, pp, *ps.Task, ps, exportedVars, resolved) {
 				return true, resolved
 			}
 		case job.StepTypePut:
 			if ps.Put == nil {
 				continue
 			}
-			if w.runPutStep(ctx, m, b, cwd, pp, *ps.Put, ps, resolved) {
+			if w.runPutStep(ctx, m, b, cwd, pp, *ps.Put, ps, exportedVars, resolved) {
 				return true, resolved
 			}
 		case job.StepTypeNotify:
 			if ps.Notify == nil {
 				continue
 			}
-			if w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, resolved) {
+			if w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, exportedVars, resolved) {
 				return true, resolved
 			}
 		}
@@ -685,7 +689,7 @@ func (w *Worker) runPlan(ctx context.Context, m queue.Body, b *build.Build, cwd 
 
 // runGetStep runs a single get step (resource pull).
 // Returns true if the step failed.
-func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, g job.GetStep, ps job.PlanStep, resolvedVersions map[string]uint32, resolved ...map[string]string) bool {
+func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, g job.GetStep, ps job.PlanStep, resolvedVersions map[string]uint32, exportedVars map[string]string, resolved ...map[string]string) bool {
 	var secretResolved map[string]string
 	if len(resolved) > 0 {
 		secretResolved = resolved[0]
@@ -729,6 +733,9 @@ func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, c
 		rc.Params[k] = v
 	}
 	for k, v := range buildMetadataParams(b, m) {
+		rc.Params[k] = v
+	}
+	for k, v := range exportedVars {
 		rc.Params[k] = v
 	}
 	if rt.Runner != nil {
@@ -822,6 +829,15 @@ func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, c
 			w.logger.Error("failed to insert build get version", "step", g.Name, "error", err)
 		}
 	}
+
+	// Export version_* params as GET_<STEPNAME>_<KEY> for subsequent steps.
+	prefix := "GET_" + sanitizeStepName(g.Name) + "_"
+	for k, v := range params {
+		if strings.HasPrefix(k, "version_") {
+			exportedVars[prefix+strings.ToUpper(strings.TrimPrefix(k, "version_"))] = v
+		}
+	}
+
 	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, g.Name, ps.OnSuccess, "on_success", secretResolved)
 	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, g.Name, ps.Ensure, "ensure", secretResolved)
 	return false
@@ -883,7 +899,7 @@ func (w *Worker) runGetStepLocal(ctx context.Context, m queue.Body, b *build.Bui
 
 // runTaskStep runs a single task step.
 // Returns true if the step failed.
-func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, t job.TaskStep, ps job.PlanStep, resolved ...map[string]string) bool {
+func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, t job.TaskStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
 	var secretResolved map[string]string
 	if len(resolved) > 0 {
 		secretResolved = resolved[0]
@@ -902,6 +918,19 @@ func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, 
 
 	for k, v := range buildMetadataParams(b, m) {
 		t.Run.Params[k] = v
+	}
+	for k, v := range exportedVars {
+		t.Run.Params[k] = v
+	}
+
+	// Create the PIKOCI_OUTPUT file inside cwd so Docker-mounted tasks can write to it.
+	if outputFile, oerr := os.CreateTemp(cwd, ".pikoci-output-*"); oerr != nil {
+		w.logger.Error("failed to create PIKOCI_OUTPUT file", "error", oerr)
+	} else {
+		outputPath := outputFile.Name()
+		outputFile.Close()
+		defer os.Remove(outputPath)
+		t.Run.Params["PIKOCI_OUTPUT"] = outputPath
 	}
 
 	for _, input := range t.Inputs {
@@ -987,6 +1016,16 @@ func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, 
 		}
 	}
 
+	// Parse PIKOCI_OUTPUT and export values for subsequent steps.
+	// Done after output validation so failed steps don't pollute exportedVars.
+	if outputPath, ok := t.Run.Params["PIKOCI_OUTPUT"]; ok {
+		parsed := parseOutputFile(outputPath, w.logger)
+		prefix := "TASK_" + sanitizeStepName(t.Name) + "_"
+		for k, v := range parsed {
+			exportedVars[prefix+k] = v
+		}
+	}
+
 	if err := w.updateBuild(ctx, m, *b); err != nil {
 		return true
 	}
@@ -997,7 +1036,7 @@ func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, 
 
 // runPutStep runs a single put step (resource push).
 // Returns true if the step failed.
-func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, p job.PutStep, ps job.PlanStep, resolved ...map[string]string) bool {
+func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, p job.PutStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
 	if w.LocalMode {
 		rCan := utils.ResourceCanonical(p.Type, p.Name)
 		logMsg := fmt.Sprintf("skipping put step (local execution): %s", rCan)
@@ -1043,6 +1082,9 @@ func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, c
 		params["put_"+k] = v
 	}
 	for k, v := range buildMetadataParams(b, m) {
+		params[k] = v
+	}
+	for k, v := range exportedVars {
 		params[k] = v
 	}
 
@@ -1195,7 +1237,7 @@ func (w *Worker) implicitGetAfterPut(ctx context.Context, m queue.Body, b *build
 
 // runNotifyStep runs a single notify step (fire-and-forget notification).
 // Returns true if the step failed.
-func (w *Worker) runNotifyStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, n job.NotifyStep, ps job.PlanStep, resolved ...map[string]string) bool {
+func (w *Worker) runNotifyStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, n job.NotifyStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
 	if w.LocalMode {
 		nCan := utils.NotificationCanonical(n.Type, n.Name)
 		logMsg := fmt.Sprintf("skipping notify step (local execution): %s", nCan)
@@ -1250,6 +1292,9 @@ func (w *Worker) runNotifyStep(ctx context.Context, m queue.Body, b *build.Build
 	}
 	// Build metadata
 	for k, v := range buildMetadataParams(b, m) {
+		params[k] = v
+	}
+	for k, v := range exportedVars {
 		params[k] = v
 	}
 
@@ -1408,7 +1453,7 @@ func (w *Worker) runAutoNotifications(ctx context.Context, m queue.Body, b *buil
 				Message: n.Message,
 			},
 		}
-		w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, resolved)
+		w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, nil, resolved)
 	}
 }
 
@@ -1543,7 +1588,7 @@ func (w *Worker) runHooks(ctx context.Context, m queue.Body, b *build.Build, ste
 				Type: job.StepTypePut,
 				Put:  h.Put,
 			}
-			w.runPutStep(ctx, m, b, cwd, pp, *h.Put, ps, resolved)
+			w.runPutStep(ctx, m, b, cwd, pp, *h.Put, ps, nil, resolved)
 			continue
 		case job.StepTypeNotify:
 			if h.Notify == nil {
@@ -1553,7 +1598,7 @@ func (w *Worker) runHooks(ctx context.Context, m queue.Body, b *build.Build, ste
 				Type:   job.StepTypeNotify,
 				Notify: h.Notify,
 			}
-			w.runNotifyStep(ctx, m, b, cwd, pp, *h.Notify, ps, resolved)
+			w.runNotifyStep(ctx, m, b, cwd, pp, *h.Notify, ps, nil, resolved)
 			continue
 		default:
 			continue
@@ -2225,6 +2270,65 @@ func buildMetadataParams(b *build.Build, m queue.Body) map[string]string {
 		"BUILD_PIPELINE_NAME": m.PipelineCanonical,
 		"BUILD_TEAM_NAME":     m.TeamCanonical,
 	}
+}
+
+// sanitizeStepName converts a step name to a safe environment variable prefix
+// by uppercasing it and replacing non-alphanumeric characters with underscores.
+func sanitizeStepName(name string) string {
+	var b strings.Builder
+	b.Grow(len(name))
+	for _, r := range strings.ToUpper(name) {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
+}
+
+// maxOutputFileSize is the maximum size of the $PIKOCI_OUTPUT file (1MB).
+const maxOutputFileSize = 1 << 20
+
+// parseOutputFile reads a KEY=VALUE file written by a task step and returns
+// the parsed key-value pairs. Keys are uppercased with non-alphanumeric chars
+// replaced by underscores. Empty lines and lines starting with # are skipped.
+// Returns an empty map if the file doesn't exist, is empty, or exceeds maxOutputFileSize.
+func parseOutputFile(path string, logger *slog.Logger) map[string]string {
+	result := make(map[string]string)
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return result
+	}
+	if info.Size() > maxOutputFileSize {
+		logger.Warn("PIKOCI_OUTPUT file exceeds 1MB limit, ignoring", "path", path, "size", info.Size())
+		return result
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		logger.Warn("failed to read PIKOCI_OUTPUT file", "path", path, "error", err)
+		return result
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			logger.Warn("invalid line in PIKOCI_OUTPUT (no '=')", "line", line)
+			continue
+		}
+		key := sanitizeStepName(strings.TrimSpace(k))
+		if key == "" {
+			continue
+		}
+		result[key] = strings.TrimSpace(v)
+	}
+	return result
 }
 
 // serviceParams builds the environment parameters for a service command,
