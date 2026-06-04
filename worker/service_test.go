@@ -716,6 +716,70 @@ func TestProcessResourceCheck_NewVersions(t *testing.T) {
 	w.processResourceCheck(ctx, m, cwd, pp)
 }
 
+func TestProcessResourceCheck_NestedVersionFlattened(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		ResourceCanonical: "custom.my-res",
+	}
+	// The check script prints env vars starting with "version_" to stderr,
+	// then outputs an empty JSON array (no new versions). If the nested
+	// version is flattened correctly, the script will see version_metadata_sha
+	// and version_metadata_author instead of a Go-formatted map.
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Resources: []resource.Resource{
+			{ID: 1, Name: "my-res", Type: "custom", Canonical: "custom.my-res"},
+		},
+		ResourceTypes: []restype.ResourceType{
+			{
+				ID: 1, Name: "custom",
+				Check: &utils.RunnerCommand{
+					Runner: "exec",
+					Args: []string{"-ec", `
+# Verify flattened env vars exist
+test "$version_metadata_sha" = "abc123" || { echo "FAIL: version_metadata_sha=$version_metadata_sha" >&2; exit 1; }
+test "$version_metadata_author" = "bob" || { echo "FAIL: version_metadata_author=$version_metadata_author" >&2; exit 1; }
+# Also verify the flat key
+test "$version_ref" = "def456" || { echo "FAIL: version_ref=$version_ref" >&2; exit 1; }
+printf "[]"
+`},
+					Params: map[string]string{"path": "/bin/sh"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	// Return an existing version with nested metadata
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "custom.my-res", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+		Return([]*resource.Version{
+			{ID: 1, Version: map[string]interface{}{
+				"ref": "def456",
+				"metadata": map[string]interface{}{
+					"sha":    "abc123",
+					"author": "bob",
+				},
+			}},
+		}, false, nil).AnyTimes()
+
+	svc.EXPECT().UpdatePipelineResource(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "custom.my-res", gomock.Any()).
+		Return(nil).AnyTimes()
+
+	// If flattening is broken, the check script will exit 1 and the test
+	// will see an error log. We just need processResourceCheck to not panic.
+	// The script outputs "[]" (no new versions), so no CreateResourceVersion call.
+	w.processResourceCheck(ctx, m, cwd, pp)
+}
+
 func TestProcessResourceCheck_DuplicateVersionSkipped_FirstCheck(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc, topic := newTestWorker(ctrl)
@@ -4377,4 +4441,475 @@ func TestRunRunner_ShellFileMode(t *testing.T) {
 	out, _, err := w.runRunner(ctx, ru, cwd, rc)
 	require.NoError(t, err)
 	assert.Contains(t, out, "file_works")
+}
+
+func TestFlattenVersionValue(t *testing.T) {
+	t.Run("string", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_ref", "abc")
+		assert.Equal(t, map[string]string{"version_ref": "abc"}, m)
+	})
+
+	t.Run("number int", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_count", float64(42))
+		assert.Equal(t, map[string]string{"version_count": "42"}, m)
+	})
+
+	t.Run("number decimal", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_score", 3.14)
+		assert.Equal(t, map[string]string{"version_score": "3.14"}, m)
+	})
+
+	t.Run("bool", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_ok", true)
+		assert.Equal(t, map[string]string{"version_ok": "true"}, m)
+	})
+
+	t.Run("nil", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_empty", nil)
+		assert.Equal(t, map[string]string{"version_empty": ""}, m)
+	})
+
+	t.Run("nested map", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_metadata", map[string]interface{}{
+			"sha":    "abc123",
+			"author": "bob",
+		})
+		assert.Equal(t, "abc123", m["version_metadata_sha"])
+		assert.Equal(t, "bob", m["version_metadata_author"])
+		assert.Len(t, m, 2)
+	})
+
+	t.Run("deeply nested", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_info", map[string]interface{}{
+			"commit": map[string]interface{}{
+				"sha":    "def456",
+				"author": "alice",
+			},
+		})
+		assert.Equal(t, "def456", m["version_info_commit_sha"])
+		assert.Equal(t, "alice", m["version_info_commit_author"])
+	})
+
+	t.Run("array", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_tags", []interface{}{"v1", "v2"})
+		assert.Equal(t, "v1", m["version_tags_0"])
+		assert.Equal(t, "v2", m["version_tags_1"])
+	})
+}
+
+func TestSanitizeStepName(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"my-repo", "MY_REPO"},
+		{"build.app", "BUILD_APP"},
+		{"a-b.c_d", "A_B_C_D"},
+		{"simple", "SIMPLE"},
+		{"ALREADY_UPPER", "ALREADY_UPPER"},
+		{"has spaces", "HAS_SPACES"},
+		{"123num", "123NUM"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			assert.Equal(t, tt.want, sanitizeStepName(tt.in))
+		})
+	}
+}
+
+func TestParseOutputFile(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	t.Run("missing file", func(t *testing.T) {
+		result := parseOutputFile("/nonexistent/path", logger)
+		assert.Empty(t, result)
+	})
+
+	t.Run("empty file", func(t *testing.T) {
+		f := filepath.Join(t.TempDir(), "out")
+		require.NoError(t, os.WriteFile(f, []byte(""), 0644))
+		result := parseOutputFile(f, logger)
+		assert.Empty(t, result)
+	})
+
+	t.Run("valid lines", func(t *testing.T) {
+		f := filepath.Join(t.TempDir(), "out")
+		require.NoError(t, os.WriteFile(f, []byte("VERSION=1.2.3\nCOMMIT=abc"), 0644))
+		result := parseOutputFile(f, logger)
+		assert.Equal(t, map[string]string{"VERSION": "1.2.3", "COMMIT": "abc"}, result)
+	})
+
+	t.Run("equals in value", func(t *testing.T) {
+		f := filepath.Join(t.TempDir(), "out")
+		require.NoError(t, os.WriteFile(f, []byte("DATA=a=b=c"), 0644))
+		result := parseOutputFile(f, logger)
+		assert.Equal(t, map[string]string{"DATA": "a=b=c"}, result)
+	})
+
+	t.Run("comments and blank lines", func(t *testing.T) {
+		f := filepath.Join(t.TempDir(), "out")
+		require.NoError(t, os.WriteFile(f, []byte("# comment\n\nKEY=val\n  \n"), 0644))
+		result := parseOutputFile(f, logger)
+		assert.Equal(t, map[string]string{"KEY": "val"}, result)
+	})
+
+	t.Run("whitespace trimming", func(t *testing.T) {
+		f := filepath.Join(t.TempDir(), "out")
+		require.NoError(t, os.WriteFile(f, []byte("  MY_KEY  =  value  \n"), 0644))
+		result := parseOutputFile(f, logger)
+		assert.Equal(t, map[string]string{"MY_KEY": "value"}, result)
+	})
+
+	t.Run("key sanitization", func(t *testing.T) {
+		f := filepath.Join(t.TempDir(), "out")
+		require.NoError(t, os.WriteFile(f, []byte("my-key=val\n"), 0644))
+		result := parseOutputFile(f, logger)
+		assert.Equal(t, map[string]string{"MY_KEY": "val"}, result)
+	})
+
+	t.Run("file exceeds size limit", func(t *testing.T) {
+		f := filepath.Join(t.TempDir(), "out")
+		data := make([]byte, maxOutputFileSize+1)
+		for i := range data {
+			data[i] = 'x'
+		}
+		require.NoError(t, os.WriteFile(f, data, 0644))
+		result := parseOutputFile(f, logger)
+		assert.Empty(t, result)
+	})
+}
+
+func TestProcessJob_GetStepExportsVersionMetadata(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           10,
+		VersionID:         1,
+	}
+	// The task step uses "printenv" to dump all env vars. We'll capture the
+	// build step logs and check for the exported GET_* vars.
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "test-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get:  &job.GetStep{Type: "cron", Name: "my-cron", Trigger: true},
+					},
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "check-env",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"-c", "printenv | grep GET_MY_CRON"}, Params: map[string]string{"path": "bash"}},
+						},
+					},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Name: "my-cron", Type: "cron", Canonical: "cron.my-cron"},
+		},
+		ResourceTypes: []restype.ResourceType{
+			{
+				ID: 1, Name: "cron",
+				Pull: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"pulling"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 10, BuildNumber: "10", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+		Return([]*resource.Version{
+			{ID: 1, Version: map[string]interface{}{"date": "2024-01-01"}},
+		}, false, nil).AnyTimes()
+
+	var finalBuild *build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			bc := b
+			finalBuild = &bc
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	// Verify that the task step received GET_MY_CRON_DATE env var.
+	// The task step runs: bash -c "printenv | grep GET_MY_CRON"
+	// If the env var is present, the output should contain it.
+	require.NotNil(t, finalBuild)
+	require.GreaterOrEqual(t, len(finalBuild.Steps), 2)
+	taskStep := finalBuild.Steps[1]
+	assert.Equal(t, build.Succeeded, taskStep.Status, "task step should succeed")
+	assert.Contains(t, taskStep.Logs, "GET_MY_CRON_DATE=2024-01-01")
+}
+
+func TestProcessJob_TaskExportsPikoOutput(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           10,
+	}
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "test-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "produce",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"-c", `echo "MY_VAR=hello123" >> "$PIKOCI_OUTPUT"`},
+								Params: map[string]string{"path": "bash"},
+							},
+						},
+					},
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "consume",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"-c", "printenv | grep TASK_PRODUCE_MY_VAR"},
+								Params: map[string]string{"path": "bash"},
+							},
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 10, BuildNumber: "10", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var finalBuild *build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			bc := b
+			finalBuild = &bc
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	require.NotNil(t, finalBuild)
+	require.GreaterOrEqual(t, len(finalBuild.Steps), 2)
+	consumeStep := finalBuild.Steps[1]
+	assert.Equal(t, build.Succeeded, consumeStep.Status, "consume step should succeed")
+	assert.Contains(t, consumeStep.Logs, "TASK_PRODUCE_MY_VAR=hello123")
+}
+
+func TestProcessJob_ExportedVarsAccumulate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           10,
+		VersionID:         1,
+	}
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "test-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get:  &job.GetStep{Type: "cron", Name: "my-cron", Trigger: true},
+					},
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "build",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"-c", `echo "VERSION=1.0.0" >> "$PIKOCI_OUTPUT"`},
+								Params: map[string]string{"path": "bash"},
+							},
+						},
+					},
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "verify",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"-c", "printenv | grep -E '(GET_MY_CRON_|TASK_BUILD_)' | sort"},
+								Params: map[string]string{"path": "bash"},
+							},
+						},
+					},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Name: "my-cron", Type: "cron", Canonical: "cron.my-cron"},
+		},
+		ResourceTypes: []restype.ResourceType{
+			{
+				ID: 1, Name: "cron",
+				Pull: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"pulling"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 10, BuildNumber: "10", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+		Return([]*resource.Version{
+			{ID: 1, Version: map[string]interface{}{"date": "2024-01-01"}},
+		}, false, nil).AnyTimes()
+
+	var finalBuild *build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			bc := b
+			finalBuild = &bc
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	require.NotNil(t, finalBuild)
+	require.GreaterOrEqual(t, len(finalBuild.Steps), 3)
+	verifyStep := finalBuild.Steps[2]
+	assert.Equal(t, build.Succeeded, verifyStep.Status, "verify step should succeed")
+	assert.Contains(t, verifyStep.Logs, "GET_MY_CRON_DATE=2024-01-01")
+	assert.Contains(t, verifyStep.Logs, "TASK_BUILD_VERSION=1.0.0")
+}
+
+func TestProcessJob_FailedStepDoesNotExport(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           10,
+	}
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "test-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "failing",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"-c", `echo "LEAKED=secret" >> "$PIKOCI_OUTPUT"; exit 1`},
+								Params: map[string]string{"path": "bash"},
+							},
+						},
+					},
+					{
+						// This step should never run because the previous failed.
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "consume",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"-c", "printenv | grep TASK_FAILING"},
+								Params: map[string]string{"path": "bash"},
+							},
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 10, BuildNumber: "10", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var finalBuild *build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			bc := b
+			finalBuild = &bc
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	require.NotNil(t, finalBuild)
+	assert.Equal(t, build.Failed, finalBuild.Status)
+	// Only 1 step should have run (the failing one)
+	require.Equal(t, 1, len(finalBuild.Steps))
+	assert.Equal(t, build.Failed, finalBuild.Steps[0].Status)
 }

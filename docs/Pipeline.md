@@ -325,6 +325,28 @@ get "git" "my_repo" {
 | `attempts` | no       | Maximum number of times to try the step (default `1`, no retry) |
 | `secrets`  | no       | Map of secret_type name to path (e.g. `{"vault" = "secret/data/db"}`) |
 
+#### Exported version metadata
+
+After a get step succeeds, its version metadata is automatically forwarded to all subsequent steps as environment variables. The naming convention is `GET_<STEPNAME>_<KEY>`, where the step name is uppercased with non-alphanumeric characters replaced by `_`, and the `version_` prefix is stripped from the key.
+
+For example, a `get "git" "my-repo"` step that fetches version `{ref: "abc123"}` will export `GET_MY_REPO_REF=abc123` to all subsequent steps.
+
+Nested version objects are recursively flattened with `_` separators. For example, a version like:
+
+```json
+{"ref": "abc123", "metadata": {"sha": "def456", "author": "alice"}}
+```
+
+produces the following environment variables for the pull command and subsequent steps:
+
+| Version key | Pull env var | Exported env var |
+|---|---|---|
+| `ref` | `version_ref=abc123` | `GET_MY_REPO_REF=abc123` |
+| `metadata.sha` | `version_metadata_sha=def456` | `GET_MY_REPO_METADATA_SHA=def456` |
+| `metadata.author` | `version_metadata_author=alice` | `GET_MY_REPO_METADATA_AUTHOR=alice` |
+
+Arrays are flattened with numeric indices (e.g. `tags: ["v1", "v2"]` → `version_tags_0=v1`, `version_tags_1=v2`). Numbers and booleans are converted to their string representation.
+
 ### task
 
 Runs a command via a runner.
@@ -361,6 +383,38 @@ task "build" {
 ```
 
 Paths are checked with `os.Stat` relative to `$WORKDIR` and work for both files and directories. If an input is missing, the task fails immediately with a clear error. If an output is missing after the task finishes, the build fails with a descriptive message.
+
+#### Exporting values with `$PIKOCI_OUTPUT`
+
+Task steps can export key-value pairs to subsequent steps by writing `KEY=VALUE` lines to the file pointed to by the `$PIKOCI_OUTPUT` environment variable. After the task succeeds, the worker parses this file and makes the values available to all subsequent steps as `TASK_<STEPNAME>_<KEY>` environment variables.
+
+```hcl
+task "build" {
+  run "exec" {
+    path = "bash"
+    args = ["-c", "echo VERSION=1.2.3 >> $PIKOCI_OUTPUT"]
+  }
+}
+
+task "deploy" {
+  run "exec" {
+    path = "bash"
+    args = ["-c", "echo Deploying version $TASK_BUILD_VERSION"]
+  }
+}
+```
+
+Rules for the output file:
+- One `KEY=VALUE` per line (split on first `=`, values can contain `=`)
+- Lines starting with `#` are treated as comments and skipped
+- Empty lines are skipped
+- Keys are uppercased with non-alphanumeric characters replaced by `_`
+- Maximum file size is 1MB
+- If the task fails, its output is not parsed
+
+#### Naming convention
+
+Step names are sanitized for use in environment variable names: uppercased with all non-alphanumeric characters replaced by `_`. For example, `my-repo` becomes `MY_REPO` and `build.app` becomes `BUILD_APP`. Note that different step names may map to the same prefix (e.g. `my-repo` and `my.repo` both become `MY_REPO`); in that case, the last writer wins.
 
 ### put
 
