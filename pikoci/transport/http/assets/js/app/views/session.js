@@ -1,6 +1,7 @@
 'use strict';
 
 import { session, userSessionKey } from '../collections.js';
+import { withLoading } from '../namespace.js';
 
 export var SessionNewView = Backbone.View.extend({
   template: _.template($('#session-new-view').html()),
@@ -17,18 +18,20 @@ export var SessionNewView = Backbone.View.extend({
     var username = this.$el.find("#username").get(0).value;
     var password = this.$el.find("#password").get(0).value;
 
-    session.save({username: username, password: password}, {
-      success: function(resp) {
-        session.unset("password");
-        session.unset("username");
-        window.localStorage.setItem(userSessionKey, JSON.stringify(session.toJSON()));
-        var u = session.get("user");
-        if (u && u.must_change_password) {
-          window.app.router.navigate('profile', { trigger: true });
-        } else {
-          window.app.router.navigate('', { trigger: true });
-        }
-      },
+    withLoading(this.$('#login'), function() {
+      return session.save({username: username, password: password}, {
+        success: function(resp) {
+          session.unset("password");
+          session.unset("username");
+          window.localStorage.setItem(userSessionKey, JSON.stringify(session.toJSON()));
+          var u = session.get("user");
+          if (u && u.must_change_password) {
+            window.app.router.navigate('profile', { trigger: true });
+          } else {
+            window.app.router.navigate('', { trigger: true });
+          }
+        },
+      });
     });
   },
 });

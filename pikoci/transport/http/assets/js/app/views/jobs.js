@@ -2,7 +2,7 @@
 
 import { session } from '../collections.js';
 import { Build } from '../models.js';
-import { addSessionFunctions, fetchInterval, pikoTimeAgo } from '../namespace.js';
+import { addSessionFunctions, fetchInterval, pikoTimeAgo, withLoading } from '../namespace.js';
 
 export var JobBuildsView = Backbone.View.extend({
   template: _.template($('#job-builds-view').html()),
@@ -129,28 +129,35 @@ export var JobBuildsView = Backbone.View.extend({
   },
   clickTriggerJob: function(event) {
     event.preventDefault();
-    this.collection.job.fetchTrigger({success: function() { window.app.apiNotice.setSuccess("Job triggered"); }});
+    var that = this;
+    withLoading(this.$('#trigger-job'), function() {
+      return that.collection.job.fetchTrigger({success: function() { window.app.apiNotice.setSuccess("Job triggered"); }});
+    });
   },
   clickPauseJob: function(event) {
     event.preventDefault();
     var that = this;
     var url = this.collection.job.url() + "/pause";
-    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
-      success: function() {
-        window.app.apiNotice.setSuccess("Job paused");
-        that.collection.job.fetch({ success: function() { that.render(); that.addBuilds(); that.collection.setActive(that.currentBuildID); } });
-      },
+    withLoading(this.$('#pause-job'), function() {
+      return $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
+        success: function() {
+          window.app.apiNotice.setSuccess("Job paused");
+          that.collection.job.fetch({ success: function() { that.render(); that.addBuilds(); that.collection.setActive(that.currentBuildID); } });
+        },
+      });
     });
   },
   clickUnpauseJob: function(event) {
     event.preventDefault();
     var that = this;
     var url = this.collection.job.url() + "/unpause";
-    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
-      success: function() {
-        window.app.apiNotice.setSuccess("Job unpaused");
-        that.collection.job.fetch({ success: function() { that.render(); that.addBuilds(); that.collection.setActive(that.currentBuildID); } });
-      },
+    withLoading(this.$('#unpause-job'), function() {
+      return $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
+        success: function() {
+          window.app.apiNotice.setSuccess("Job unpaused");
+          that.collection.job.fetch({ success: function() { that.render(); that.addBuilds(); that.collection.setActive(that.currentBuildID); } });
+        },
+      });
     });
   },
   clickOnTab: function(event) {
@@ -214,8 +221,10 @@ var JobBuildsContentView = Backbone.View.extend({
     var that = this;
     var bid = this.model.get("build_number");
     var url = this.model.collection.url() + "/" + bid + "/cancel";
-    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
-      success: function() { window.app.apiNotice.setSuccess("Build cancelled"); that.model.fetch(); },
+    withLoading($(e.currentTarget), function() {
+      return $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
+        success: function() { window.app.apiNotice.setSuccess("Build cancelled"); that.model.fetch(); },
+      });
     });
   },
   retryBuild: function(e) {
@@ -223,8 +232,10 @@ var JobBuildsContentView = Backbone.View.extend({
     var bid = this.model.get("build_number");
     var collection = this.model.collection;
     var url = collection.url() + "/" + bid + "/retry";
-    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
-      success: function() { window.app.apiNotice.setSuccess("Build retried"); collection.fetchNew(); },
+    withLoading($(e.currentTarget), function() {
+      return $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
+        success: function() { window.app.apiNotice.setSuccess("Build retried"); collection.fetchNew(); },
+      });
     });
   },
   toggleFollow: function(e) {

@@ -146,7 +146,7 @@ export var Job = Backbone.Model.extend({
     return response;
   },
   fetchTrigger: function(opts) {
-    this.fetch(_.extend({url: this.url()+"/trigger", type: "POST"}, opts));
+    return this.fetch(_.extend({url: this.url()+"/trigger", type: "POST"}, opts));
   },
 });
 
@@ -177,7 +177,7 @@ export var Resource = Backbone.Model.extend({
   },
   pinVersion: function(versionID, opts) {
     opts = opts || {};
-    $.ajax(_.extend({
+    return $.ajax(_.extend({
       url: this.url()+"/pin",
       type: "POST",
       contentType: "application/json",
@@ -186,7 +186,7 @@ export var Resource = Backbone.Model.extend({
   },
   unpinVersion: function(opts) {
     opts = opts || {};
-    $.ajax(_.extend({
+    return $.ajax(_.extend({
       url: this.url()+"/unpin",
       type: "POST",
       contentType: "application/json",

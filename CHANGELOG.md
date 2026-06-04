@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Loading indicators on action buttons: all mutating buttons (trigger, cancel, retry, delete, pause, unpause, pin, etc.) now show a spinner and loading text while the request is in flight, preventing double-clicks and providing visual feedback ([#453](https://github.com/PikoCI/pikoci/issues/453))
 - Built-in `shell` runner for simplified shell command execution. Supports inline `cmd` mode (`run "shell" { cmd = "..." }`) and script `file` mode (`run "shell" { file = "script.sh" }`), with optional `shell` param to override the default `/bin/sh` ([#458](https://github.com/PikoCI/pikoci/issues/458))
 
 ## [0.3.0] - 2026-06-03
