@@ -331,6 +331,22 @@ After a get step succeeds, its version metadata is automatically forwarded to al
 
 For example, a `get "git" "my-repo"` step that fetches version `{ref: "abc123"}` will export `GET_MY_REPO_REF=abc123` to all subsequent steps.
 
+Nested version objects are recursively flattened with `_` separators. For example, a version like:
+
+```json
+{"ref": "abc123", "metadata": {"sha": "def456", "author": "alice"}}
+```
+
+produces the following environment variables for the pull command and subsequent steps:
+
+| Version key | Pull env var | Exported env var |
+|---|---|---|
+| `ref` | `version_ref=abc123` | `GET_MY_REPO_REF=abc123` |
+| `metadata.sha` | `version_metadata_sha=def456` | `GET_MY_REPO_METADATA_SHA=def456` |
+| `metadata.author` | `version_metadata_author=alice` | `GET_MY_REPO_METADATA_AUTHOR=alice` |
+
+Arrays are flattened with numeric indices (e.g. `tags: ["v1", "v2"]` → `version_tags_0=v1`, `version_tags_1=v2`). Numbers and booleans are converted to their string representation.
+
 ### task
 
 Runs a command via a runner.
