@@ -52,7 +52,7 @@ runner_type "my-docker" {
 
 Two URL formats are supported:
 
-- **`pikoci://<name>`** resolves to the PikoCI registry. For shipped built-ins (`exec`, `docker`), the embedded definition is used directly (no network call).
+- **`pikoci://<name>`** resolves to the PikoCI registry. For shipped built-ins (`exec`, `docker`, `shell`), the embedded definition is used directly (no network call).
 - **`https://...`** or **`http://...`** fetches HCL from any URL.
 
 When `source` is set, you must not define an inline `run` block. PikoCI will error if both are present.
@@ -61,7 +61,7 @@ When `source` is set, you must not define an inline `run` block. PikoCI will err
 
 ## Overriding built-ins
 
-All built-in runners (`exec`, `docker`) can be overridden by defining a `runner_type` block with the same name in your pipeline. Inline definitions always take precedence over built-ins.
+All built-in runners (`exec`, `docker`, `shell`) can be overridden by defining a `runner_type` block with the same name in your pipeline. Inline definitions always take precedence over built-ins.
 
 This is useful when you need different default behavior. For example, the built-in `docker` runner uses `/bin/sh -ec` to run commands. If you want to always run with `--network=host` or use a different shell:
 
@@ -282,7 +282,68 @@ task "test" {
 }
 ```
 
-## Example: custom shell runner
+## Built-in: shell
+
+The `shell` runner simplifies running shell commands in tasks and hooks. It replaces the common `run "exec" { path = "/bin/sh" args = ["-ec", "..."] }` pattern. It has two mutually exclusive modes: **inline** (`cmd`) and **file** (`file`).
+
+### Inline mode (`cmd`)
+
+Runs a shell command string via `<shell> -ec "<cmd>"`:
+
+```hcl
+task "test" {
+  run "shell" {
+    cmd = <<-EOT
+      cd app
+      make test
+      make lint
+    EOT
+  }
+}
+```
+
+### File mode (`file`)
+
+Runs a script file. Relative paths are resolved against the build working directory:
+
+```hcl
+task "deploy" {
+  run "shell" {
+    file = "app/scripts/deploy.sh"
+  }
+}
+```
+
+When no `shell` param is set, the file is executed directly (chmod +x is applied), so the OS uses the script's shebang line. When `shell` is set, the file is passed as an argument to the specified shell.
+
+### Params
+
+| Param   | Required | Description                                              |
+|---------|----------|----------------------------------------------------------|
+| `cmd`   | no*      | Shell command string to run inline                       |
+| `file`  | no*      | Path to a script file to execute                         |
+| `shell` | no       | Shell binary to use (default `/bin/sh`)                  |
+
+\* Exactly one of `cmd` or `file` must be set.
+
+### Custom shell
+
+Both modes accept an optional `shell` param to override the default `/bin/sh`:
+
+```hcl
+task "test" {
+  run "shell" {
+    shell = "/bin/bash"
+    cmd   = "set -o pipefail; make test 2>&1 | tee test.log"
+  }
+}
+```
+
+### When to use shell vs exec
+
+Use `shell` for shell commands and scripts. Use `exec` when you need to run a binary directly with specific arguments.
+
+## Example: custom runner
 
 ```hcl
 runner_type "bash" {
