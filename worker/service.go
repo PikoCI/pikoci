@@ -1489,7 +1489,7 @@ func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Bui
 			if ver.ID == versionID {
 				found = true
 				for k, v := range ver.Version {
-					params["version_"+k] = versionValueToString(v)
+					flattenVersionValue(params, "version_"+k, v)
 				}
 				break
 			}
@@ -1506,7 +1506,7 @@ func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Bui
 		slices.Reverse(dbvers)
 		versionID = dbvers[0].ID
 		for k, v := range dbvers[0].Version {
-			params["version_"+k] = versionValueToString(v)
+			flattenVersionValue(params, "version_"+k, v)
 		}
 	}
 
@@ -2272,28 +2272,34 @@ func buildMetadataParams(b *build.Build, m queue.Body) map[string]string {
 	}
 }
 
-// versionValueToString converts a version metadata value to a string suitable
-// for use as an environment variable. Strings are returned as-is; nested
-// objects/arrays are JSON-encoded so the value is always a flat string.
-func versionValueToString(v interface{}) string {
+// flattenVersionValue flattens a version metadata value into params with the
+// given key prefix. Nested maps are recursively flattened with "_" separators
+// (e.g. prefix "version_metadata" + {"sha": "abc"} → "version_metadata_sha" = "abc").
+// Scalar values are converted to strings directly.
+func flattenVersionValue(params map[string]string, prefix string, v interface{}) {
 	switch val := v.(type) {
+	case map[string]interface{}:
+		for k, nested := range val {
+			flattenVersionValue(params, prefix+"_"+k, nested)
+		}
+	case []interface{}:
+		for i, item := range val {
+			flattenVersionValue(params, fmt.Sprintf("%s_%d", prefix, i), item)
+		}
 	case string:
-		return val
+		params[prefix] = val
 	case float64:
 		if val == float64(int64(val)) {
-			return fmt.Sprintf("%d", int64(val))
+			params[prefix] = fmt.Sprintf("%d", int64(val))
+		} else {
+			params[prefix] = fmt.Sprintf("%g", val)
 		}
-		return fmt.Sprintf("%g", val)
 	case bool:
-		return fmt.Sprintf("%t", val)
+		params[prefix] = fmt.Sprintf("%t", val)
 	case nil:
-		return ""
+		params[prefix] = ""
 	default:
-		b, err := json.Marshal(val)
-		if err != nil {
-			return fmt.Sprintf("%v", val)
-		}
-		return string(b)
+		params[prefix] = fmt.Sprintf("%v", val)
 	}
 }
 

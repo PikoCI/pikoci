@@ -4379,34 +4379,66 @@ func TestRunRunner_ShellFileMode(t *testing.T) {
 	assert.Contains(t, out, "file_works")
 }
 
-func TestVersionValueToString(t *testing.T) {
-	tests := []struct {
-		name string
-		in   interface{}
-		want string
-	}{
-		{"string", "abc", "abc"},
-		{"float64 int", float64(42), "42"},
-		{"float64 decimal", 3.14, "3.14"},
-		{"bool", true, "true"},
-		{"nil", nil, ""},
-		{"nested map", map[string]interface{}{"sha": "abc", "num": float64(1)}, ""},
-		{"slice", []interface{}{"a", "b"}, ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := versionValueToString(tt.in)
-			if tt.name == "nested map" {
-				// JSON encoding, order may vary
-				assert.Contains(t, got, `"sha":"abc"`)
-				assert.Contains(t, got, `"num":1`)
-			} else if tt.name == "slice" {
-				assert.Equal(t, `["a","b"]`, got)
-			} else {
-				assert.Equal(t, tt.want, got)
-			}
+func TestFlattenVersionValue(t *testing.T) {
+	t.Run("string", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_ref", "abc")
+		assert.Equal(t, map[string]string{"version_ref": "abc"}, m)
+	})
+
+	t.Run("number int", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_count", float64(42))
+		assert.Equal(t, map[string]string{"version_count": "42"}, m)
+	})
+
+	t.Run("number decimal", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_score", 3.14)
+		assert.Equal(t, map[string]string{"version_score": "3.14"}, m)
+	})
+
+	t.Run("bool", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_ok", true)
+		assert.Equal(t, map[string]string{"version_ok": "true"}, m)
+	})
+
+	t.Run("nil", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_empty", nil)
+		assert.Equal(t, map[string]string{"version_empty": ""}, m)
+	})
+
+	t.Run("nested map", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_metadata", map[string]interface{}{
+			"sha":    "abc123",
+			"author": "bob",
 		})
-	}
+		assert.Equal(t, "abc123", m["version_metadata_sha"])
+		assert.Equal(t, "bob", m["version_metadata_author"])
+		assert.Len(t, m, 2)
+	})
+
+	t.Run("deeply nested", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_info", map[string]interface{}{
+			"commit": map[string]interface{}{
+				"sha":    "def456",
+				"author": "alice",
+			},
+		})
+		assert.Equal(t, "def456", m["version_info_commit_sha"])
+		assert.Equal(t, "alice", m["version_info_commit_author"])
+	})
+
+	t.Run("array", func(t *testing.T) {
+		m := make(map[string]string)
+		flattenVersionValue(m, "version_tags", []interface{}{"v1", "v2"})
+		assert.Equal(t, "v1", m["version_tags_0"])
+		assert.Equal(t, "v2", m["version_tags_1"])
+	})
 }
 
 func TestSanitizeStepName(t *testing.T) {
