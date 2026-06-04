@@ -2,7 +2,7 @@
 
 import { session } from '../collections.js';
 import { PipelineImage } from '../models.js';
-import { addSessionFunctions, fetchInterval, pikoTimeAgo } from '../namespace.js';
+import { addSessionFunctions, fetchInterval, pikoTimeAgo, withLoading } from '../namespace.js';
 import { PipelineGraphView, PikoGraphZoom } from './editor.js';
 
 export var PipelinesView = Backbone.View.extend({
@@ -201,10 +201,13 @@ export var PipelineShowView = Backbone.View.extend({
     event.preventDefault();
     if (confirm("Are you sure you want to delete Pipeline '"+this.model.get("name")+"'")) {
       var pps = this.model.collection;
-      this.model.destroy({
-        success: function() {
-          window.app.router.navigate(pps.url(), { trigger: true });
-        },
+      var that = this;
+      withLoading(this.$('#delete-pipeline'), function() {
+        return that.model.destroy({
+          success: function() {
+            window.app.router.navigate(pps.url(), { trigger: true });
+          },
+        });
       });
     }
   },
@@ -212,22 +215,26 @@ export var PipelineShowView = Backbone.View.extend({
     event.preventDefault();
     var that = this;
     var url = this.model.url() + "/pause";
-    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
-      success: function() {
-        window.app.apiNotice.setSuccess("Pipeline paused");
-        that.model.fetch({ success: function() { that.render(); } });
-      },
+    withLoading(this.$('#pause-pipeline'), function() {
+      return $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
+        success: function() {
+          window.app.apiNotice.setSuccess("Pipeline paused");
+          that.model.fetch({ success: function() { that.render(); } });
+        },
+      });
     });
   },
   clickUnpausePipeline: function(event) {
     event.preventDefault();
     var that = this;
     var url = this.model.url() + "/unpause";
-    $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
-      success: function() {
-        window.app.apiNotice.setSuccess("Pipeline unpaused");
-        that.model.fetch({ success: function() { that.render(); } });
-      },
+    withLoading(this.$('#unpause-pipeline'), function() {
+      return $.ajax({ url: url, type: "POST", contentType: "application/json", headers: { "Authorization": "Bearer " + session.get("jwt") },
+        success: function() {
+          window.app.apiNotice.setSuccess("Pipeline unpaused");
+          that.model.fetch({ success: function() { that.render(); } });
+        },
+      });
     });
   },
 });

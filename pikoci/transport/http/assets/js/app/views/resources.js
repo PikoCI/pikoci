@@ -1,7 +1,7 @@
 'use strict';
 
 import { session } from '../collections.js';
-import { addSessionFunctions, fetchInterval } from '../namespace.js';
+import { addSessionFunctions, fetchInterval, withLoading } from '../namespace.js';
 
 export var ResourceVersionsView = Backbone.View.extend({
   template: _.template($('#resource-versions-view').html()),
@@ -91,12 +91,16 @@ export var ResourceVersionsView = Backbone.View.extend({
   clickUnpinBanner: function(event) {
     event.preventDefault();
     var rs = this.collection.resource;
-    rs.unpinVersion({
-      headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
-      success: function() {
-        rs.set('pinned_version_id', null);
-        window.app.apiNotice.setSuccess("Resource unpinned");
-      },
+    var $btn = $(event.currentTarget);
+    $btn.attr('data-loading-text', 'Unpinning...');
+    withLoading($btn, function() {
+      return rs.unpinVersion({
+        headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+        success: function() {
+          rs.set('pinned_version_id', null);
+          window.app.apiNotice.setSuccess("Resource unpinned");
+        },
+      });
     });
   },
   addVersion: function(m, isReset) {
@@ -132,7 +136,10 @@ export var ResourceVersionsView = Backbone.View.extend({
   },
   clickTriggerResource: function(event) {
     event.preventDefault();
-    this.collection.resource.fetchTrigger({success: function() { window.app.apiNotice.setSuccess("Resource check triggered"); }});
+    var rs = this.collection.resource;
+    withLoading(this.$('#trigger-resource'), function() {
+      return rs.fetchTrigger({success: function() { window.app.apiNotice.setSuccess("Resource check triggered"); }});
+    });
   },
   clickToggleWebhookPanel: function(event) {
     event.preventDefault();
@@ -158,19 +165,21 @@ export var ResourceVersionsView = Backbone.View.extend({
     var tc = rs.collection.pipeline.collection.team.get('canonical');
     var pn = rs.collection.pipeline.get('canonical');
     var rCan = rs.get('canonical');
-    $.ajax({
-      url: '/teams/' + tc + '/pipelines/' + pn + '/resources/' + rCan + '/webhook_token',
-      type: 'POST',
-      contentType: 'application/json',
-      headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
-      success: function(resp) {
-        if (resp.token) {
-          rs.set('webhook_token', resp.token);
-          var url = window.location.origin + '/webhooks/' + resp.token + '';
-          that.$('#webhook-url').text(url);
-          window.app.apiNotice.setSuccess("Webhook token regenerated");
+    withLoading(this.$('#regenerate-webhook'), function() {
+      return $.ajax({
+        url: '/teams/' + tc + '/pipelines/' + pn + '/resources/' + rCan + '/webhook_token',
+        type: 'POST',
+        contentType: 'application/json',
+        headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+        success: function(resp) {
+          if (resp.token) {
+            rs.set('webhook_token', resp.token);
+            var url = window.location.origin + '/webhooks/' + resp.token + '';
+            that.$('#webhook-url').text(url);
+            window.app.apiNotice.setSuccess("Webhook token regenerated");
+          }
         }
-      }
+      });
     });
   },
 });
@@ -202,14 +211,16 @@ var ResourceVersionView = Backbone.View.extend({
     var tc = rs.collection.pipeline.collection.team.get('canonical');
     var pn = rs.collection.pipeline.get('canonical');
     var rCan = rs.get('canonical');
-    $.ajax({
-      url: '/teams/' + tc + '/pipelines/' + pn + '/resources/' + rCan + '/versions/' + versionID + '/trigger',
-      type: 'POST',
-      contentType: 'application/json',
-      headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
-      success: function() {
-        window.app.apiNotice.setSuccess("Triggered downstream jobs with version #" + versionID);
-      },
+    withLoading($(event.currentTarget), function() {
+      return $.ajax({
+        url: '/teams/' + tc + '/pipelines/' + pn + '/resources/' + rCan + '/versions/' + versionID + '/trigger',
+        type: 'POST',
+        contentType: 'application/json',
+        headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+        success: function() {
+          window.app.apiNotice.setSuccess("Triggered downstream jobs with version #" + versionID);
+        },
+      });
     });
   },
   clickPinVersion: function(event) {
@@ -218,22 +229,26 @@ var ResourceVersionView = Backbone.View.extend({
     var versionID = this.model.get('id');
     var rs = this.resource;
     var isPinned = rs.get('pinned_version_id') === versionID;
-    if (isPinned) {
-      rs.unpinVersion({
-        headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
-        success: function() {
-          rs.set('pinned_version_id', null);
-          window.app.apiNotice.setSuccess("Resource unpinned");
-        },
-      });
-    } else {
-      rs.pinVersion(versionID, {
-        headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
-        success: function() {
-          rs.set('pinned_version_id', versionID);
-          window.app.apiNotice.setSuccess("Resource pinned to version #" + versionID);
-        },
-      });
-    }
+    var $btn = $(event.currentTarget);
+    $btn.attr('data-loading-text', isPinned ? 'Unpinning...' : 'Pinning...');
+    withLoading($btn, function() {
+      if (isPinned) {
+        return rs.unpinVersion({
+          headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+          success: function() {
+            rs.set('pinned_version_id', null);
+            window.app.apiNotice.setSuccess("Resource unpinned");
+          },
+        });
+      } else {
+        return rs.pinVersion(versionID, {
+          headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+          success: function() {
+            rs.set('pinned_version_id', versionID);
+            window.app.apiNotice.setSuccess("Resource pinned to version #" + versionID);
+          },
+        });
+      }
+    });
   },
 });

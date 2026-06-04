@@ -100,6 +100,20 @@ export var processLogs = function(text) {
   }).join('\n');
 };
 
+export function withLoading(btn, ajaxFn) {
+  var $btn = $(btn);
+  var originalHTML = $btn.html();
+  var loadingText = $btn.attr('data-loading-text') || 'Loading...';
+  $btn.html(loadingText + ' <span class="spinner-border spinner-border-sm" role="status"></span>');
+  $btn.prop('disabled', true).addClass('piko-btn-loading');
+  var xhr = ajaxFn();
+  xhr.always(function() {
+    $btn.html(originalHTML);
+    $btn.prop('disabled', false).removeClass('piko-btn-loading');
+  });
+  return xhr;
+}
+
 export var addSessionFunctions = function(data) {
   return _.extend(window.app.session.data(), data);
 };

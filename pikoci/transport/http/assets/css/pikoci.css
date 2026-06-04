@@ -269,6 +269,15 @@ a:hover { color: var(--primary-hover); }
 .btn-info { background: transparent !important; color: var(--primary) !important; border: 1px solid var(--primary) !important; }
 .btn-info:hover { background: var(--primary-light) !important; }
 
+.piko-btn-loading {
+  opacity: 0.65;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.piko-btn-loading .spinner-border {
+  vertical-align: -0.125em;
+}
+
 /* ============================================================
    FORMS
    ============================================================ */

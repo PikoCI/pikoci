@@ -1,6 +1,7 @@
 'use strict';
 
 import { session, userSessionKey } from '../collections.js';
+import { withLoading } from '../namespace.js';
 
 export var UsersListView = Backbone.View.extend({
   template: _.template($('#users-list-view').html()),
@@ -68,26 +69,28 @@ export var UserShowView = Backbone.View.extend({
     var originalUsername = this.model.get("username");
     var that = this;
 
-    $.ajax({
-      url: '/users/' + originalUsername + '',
-      type: 'PUT',
-      headers: {
-        'Authorization': 'Bearer ' + session.get("jwt"),
-        'Content-Type': 'application/json',
-      },
-      data: JSON.stringify({full_name: fullName, username: username, admin: admin}),
-      success: function(resp) {
-        if (resp.error) {
-          window.app.apiNotice.set({error: resp.error});
-          return;
-        }
-        if (username !== originalUsername) {
-          window.app.router.navigate('users/' + username, { trigger: true });
-        } else {
-          that.model.set(resp.data);
-          that.render();
-        }
-      },
+    withLoading(this.$('#user-form button[type="submit"]'), function() {
+      return $.ajax({
+        url: '/users/' + originalUsername + '',
+        type: 'PUT',
+        headers: {
+          'Authorization': 'Bearer ' + session.get("jwt"),
+          'Content-Type': 'application/json',
+        },
+        data: JSON.stringify({full_name: fullName, username: username, admin: admin}),
+        success: function(resp) {
+          if (resp.error) {
+            window.app.apiNotice.set({error: resp.error});
+            return;
+          }
+          if (username !== originalUsername) {
+            window.app.router.navigate('users/' + username, { trigger: true });
+          } else {
+            that.model.set(resp.data);
+            that.render();
+          }
+        },
+      });
     });
   },
   resetPassword: function(event) {
@@ -95,22 +98,25 @@ export var UserShowView = Backbone.View.extend({
     var newPassword = this.$('#new_password').val();
     if (!newPassword) return;
     var username = this.model.get("username");
+    var admin = this.model.get("admin");
 
-    $.ajax({
-      url: '/users/' + username + '',
-      type: 'PUT',
-      headers: {
-        'Authorization': 'Bearer ' + session.get("jwt"),
-        'Content-Type': 'application/json',
-      },
-      data: JSON.stringify({password: newPassword, admin: this.model.get("admin")}),
-      success: function(resp) {
-        if (resp.error) {
-          window.app.apiNotice.set({error: resp.error});
-          return;
-        }
-        window.app.apiNotice.setSuccess("Password reset successfully");
-      },
+    withLoading(this.$('#reset-password-form button[type="submit"]'), function() {
+      return $.ajax({
+        url: '/users/' + username + '',
+        type: 'PUT',
+        headers: {
+          'Authorization': 'Bearer ' + session.get("jwt"),
+          'Content-Type': 'application/json',
+        },
+        data: JSON.stringify({password: newPassword, admin: admin}),
+        success: function(resp) {
+          if (resp.error) {
+            window.app.apiNotice.set({error: resp.error});
+            return;
+          }
+          window.app.apiNotice.setSuccess("Password reset successfully");
+        },
+      });
     });
   },
   deleteUser: function(event) {
@@ -118,20 +124,22 @@ export var UserShowView = Backbone.View.extend({
     var username = this.model.get("username");
     if (!confirm("Are you sure you want to delete user '" + username + "'?")) return;
 
-    $.ajax({
-      url: '/users/' + username + '',
-      type: 'DELETE',
-      headers: {
-        'Authorization': 'Bearer ' + session.get("jwt"),
-        'Content-Type': 'application/json',
-      },
-      success: function(resp) {
-        if (resp.error) {
-          window.app.apiNotice.set({error: resp.error});
-          return;
-        }
-        window.app.router.navigate('users', { trigger: true });
-      },
+    withLoading(this.$('#delete-user'), function() {
+      return $.ajax({
+        url: '/users/' + username + '',
+        type: 'DELETE',
+        headers: {
+          'Authorization': 'Bearer ' + session.get("jwt"),
+          'Content-Type': 'application/json',
+        },
+        success: function(resp) {
+          if (resp.error) {
+            window.app.apiNotice.set({error: resp.error});
+            return;
+          }
+          window.app.router.navigate('users', { trigger: true });
+        },
+      });
     });
   },
 });
@@ -152,21 +160,23 @@ export var UsersNewView = Backbone.View.extend({
     var password = this.$('#password').val();
     var admin = this.$('#admin').is(':checked');
 
-    $.ajax({
-      url: '/users',
-      type: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + session.get("jwt"),
-        'Content-Type': 'application/json',
-      },
-      data: JSON.stringify({username: username, password: password, full_name: fullName, admin: admin}),
-      success: function(resp) {
-        if (resp.error) {
-          window.app.apiNotice.set({error: resp.error});
-          return;
-        }
-        window.app.router.navigate('users/' + username, { trigger: true });
-      },
+    withLoading(this.$('button[type="submit"]'), function() {
+      return $.ajax({
+        url: '/users',
+        type: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + session.get("jwt"),
+          'Content-Type': 'application/json',
+        },
+        data: JSON.stringify({username: username, password: password, full_name: fullName, admin: admin}),
+        success: function(resp) {
+          if (resp.error) {
+            window.app.apiNotice.set({error: resp.error});
+            return;
+          }
+          window.app.router.navigate('users/' + username, { trigger: true });
+        },
+      });
     });
   },
 });
@@ -194,35 +204,37 @@ export var ProfileView = Backbone.View.extend({
     var fullName = this.$('#full_name').val();
     var username = this.$('#username').val();
 
-    $.ajax({
-      url: '/profile',
-      type: 'PUT',
-      headers: {
-        'Authorization': 'Bearer ' + session.get("jwt"),
-        'Content-Type': 'application/json',
-      },
-      data: JSON.stringify({full_name: fullName, username: username}),
-      success: function(resp) {
-        if (resp.error) {
-          window.app.apiNotice.set({error: resp.error});
-          return;
-        }
-        $.ajax({
-          url: '/refresh-token',
-          type: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + session.get("jwt"),
-            'Content-Type': 'application/json',
-          },
-          success: function(refreshResp) {
-            if (refreshResp.data && refreshResp.data.jwt) {
-              session.set({jwt: refreshResp.data.jwt, user: refreshResp.data.user});
-              window.localStorage.setItem(userSessionKey, JSON.stringify(session.toJSON()));
-            }
-          },
-        });
-        window.app.apiNotice.setSuccess("Profile updated successfully");
-      },
+    withLoading(this.$('#profile-form button[type="submit"]'), function() {
+      return $.ajax({
+        url: '/profile',
+        type: 'PUT',
+        headers: {
+          'Authorization': 'Bearer ' + session.get("jwt"),
+          'Content-Type': 'application/json',
+        },
+        data: JSON.stringify({full_name: fullName, username: username}),
+        success: function(resp) {
+          if (resp.error) {
+            window.app.apiNotice.set({error: resp.error});
+            return;
+          }
+          $.ajax({
+            url: '/refresh-token',
+            type: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + session.get("jwt"),
+              'Content-Type': 'application/json',
+            },
+            success: function(refreshResp) {
+              if (refreshResp.data && refreshResp.data.jwt) {
+                session.set({jwt: refreshResp.data.jwt, user: refreshResp.data.user});
+                window.localStorage.setItem(userSessionKey, JSON.stringify(session.toJSON()));
+              }
+            },
+          });
+          window.app.apiNotice.setSuccess("Profile updated successfully");
+        },
+      });
     });
   },
   changePassword: function(event) {
@@ -237,37 +249,39 @@ export var ProfileView = Backbone.View.extend({
     }
 
     var that = this;
-    $.ajax({
-      url: '/users/change-password',
-      type: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + session.get("jwt"),
-        'Content-Type': 'application/json',
-      },
-      data: JSON.stringify({old_password: currentPassword, new_password: newPassword}),
-      success: function(resp) {
-        if (resp.error) {
-          window.app.apiNotice.set({error: resp.error});
-          return;
-        }
-        var wasForcedChange = that.mustChangePassword;
-        that.mustChangePassword = false;
-        that.$('#must-change-password-banner').remove();
-        var u = session.get("user");
-        if (u) {
-          u.must_change_password = false;
-          session.set({user: u});
-          window.localStorage.setItem(userSessionKey, JSON.stringify(session.toJSON()));
-        }
-        window.app.apiNotice.setSuccess("Password changed successfully");
-        if (wasForcedChange) {
-          window.app.router.navigate('', { trigger: true });
-        }
-      },
-      error: function(response) {
-        var msg = (response.responseJSON && response.responseJSON.error) || response.statusText || "Unknown error";
-        window.app.apiNotice.set({error: msg});
-      },
+    withLoading(this.$('#change-password-form button[type="submit"]'), function() {
+      return $.ajax({
+        url: '/users/change-password',
+        type: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + session.get("jwt"),
+          'Content-Type': 'application/json',
+        },
+        data: JSON.stringify({old_password: currentPassword, new_password: newPassword}),
+        success: function(resp) {
+          if (resp.error) {
+            window.app.apiNotice.set({error: resp.error});
+            return;
+          }
+          var wasForcedChange = that.mustChangePassword;
+          that.mustChangePassword = false;
+          that.$('#must-change-password-banner').remove();
+          var u = session.get("user");
+          if (u) {
+            u.must_change_password = false;
+            session.set({user: u});
+            window.localStorage.setItem(userSessionKey, JSON.stringify(session.toJSON()));
+          }
+          window.app.apiNotice.setSuccess("Password changed successfully");
+          if (wasForcedChange) {
+            window.app.router.navigate('', { trigger: true });
+          }
+        },
+        error: function(response) {
+          var msg = (response.responseJSON && response.responseJSON.error) || response.statusText || "Unknown error";
+          window.app.apiNotice.set({error: msg});
+        },
+      });
     });
   },
 });

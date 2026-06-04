@@ -2,7 +2,7 @@
 
 import { session, teams, Users } from '../collections.js';
 import { Team } from '../models.js';
-import { addSessionFunctions } from '../namespace.js';
+import { addSessionFunctions, withLoading } from '../namespace.js';
 
 export var TeamsView = Backbone.View.extend({
   template: _.template($('#teams-view').html()),
@@ -57,8 +57,10 @@ var TeamRowView = Backbone.View.extend({
   clickDelete: function(event) {
     event.preventDefault();
     event.stopPropagation();
-
-    this.model.destroy({success: function() { window.app.apiNotice.setSuccess("Team deleted"); }});
+    var that = this;
+    withLoading(this.$('#delete'), function() {
+      return that.model.destroy({success: function() { window.app.apiNotice.setSuccess("Team deleted"); }});
+    });
   },
 });
 
@@ -128,10 +130,13 @@ export var TeamShowView = Backbone.View.extend({
   clickUpdate: function(event){
     event.preventDefault();
     var name = this.$el.find("#name").get(0).value;
-    this.model.save({name: name}, {
-      success: function(m) {
-        window.app.router.navigate('teams/'+m.get("canonical"), { trigger: true });
-      },
+    var that = this;
+    withLoading(this.$('button[type="submit"]'), function() {
+      return that.model.save({name: name}, {
+        success: function(m) {
+          window.app.router.navigate('teams/'+m.get("canonical"), { trigger: true });
+        },
+      });
     });
   },
   clickNewMember: function(event){
@@ -175,6 +180,11 @@ var TeamNewMemberRowView = Backbone.View.extend({
     var username = this.$el.find("#username").get(0).value;
     var admin = this.$el.find("#admin").get(0).checked;
     var that = this;
+    var $btn = this.$('#create');
+    var originalHTML = $btn.html();
+    var loadingText = $btn.attr('data-loading-text') || 'Loading...';
+    $btn.html(loadingText + ' <span class="spinner-border spinner-border-sm" role="status"></span>');
+    $btn.prop('disabled', true).addClass('piko-btn-loading');
     this.members.create({admin: admin, user: {
       username: username,
     }}, {url: this.members.url(), method: "POST",
@@ -182,6 +192,10 @@ var TeamNewMemberRowView = Backbone.View.extend({
       success: function(){
         window.app.apiNotice.setSuccess("Member added");
         Backbone.View.prototype.remove.call(that);
+      },
+      error: function() {
+        $btn.html(originalHTML);
+        $btn.prop('disabled', false).removeClass('piko-btn-loading');
       },
     });
   },
@@ -211,6 +225,9 @@ var TeamShowMemberRowView = Backbone.View.extend({
   },
   deleteMember: function(event) {
     event.preventDefault();
-    this.model.destroy({success: function() { window.app.apiNotice.setSuccess("Member removed"); }});
+    var that = this;
+    withLoading(this.$('#delete'), function() {
+      return that.model.destroy({success: function() { window.app.apiNotice.setSuccess("Member removed"); }});
+    });
   },
 });
