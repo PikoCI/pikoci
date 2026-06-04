@@ -1642,7 +1642,7 @@ func (w *Worker) processResourceCheck(ctx context.Context, m queue.Body, cwd str
 	}
 	if len(dbvers) != 0 {
 		for k, v := range dbvers[0].Version {
-			params["version_"+k] = fmt.Sprintf("%s", v)
+			flattenVersionValue(params, "version_"+k, v)
 		}
 	}
 	for k, v := range r.GetParams() {
