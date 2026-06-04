@@ -13,7 +13,12 @@ job "lint" {
         cp /usr/bin/jq /pikoci-tools/
         cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true
         if [ ! -f /pikoci-tools/codecov ]; then
-          curl -fsSL https://cli.codecov.io/latest/linux/codecov -o /pikoci-tools/codecov
+          ARCH=$(dpkg --print-architecture)
+          if [ "$ARCH" = "arm64" ]; then
+            curl -fsSL https://cli.codecov.io/latest/linux-arm64/codecov -o /pikoci-tools/codecov
+          else
+            curl -fsSL https://cli.codecov.io/latest/linux/codecov -o /pikoci-tools/codecov
+          fi
           chmod +x /pikoci-tools/codecov
         fi
       EOT
@@ -54,7 +59,12 @@ job "test-mock" {
         cp /usr/bin/jq /pikoci-tools/
         cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true
         if [ ! -f /pikoci-tools/codecov ]; then
-          curl -fsSL https://cli.codecov.io/latest/linux/codecov -o /pikoci-tools/codecov
+          ARCH=$(dpkg --print-architecture)
+          if [ "$ARCH" = "arm64" ]; then
+            curl -fsSL https://cli.codecov.io/latest/linux-arm64/codecov -o /pikoci-tools/codecov
+          else
+            curl -fsSL https://cli.codecov.io/latest/linux/codecov -o /pikoci-tools/codecov
+          fi
           chmod +x /pikoci-tools/codecov
         fi
       EOT
@@ -117,7 +127,12 @@ job "test-integration" {
         cp /usr/bin/jq /pikoci-tools/
         cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true
         if [ ! -f /pikoci-tools/codecov ]; then
-          curl -fsSL https://cli.codecov.io/latest/linux/codecov -o /pikoci-tools/codecov
+          ARCH=$(dpkg --print-architecture)
+          if [ "$ARCH" = "arm64" ]; then
+            curl -fsSL https://cli.codecov.io/latest/linux-arm64/codecov -o /pikoci-tools/codecov
+          else
+            curl -fsSL https://cli.codecov.io/latest/linux/codecov -o /pikoci-tools/codecov
+          fi
           chmod +x /pikoci-tools/codecov
         fi
       EOT
@@ -195,7 +210,12 @@ job "test-backends" {
         cp /usr/bin/jq /pikoci-tools/
         cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true
         if [ ! -f /pikoci-tools/codecov ]; then
-          curl -fsSL https://cli.codecov.io/latest/linux/codecov -o /pikoci-tools/codecov
+          ARCH=$(dpkg --print-architecture)
+          if [ "$ARCH" = "arm64" ]; then
+            curl -fsSL https://cli.codecov.io/latest/linux-arm64/codecov -o /pikoci-tools/codecov
+          else
+            curl -fsSL https://cli.codecov.io/latest/linux/codecov -o /pikoci-tools/codecov
+          fi
           chmod +x /pikoci-tools/codecov
         fi
       EOT
