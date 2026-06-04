@@ -5,10 +5,18 @@ job "lint" {
     trigger = true
   }
   notify "github-check" "ci" { status = "in_progress" }
-  task "install-jq" {
+  task "install-tools" {
     run "docker" {
       image = var.go_image
-      cmd   = "apt-get update -qq && apt-get install -qq -y jq && cp /usr/bin/jq /pikoci-tools/ && cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true"
+      cmd   = <<-EOT
+        apt-get update -qq && apt-get install -qq -y jq
+        cp /usr/bin/jq /pikoci-tools/
+        cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true
+        if [ ! -f /pikoci-tools/codecov ]; then
+          curl -fsSL https://cli.codecov.io/latest/linux/codecov -o /pikoci-tools/codecov
+          chmod +x /pikoci-tools/codecov
+        fi
+      EOT
       args  = [
         "-v", "pikoci-tools:/pikoci-tools",
       ]
@@ -38,10 +46,18 @@ job "test-mock" {
     trigger = true
   }
   notify "github-check" "ci" { status = "in_progress" }
-  task "install-jq" {
+  task "install-tools" {
     run "docker" {
       image = var.go_image
-      cmd   = "apt-get update -qq && apt-get install -qq -y jq && cp /usr/bin/jq /pikoci-tools/ && cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true"
+      cmd   = <<-EOT
+        apt-get update -qq && apt-get install -qq -y jq
+        cp /usr/bin/jq /pikoci-tools/
+        cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true
+        if [ ! -f /pikoci-tools/codecov ]; then
+          curl -fsSL https://cli.codecov.io/latest/linux/codecov -o /pikoci-tools/codecov
+          chmod +x /pikoci-tools/codecov
+        fi
+      EOT
       args  = [
         "-v", "pikoci-tools:/pikoci-tools",
       ]
@@ -52,6 +68,28 @@ job "test-mock" {
       image = var.go_image
       cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH && cd ${var.git_name} && make test-mock"
       args  = [
+        "-v", "pikoci-go-mod:/go/pkg/mod",
+        "-v", "pikoci-build:/root/.cache/go-build",
+        "-v", "pikoci-tools:/pikoci-tools",
+      ]
+    }
+  }
+  task "upload-coverage" {
+    run "docker" {
+      image = var.go_image
+      cmd   = <<-EOT
+        export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH
+        cd ${var.git_name}
+        codecov upload-process \
+          --token "${var.codecov_token}" \
+          --file coverage.out \
+          --flag unit \
+          --git-service github \
+          --slug PikoCI/pikoci \
+          --sha "$GET_PIKOCI_PR_REF" \
+          --branch "$GET_PIKOCI_PR_BRANCH"
+      EOT
+      args = [
         "-v", "pikoci-go-mod:/go/pkg/mod",
         "-v", "pikoci-build:/root/.cache/go-build",
         "-v", "pikoci-tools:/pikoci-tools",
@@ -71,10 +109,18 @@ job "test-integration" {
     trigger = true
   }
   notify "github-check" "ci" { status = "in_progress" }
-  task "install-jq" {
+  task "install-tools" {
     run "docker" {
       image = "ghcr.io/xescugc/pikoci-integration:latest"
-      cmd   = "apt-get update -qq && apt-get install -qq -y jq && cp /usr/bin/jq /pikoci-tools/ && cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true"
+      cmd   = <<-EOT
+        apt-get update -qq && apt-get install -qq -y jq
+        cp /usr/bin/jq /pikoci-tools/
+        cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true
+        if [ ! -f /pikoci-tools/codecov ]; then
+          curl -fsSL https://cli.codecov.io/latest/linux/codecov -o /pikoci-tools/codecov
+          chmod +x /pikoci-tools/codecov
+        fi
+      EOT
       args  = [
         "-v", "pikoci-tools:/pikoci-tools",
       ]
@@ -141,10 +187,18 @@ job "test-backends" {
     root_token = "test-root-token"
   }
 
-  task "install-jq" {
+  task "install-tools" {
     run "docker" {
       image = var.go_image
-      cmd   = "apt-get update -qq && apt-get install -qq -y jq && cp /usr/bin/jq /pikoci-tools/ && cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true"
+      cmd   = <<-EOT
+        apt-get update -qq && apt-get install -qq -y jq
+        cp /usr/bin/jq /pikoci-tools/
+        cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true
+        if [ ! -f /pikoci-tools/codecov ]; then
+          curl -fsSL https://cli.codecov.io/latest/linux/codecov -o /pikoci-tools/codecov
+          chmod +x /pikoci-tools/codecov
+        fi
+      EOT
       args  = [
         "--network=host",
         "-v", "pikoci-tools:/pikoci-tools",
@@ -156,6 +210,29 @@ job "test-backends" {
       image = var.go_image
       cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH && cd ${var.git_name} && make test-backends"
       args  = [
+        "--network=host",
+        "-v", "pikoci-go-mod:/go/pkg/mod",
+        "-v", "pikoci-build:/root/.cache/go-build",
+        "-v", "pikoci-tools:/pikoci-tools",
+      ]
+    }
+  }
+  task "upload-coverage" {
+    run "docker" {
+      image = var.go_image
+      cmd   = <<-EOT
+        export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH
+        cd ${var.git_name}
+        codecov upload-process \
+          --token "${var.codecov_token}" \
+          --file coverage-backends.out \
+          --flag backends \
+          --git-service github \
+          --slug PikoCI/pikoci \
+          --sha "$GET_PIKOCI_PR_REF" \
+          --branch "$GET_PIKOCI_PR_BRANCH"
+      EOT
+      args = [
         "--network=host",
         "-v", "pikoci-go-mod:/go/pkg/mod",
         "-v", "pikoci-build:/root/.cache/go-build",
@@ -475,5 +552,12 @@ variable "ghcr_token" {
   type = string
   secret "env" {
     key = "GHCR_TOKEN"
+  }
+}
+
+variable "codecov_token" {
+  type = string
+  secret "env" {
+    key = "CODECOV_TOKEN"
   }
 }

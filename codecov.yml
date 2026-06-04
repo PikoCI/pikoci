@@ -1,0 +1,23 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 40%
+        threshold: 1%
+    patch:
+      default:
+        target: 70%
+
+ignore:
+  - "pikoci/mock/**"
+  - "**/*_string.go"
+  - "pikoci/mysql/migrate/migrations/**"
+  - "pikoci/transport/http/assets/**"
+  - "pikoci/transport/http/templates/**"
+  - "integration/**"
+  - "cmd/**"
+
+comment:
+  layout: "condensed_header, condensed_files, condensed_footer"
+  behavior: default
+  require_changes: true
