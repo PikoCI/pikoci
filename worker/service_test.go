@@ -4379,6 +4379,36 @@ func TestRunRunner_ShellFileMode(t *testing.T) {
 	assert.Contains(t, out, "file_works")
 }
 
+func TestVersionValueToString(t *testing.T) {
+	tests := []struct {
+		name string
+		in   interface{}
+		want string
+	}{
+		{"string", "abc", "abc"},
+		{"float64 int", float64(42), "42"},
+		{"float64 decimal", 3.14, "3.14"},
+		{"bool", true, "true"},
+		{"nil", nil, ""},
+		{"nested map", map[string]interface{}{"sha": "abc", "num": float64(1)}, ""},
+		{"slice", []interface{}{"a", "b"}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := versionValueToString(tt.in)
+			if tt.name == "nested map" {
+				// JSON encoding, order may vary
+				assert.Contains(t, got, `"sha":"abc"`)
+				assert.Contains(t, got, `"num":1`)
+			} else if tt.name == "slice" {
+				assert.Equal(t, `["a","b"]`, got)
+			} else {
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}
+
 func TestSanitizeStepName(t *testing.T) {
 	tests := []struct {
 		in, want string

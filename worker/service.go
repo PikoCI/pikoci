@@ -1489,7 +1489,7 @@ func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Bui
 			if ver.ID == versionID {
 				found = true
 				for k, v := range ver.Version {
-					params["version_"+k] = fmt.Sprintf("%s", v)
+					params["version_"+k] = versionValueToString(v)
 				}
 				break
 			}
@@ -1506,7 +1506,7 @@ func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Bui
 		slices.Reverse(dbvers)
 		versionID = dbvers[0].ID
 		for k, v := range dbvers[0].Version {
-			params["version_"+k] = fmt.Sprintf("%s", v)
+			params["version_"+k] = versionValueToString(v)
 		}
 	}
 
@@ -2269,6 +2269,31 @@ func buildMetadataParams(b *build.Build, m queue.Body) map[string]string {
 		"BUILD_JOB_NAME":      m.JobName,
 		"BUILD_PIPELINE_NAME": m.PipelineCanonical,
 		"BUILD_TEAM_NAME":     m.TeamCanonical,
+	}
+}
+
+// versionValueToString converts a version metadata value to a string suitable
+// for use as an environment variable. Strings are returned as-is; nested
+// objects/arrays are JSON-encoded so the value is always a flat string.
+func versionValueToString(v interface{}) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case float64:
+		if val == float64(int64(val)) {
+			return fmt.Sprintf("%d", int64(val))
+		}
+		return fmt.Sprintf("%g", val)
+	case bool:
+		return fmt.Sprintf("%t", val)
+	case nil:
+		return ""
+	default:
+		b, err := json.Marshal(val)
+		if err != nil {
+			return fmt.Sprintf("%v", val)
+		}
+		return string(b)
 	}
 }
 
