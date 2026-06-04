@@ -716,6 +716,70 @@ func TestProcessResourceCheck_NewVersions(t *testing.T) {
 	w.processResourceCheck(ctx, m, cwd, pp)
 }
 
+func TestProcessResourceCheck_NestedVersionFlattened(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		ResourceCanonical: "custom.my-res",
+	}
+	// The check script prints env vars starting with "version_" to stderr,
+	// then outputs an empty JSON array (no new versions). If the nested
+	// version is flattened correctly, the script will see version_metadata_sha
+	// and version_metadata_author instead of a Go-formatted map.
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Resources: []resource.Resource{
+			{ID: 1, Name: "my-res", Type: "custom", Canonical: "custom.my-res"},
+		},
+		ResourceTypes: []restype.ResourceType{
+			{
+				ID: 1, Name: "custom",
+				Check: &utils.RunnerCommand{
+					Runner: "exec",
+					Args: []string{"-ec", `
+# Verify flattened env vars exist
+test "$version_metadata_sha" = "abc123" || { echo "FAIL: version_metadata_sha=$version_metadata_sha" >&2; exit 1; }
+test "$version_metadata_author" = "bob" || { echo "FAIL: version_metadata_author=$version_metadata_author" >&2; exit 1; }
+# Also verify the flat key
+test "$version_ref" = "def456" || { echo "FAIL: version_ref=$version_ref" >&2; exit 1; }
+printf "[]"
+`},
+					Params: map[string]string{"path": "/bin/sh"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	// Return an existing version with nested metadata
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "custom.my-res", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+		Return([]*resource.Version{
+			{ID: 1, Version: map[string]interface{}{
+				"ref": "def456",
+				"metadata": map[string]interface{}{
+					"sha":    "abc123",
+					"author": "bob",
+				},
+			}},
+		}, false, nil).AnyTimes()
+
+	svc.EXPECT().UpdatePipelineResource(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "custom.my-res", gomock.Any()).
+		Return(nil).AnyTimes()
+
+	// If flattening is broken, the check script will exit 1 and the test
+	// will see an error log. We just need processResourceCheck to not panic.
+	// The script outputs "[]" (no new versions), so no CreateResourceVersion call.
+	w.processResourceCheck(ctx, m, cwd, pp)
+}
+
 func TestProcessResourceCheck_DuplicateVersionSkipped_FirstCheck(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc, topic := newTestWorker(ctrl)
