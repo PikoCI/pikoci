@@ -272,6 +272,7 @@ job "test-backends" {
 # --- Jobs: Docker Release ---
 
 job "build-latest" {
+  concurrency = 1
   get "git" "pikoci_master" {
     trigger = true
   }
@@ -355,6 +356,7 @@ job "deploy-website" {
 }
 
 job "build-release" {
+  concurrency = 1
   get "git" "pikoci_tag" {
     trigger = true
   }
