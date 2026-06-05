@@ -250,7 +250,7 @@ Manual triggers (via the UI or API) and webhook triggers reset the check timer, 
 
 ## Built-in: git
 
-The `git` resource type is built in with API-aware check support for GitHub and GitLab. You do not need to define it, just use it directly:
+The `git` resource type is built in with API-aware check support for GitHub, GitLab, and Gitea/Forgejo. You do not need to define it, just use it directly:
 
 ```hcl
 resource "git" "my-repo" {
@@ -265,18 +265,21 @@ resource "git" "my-repo" {
 
 | Param    | Required | Description                                      |
 |----------|----------|--------------------------------------------------|
-| `url`    | yes      | Repository URL (HTTPS)                           |
-| `name`   | yes      | Directory name to clone into                     |
-| `branch` | no       | Branch to track (defaults to HEAD)               |
-| `token`  | no       | API/HTTPS auth token for private repos           |
-| `pr`     | no       | Set to `"true"` to check for open pull requests instead of commits (requires `token`, GitHub/GitLab only) |
-| `tag`    | no       | Set to `true` to check for tags instead of commits (requires `token`, GitHub/GitLab only) |
+| `url`      | yes      | Repository URL (HTTPS)                           |
+| `name`     | yes      | Directory name to clone into                     |
+| `branch`   | no       | Branch to track (defaults to HEAD)               |
+| `token`    | no       | API/HTTPS auth token for private repos           |
+| `pr`       | no       | Set to `"true"` to check for open pull requests instead of commits (requires `token`) |
+| `tag`      | no       | Set to `true` to check for tags instead of commits (requires `token`) |
+| `provider` | no       | Git hosting provider: `github`, `gitlab`, `gitea`, or `forgejo`. Auto-detected from URL for `github.com` and `gitlab.com`. Required for self-hosted instances when using tag or PR mode. |
 
 ### Token setup
 
 **GitHub**: Create a personal access token at **Settings > Developer settings > Personal access tokens > Fine-grained tokens**. The token needs **Contents** (read) permission for commit checks and cloning. For PR mode, it also needs **Pull requests** (read). For private repos, the token must have access to the repository.
 
 **GitLab**: Create a project or personal access token at **Settings > Access Tokens**. The token needs the `read_repository` scope for commit checks and cloning. For PR mode (merge requests), it also needs `read_api`.
+
+**Gitea/Forgejo**: Create a personal access token at **Settings > Applications > Manage Access Tokens**. The token needs `read:repository` scope. For PR mode, it also needs `read:issue`. Pass the token the same way as GitHub (uses `Authorization: token` header).
 
 Pass the token via a pipeline variable to avoid hardcoding it:
 
@@ -302,7 +305,10 @@ When `token` is provided and the URL matches a supported provider, the check use
 
 - **GitHub** (`github.com`): Uses `GET /repos/{owner}/{repo}/commits?sha={branch}` with `Authorization: token` header
 - **GitLab** (`gitlab.com`): Uses `GET /api/v4/projects/{id}/repository/commits?ref_name={branch}` with `PRIVATE-TOKEN` header
+- **Gitea/Forgejo** (with `provider` param): Uses `GET /api/v1/repos/{owner}/{repo}/commits?sha={branch}` with `Authorization: token` header
 - **Other providers**: Falls back to `git ls-remote`
+
+For self-hosted instances (GitLab, Gitea, Forgejo), set the `provider` param to use the correct API. Without it, PikoCI only auto-detects `github.com` and `gitlab.com` domains. For unknown domains without a `provider` param, the check falls back to trying GitLab and Gitea APIs in sequence before using `git ls-remote`.
 
 Without a token, all providers use `git ls-remote`.
 
@@ -316,7 +322,7 @@ When `pr = "true"` is set, the check command lists open pull requests (or merge 
 
 When a new PR is opened or an existing PR is updated (new commits pushed), PikoCI detects the change and triggers the job. The pull step fetches the PR's head ref so your CI runs against the PR code.
 
-This requires a `token` and is supported on GitHub and GitLab.
+This requires a `token` and is supported on GitHub, GitLab, and Gitea/Forgejo.
 
 ### Tag mode
 
@@ -328,7 +334,7 @@ When `tag = "true"` is set, the check command lists tags instead of checking for
 
 When a new tag is pushed, PikoCI detects it and triggers the job. The pull step clones the repository at the specific tag. Since version variables (`$version_tag`) are only available in pull steps, use `git describe --tags --exact-match` in task steps to retrieve the tag name.
 
-This requires a `token` and is supported on GitHub and GitLab.
+This requires a `token` and is supported on GitHub, GitLab, and Gitea/Forgejo.
 
 ### Pull behavior
 
@@ -386,6 +392,34 @@ job "ci" {
       image = "golang:1.25"
       cmd   = "cd my-repo && make test"
     }
+  }
+}
+```
+
+Forgejo/Gitea repository with PR mode:
+
+```hcl
+resource "git" "forgejo-prs" {
+  params {
+    url      = "https://forgejo.example.com/myorg/my-repo.git"
+    name     = "my-repo"
+    token    = var.forgejo_token
+    provider = "forgejo"
+    pr       = "true"
+  }
+}
+```
+
+Self-hosted GitLab with tag mode:
+
+```hcl
+resource "git" "gitlab-tags" {
+  params {
+    url      = "https://gitlab.mycompany.com/team/project.git"
+    name     = "project"
+    token    = var.gitlab_token
+    provider = "gitlab"
+    tag      = true
   }
 }
 ```

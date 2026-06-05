@@ -53,6 +53,30 @@ RESP
 	return dir, logFile
 }
 
+// fakeCurlDirFailThenSucceed creates a fake curl that fails (exit 22, like
+// curl -f on 404) on the first invocation and returns the canned response on
+// the second. This simulates the fallback chain where the GitLab API probe
+// fails and the Gitea API probe succeeds.
+func fakeCurlDirFailThenSucceed(t *testing.T, response string) (dir string, logFile string) {
+	t.Helper()
+	dir = t.TempDir()
+	logFile = filepath.Join(dir, "curl.log")
+	counterFile := filepath.Join(dir, "curl.count")
+
+	script := `#!/bin/sh
+echo "$@" >> ` + logFile + `
+if [ ! -f ` + counterFile + ` ]; then
+  echo 1 > ` + counterFile + `
+  exit 22
+fi
+cat << 'RESP'
+` + response + `
+RESP
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(script), 0755))
+	return dir, logFile
+}
+
 // initBareRepo creates a bare git repo with one commit and returns the
 // bare dir, the work dir, and a helper to run git in the work dir.
 func initBareRepo(t *testing.T) (bareDir, workDir string, runWork func(args ...string)) {
@@ -438,6 +462,363 @@ func TestGitCheck_PRMode_GitLab_SubsequentCheck(t *testing.T) {
 	var versions []map[string]interface{}
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
 	assert.Len(t, versions, 2)
+}
+
+// --- Git resource type: Gitea/Forgejo check ---
+
+func TestGitCheck_TagMode_Gitea_FirstCheck(t *testing.T) {
+	cannedTags := `[{"name":"v3","commit":{"sha":"aaa"}},{"name":"v2","commit":{"sha":"bbb"}}]`
+	curlDir, logFile := fakeCurlDir(t, cannedTags)
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":      "https://forgejo.example.com/myorg/myrepo",
+		"param_token":    "fake-token",
+		"param_tag":      "true",
+		"param_provider": "gitea",
+		"PATH":           curlDir + ":" + os.Getenv("PATH"),
+	})
+	require.NoError(t, err, "git check (Gitea tag, first) failed: %s", out)
+
+	curlLog, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(curlLog), "forgejo.example.com/api/v1/repos/myorg/myrepo/tags")
+	assert.Contains(t, string(curlLog), "limit=1")
+}
+
+func TestGitCheck_TagMode_Gitea_SubsequentCheck(t *testing.T) {
+	cannedTags := `[{"name":"v4","commit":{"sha":"ddd"}},{"name":"v3","commit":{"sha":"aaa"}},{"name":"v2","commit":{"sha":"bbb"}},{"name":"v1","commit":{"sha":"ccc"}}]`
+	curlDir, logFile := fakeCurlDir(t, cannedTags)
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":      "https://forgejo.example.com/myorg/myrepo",
+		"param_token":    "fake-token",
+		"param_tag":      "true",
+		"param_provider": "gitea",
+		"version_tag":    "v2",
+		"version_ref":    "bbb",
+		"PATH":           curlDir + ":" + os.Getenv("PATH"),
+	})
+	require.NoError(t, err, "git check (Gitea tag, subsequent) failed: %s", out)
+
+	curlLog, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(curlLog), "limit=100")
+
+	var versions []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 2, "should only return tags newer than known tag v2")
+	assert.Equal(t, "v4", versions[0]["tag"])
+	assert.Equal(t, "v3", versions[1]["tag"])
+}
+
+func TestGitCheck_TagMode_Gitea_NoNewTags(t *testing.T) {
+	cannedTags := `[{"name":"v2","commit":{"sha":"bbb"}},{"name":"v1","commit":{"sha":"ccc"}}]`
+	curlDir, _ := fakeCurlDir(t, cannedTags)
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":      "https://forgejo.example.com/myorg/myrepo",
+		"param_token":    "fake-token",
+		"param_tag":      "true",
+		"param_provider": "gitea",
+		"version_tag":    "v2",
+		"version_ref":    "bbb",
+		"PATH":           curlDir + ":" + os.Getenv("PATH"),
+	})
+	require.NoError(t, err, "git check (Gitea tag, no new) failed: %s", out)
+
+	var versions []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 0, "should return empty list when no new tags exist")
+}
+
+func TestGitCheck_PRMode_Gitea_FirstCheck(t *testing.T) {
+	cannedPRs := `[{"number":10,"head":{"sha":"aaa"}},{"number":9,"head":{"sha":"bbb"}}]`
+	curlDir, logFile := fakeCurlDir(t, cannedPRs)
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":      "https://forgejo.example.com/myorg/myrepo",
+		"param_token":    "fake-token",
+		"param_pr":       "true",
+		"param_provider": "gitea",
+		"PATH":           curlDir + ":" + os.Getenv("PATH"),
+	})
+	require.NoError(t, err, "git check (Gitea PR, first) failed: %s", out)
+
+	curlLog, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(curlLog), "forgejo.example.com/api/v1/repos/myorg/myrepo/pulls")
+	assert.Contains(t, string(curlLog), "limit=1")
+}
+
+func TestGitCheck_PRMode_Gitea_SubsequentCheck(t *testing.T) {
+	cannedPRs := `[{"number":10,"head":{"sha":"aaa"}},{"number":9,"head":{"sha":"bbb"}}]`
+	curlDir, logFile := fakeCurlDir(t, cannedPRs)
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":      "https://forgejo.example.com/myorg/myrepo",
+		"param_token":    "fake-token",
+		"param_pr":       "true",
+		"param_provider": "gitea",
+		"version_pr":     "8",
+		"version_ref":    "old-sha",
+		"PATH":           curlDir + ":" + os.Getenv("PATH"),
+	})
+	require.NoError(t, err, "git check (Gitea PR, subsequent) failed: %s", out)
+
+	curlLog, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(curlLog), "limit=100")
+
+	var versions []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 2)
+}
+
+func TestGitCheck_GiteaAPI_ReturnsSingleVersion(t *testing.T) {
+	cannedCommits := `[{"sha":"ggg789"}]`
+	curlDir, logFile := fakeCurlDir(t, cannedCommits)
+
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":      "https://forgejo.example.com/myorg/myrepo",
+		"param_token":    "fake-token",
+		"param_provider": "gitea",
+		"PATH":           curlDir + ":" + os.Getenv("PATH"),
+	})
+	require.NoError(t, err, "git check (Gitea API) failed: %s", out)
+
+	curlLog, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(curlLog), "forgejo.example.com/api/v1/repos/myorg/myrepo/commits")
+	assert.Contains(t, string(curlLog), "limit=1")
+
+	var versions []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 1)
+	assert.Equal(t, "ggg789", versions[0]["ref"])
+}
+
+func TestGitCheck_ProviderParam_Gitea(t *testing.T) {
+	cannedCommits := `[{"sha":"ggg789"}]`
+	curlDir, logFile := fakeCurlDir(t, cannedCommits)
+
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":      "https://git.mycompany.com/team/project",
+		"param_token":    "fake-token",
+		"param_provider": "gitea",
+		"PATH":           curlDir + ":" + os.Getenv("PATH"),
+	})
+	require.NoError(t, err, "git check (provider=gitea) failed: %s", out)
+
+	curlLog, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(curlLog), "git.mycompany.com/api/v1/repos/team/project/commits")
+}
+
+func TestGitCheck_ProviderParam_Forgejo_Alias(t *testing.T) {
+	cannedCommits := `[{"sha":"ggg789"}]`
+	curlDir, logFile := fakeCurlDir(t, cannedCommits)
+
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":      "https://forgejo.example.com/myorg/myrepo",
+		"param_token":    "fake-token",
+		"param_provider": "forgejo",
+		"PATH":           curlDir + ":" + os.Getenv("PATH"),
+	})
+	require.NoError(t, err, "git check (provider=forgejo) failed: %s", out)
+
+	curlLog, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(curlLog), "forgejo.example.com/api/v1/repos/myorg/myrepo/commits",
+		"forgejo should be treated as gitea")
+}
+
+func TestGitCheck_ProviderParam_GitLab_SelfHosted(t *testing.T) {
+	cannedCommits := `[{"id":"def456"}]`
+	curlDir, logFile := fakeCurlDir(t, cannedCommits)
+
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":      "https://gitlab.mycompany.com/team/project",
+		"param_token":    "fake-token",
+		"param_provider": "gitlab",
+		"PATH":           curlDir + ":" + os.Getenv("PATH"),
+	})
+	require.NoError(t, err, "git check (provider=gitlab self-hosted) failed: %s", out)
+
+	curlLog, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(curlLog), "gitlab.mycompany.com/api/v4/projects/team%2Fproject/repository/commits")
+
+	var versions []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 1)
+	assert.Equal(t, "def456", versions[0]["ref"])
+}
+
+func TestGitCheck_TagMode_Fallback_GiteaAfterGitLabFails(t *testing.T) {
+	// Single tag — simulates what the API returns with limit=1 on first check
+	cannedTags := `[{"name":"v2","commit":{"sha":"aaa"}}]`
+	curlDir, logFile := fakeCurlDirFailThenSucceed(t, cannedTags)
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":   "https://gitea.example.com/myorg/myrepo",
+		"param_token": "fake-token",
+		"param_tag":   "true",
+		"PATH":        curlDir + ":" + os.Getenv("PATH"),
+	})
+	require.NoError(t, err, "git check (fallback tag) failed: %s", out)
+
+	curlLog, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	logStr := string(curlLog)
+	assert.Contains(t, logStr, "api/v4/projects",
+		"should try GitLab API first")
+	assert.Contains(t, logStr, "api/v1/repos",
+		"should fall back to Gitea API")
+
+	var versions []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 1)
+	assert.Equal(t, "v2", versions[0]["tag"])
+}
+
+func TestGitCheck_PRMode_Fallback_GiteaAfterGitLabFails(t *testing.T) {
+	cannedPRs := `[{"number":5,"head":{"sha":"fff"}}]`
+	curlDir, logFile := fakeCurlDirFailThenSucceed(t, cannedPRs)
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":   "https://gitea.example.com/myorg/myrepo",
+		"param_token": "fake-token",
+		"param_pr":    "true",
+		"PATH":        curlDir + ":" + os.Getenv("PATH"),
+	})
+	require.NoError(t, err, "git check (fallback PR) failed: %s", out)
+
+	curlLog, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	logStr := string(curlLog)
+	assert.Contains(t, logStr, "api/v4/projects",
+		"should try GitLab API first")
+	assert.Contains(t, logStr, "api/v1/repos",
+		"should fall back to Gitea API")
+
+	var versions []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 1)
+	assert.Equal(t, "5", versions[0]["pr"])
+}
+
+func TestGitPull_PRMode_Gitea_PullRefFormat(t *testing.T) {
+	bareDir, _, runWork := initBareRepo(t)
+	_ = runWork
+
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	dir := t.TempDir()
+	logFile := filepath.Join(dir, "git.log")
+	script := `#!/bin/sh
+if [ "$1" = "fetch" ]; then
+  echo "$@" >> ` + logFile + `
+  exit 0
+fi
+exec /usr/bin/git "$@"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0755))
+
+	pullDir := t.TempDir()
+	_, _ = runScript(t, rt.Pull, pullDir, map[string]string{
+		"param_url":      bareDir,
+		"param_name":     "myrepo",
+		"param_pr":       "true",
+		"param_provider": "gitea",
+		"version_pr":     "7",
+		"version_ref":    "abc123",
+		"PATH":           dir + ":" + os.Getenv("PATH"),
+	})
+
+	gitLog, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(gitLog), "pull/7/head",
+		"Gitea PR mode should use pull/N/head ref")
+}
+
+func TestGitCheck_ProviderParam_Invalid(t *testing.T) {
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":      "https://bitbucket.org/example/repo",
+		"param_token":    "fake-token",
+		"param_provider": "bitbucket",
+	})
+	assert.Error(t, err, "invalid provider should fail")
+	assert.Contains(t, out, "invalid provider")
+}
+
+func TestGitPull_PRMode_GitLab_MergeRequestRef(t *testing.T) {
+	bareDir, _, runWork := initBareRepo(t)
+	_ = runWork
+
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	// We can't fully test the fetch (no real MR ref in the bare repo),
+	// but we can verify the script constructs the right ref by checking
+	// that it attempts the merge-requests/N/head pattern.
+	// Use a fake git wrapper to capture the fetch command.
+	dir := t.TempDir()
+	logFile := filepath.Join(dir, "git.log")
+	// Create a fake git that logs fetch commands but delegates everything else
+	script := `#!/bin/sh
+if [ "$1" = "fetch" ]; then
+  echo "$@" >> ` + logFile + `
+  exit 0
+fi
+exec /usr/bin/git "$@"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0755))
+
+	pullDir := t.TempDir()
+	_, _ = runScript(t, rt.Pull, pullDir, map[string]string{
+		"param_url":      bareDir,
+		"param_name":     "myrepo",
+		"param_pr":       "true",
+		"param_provider": "gitlab",
+		"version_pr":     "42",
+		"version_ref":    "abc123",
+		"PATH":           dir + ":" + os.Getenv("PATH"),
+	})
+
+	gitLog, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(gitLog), "merge-requests/42/head",
+		"GitLab PR mode should use merge-requests/N/head ref")
 }
 
 func TestGitCheck_TagMode_RequiresToken(t *testing.T) {
