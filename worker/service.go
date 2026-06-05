@@ -2034,6 +2034,15 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 			args = append(args, rc.Args...)
 			continue
 		}
+		if a == "$env" {
+			// Inject "-e KEY=VALUE" flags for each env var. This is used
+			// by the Docker runner to forward params (including exported
+			// GET_*/TASK_* step metadata) into the container environment.
+			for k, v := range envs {
+				args = append(args, "-e", k+"="+v)
+			}
+			continue
+		}
 		ea := os.Expand(a, envFn)
 		if ea != "" {
 			args = append(args, ea)
