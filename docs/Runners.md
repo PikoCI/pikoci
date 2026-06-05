@@ -12,6 +12,7 @@ runner_type "docker" {
       "run", "--rm",
       "-v", "$WORKDIR:/workdir",
       "-w", "/workdir",
+      "$env",
       "$image",
       "$cmd",
     ]
@@ -37,8 +38,12 @@ Inside `path` and `args`, PikoCI expands:
 |-------------|---------------------------------------------|
 | `$WORKDIR`  | Temporary working directory for the job     |
 | `$<param>`  | Any parameter passed from a `run` block in a task |
+| `$args`     | Replaced with the user-provided `args` list from the `run` block, passed through without variable expansion |
+| `$env`      | Replaced with `-e KEY=VALUE` flags for every parameter and env var, including exported step metadata (`GET_*`, `TASK_*`) |
 
 For example, when a task uses `run "docker" { image = "golang:1.25" cmd = "make test" }`, the runner receives `$image` and `$cmd` as expandable variables.
+
+The `$env` placeholder is used by the Docker runner to forward all parameters (including step metadata exported by get and task steps) into the container as environment variables. Without it, env vars set on the host process would not be visible inside the container.
 
 ## Sourcing from URL
 
@@ -74,6 +79,7 @@ runner_type "docker" {
       "--network=host",
       "-v", "$WORKDIR:/workdir",
       "-w", "/workdir",
+      "$env",
       "$args",
       "$image",
       "/bin/bash", "-ec", "$cmd",

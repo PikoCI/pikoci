@@ -331,6 +331,8 @@ After a get step succeeds, its version metadata is automatically forwarded to al
 
 For example, a `get "git" "my-repo"` step that fetches version `{ref: "abc123"}` will export `GET_MY_REPO_REF=abc123` to all subsequent steps.
 
+These variables are available in both exec and Docker-based steps. The built-in Docker runner uses the `$env` placeholder to forward all parameters (including exported metadata) into the container as `-e` flags. If you define a custom Docker runner, include `$env` in the args to get this behavior (see [Runners](Runners.md)).
+
 Nested version objects are recursively flattened with `_` separators. For example, a version like:
 
 ```json
