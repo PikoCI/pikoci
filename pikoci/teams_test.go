@@ -185,6 +185,67 @@ func TestDeleteTeamMember(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestGetTeam_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.GetTeam(ctx, "INVALID")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Team Canonical")
+}
+
+func TestListTeams_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.ListTeams(ctx, "INVALID")
+	require.Error(t, err)
+}
+
+func TestUpdateTeam_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.UpdateTeam(ctx, "INVALID", team.Team{Name: "test"})
+	require.Error(t, err)
+}
+
+func TestCreateTeamMember_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.CreateTeamMember(ctx, "INVALID", team.Member{})
+	require.Error(t, err)
+}
+
+func TestUpdateTeamMember_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.UpdateTeamMember(ctx, "INVALID", "pepito", team.Member{})
+	require.Error(t, err)
+
+	_, err = s.S.UpdateTeamMember(ctx, "main", "INVALID", team.Member{})
+	require.Error(t, err)
+}
+
+func TestDeleteTeamMember_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	err := s.S.DeleteTeamMember(ctx, "INVALID", "pepito")
+	require.Error(t, err)
+
+	err = s.S.DeleteTeamMember(ctx, "main", "INVALID")
+	require.Error(t, err)
+}
+
 func TestDeleteTeamMember_LastAdmin(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)

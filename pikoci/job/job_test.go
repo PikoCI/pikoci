@@ -111,3 +111,138 @@ func TestPlanStep_JSONMarshalUnmarshal(t *testing.T) {
 	assert.Equal(t, "latest", decoded[2].Put.Params["tag"])
 	require.Len(t, decoded[2].OnSuccess, 1)
 }
+
+func TestJob_AllPutSteps(t *testing.T) {
+	t.Run("collects put steps from plan", func(t *testing.T) {
+		j := job.Job{
+			Name: "test",
+			Plan: []job.PlanStep{
+				{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo"}},
+				{Type: job.StepTypePut, Put: &job.PutStep{Type: "git", Name: "repo"}},
+				{Type: job.StepTypePut, Put: &job.PutStep{Type: "docker", Name: "image"}},
+			},
+		}
+
+		puts := j.AllPutSteps()
+		require.Len(t, puts, 2)
+		assert.Equal(t, "repo", puts[0].Name)
+		assert.Equal(t, "git", puts[0].Type)
+		assert.Equal(t, "image", puts[1].Name)
+		assert.Equal(t, "docker", puts[1].Type)
+	})
+
+	t.Run("deduplicates put steps", func(t *testing.T) {
+		j := job.Job{
+			Name: "test",
+			Plan: []job.PlanStep{
+				{Type: job.StepTypePut, Put: &job.PutStep{Type: "git", Name: "repo"}},
+				{Type: job.StepTypePut, Put: &job.PutStep{Type: "git", Name: "repo"}},
+			},
+		}
+
+		puts := j.AllPutSteps()
+		require.Len(t, puts, 1)
+		assert.Equal(t, "repo", puts[0].Name)
+	})
+
+	t.Run("collects put steps from step-level hooks", func(t *testing.T) {
+		j := job.Job{
+			Name: "test",
+			Plan: []job.PlanStep{
+				{
+					Type: job.StepTypeTask,
+					Task: &job.TaskStep{Name: "build"},
+					OnSuccess: []job.HookStep{
+						{Type: job.StepTypePut, Put: &job.PutStep{Type: "git", Name: "repo"}},
+					},
+					OnFailure: []job.HookStep{
+						{Type: job.StepTypePut, Put: &job.PutStep{Type: "slack", Name: "alerts"}},
+					},
+					OnCancel: []job.HookStep{
+						{Type: job.StepTypePut, Put: &job.PutStep{Type: "docker", Name: "cleanup"}},
+					},
+					Ensure: []job.HookStep{
+						{Type: job.StepTypePut, Put: &job.PutStep{Type: "s3", Name: "logs"}},
+					},
+				},
+			},
+		}
+
+		puts := j.AllPutSteps()
+		require.Len(t, puts, 4)
+	})
+
+	t.Run("collects put steps from job-level hooks", func(t *testing.T) {
+		j := job.Job{
+			Name: "test",
+			Plan: []job.PlanStep{
+				{Type: job.StepTypeTask, Task: &job.TaskStep{Name: "build"}},
+			},
+			OnSuccess: []job.HookStep{
+				{Type: job.StepTypePut, Put: &job.PutStep{Type: "git", Name: "success-put"}},
+			},
+			OnFailure: []job.HookStep{
+				{Type: job.StepTypePut, Put: &job.PutStep{Type: "slack", Name: "fail-put"}},
+			},
+			OnCancel: []job.HookStep{
+				{Type: job.StepTypePut, Put: &job.PutStep{Type: "docker", Name: "cancel-put"}},
+			},
+			Ensure: []job.HookStep{
+				{Type: job.StepTypePut, Put: &job.PutStep{Type: "s3", Name: "ensure-put"}},
+			},
+		}
+
+		puts := j.AllPutSteps()
+		require.Len(t, puts, 4)
+	})
+
+	t.Run("skips nil put in hook steps", func(t *testing.T) {
+		j := job.Job{
+			Name: "test",
+			Plan: []job.PlanStep{
+				{
+					Type: job.StepTypeTask,
+					Task: &job.TaskStep{Name: "build"},
+					OnSuccess: []job.HookStep{
+						{Type: job.StepTypeRunner, Runner: &utils.RunnerCommand{Runner: "exec"}},
+					},
+				},
+			},
+		}
+
+		puts := j.AllPutSteps()
+		assert.Nil(t, puts)
+	})
+
+	t.Run("returns nil for empty job", func(t *testing.T) {
+		j := job.Job{Name: "empty"}
+		puts := j.AllPutSteps()
+		assert.Nil(t, puts)
+	})
+
+	t.Run("combines plan and hook put steps with dedup", func(t *testing.T) {
+		j := job.Job{
+			Name: "test",
+			Plan: []job.PlanStep{
+				{Type: job.StepTypePut, Put: &job.PutStep{Type: "git", Name: "repo"}},
+			},
+			OnSuccess: []job.HookStep{
+				{Type: job.StepTypePut, Put: &job.PutStep{Type: "git", Name: "repo"}},
+				{Type: job.StepTypePut, Put: &job.PutStep{Type: "slack", Name: "notify"}},
+			},
+		}
+
+		puts := j.AllPutSteps()
+		require.Len(t, puts, 2)
+		assert.Equal(t, "repo", puts[0].Name)
+		assert.Equal(t, "notify", puts[1].Name)
+	})
+}
+
+func TestNotifyStep_NotificationCanonical(t *testing.T) {
+	n := &job.NotifyStep{Type: "slack", Name: "deploy-alerts"}
+	assert.Equal(t, "slack.deploy-alerts", n.NotificationCanonical())
+
+	n = &job.NotifyStep{Type: "email", Name: "ops"}
+	assert.Equal(t, "email.ops", n.NotificationCanonical())
+}

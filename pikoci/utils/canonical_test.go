@@ -62,3 +62,8 @@ func TestResourceCanonical(t *testing.T) {
 	assert.Equal(t, "git.my-repo", utils.ResourceCanonical("git", "my-repo"))
 	assert.Equal(t, "cron.timer", utils.ResourceCanonical("cron", "timer"))
 }
+
+func TestNotificationCanonical(t *testing.T) {
+	assert.Equal(t, "slack.alerts", utils.NotificationCanonical("slack", "alerts"))
+	assert.Equal(t, "github-check.ci", utils.NotificationCanonical("github-check", "ci"))
+}

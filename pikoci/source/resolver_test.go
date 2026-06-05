@@ -138,6 +138,100 @@ service_type "simple" {
 	assert.Nil(t, svc.ReadyCheck)
 }
 
+func TestResolveSecretType_PikoCI(t *testing.T) {
+	st, err := source.ResolveSecretType(context.Background(), "pikoci://file")
+	require.NoError(t, err)
+	assert.Equal(t, "file", st.Name)
+}
+
+func TestResolveSecretType_HTTP(t *testing.T) {
+	hcl := `
+secret_type "custom-vault" {
+  params = ["addr", "token", "path"]
+  get "exec" {
+    path = "/bin/sh"
+    args = ["-c", "echo secret"]
+  }
+}
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(hcl))
+	}))
+	defer srv.Close()
+
+	st, err := source.ResolveSecretType(context.Background(), srv.URL+"/custom-vault.hcl")
+	require.NoError(t, err)
+	assert.Equal(t, "custom-vault", st.Name)
+	assert.Equal(t, []string{"addr", "token", "path"}, st.Params)
+}
+
+func TestResolveSecretType_UnsupportedScheme(t *testing.T) {
+	_, err := source.ResolveSecretType(context.Background(), "ftp://example.com/secret.hcl")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported source URL scheme")
+}
+
+func TestResolveNotificationType_HTTP(t *testing.T) {
+	hcl := `
+notification_type "slack" {
+  params = ["webhook_url", "channel"]
+  notify "exec" {
+    path = "/bin/sh"
+    args = ["-c", "curl -X POST $webhook_url"]
+  }
+}
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(hcl))
+	}))
+	defer srv.Close()
+
+	nt, err := source.ResolveNotificationType(context.Background(), srv.URL+"/slack.hcl")
+	require.NoError(t, err)
+	assert.Equal(t, "slack", nt.Name)
+	assert.Equal(t, []string{"webhook_url", "channel"}, nt.Params)
+	require.NotNil(t, nt.Notify)
+	assert.Equal(t, "exec", nt.Notify.Runner)
+}
+
+func TestResolveNotificationType_UnsupportedScheme(t *testing.T) {
+	_, err := source.ResolveNotificationType(context.Background(), "ftp://example.com/notif.hcl")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported source URL scheme")
+}
+
+func TestResolveNotificationType_InvalidHCL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("not valid hcl {{{{"))
+	}))
+	defer srv.Close()
+
+	_, err := source.ResolveNotificationType(context.Background(), srv.URL+"/bad.hcl")
+	require.Error(t, err)
+}
+
+func TestResolveNotificationType_EmptyBlock(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`# empty file`))
+	}))
+	defer srv.Close()
+
+	_, err := source.ResolveNotificationType(context.Background(), srv.URL+"/empty.hcl")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no notification_type block found")
+}
+
+func TestResolveSecretType_EmptyBlock(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`# empty file`))
+	}))
+	defer srv.Close()
+
+	_, err := source.ResolveSecretType(context.Background(), srv.URL+"/empty.hcl")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no secret_type block found")
+}
+
 func TestResolveRunner_HTTP(t *testing.T) {
 	hcl := `
 runner_type "myrunner" {

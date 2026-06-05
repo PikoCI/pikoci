@@ -102,6 +102,67 @@ func TestResourceTypeHCL(t *testing.T) {
 	})
 }
 
+func TestSecretTypes(t *testing.T) {
+	sts := builtin.SecretTypes()
+	require.NotEmpty(t, sts)
+
+	t.Run("file", func(t *testing.T) {
+		st, ok := sts["file"]
+		require.True(t, ok)
+		assert.Equal(t, "file", st.Name)
+	})
+
+	t.Run("vault", func(t *testing.T) {
+		st, ok := sts["vault"]
+		require.True(t, ok)
+		assert.Equal(t, "vault", st.Name)
+	})
+}
+
+func TestSecretTypeHCL(t *testing.T) {
+	t.Run("existing file", func(t *testing.T) {
+		data, ok := builtin.SecretTypeHCL("file")
+		assert.True(t, ok)
+		assert.NotEmpty(t, data)
+	})
+
+	t.Run("existing vault", func(t *testing.T) {
+		data, ok := builtin.SecretTypeHCL("vault")
+		assert.True(t, ok)
+		assert.NotEmpty(t, data)
+	})
+
+	t.Run("nonexistent", func(t *testing.T) {
+		_, ok := builtin.SecretTypeHCL("nonexistent")
+		assert.False(t, ok)
+	})
+}
+
+func TestNotificationTypes(t *testing.T) {
+	nts := builtin.NotificationTypes()
+	assert.Nil(t, nts, "no built-in notification types are embedded")
+}
+
+func TestNotificationTypeHCL(t *testing.T) {
+	data, ok := builtin.NotificationTypeHCL("slack")
+	assert.False(t, ok)
+	assert.Nil(t, data)
+
+	data, ok = builtin.NotificationTypeHCL("nonexistent")
+	assert.False(t, ok)
+	assert.Nil(t, data)
+}
+
+func TestServiceHCL(t *testing.T) {
+	data, ok := builtin.ServiceHCL("postgres")
+	assert.False(t, ok)
+	assert.Nil(t, data)
+
+	data, ok = builtin.ServiceHCL("nonexistent")
+	assert.False(t, ok)
+	assert.Nil(t, data)
+}
+
 func TestRunnerHCL(t *testing.T) {
 	t.Run("existing", func(t *testing.T) {
 		data, ok := builtin.RunnerHCL("exec")

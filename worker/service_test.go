@@ -17,12 +17,15 @@ import (
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/mock"
+	"github.com/pikoci/pikoci/pikoci/notification"
+	"github.com/pikoci/pikoci/pikoci/notiftype"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/queue"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
 	"github.com/pikoci/pikoci/pikoci/sectype"
+	"github.com/pikoci/pikoci/pikoci/service"
 	"github.com/pikoci/pikoci/pikoci/trigger"
 	"github.com/pikoci/pikoci/pikoci/utils"
 	"go.uber.org/mock/gomock"
@@ -4912,4 +4915,2312 @@ func TestProcessJob_FailedStepDoesNotExport(t *testing.T) {
 	// Only 1 step should have run (the failing one)
 	require.Equal(t, 1, len(finalBuild.Steps))
 	assert.Equal(t, build.Failed, finalBuild.Steps[0].Status)
+}
+
+// --- runNotifyStep tests ---
+
+func TestProcessJob_NotifyStep_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "notify-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "notify-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeNotify,
+						Notify: &job.NotifyStep{
+							Type:    "echo-notifier",
+							Name:    "my-alert",
+							Message: "build done",
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "my-alert",
+				Canonical: "echo-notifier.my-alert",
+				Params:    &notification.Params{Params: map[string]string{"channel": "#builds"}},
+				Message:   "default message",
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"notifying"},
+					Params: map[string]string{"path": "echo"},
+				},
+				Params: []string{"channel"},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 300, BuildNumber: "300", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "300", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	require.NotEmpty(t, capturedBuild.Steps)
+	assert.Equal(t, "notify", capturedBuild.Steps[0].Type)
+	assert.Equal(t, "my-alert", capturedBuild.Steps[0].Name)
+	assert.Equal(t, build.Succeeded, capturedBuild.Steps[0].Status)
+}
+
+func TestProcessJob_NotifyStep_Failure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "notify-fail-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "notify-fail-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeNotify,
+						Notify: &job.NotifyStep{
+							Type: "fail-notifier",
+							Name: "my-alert",
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "fail-notifier",
+				Name:      "my-alert",
+				Canonical: "fail-notifier.my-alert",
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "fail-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Params: map[string]string{"path": "false"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 301, BuildNumber: "301", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "301", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Failed, capturedBuild.Status)
+	require.NotEmpty(t, capturedBuild.Steps)
+	assert.Equal(t, "notify", capturedBuild.Steps[0].Type)
+	assert.Equal(t, build.Failed, capturedBuild.Steps[0].Status)
+}
+
+func TestRunNotifyStep_LocalMode_Skips(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, topic := newTestWorker(ctrl)
+	w.LocalMode = true
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "local-notify-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "local-notify-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeNotify,
+						Notify: &job.NotifyStep{
+							Type: "slack",
+							Name: "alerts",
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 302, BuildNumber: "302", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "302", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	// Allow topic.Send for notifyNextPendingBuild
+	topic.EXPECT().Send(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	require.NotEmpty(t, capturedBuild.Steps)
+	assert.Equal(t, "notify", capturedBuild.Steps[0].Type)
+	assert.Contains(t, capturedBuild.Steps[0].Logs, "skipping notify step")
+	assert.Equal(t, build.Succeeded, capturedBuild.Steps[0].Status)
+}
+
+func TestRunNotifyStep_NotificationNotFound_NoFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "missing-notif-job",
+		BuildID:           10,
+	}
+
+	// Pipeline has the notify step type but no matching notification entity
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "missing-notif-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeNotify,
+						Notify: &job.NotifyStep{
+							Type: "slack",
+							Name: "nonexistent",
+						},
+					},
+				},
+			},
+		},
+		// No Notifications defined
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 303, BuildNumber: "303", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "303", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	// The notify step returns false (no failure) when notification is not found,
+	// so the build should succeed.
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+}
+
+func TestRunNotifyStep_NotificationTypeNotFound_NoFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "missing-type-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "missing-type-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeNotify,
+						Notify: &job.NotifyStep{
+							Type: "nonexistent-type",
+							Name: "my-alert",
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "nonexistent-type",
+				Name:      "my-alert",
+				Canonical: "nonexistent-type.my-alert",
+			},
+		},
+		// No NotificationTypes defined
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 304, BuildNumber: "304", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "304", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+}
+
+func TestRunNotifyStep_WithMessage_And_Params(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "notify-msg-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "notify-msg-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeNotify,
+						Notify: &job.NotifyStep{
+							Type:    "echo-notifier",
+							Name:    "my-alert",
+							Message: "step-level message",
+							Params:  map[string]string{"severity": "high"},
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "my-alert",
+				Canonical: "echo-notifier.my-alert",
+				Params:    &notification.Params{Params: map[string]string{"channel": "#alerts"}},
+				Message:   "notification default message",
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					// Script that checks NOTIFY_MESSAGE env var
+					Args:   []string{"-c", `echo "msg=$NOTIFY_MESSAGE channel=$param_channel severity=$notify_severity"`},
+					Params: map[string]string{"path": "/bin/sh"},
+				},
+				Params: []string{"channel"},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 305, BuildNumber: "305", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "305", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	require.NotEmpty(t, capturedBuild.Steps)
+	// Verify the script was able to read our env vars
+	assert.Contains(t, capturedBuild.Steps[0].Logs, "msg=step-level message")
+	assert.Contains(t, capturedBuild.Steps[0].Logs, "channel=#alerts")
+	assert.Contains(t, capturedBuild.Steps[0].Logs, "severity=high")
+}
+
+// --- runAutoNotifications tests ---
+
+func TestRunAutoNotifications_SuccessEvent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "auto-notif-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "auto-notif-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "success-alert",
+				Canonical: "echo-notifier.success-alert",
+				On:        []string{"success"},
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"-c", `echo "auto-notif build_status=$notify_build_status"`},
+					Params: map[string]string{"path": "/bin/sh"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 310, BuildNumber: "310", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "310", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	// Should have 2 steps: task + auto notification
+	require.Len(t, capturedBuild.Steps, 2)
+	assert.Equal(t, "notify", capturedBuild.Steps[1].Type)
+	assert.Equal(t, "success-alert", capturedBuild.Steps[1].Name)
+	assert.Contains(t, capturedBuild.Steps[1].Logs, "auto-notif build_status=success")
+}
+
+func TestRunAutoNotifications_FailureEvent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "auto-fail-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "auto-fail-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "fail",
+							Run:  utils.RunnerCommand{Runner: "exec", Params: map[string]string{"path": "false"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "fail-alert",
+				Canonical: "echo-notifier.fail-alert",
+				On:        []string{"failure"},
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"failure notification sent"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 311, BuildNumber: "311", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "311", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Failed, capturedBuild.Status)
+	// Should have 2 steps: failed task + auto failure notification
+	require.Len(t, capturedBuild.Steps, 2)
+	assert.Equal(t, "notify", capturedBuild.Steps[1].Type)
+	assert.Equal(t, "fail-alert", capturedBuild.Steps[1].Name)
+	assert.Contains(t, capturedBuild.Steps[1].Logs, "failure notification sent")
+}
+
+func TestRunAutoNotifications_EventNotMatched(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "auto-no-match-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "auto-no-match-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"ok"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "fail-only-alert",
+				Canonical: "echo-notifier.fail-only-alert",
+				On:        []string{"failure"}, // only on failure
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"should not appear"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 312, BuildNumber: "312", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "312", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	// Only the task step, no notification
+	require.Len(t, capturedBuild.Steps, 1)
+	assert.Equal(t, "task", capturedBuild.Steps[0].Type)
+}
+
+func TestRunAutoNotifications_AllEvent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "auto-all-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "auto-all-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "all-alert",
+				Canonical: "echo-notifier.all-alert",
+				On:        []string{"all"},
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"all event triggered"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 313, BuildNumber: "313", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "313", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	require.Len(t, capturedBuild.Steps, 2)
+	assert.Equal(t, "notify", capturedBuild.Steps[1].Type)
+}
+
+func TestRunAutoNotifications_JobScope(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "unscoped-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "unscoped-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "scoped-alert",
+				Canonical: "echo-notifier.scoped-alert",
+				On:        []string{"success"},
+				Jobs:      []string{"other-job"}, // scoped to a different job
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"should not appear"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 314, BuildNumber: "314", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "314", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	// Notification scoped to "other-job", so it should NOT fire for "unscoped-job"
+	require.Len(t, capturedBuild.Steps, 1)
+}
+
+func TestRunAutoNotifications_ExcludeJob(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "excluded-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "excluded-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "exclude-alert",
+				Canonical: "echo-notifier.exclude-alert",
+				On:        []string{"success"},
+				Exclude:   []string{"excluded-job"},
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"should not appear"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 315, BuildNumber: "315", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "315", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	require.Len(t, capturedBuild.Steps, 1)
+}
+
+func TestRunAutoNotifications_NoOnField_Skips(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "no-on-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "no-on-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "no-on-alert",
+				Canonical: "echo-notifier.no-on-alert",
+				// On is nil - explicit-only notifications
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"should not appear"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 316, BuildNumber: "316", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "316", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	// No auto notifications because On is empty
+	require.Len(t, capturedBuild.Steps, 1)
+}
+
+// --- runPutStepTrigger tests ---
+
+func TestProcessJob_PutStepTrigger_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "trigger-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "trigger-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypePut,
+						Put: &job.PutStep{
+							Type:   "trigger",
+							Name:   "downstream",
+							Params: map[string]string{"key": "val"},
+						},
+					},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Name: "downstream", Type: "trigger", Canonical: "trigger.downstream"},
+		},
+		ResourceTypes: []restype.ResourceType{
+			{ID: 1, Name: "trigger", Source: "pikoci://trigger"},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 320, BuildNumber: "320", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	// CreateTrigger should be called
+	svc.EXPECT().CreateTrigger(gomock.Any(), "main", "trigger.downstream", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _ string, version map[string]interface{}) (*trigger.Trigger, error) {
+			assert.Equal(t, "val", version["key"])
+			assert.Equal(t, "test-pipeline", version["trigger_pipeline"])
+			assert.Equal(t, "trigger-job", version["trigger_job"])
+			assert.Equal(t, "320", version["trigger_build"])
+			return &trigger.Trigger{ID: 1, Version: version}, nil
+		})
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "320", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	require.NotEmpty(t, capturedBuild.Steps)
+	assert.Equal(t, "put", capturedBuild.Steps[0].Type)
+	assert.Equal(t, "downstream", capturedBuild.Steps[0].Name)
+	assert.Equal(t, build.Succeeded, capturedBuild.Steps[0].Status)
+}
+
+func TestProcessJob_PutStepTrigger_Failure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "trigger-fail-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "trigger-fail-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypePut,
+						Put: &job.PutStep{
+							Type:   "trigger",
+							Name:   "downstream",
+							Params: map[string]string{"key": "val"},
+						},
+					},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Name: "downstream", Type: "trigger", Canonical: "trigger.downstream"},
+		},
+		ResourceTypes: []restype.ResourceType{
+			{ID: 1, Name: "trigger", Source: "pikoci://trigger"},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 321, BuildNumber: "321", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	// CreateTrigger fails
+	svc.EXPECT().CreateTrigger(gomock.Any(), "main", "trigger.downstream", gomock.Any()).
+		Return(nil, fmt.Errorf("trigger creation failed"))
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "321", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Failed, capturedBuild.Status)
+	require.NotEmpty(t, capturedBuild.Steps)
+	assert.Equal(t, "put", capturedBuild.Steps[0].Type)
+	assert.Equal(t, build.Failed, capturedBuild.Steps[0].Status)
+	assert.Contains(t, capturedBuild.Steps[0].Logs, "failed to create trigger")
+}
+
+// --- notifyNextPendingBuild tests ---
+
+func TestNotifyNextPendingBuild_SendsMessage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, topic := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+	}
+
+	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), "main", "test-pipeline", "test-job").
+		Return(&build.Build{ID: 42, BuildNumber: "42", Status: build.Pending}, nil)
+
+	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, "main", body.TeamCanonical)
+		assert.Equal(t, "test-pipeline", body.PipelineCanonical)
+		assert.Equal(t, "test-job", body.JobName)
+		assert.Equal(t, uint32(42), body.BuildID)
+		return nil
+	})
+
+	w.notifyNextPendingBuild(ctx, m)
+}
+
+func TestNotifyNextPendingBuild_NoPending(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+	}
+
+	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), "main", "test-pipeline", "test-job").
+		Return(nil, nil)
+
+	// No topic.Send expected
+	w.notifyNextPendingBuild(ctx, m)
+}
+
+func TestNotifyNextPendingBuild_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+	}
+
+	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), "main", "test-pipeline", "test-job").
+		Return(nil, fmt.Errorf("db error"))
+
+	// No topic.Send expected, error is logged
+	w.notifyNextPendingBuild(ctx, m)
+}
+
+// --- startServices / stopServices tests ---
+
+func TestProcessJob_ServiceStep_StartAndStop(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "service-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "service-job",
+				Plan: []job.PlanStep{
+					{
+						Type:    job.StepTypeService,
+						Service: &job.ServiceStep{Name: "my-db"},
+					},
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "use-db",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"using db"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Services: []service.Service{
+			{
+				ID:   1,
+				Name: "my-db",
+				Start: utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"starting db"},
+					Params: map[string]string{"path": "echo"},
+				},
+				Stop: utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"stopping db"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 330, BuildNumber: "330", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "330", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	// Steps: service:start, task, service:stop
+	require.GreaterOrEqual(t, len(capturedBuild.Steps), 3)
+	assert.Equal(t, "my-db:start", capturedBuild.Steps[0].Name)
+	assert.Equal(t, "service", capturedBuild.Steps[0].Type)
+	assert.Equal(t, build.Succeeded, capturedBuild.Steps[0].Status)
+	assert.Equal(t, "use-db", capturedBuild.Steps[1].Name)
+	assert.Equal(t, "task", capturedBuild.Steps[1].Type)
+	// The stop step is appended as the last step
+	found := false
+	for _, s := range capturedBuild.Steps {
+		if s.Name == "my-db:stop" && s.Type == "service" {
+			found = true
+			assert.Equal(t, build.Succeeded, s.Status)
+		}
+	}
+	assert.True(t, found, "expected my-db:stop step")
+}
+
+func TestProcessJob_ServiceStep_StartFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "service-fail-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "service-fail-job",
+				Plan: []job.PlanStep{
+					{
+						Type:    job.StepTypeService,
+						Service: &job.ServiceStep{Name: "broken-svc"},
+					},
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "should-not-run",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"should not appear"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Services: []service.Service{
+			{
+				ID:   1,
+				Name: "broken-svc",
+				Start: utils.RunnerCommand{
+					Runner: "exec",
+					Params: map[string]string{"path": "false"}, // fails
+				},
+				Stop: utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"stopping broken-svc"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 331, BuildNumber: "331", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "331", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Failed, capturedBuild.Status)
+	// Only the failed start step should be present, task should not run
+	require.NotEmpty(t, capturedBuild.Steps)
+	assert.Equal(t, "broken-svc:start", capturedBuild.Steps[0].Name)
+	assert.Equal(t, build.Failed, capturedBuild.Steps[0].Status)
+	// Task should NOT have run
+	for _, s := range capturedBuild.Steps {
+		assert.NotEqual(t, "should-not-run", s.Name, "task should not run when service start fails")
+	}
+}
+
+func TestProcessJob_ServiceStep_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "missing-svc-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "missing-svc-job",
+				Plan: []job.PlanStep{
+					{
+						Type:    job.StepTypeService,
+						Service: &job.ServiceStep{Name: "nonexistent"},
+					},
+				},
+			},
+		},
+		// No Services defined
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 332, BuildNumber: "332", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "332", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Failed, capturedBuild.Status)
+}
+
+func TestProcessJob_ServiceStep_WithReadyCheck(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "ready-svc-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "ready-svc-job",
+				Plan: []job.PlanStep{
+					{
+						Type:    job.StepTypeService,
+						Service: &job.ServiceStep{Name: "my-svc"},
+					},
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "use-svc",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"using svc"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Services: []service.Service{
+			{
+				ID:   1,
+				Name: "my-svc",
+				Start: utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"starting svc"},
+					Params: map[string]string{"path": "echo"},
+				},
+				ReadyCheck: &service.ReadyCheck{
+					RunnerCommand: utils.RunnerCommand{
+						Runner: "exec",
+						Args:   []string{"ready"},
+						Params: map[string]string{"path": "echo"},
+					},
+					Interval: "100ms",
+					Timeout:  "5s",
+				},
+				Stop: utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"stopping svc"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 333, BuildNumber: "333", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "333", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	// Steps: service:start, service:ready, task, service:stop
+	var stepNames []string
+	for _, s := range capturedBuild.Steps {
+		stepNames = append(stepNames, s.Name)
+	}
+	assert.Contains(t, stepNames, "my-svc:start")
+	assert.Contains(t, stepNames, "my-svc:ready")
+	assert.Contains(t, stepNames, "use-svc")
+	assert.Contains(t, stepNames, "my-svc:stop")
+}
+
+func TestProcessJob_ServiceStep_ReadyCheckTimeout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "ready-timeout-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "ready-timeout-job",
+				Plan: []job.PlanStep{
+					{
+						Type:    job.StepTypeService,
+						Service: &job.ServiceStep{Name: "slow-svc"},
+					},
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "should-not-run",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"nope"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Services: []service.Service{
+			{
+				ID:   1,
+				Name: "slow-svc",
+				Start: utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"starting slow-svc"},
+					Params: map[string]string{"path": "echo"},
+				},
+				ReadyCheck: &service.ReadyCheck{
+					RunnerCommand: utils.RunnerCommand{
+						Runner: "exec",
+						Params: map[string]string{"path": "false"}, // always fails
+					},
+					Interval: "100ms",
+					Timeout:  "500ms",
+				},
+				Stop: utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"stopping slow-svc"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 334, BuildNumber: "334", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "334", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Failed, capturedBuild.Status)
+	// Task should not have run because ready check timed out
+	for _, s := range capturedBuild.Steps {
+		assert.NotEqual(t, "should-not-run", s.Name)
+	}
+	// Ready step should be failed
+	found := false
+	for _, s := range capturedBuild.Steps {
+		if s.Name == "slow-svc:ready" {
+			found = true
+			assert.Equal(t, build.Failed, s.Status)
+			assert.Contains(t, s.Logs, "timed out")
+		}
+	}
+	assert.True(t, found, "expected slow-svc:ready step")
+}
+
+// --- serviceParams tests ---
+
+func TestServiceParams(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _, _ := newTestWorker(ctrl)
+
+	b := &build.Build{BuildNumber: "99"}
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+	}
+	cmdParams := map[string]string{"image": "postgres:15"}
+	overrides := map[string]string{"port": "5433"}
+
+	params := w.serviceParams(b, m, cmdParams, overrides)
+
+	assert.Equal(t, "postgres:15", params["image"])
+	assert.Equal(t, "99", params["BUILD_NUMBER"])
+	assert.Equal(t, "test-job", params["BUILD_JOB_NAME"])
+	assert.Equal(t, "test-pipeline", params["BUILD_PIPELINE_NAME"])
+	assert.Equal(t, "main", params["BUILD_TEAM_NAME"])
+	assert.Equal(t, "5433", params["param_port"])
+}
+
+// --- processMessage tests ---
+
+func TestProcessMessage_ResourceCheckDispatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		ResourceCanonical: "cron.my-cron",
+	}
+	cwd := t.TempDir()
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Resources: []resource.Resource{
+			{ID: 1, Name: "my-cron", Type: "cron", Canonical: "cron.my-cron"},
+		},
+		ResourceTypes: []restype.ResourceType{
+			{
+				ID: 1, Name: "cron",
+				Check: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"-ec", `printf "[]"`},
+					Params: map[string]string{"path": "/bin/sh"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+
+	svc.EXPECT().GetPipeline(gomock.Any(), m.TeamCanonical, m.PipelineCanonical).
+		Return(pp, nil)
+
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+		Return([]*resource.Version{}, false, nil).AnyTimes()
+
+	svc.EXPECT().UpdatePipelineResource(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", gomock.Any()).
+		Return(nil).AnyTimes()
+
+	w.processMessage(ctx, m, cwd)
+}
+
+func TestProcessMessage_GetPipelineError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           10,
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipeline(gomock.Any(), m.TeamCanonical, m.PipelineCanonical).
+		Return(nil, fmt.Errorf("pipeline not found"))
+
+	// Should return early without calling processJob or processResourceCheck
+	w.processMessage(ctx, m, cwd)
+}
+
+func TestProcessMessage_EmptyJobAndResource(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		// No JobName, no ResourceCanonical
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipeline(gomock.Any(), m.TeamCanonical, m.PipelineCanonical).
+		Return(&pipeline.Pipeline{Name: "test-pipeline"}, nil)
+
+	// Should return early without calling processJob or processResourceCheck
+	w.processMessage(ctx, m, cwd)
+}
+
+// --- processJob edge cases ---
+
+func TestProcessJob_BuildID_Zero(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+	w.LocalMode = true // skip FindOldestPendingBuild
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           0,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{{ID: 1, Name: "test-job"}},
+	}
+	cwd := t.TempDir()
+
+	// Should return early because BuildID is 0
+	// No StartPendingBuild or other calls expected beyond the global mock defaults
+	_ = svc
+	w.processJob(ctx, m, cwd, pp)
+}
+
+func TestProcessJob_NoPendingBuild(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{{ID: 1, Name: "test-job"}},
+	}
+	cwd := t.TempDir()
+
+	// No pending builds
+	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), "main", "test-pipeline", "test-job").
+		Return(nil, nil)
+
+	// Should return early
+	w.processJob(ctx, m, cwd, pp)
+}
+
+func TestProcessJob_FindOldestPendingBuild_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{{ID: 1, Name: "test-job"}},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), "main", "test-pipeline", "test-job").
+		Return(nil, fmt.Errorf("db error"))
+
+	w.processJob(ctx, m, cwd, pp)
+}
+
+func TestProcessJob_PutStep_LocalMode_Skips(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, topic := newTestWorker(ctrl)
+	w.LocalMode = true
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "local-put-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "local-put-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypePut,
+						Put: &job.PutStep{
+							Type: "git",
+							Name: "repo",
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 340, BuildNumber: "340", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "340", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	// Allow topic.Send for notifyNextPendingBuild
+	topic.EXPECT().Send(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	require.NotEmpty(t, capturedBuild.Steps)
+	assert.Contains(t, capturedBuild.Steps[0].Logs, "skipping put step")
+}
+
+func TestProcessJob_OnSuccessHook(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "success-hook-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "success-hook-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+				OnSuccess: []job.HookStep{
+					runnerHook(utils.RunnerCommand{
+						Runner: "exec",
+						Args:   []string{"job succeeded hook"},
+						Params: map[string]string{"path": "echo"},
+					}),
+				},
+				Ensure: []job.HookStep{
+					runnerHook(utils.RunnerCommand{
+						Runner: "exec",
+						Args:   []string{"job ensure hook"},
+						Params: map[string]string{"path": "echo"},
+					}),
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 341, BuildNumber: "341", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "341", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	// Task + on_success hook + ensure hook
+	require.GreaterOrEqual(t, len(capturedBuild.Steps), 1)
+	// Job-level hooks are stored in capturedBuild.Job
+	require.GreaterOrEqual(t, len(capturedBuild.Job), 2)
+}
+
+func TestProcessJob_OnFailureHook_WithAutoNotification(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "fail-hook-notif-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "fail-hook-notif-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "fail",
+							Run:  utils.RunnerCommand{Runner: "exec", Params: map[string]string{"path": "false"}},
+						},
+					},
+				},
+				OnFailure: []job.HookStep{
+					runnerHook(utils.RunnerCommand{
+						Runner: "exec",
+						Args:   []string{"job failed hook"},
+						Params: map[string]string{"path": "echo"},
+					}),
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "fail-alert",
+				Canonical: "echo-notifier.fail-alert",
+				On:        []string{"failure"},
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"auto fail notif"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 342, BuildNumber: "342", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "342", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Failed, capturedBuild.Status)
+	// Should have task step (failed) + auto notification step
+	require.GreaterOrEqual(t, len(capturedBuild.Steps), 2)
+	assert.Equal(t, "notify", capturedBuild.Steps[1].Type)
+	assert.Equal(t, "fail-alert", capturedBuild.Steps[1].Name)
+	assert.Contains(t, capturedBuild.Steps[1].Logs, "auto fail notif")
+	// Job-level on_failure hook should also have run
+	require.NotEmpty(t, capturedBuild.Job)
+}
+
+// --- runPlan edge cases ---
+
+func TestRunPlan_EmptyPlan(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "empty-plan-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "empty-plan-job",
+				Plan: []job.PlanStep{}, // empty plan
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 350, BuildNumber: "350", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "350", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	assert.Empty(t, capturedBuild.Steps)
+}
+
+func TestRunPlan_MixedSteps_GetTaskPutNotify(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "mixed-job",
+		BuildID:           10,
+		VersionID:         1,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "mixed-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get:  &job.GetStep{Type: "cron", Name: "my-cron", Trigger: true},
+					},
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "build",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"building"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+					{
+						Type: job.StepTypePut,
+						Put:  &job.PutStep{Type: "git", Name: "repo"},
+					},
+					{
+						Type: job.StepTypeNotify,
+						Notify: &job.NotifyStep{
+							Type: "echo-notifier",
+							Name: "deploy-alert",
+						},
+					},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Name: "my-cron", Type: "cron", Canonical: "cron.my-cron"},
+			{ID: 2, Name: "repo", Type: "git", Canonical: "git.repo"},
+		},
+		ResourceTypes: []restype.ResourceType{
+			{
+				ID: 1, Name: "cron",
+				Pull: &utils.RunnerCommand{Runner: "exec", Args: []string{"pulling"}, Params: map[string]string{"path": "echo"}},
+			},
+			{
+				ID: 2, Name: "git",
+				Push: &utils.RunnerCommand{Runner: "exec", Args: []string{"pushing"}, Params: map[string]string{"path": "echo"}},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "deploy-alert",
+				Canonical: "echo-notifier.deploy-alert",
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"notifying"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 351, BuildNumber: "351", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+		Return([]*resource.Version{
+			{ID: 1, Version: map[string]interface{}{"date": "now"}},
+		}, false, nil).AnyTimes()
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "351", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	require.Len(t, capturedBuild.Steps, 4)
+	assert.Equal(t, "get", capturedBuild.Steps[0].Type)
+	assert.Equal(t, "task", capturedBuild.Steps[1].Type)
+	assert.Equal(t, "put", capturedBuild.Steps[2].Type)
+	assert.Equal(t, "notify", capturedBuild.Steps[3].Type)
+}
+
+func TestProcessJob_GetPipelineJob_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "error-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 360, BuildNumber: "360", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(nil, fmt.Errorf("job not found"))
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "360", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Failed, capturedBuild.Status)
+	assert.Contains(t, capturedBuild.Error, "failed to get job")
+}
+
+func TestProcessJob_NotifyStep_WithHooks(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "notify-hook-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "notify-hook-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeNotify,
+						Notify: &job.NotifyStep{
+							Type: "echo-notifier",
+							Name: "my-alert",
+						},
+						OnSuccess: []job.HookStep{
+							runnerHook(utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"notify succeeded"},
+								Params: map[string]string{"path": "echo"},
+							}),
+						},
+						Ensure: []job.HookStep{
+							runnerHook(utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"notify ensure"},
+								Params: map[string]string{"path": "echo"},
+							}),
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "my-alert",
+				Canonical: "echo-notifier.my-alert",
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"notifying"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 370, BuildNumber: "370", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "370", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	require.NotEmpty(t, capturedBuild.Steps)
+	assert.Equal(t, "notify", capturedBuild.Steps[0].Type)
+	assert.Equal(t, build.Succeeded, capturedBuild.Steps[0].Status)
+}
+
+func TestCreateWorkDir(t *testing.T) {
+	w := &Worker{}
+	dir, err := w.createWorkDir()
+	require.NoError(t, err)
+	assert.DirExists(t, dir)
+	os.RemoveAll(dir)
+}
+
+func TestNew(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	topic := mock.NewTopic(ctrl)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	w := New(svc, topic, nil, nil, logger)
+	assert.NotNil(t, w)
 }
