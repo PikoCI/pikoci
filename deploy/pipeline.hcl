@@ -348,7 +348,7 @@ job "deploy-website" {
     run "shell" {
       cmd = <<-EOT
         mkdir -p /var/www/pikoci.com
-        cp -a pikoci.com/. /var/www/pikoci.com/
+        rsync -a --exclude='.git' pikoci.com/ /var/www/pikoci.com/
       EOT
     }
   }
