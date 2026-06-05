@@ -96,7 +96,7 @@ job "test-mock" {
           --flag unit \
           --git-service github \
           --slug PikoCI/pikoci \
-          --sha "$GET_PIKOCI_PR_REF" \
+          --sha "$(git rev-parse HEAD)" \
           --branch "$(git symbolic-ref --short HEAD 2>/dev/null || echo pr)"
       EOT
       args = [
@@ -249,7 +249,7 @@ job "test-backends" {
           --flag backends \
           --git-service github \
           --slug PikoCI/pikoci \
-          --sha "$GET_PIKOCI_PR_REF" \
+          --sha "$(git rev-parse HEAD)" \
           --branch "$(git symbolic-ref --short HEAD 2>/dev/null || echo pr)"
       EOT
       args = [
