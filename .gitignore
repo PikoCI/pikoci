@@ -5,3 +5,5 @@ deploy/pikoci.env
 *.pem
 /site
 /.venv
+coverage.out
+coverage-backends.out

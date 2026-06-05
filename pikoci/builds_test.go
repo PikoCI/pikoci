@@ -378,6 +378,56 @@ func TestReEnqueuePendingBuilds_NoPending(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestGetJobBuild(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	expected := &build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}
+	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3").Return(expected, nil)
+
+	b, err := s.S.GetJobBuild(ctx, "main", "my-pipeline", "my-job", "3")
+	require.NoError(t, err)
+	assert.Equal(t, expected, b)
+}
+
+func TestGetJobBuild_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.GetJobBuild(ctx, "INVALID", "my-pipeline", "my-job", "1")
+	require.Error(t, err)
+
+	_, err = s.S.GetJobBuild(ctx, "main", "INVALID", "my-job", "1")
+	require.Error(t, err)
+
+	_, err = s.S.GetJobBuild(ctx, "main", "my-pipeline", "INVALID", "1")
+	require.Error(t, err)
+}
+
+func TestGetJobBuild_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "99").Return(nil, assert.AnError)
+
+	_, err := s.S.GetJobBuild(ctx, "main", "my-pipeline", "my-job", "99")
+	require.Error(t, err)
+}
+
+func TestInsertBuildGetVersion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().InsertGetVersion(ctx, "main", "my-pipeline", "my-job", uint32(5), "my-repo", uint32(42)).Return(nil)
+
+	err := s.S.InsertBuildGetVersion(ctx, "main", "my-pipeline", "my-job", 5, "my-repo", 42)
+	require.NoError(t, err)
+}
+
 func TestReEnqueuePendingBuilds_NoPipelines(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
@@ -387,4 +437,228 @@ func TestReEnqueuePendingBuilds_NoPipelines(t *testing.T) {
 
 	err := s.P.ReEnqueuePendingBuilds(ctx)
 	require.NoError(t, err)
+}
+
+func TestCancelJobBuild_Running_NotifiesNextPending_WithPendingBuild(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// Cancel a running build and there IS a next pending build to notify
+	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "1").
+		Return(&build.Build{ID: 1, BuildNumber: "1", Status: build.Started}, nil)
+	s.Builds.EXPECT().Update(ctx, "main", "my-pipeline", "my-job", "1", gomock.Any()).Return(nil)
+	// notifyNextPendingBuild finds a pending build
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "my-job").
+		Return(&build.Build{ID: 5, Status: build.Pending}, nil)
+	// It should send a message to the topic
+	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, "main", body.TeamCanonical)
+		assert.Equal(t, "my-pipeline", body.PipelineCanonical)
+		assert.Equal(t, "my-job", body.JobName)
+		assert.Equal(t, uint32(5), body.BuildID)
+		return nil
+	})
+
+	err := s.S.CancelJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
+	require.NoError(t, err)
+}
+
+func TestCancelJobBuild_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	err := s.S.CancelJobBuild(ctx, "INVALID", "my-pipeline", "my-job", "1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Team Canonical")
+
+	err = s.S.CancelJobBuild(ctx, "main", "INVALID", "my-job", "1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Pipeline Canonical")
+
+	err = s.S.CancelJobBuild(ctx, "main", "my-pipeline", "INVALID", "1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Job Name")
+}
+
+func TestCancelJobBuild_AlreadyCompleted(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "1").
+		Return(&build.Build{ID: 1, BuildNumber: "1", Status: build.Succeeded}, nil)
+
+	err := s.S.CancelJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not running or pending")
+}
+
+func TestUpdateJobBuild_CancelledBuildNotOverwritten(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// Build was cancelled; worker tries to update to succeeded — should stay cancelled
+	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "1").
+		Return(&build.Build{Status: build.Cancelled}, nil)
+	s.Builds.EXPECT().Update(ctx, "main", "my-pipeline", "my-job", "1", gomock.Any()).DoAndReturn(
+		func(ctx context.Context, tc, pc, jn, bn string, b build.Build) error {
+			assert.Equal(t, build.Cancelled, b.Status)
+			return nil
+		})
+
+	err := s.S.UpdateJobBuild(ctx, "main", "my-pipeline", "my-job", "1", build.Build{Status: build.Succeeded})
+	require.NoError(t, err)
+}
+
+func TestUpdateJobBuild_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	err := s.S.UpdateJobBuild(ctx, "INVALID", "my-pipeline", "my-job", "1", build.Build{})
+	require.Error(t, err)
+
+	err = s.S.UpdateJobBuild(ctx, "main", "INVALID", "my-job", "1", build.Build{})
+	require.Error(t, err)
+
+	err = s.S.UpdateJobBuild(ctx, "main", "my-pipeline", "INVALID", "1", build.Build{})
+	require.Error(t, err)
+}
+
+func TestDeleteJobBuild_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	err := s.S.DeleteJobBuild(ctx, "INVALID", "my-pipeline", "my-job", "1")
+	require.Error(t, err)
+
+	err = s.S.DeleteJobBuild(ctx, "main", "INVALID", "my-job", "1")
+	require.Error(t, err)
+
+	err = s.S.DeleteJobBuild(ctx, "main", "my-pipeline", "INVALID", "1")
+	require.Error(t, err)
+}
+
+func TestListJobBuilds_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, _, err := s.S.ListJobBuilds(ctx, "INVALID", "my-pipeline", "my-job", nil, nil, 0)
+	require.Error(t, err)
+
+	_, _, err = s.S.ListJobBuilds(ctx, "main", "INVALID", "my-job", nil, nil, 0)
+	require.Error(t, err)
+
+	_, _, err = s.S.ListJobBuilds(ctx, "main", "my-pipeline", "INVALID", nil, nil, 0)
+	require.Error(t, err)
+}
+
+func TestRetryJobBuild_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	err := s.S.RetryJobBuild(ctx, "INVALID", "my-pipeline", "my-job", "1")
+	require.Error(t, err)
+
+	err = s.S.RetryJobBuild(ctx, "main", "INVALID", "my-job", "1")
+	require.Error(t, err)
+
+	err = s.S.RetryJobBuild(ctx, "main", "my-pipeline", "INVALID", "1")
+	require.Error(t, err)
+}
+
+func TestStartPendingBuild_JobPaused(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job", Paused: true}, nil)
+
+	_, err := s.S.StartPendingBuild(ctx, "main", "my-pipeline", "my-job", 10)
+	require.ErrorIs(t, err, pikoci.ErrJobPaused)
+}
+
+func TestStartPendingBuild_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.StartPendingBuild(ctx, "INVALID", "my-pipeline", "my-job", 10)
+	require.Error(t, err)
+
+	_, err = s.S.StartPendingBuild(ctx, "main", "INVALID", "my-job", 10)
+	require.Error(t, err)
+
+	_, err = s.S.StartPendingBuild(ctx, "main", "my-pipeline", "INVALID", 10)
+	require.Error(t, err)
+}
+
+func TestStartPendingBuild_NoConcurrencyLimit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// Concurrency == 0 means no limit
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job", Concurrency: 0}, nil)
+	s.Builds.EXPECT().StartPending(ctx, "main", "my-pipeline", "my-job", uint32(10)).Return(nil)
+	s.Builds.EXPECT().FindByID(ctx, uint32(10)).Return(
+		&build.Build{ID: 10, BuildNumber: "1", Status: build.Started}, nil)
+
+	b, err := s.S.StartPendingBuild(ctx, "main", "my-pipeline", "my-job", 10)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(10), b.ID)
+}
+
+func TestFindOldestPendingBuild_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.FindOldestPendingBuild(ctx, "INVALID", "my-pipeline", "my-job")
+	require.Error(t, err)
+
+	_, err = s.S.FindOldestPendingBuild(ctx, "main", "INVALID", "my-job")
+	require.Error(t, err)
+
+	_, err = s.S.FindOldestPendingBuild(ctx, "main", "my-pipeline", "INVALID")
+	require.Error(t, err)
+}
+
+func TestFindBuildGetVersions_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.FindBuildGetVersions(ctx, "INVALID", "my-pipeline", "my-job", 5)
+	require.Error(t, err)
+
+	_, err = s.S.FindBuildGetVersions(ctx, "main", "INVALID", "my-job", 5)
+	require.Error(t, err)
+
+	_, err = s.S.FindBuildGetVersions(ctx, "main", "my-pipeline", "INVALID", 5)
+	require.Error(t, err)
+}
+
+func TestCreateRetryJobBuild_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.CreateRetryJobBuild(ctx, "INVALID", "my-pipeline", "my-job", "3", build.Build{})
+	require.Error(t, err)
+
+	_, err = s.S.CreateRetryJobBuild(ctx, "main", "INVALID", "my-job", "3", build.Build{})
+	require.Error(t, err)
+
+	_, err = s.S.CreateRetryJobBuild(ctx, "main", "my-pipeline", "INVALID", "3", build.Build{})
+	require.Error(t, err)
 }

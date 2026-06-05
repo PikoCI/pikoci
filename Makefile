@@ -63,7 +63,7 @@ test: test-mock test-integration test-backends ## Runs all tests
 
 .PHONY: test-mock
 test-mock: ## Runs unit/mock tests (no services needed)
-	go test ./... -timeout 120s
+	go test ./... -timeout 120s -coverprofile=coverage.out
 
 .PHONY: test-integration
 test-integration: ## Runs UI and backend integration tests (requires geckodriver + Xvfb + Firefox)
@@ -80,7 +80,7 @@ test-backends: ## Runs integration tests with all backends (requires test-servic
 	NATS_SERVER_URL=nats://127.0.0.1:4222 \
 	RABBIT_SERVER_URL=amqp://guest:guest@127.0.0.1:5672/ \
 	KAFKA_BROKERS=127.0.0.1:9092 \
-	go test -tags integration ./integration/backends/...
+	go test -tags integration ./integration/backends/... -coverprofile=coverage-backends.out
 
 .PHONY: tag
 tag: ## Tag a release: make tag SEMVER=major|minor|patch

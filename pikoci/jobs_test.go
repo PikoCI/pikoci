@@ -185,6 +185,58 @@ func TestTriggerPipelineJob_JobPaused(t *testing.T) {
 	assert.Contains(t, err.Error(), "is paused")
 }
 
+func TestPauseJob(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().SetPaused(ctx, "main", "pp", "jn", true).Return(nil)
+
+	err := s.S.PauseJob(ctx, "main", "pp", "jn")
+	require.NoError(t, err)
+}
+
+func TestPauseJob_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	err := s.S.PauseJob(ctx, "INVALID", "pp", "jn")
+	require.Error(t, err)
+
+	err = s.S.PauseJob(ctx, "main", "INVALID", "jn")
+	require.Error(t, err)
+
+	err = s.S.PauseJob(ctx, "main", "pp", "INVALID")
+	require.Error(t, err)
+}
+
+func TestUnpauseJob(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().SetPaused(ctx, "main", "pp", "jn", false).Return(nil)
+
+	err := s.S.UnpauseJob(ctx, "main", "pp", "jn")
+	require.NoError(t, err)
+}
+
+func TestUnpauseJob_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	err := s.S.UnpauseJob(ctx, "INVALID", "pp", "jn")
+	require.Error(t, err)
+
+	err = s.S.UnpauseJob(ctx, "main", "INVALID", "jn")
+	require.Error(t, err)
+
+	err = s.S.UnpauseJob(ctx, "main", "pp", "INVALID")
+	require.Error(t, err)
+}
+
 func TestPausePipeline_PausesAllJobs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)

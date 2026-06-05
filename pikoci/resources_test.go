@@ -7,6 +7,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/pikoci/pikoci/pikoci/build"
+	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/queue"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"go.uber.org/mock/gomock"
@@ -145,4 +148,455 @@ func TestTriggerPipelineResource(t *testing.T) {
 
 	err := s.S.TriggerPipelineResource(ctx, "main", "my-pipeline", "git.repo")
 	require.NoError(t, err)
+}
+
+func TestPinResourceVersion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// validateResourceVersion: FilterVersions returns versions including the one we pin
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
+		{ID: 10},
+		{ID: 20},
+	}, nil)
+	s.Resources.EXPECT().PinVersion(ctx, "main", "my-pipeline", "git.repo", uint32(10)).Return(nil)
+	// cancelMismatchedPendingBuilds: find pipeline, then filter builds for matching jobs
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
+		Jobs: []job.Job{
+			{
+				Name: "my-job",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo"}},
+				},
+			},
+		},
+	}, nil)
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+		{ID: 1, BuildNumber: "1", Status: build.Pending, ResourceCanonical: "git.repo", VersionID: 20},
+	}, nil)
+	// The mismatched pending build (version 20 != pinned 10) should be cancelled
+	s.Builds.EXPECT().Update(ctx, "main", "my-pipeline", "my-job", "1", gomock.Any()).Return(nil)
+
+	err := s.S.PinResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
+	require.NoError(t, err)
+}
+
+func TestPinResourceVersion_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	err := s.S.PinResourceVersion(ctx, "INVALID", "my-pipeline", "git.repo", 10)
+	require.Error(t, err)
+
+	err = s.S.PinResourceVersion(ctx, "main", "INVALID", "git.repo", 10)
+	require.Error(t, err)
+
+	err = s.S.PinResourceVersion(ctx, "main", "my-pipeline", "INVALID", 10)
+	require.Error(t, err)
+}
+
+func TestPinResourceVersion_VersionNotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// FilterVersions returns versions that don't include the requested one
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
+		{ID: 20},
+		{ID: 30},
+	}, nil)
+
+	err := s.S.PinResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not belong to resource")
+}
+
+func TestUnpinResourceVersion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().UnpinVersion(ctx, "main", "my-pipeline", "git.repo").Return(nil)
+
+	err := s.S.UnpinResourceVersion(ctx, "main", "my-pipeline", "git.repo")
+	require.NoError(t, err)
+}
+
+func TestUnpinResourceVersion_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	err := s.S.UnpinResourceVersion(ctx, "INVALID", "my-pipeline", "git.repo")
+	require.Error(t, err)
+
+	err = s.S.UnpinResourceVersion(ctx, "main", "INVALID", "git.repo")
+	require.Error(t, err)
+
+	err = s.S.UnpinResourceVersion(ctx, "main", "my-pipeline", "INVALID")
+	require.Error(t, err)
+}
+
+func TestTriggerResourceVersion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// validateResourceVersion
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
+		{ID: 10},
+	}, nil)
+	// Find pipeline to iterate jobs
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
+		Jobs: []job.Job{
+			{
+				Name: "my-job",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo"}},
+				},
+			},
+		},
+	}, nil)
+	// CreateJobBuild for the matching job
+	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "my-job", gomock.Any()).Return(uint32(1), "1", nil)
+	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, "main", body.TeamCanonical)
+		assert.Equal(t, "my-pipeline", body.PipelineCanonical)
+		assert.Equal(t, "my-job", body.JobName)
+		assert.Equal(t, uint32(10), body.VersionID)
+		assert.Equal(t, "git.repo", body.ResourceCanonical)
+		return nil
+	})
+
+	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
+	require.NoError(t, err)
+}
+
+func TestTriggerResourceVersion_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	err := s.S.TriggerResourceVersion(ctx, "INVALID", "my-pipeline", "git.repo", 10)
+	require.Error(t, err)
+
+	err = s.S.TriggerResourceVersion(ctx, "main", "INVALID", "git.repo", 10)
+	require.Error(t, err)
+
+	err = s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "INVALID", 10)
+	require.Error(t, err)
+}
+
+func TestTriggerResourceVersion_SkipsPausedJobs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// validateResourceVersion
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
+		{ID: 10},
+	}, nil)
+	// Pipeline has one paused job with a matching get step
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
+		Jobs: []job.Job{
+			{
+				Name:   "paused-job",
+				Paused: true,
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo"}},
+				},
+			},
+		},
+	}, nil)
+	// No builds or sends should happen for paused jobs
+
+	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
+	require.NoError(t, err)
+}
+
+func TestWebhookTrigger(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().FindByWebhookToken(ctx, "my-token").Return(&resource.Resource{
+		ID: 1, Canonical: "git.repo",
+	}, "main", "my-pipeline", nil)
+	// TriggerPipelineResource chain: Find, Send, Update
+	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").Return(&resource.Resource{
+		ID: 1, Canonical: "git.repo",
+	}, nil)
+	s.CheckTopic.EXPECT().Send(ctx, gomock.Any()).Return(nil)
+	s.Resources.EXPECT().Update(ctx, "main", "my-pipeline", "git.repo", gomock.Any()).Return(nil)
+
+	err := s.S.WebhookTrigger(ctx, "my-token")
+	require.NoError(t, err)
+}
+
+func TestWebhookTrigger_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().FindByWebhookToken(ctx, "bad-token").Return(nil, "", "", assert.AnError)
+
+	err := s.S.WebhookTrigger(ctx, "bad-token")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to find Resource by webhook token")
+}
+
+func TestRegenerateWebhookToken(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").Return(&resource.Resource{
+		ID: 1, Canonical: "git.repo", WebhookToken: "old-token",
+	}, nil)
+	s.Resources.EXPECT().Update(ctx, "main", "my-pipeline", "git.repo", gomock.Any()).Return(nil)
+
+	token, err := s.S.RegenerateWebhookToken(ctx, "main", "my-pipeline", "git.repo")
+	require.NoError(t, err)
+	assert.NotEmpty(t, token)
+	assert.NotEqual(t, "old-token", token)
+}
+
+func TestRegenerateWebhookToken_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.RegenerateWebhookToken(ctx, "INVALID", "my-pipeline", "git.repo")
+	require.Error(t, err)
+
+	_, err = s.S.RegenerateWebhookToken(ctx, "main", "INVALID", "git.repo")
+	require.Error(t, err)
+
+	_, err = s.S.RegenerateWebhookToken(ctx, "main", "my-pipeline", "INVALID")
+	require.Error(t, err)
+}
+
+func TestGetPipelineResource_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.GetPipelineResource(ctx, "INVALID", "my-pipeline", "git.repo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Team Canonical")
+
+	_, err = s.S.GetPipelineResource(ctx, "main", "INVALID", "git.repo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Pipeline Canonical")
+
+	_, err = s.S.GetPipelineResource(ctx, "main", "my-pipeline", "INVALID")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Resource Canonical")
+}
+
+func TestUpdatePipelineResource_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	err := s.S.UpdatePipelineResource(ctx, "INVALID", "my-pipeline", "git.repo", resource.Resource{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Team Canonical")
+
+	err = s.S.UpdatePipelineResource(ctx, "main", "INVALID", "git.repo", resource.Resource{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Pipeline Canonical")
+
+	err = s.S.UpdatePipelineResource(ctx, "main", "my-pipeline", "INVALID", resource.Resource{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Resource Canonical")
+}
+
+func TestListResourceVersions_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, _, err := s.S.ListResourceVersions(ctx, "INVALID", "my-pipeline", "git.repo", nil, nil, 0)
+	require.Error(t, err)
+
+	_, _, err = s.S.ListResourceVersions(ctx, "main", "INVALID", "git.repo", nil, nil, 0)
+	require.Error(t, err)
+
+	_, _, err = s.S.ListResourceVersions(ctx, "main", "my-pipeline", "INVALID", nil, nil, 0)
+	require.Error(t, err)
+}
+
+func TestTriggerPipelineResource_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	err := s.S.TriggerPipelineResource(ctx, "INVALID", "my-pipeline", "git.repo")
+	require.Error(t, err)
+
+	err = s.S.TriggerPipelineResource(ctx, "main", "INVALID", "git.repo")
+	require.Error(t, err)
+
+	err = s.S.TriggerPipelineResource(ctx, "main", "my-pipeline", "INVALID")
+	require.Error(t, err)
+}
+
+func TestTriggerPipelineResource_ResourceNotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").Return(nil, assert.AnError)
+
+	err := s.S.TriggerPipelineResource(ctx, "main", "my-pipeline", "git.repo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to find Resource")
+}
+
+func TestTriggerResourceVersion_SkipsPassedConstraints(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// validateResourceVersion
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
+		{ID: 10},
+	}, nil)
+	// Pipeline has a job with passed constraints (should be skipped)
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
+		Jobs: []job.Job{
+			{
+				Name: "downstream-job",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo", Passed: []string{"upstream"}}},
+				},
+			},
+		},
+	}, nil)
+	// No builds should be created since the get has passed constraints
+
+	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
+	require.NoError(t, err)
+}
+
+func TestTriggerResourceVersion_SkipsNonMatchingResource(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
+		{ID: 10},
+	}, nil)
+	// Pipeline has a job with a different resource
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
+		Jobs: []job.Job{
+			{
+				Name: "other-job",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "cron", Name: "timer"}},
+				},
+			},
+		},
+	}, nil)
+	// No builds should be created
+
+	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
+	require.NoError(t, err)
+}
+
+func TestTriggerResourceVersion_SkipsTaskSteps(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
+		{ID: 10},
+	}, nil)
+	// Pipeline has a job with only task steps (no get)
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
+		Jobs: []job.Job{
+			{
+				Name: "task-only",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeTask},
+				},
+			},
+		},
+	}, nil)
+
+	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
+	require.NoError(t, err)
+}
+
+func TestCancelMismatchedPendingBuilds_NoMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// Pin to version 10, the pending build also has version 10 — no cancel
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
+		{ID: 10},
+	}, nil)
+	s.Resources.EXPECT().PinVersion(ctx, "main", "my-pipeline", "git.repo", uint32(10)).Return(nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
+		Jobs: []job.Job{
+			{
+				Name: "my-job",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo"}},
+				},
+			},
+		},
+	}, nil)
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+		{ID: 1, BuildNumber: "1", Status: build.Pending, ResourceCanonical: "git.repo", VersionID: 10},
+	}, nil)
+	// No Update call — build matches pinned version
+
+	err := s.S.PinResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
+	require.NoError(t, err)
+}
+
+func TestCancelMismatchedPendingBuilds_JobDoesNotUseResource(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
+		{ID: 10},
+	}, nil)
+	s.Resources.EXPECT().PinVersion(ctx, "main", "my-pipeline", "git.repo", uint32(10)).Return(nil)
+	// Job uses a different resource — should be skipped entirely
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
+		Jobs: []job.Job{
+			{
+				Name: "other-job",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "cron", Name: "timer"}},
+				},
+			},
+		},
+	}, nil)
+	// No Filter or Update calls for this job
+
+	err := s.S.PinResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
+	require.NoError(t, err)
+}
+
+func TestRegenerateWebhookToken_FindError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").Return(nil, assert.AnError)
+
+	_, err := s.S.RegenerateWebhookToken(ctx, "main", "my-pipeline", "git.repo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to find Resource")
 }

@@ -313,6 +313,44 @@ func TestChangePassword_WrongOld(t *testing.T) {
 	assert.Contains(t, err.Error(), "current password is incorrect")
 }
 
+func TestRefreshToken(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	um := &user.WithMemberships{
+		User: user.User{ID: 1, Username: "admin"},
+	}
+	s.Users.EXPECT().FindWithMemberships(ctx, "admin").Return(um, nil)
+
+	u, jwt, err := s.S.RefreshToken(ctx, "admin")
+	require.NoError(t, err)
+	require.NotNil(t, u)
+	assert.NotEmpty(t, jwt)
+	assert.Equal(t, "admin", u.Username)
+}
+
+func TestRefreshToken_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, _, err := s.S.RefreshToken(ctx, "INVALID USER")
+	require.Error(t, err)
+}
+
+func TestRefreshToken_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Users.EXPECT().FindWithMemberships(ctx, "unknown").Return(nil, assert.AnError)
+
+	_, _, err := s.S.RefreshToken(ctx, "unknown")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to Find User")
+}
+
 func TestUpdateProfile(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
