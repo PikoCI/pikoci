@@ -2038,8 +2038,19 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 			// Inject "-e KEY=VALUE" flags for each env var. This is used
 			// by the Docker runner to forward params (including exported
 			// GET_*/TASK_* step metadata) into the container environment.
+			// Only inject build metadata and exported step vars, not
+			// runner-specific params like cmd, image, or WORKDIR.
 			for k, v := range envs {
-				args = append(args, "-e", k+"="+v)
+				if strings.HasPrefix(k, "GET_") ||
+					strings.HasPrefix(k, "TASK_") ||
+					strings.HasPrefix(k, "BUILD_") ||
+					strings.HasPrefix(k, "PIKOCI_") ||
+					strings.HasPrefix(k, "version_") ||
+					strings.HasPrefix(k, "param_") ||
+					strings.HasPrefix(k, "secret_") ||
+					strings.HasPrefix(k, "notify_") {
+					args = append(args, "-e", k+"="+v)
+				}
 			}
 			continue
 		}
