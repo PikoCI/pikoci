@@ -2038,17 +2038,10 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 			// Inject "-e KEY=VALUE" flags for each env var. This is used
 			// by the Docker runner to forward params (including exported
 			// GET_*/TASK_* step metadata) into the container environment.
-			// Only inject build metadata and exported step vars, not
-			// runner-specific params like cmd, image, or WORKDIR.
+			// Runner-internal params are excluded to avoid breaking the
+			// container command (e.g. multi-line cmd values).
 			for k, v := range envs {
-				if strings.HasPrefix(k, "GET_") ||
-					strings.HasPrefix(k, "TASK_") ||
-					strings.HasPrefix(k, "BUILD_") ||
-					strings.HasPrefix(k, "PIKOCI_") ||
-					strings.HasPrefix(k, "version_") ||
-					strings.HasPrefix(k, "param_") ||
-					strings.HasPrefix(k, "secret_") ||
-					strings.HasPrefix(k, "notify_") {
+				if !isRunnerInternalParam(k) {
 					args = append(args, "-e", k+"="+v)
 				}
 			}
@@ -2321,6 +2314,26 @@ func flattenVersionValue(params map[string]string, prefix string, v interface{})
 	default:
 		params[prefix] = fmt.Sprintf("%v", val)
 	}
+}
+
+// runnerInternalParams are params used by the runner template itself (e.g. cmd,
+// image, WORKDIR). These must not be injected as -e flags via $env because they
+// can contain multi-line values or special characters that break container CLIs.
+var runnerInternalParams = map[string]bool{
+	"cmd":           true,
+	"image":         true,
+	"WORKDIR":       true,
+	"path":          true,
+	"PIKOCI_OUTPUT": true,
+	"script":        true,
+	"shell":         true,
+	"file":          true,
+}
+
+// isRunnerInternalParam reports whether the given key is a runner-internal
+// parameter that should be excluded from $env injection.
+func isRunnerInternalParam(key string) bool {
+	return runnerInternalParams[key]
 }
 
 // sanitizeStepName converts a step name to a safe environment variable prefix
