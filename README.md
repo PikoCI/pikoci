@@ -13,7 +13,7 @@
   [![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Fpikoci%2Fpikoci-blue?logo=docker)](https://github.com/orgs/PikoCI/packages/container/package/pikoci)
   [![codecov](https://codecov.io/gh/PikoCI/pikoci/graph/badge.svg)](https://codecov.io/gh/PikoCI/pikoci)
 
-  [Documentation](https://docs.pikoci.com) · [Quick Start](#quick-start) · [Contributing](#contributing)
+  [Documentation](https://docs.pikoci.com) · [Quick Start](#quick-start) · [Contributing](#contributing) · [Discord](https://discord.gg/gctEh24CTm)
 </div>
 
 ![PikoCI pipeline](https://ci.pikoci.com/teams/main/pipelines/pikoci/image.svg)
