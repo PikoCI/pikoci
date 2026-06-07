@@ -3064,7 +3064,13 @@ job "test" {
 	s.Jobs.EXPECT().Update(ctx, tc, pCan, "test", gomock.Any()).Return(nil)
 	// timer is updated, new-res is created, old-res is deleted
 	s.Resources.EXPECT().Update(ctx, tc, pCan, "cron.timer", gomock.Any()).Return(nil)
-	s.Resources.EXPECT().Create(ctx, tc, pCan, gomock.Any()).Return(uint32(3), nil)
+	s.Resources.EXPECT().Create(ctx, tc, pCan, gomock.Any()).DoAndReturn(
+		func(_ context.Context, _, _ string, r resource.Resource) (uint32, error) {
+			assert.True(t, strings.HasPrefix(r.WebhookToken, r.Canonical+"_"),
+				"webhook token should start with canonical prefix, got %q", r.WebhookToken)
+			return uint32(3), nil
+		},
+	)
 	s.Resources.EXPECT().Delete(ctx, tc, pCan, "cron.old-res").Return(nil)
 
 	pp, err := s.S.UpdatePipeline(ctx, tc, pCan, hclConfig, nil)

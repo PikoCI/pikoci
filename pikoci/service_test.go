@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,6 +12,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/resource"
 	"go.uber.org/mock/gomock"
 	"gocloud.dev/pubsub"
 )
@@ -31,7 +33,13 @@ func TestCreatePipeline(t *testing.T) {
 
 	s.Pipelines.EXPECT().Create(ctx, tc, gomock.Any()).Return(uint32(1), nil)
 	s.Jobs.EXPECT().Create(ctx, tc, ppc, gomock.Any()).Return(uint32(1), nil).Times(3)
-	s.Resources.EXPECT().Create(ctx, tc, ppc, gomock.Any()).Return(uint32(1), nil).Times(1)
+	s.Resources.EXPECT().Create(ctx, tc, ppc, gomock.Any()).DoAndReturn(
+		func(_ context.Context, _, _ string, r resource.Resource) (uint32, error) {
+			assert.True(t, strings.HasPrefix(r.WebhookToken, r.Canonical+"_"),
+				"webhook token should start with canonical prefix, got %q", r.WebhookToken)
+			return uint32(1), nil
+		},
+	).Times(1)
 	// GetPipeline uses Find which now does a single JOIN query
 	s.Pipelines.EXPECT().Find(ctx, tc, ppc).Return(&pipeline.Pipeline{Name: ppc}, nil)
 
