@@ -80,6 +80,18 @@ func findOldestPendingBuild(s pikoci.Service) http.HandlerFunc {
 	}
 }
 
+func notifySerialGroupPendingBuilds(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var ctx = r.Context()
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		jn := vars["job_name"]
+		s.NotifySerialGroupPendingBuilds(ctx, tc, pc, jn)
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 type UpdateJobBuildRequest struct {
 	TeamCanonical     string      `json:"team_canonical"`
 	PipelineCanonical string      `json:"pipeline_canonical"`

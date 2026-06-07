@@ -37,4 +37,7 @@ type Repository interface {
 	FindOldestPending(ctx context.Context, tc, pn, jn string) (*Build, error)
 	// StartPending transitions a pending build to started status.
 	StartPending(ctx context.Context, tc, pn, jn string, buildID uint32) error
+	// CountRunningInSerialGroups returns the number of running builds for jobs (excluding excludeJobName)
+	// that share any of the given serial groups within the same pipeline.
+	CountRunningInSerialGroups(ctx context.Context, tc, pn string, serialGroups []string, excludeJobName string) (int, error)
 }

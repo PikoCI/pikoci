@@ -298,6 +298,9 @@ func TestCancelJobBuild_Pending(t *testing.T) {
 	// Should also notify next pending build
 	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "my-job").
 		Return(nil, nil)
+	// NotifySerialGroupPendingBuilds looks up the job
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
+		Return(&job.Job{Name: "my-job"}, nil)
 
 	err := s.S.CancelJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
 	require.NoError(t, err)
@@ -314,6 +317,9 @@ func TestCancelJobBuild_Running_NotifiesNextPending(t *testing.T) {
 	// Should check for next pending build
 	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "my-job").
 		Return(nil, nil)
+	// NotifySerialGroupPendingBuilds looks up the job
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
+		Return(&job.Job{Name: "my-job"}, nil)
 
 	err := s.S.CancelJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
 	require.NoError(t, err)
@@ -462,6 +468,9 @@ func TestCancelJobBuild_Running_NotifiesNextPending_WithPendingBuild(t *testing.
 		assert.Equal(t, uint32(5), body.BuildID)
 		return nil
 	})
+	// NotifySerialGroupPendingBuilds looks up the job
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
+		Return(&job.Job{Name: "my-job"}, nil)
 
 	err := s.S.CancelJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
 	require.NoError(t, err)
@@ -646,6 +655,95 @@ func TestFindBuildGetVersions_InvalidCanonical(t *testing.T) {
 
 	_, err = s.S.FindBuildGetVersions(ctx, "main", "my-pipeline", "INVALID", 5)
 	require.Error(t, err)
+}
+
+// --- Serial Group tests ---
+
+func TestStartPendingBuild_SerialGroupLimit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "deploy-staging").
+		Return(&job.Job{Name: "deploy-staging", SerialGroups: []string{"deploy"}}, nil)
+	s.Builds.EXPECT().CountRunningInSerialGroups(ctx, "main", "my-pipeline", []string{"deploy"}, "deploy-staging").
+		Return(1, nil)
+
+	_, err := s.S.StartPendingBuild(ctx, "main", "my-pipeline", "deploy-staging", 10)
+	require.ErrorIs(t, err, pikoci.ErrSerialGroupLimit)
+}
+
+func TestStartPendingBuild_SerialGroupNoRunning(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "deploy-staging").
+		Return(&job.Job{Name: "deploy-staging", SerialGroups: []string{"deploy"}}, nil)
+	s.Builds.EXPECT().CountRunningInSerialGroups(ctx, "main", "my-pipeline", []string{"deploy"}, "deploy-staging").
+		Return(0, nil)
+	s.Builds.EXPECT().StartPending(ctx, "main", "my-pipeline", "deploy-staging", uint32(10)).Return(nil)
+	s.Builds.EXPECT().FindByID(ctx, uint32(10)).Return(
+		&build.Build{ID: 10, BuildNumber: "1", Status: build.Started}, nil)
+
+	b, err := s.S.StartPendingBuild(ctx, "main", "my-pipeline", "deploy-staging", 10)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(10), b.ID)
+}
+
+func TestStartPendingBuild_SerialGroupAndConcurrency(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// Concurrency allows but serial group blocks
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "deploy-staging").
+		Return(&job.Job{Name: "deploy-staging", Concurrency: 2, SerialGroups: []string{"deploy"}}, nil)
+	s.Builds.EXPECT().CountRunning(ctx, "main", "my-pipeline", "deploy-staging").Return(0, nil)
+	s.Builds.EXPECT().CountRunningInSerialGroups(ctx, "main", "my-pipeline", []string{"deploy"}, "deploy-staging").
+		Return(1, nil)
+
+	_, err := s.S.StartPendingBuild(ctx, "main", "my-pipeline", "deploy-staging", 10)
+	require.ErrorIs(t, err, pikoci.ErrSerialGroupLimit)
+}
+
+func TestNotifySerialGroupPendingBuilds(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "deploy-staging").
+		Return(&job.Job{Name: "deploy-staging", SerialGroups: []string{"deploy"}}, nil)
+	s.Jobs.EXPECT().FindJobsBySerialGroups(ctx, "main", "my-pipeline", []string{"deploy"}).
+		Return([]*job.Job{
+			{Name: "deploy-staging"},
+			{Name: "deploy-prod"},
+		}, nil)
+	// Should find pending build for deploy-prod (skip deploy-staging since it's the caller)
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "deploy-prod").
+		Return(&build.Build{ID: 42, Status: build.Pending}, nil)
+	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, "deploy-prod", body.JobName)
+		assert.Equal(t, uint32(42), body.BuildID)
+		return nil
+	})
+
+	s.P.NotifySerialGroupPendingBuilds(ctx, "main", "my-pipeline", "deploy-staging")
+}
+
+func TestNotifySerialGroupPendingBuilds_NoSerialGroups(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
+		Return(&job.Job{Name: "my-job"}, nil)
+	// No further calls expected — job has no serial groups
+
+	s.P.NotifySerialGroupPendingBuilds(ctx, "main", "my-pipeline", "my-job")
 }
 
 func TestCreateRetryJobBuild_InvalidCanonical(t *testing.T) {

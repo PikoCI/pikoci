@@ -821,6 +821,12 @@ func (cl *Client) FindOldestPendingBuild(ctx context.Context, tc, pn, jn string)
 	return resp.Build, nil
 }
 
+// NotifySerialGroupPendingBuilds asks the server to notify pending builds for
+// all jobs sharing serial groups with the given job.
+func (cl *Client) NotifySerialGroupPendingBuilds(ctx context.Context, tc, pn, jn string) {
+	_ = cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/notify-serial-groups", cl.url, tc, pn, jn), nil, nil)
+}
+
 // ListJobBuilds always fetches all builds (limit=0) for CLI backward compat.
 // The before/after/limit params satisfy the Service interface but are not sent.
 func (cl *Client) ListJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error) {

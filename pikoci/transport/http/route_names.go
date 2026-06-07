@@ -90,6 +90,8 @@ const (
 	StartPendingBuild
 	// FindOldestPendingBuild is the route for finding the oldest pending build for a job.
 	FindOldestPendingBuild
+	// NotifySerialGroupPendingBuilds is the route for notifying pending builds in serial groups.
+	NotifySerialGroupPendingBuilds
 
 	// GetPipelineResource is the route for retrieving a single pipeline resource.
 	GetPipelineResource

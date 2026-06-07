@@ -68,14 +68,15 @@ type hclPutStep struct {
 
 // hclJob is the intermediate HCL-decoded job with separate get/task/put/notify arrays.
 type hclJob struct {
-	Name        string           `hcl:"name,label"`
-	Concurrency int              `hcl:"concurrency,optional"`
-	Timeout     string           `hcl:"timeout,optional"`
-	Get         []hclGetStep     `hcl:"get,block"`
-	Task        []hclTaskStep    `hcl:"task,block"`
-	Put         []hclPutStep     `hcl:"put,block"`
-	Notify      []hclNotifyStep  `hcl:"notify,block"`
-	Service     []hclServiceRef  `hcl:"service,block"`
+	Name         string           `hcl:"name,label"`
+	Concurrency  int              `hcl:"concurrency,optional"`
+	SerialGroups []string         `hcl:"serial_groups,optional"`
+	Timeout      string           `hcl:"timeout,optional"`
+	Get          []hclGetStep     `hcl:"get,block"`
+	Task         []hclTaskStep    `hcl:"task,block"`
+	Put          []hclPutStep     `hcl:"put,block"`
+	Notify       []hclNotifyStep  `hcl:"notify,block"`
+	Service      []hclServiceRef  `hcl:"service,block"`
 
 	Remain hcl.Body `hcl:",remain"` // absorbs hook blocks; parsed by parseHooks from AST
 }
@@ -667,6 +668,11 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 		if hj.Concurrency < 0 {
 			return nil, fmt.Errorf("job %q: concurrency must be >= 0", hj.Name)
 		}
+		for _, sg := range hj.SerialGroups {
+			if !utils.ValidateCanonical(sg) {
+				return nil, fmt.Errorf("job %q: invalid serial_group name %q (must be lowercase alphanumeric with hyphens)", hj.Name, sg)
+			}
+		}
 		var jobTimeout time.Duration
 		if hj.Timeout != "" {
 			jobTimeout, err = time.ParseDuration(hj.Timeout)
@@ -676,14 +682,15 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 		}
 		jh := jobHooksMap[hj.Name]
 		j := job.Job{
-			Name:        hj.Name,
-			Concurrency: hj.Concurrency,
-			Timeout:     jobTimeout,
-			Plan:        jobPlans[hj.Name],
-			OnSuccess:   jh.OnSuccess,
-			OnFailure:   jh.OnFailure,
-			OnCancel:    jh.OnCancel,
-			Ensure:      jh.Ensure,
+			Name:         hj.Name,
+			Concurrency:  hj.Concurrency,
+			SerialGroups: hj.SerialGroups,
+			Timeout:      jobTimeout,
+			Plan:         jobPlans[hj.Name],
+			OnSuccess:    jh.OnSuccess,
+			OnFailure:    jh.OnFailure,
+			OnCancel:     jh.OnCancel,
+			Ensure:       jh.Ensure,
 		}
 		pp.Jobs = append(pp.Jobs, j)
 	}

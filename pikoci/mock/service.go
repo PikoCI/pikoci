@@ -613,6 +613,18 @@ func (mr *ServiceMockRecorder) ListUsers(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListUsers", reflect.TypeOf((*Service)(nil).ListUsers), ctx)
 }
 
+// NotifySerialGroupPendingBuilds mocks base method.
+func (m *Service) NotifySerialGroupPendingBuilds(ctx context.Context, tc, pn, jn string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "NotifySerialGroupPendingBuilds", ctx, tc, pn, jn)
+}
+
+// NotifySerialGroupPendingBuilds indicates an expected call of NotifySerialGroupPendingBuilds.
+func (mr *ServiceMockRecorder) NotifySerialGroupPendingBuilds(ctx, tc, pn, jn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifySerialGroupPendingBuilds", reflect.TypeOf((*Service)(nil).NotifySerialGroupPendingBuilds), ctx, tc, pn, jn)
+}
+
 // PauseJob mocks base method.
 func (m *Service) PauseJob(ctx context.Context, tc, pCan, jn string) error {
 	m.ctrl.T.Helper()

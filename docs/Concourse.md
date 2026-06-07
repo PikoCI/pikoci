@@ -20,6 +20,7 @@ PikoCI's resource model is directly inspired by [Concourse CI](https://concourse
 | `trigger: true` | `trigger = true` | Same. Auto-triggers the job on new versions. |
 | `on_success` / `on_failure` / `on_cancel` / `ensure` | Same names | Same semantics. Available on both steps and jobs. |
 | Webhook triggers | Webhook triggers | Same. `POST /webhooks/<token>` triggers a resource check. |
+| `serial_groups` | `serial_groups` | Same concept. Cross-job mutual exclusion within a pipeline. |
 | Teams | Teams | Similar. PikoCI has team-based scoping. |
 
 ## Key differences

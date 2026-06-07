@@ -22,4 +22,6 @@ type Repository interface {
 	PauseAll(ctx context.Context, tc, pn string) error
 	// UnpauseAll clears the paused flag for all jobs in a pipeline.
 	UnpauseAll(ctx context.Context, tc, pn string) error
+	// FindJobsBySerialGroups returns all jobs in the pipeline that share any of the given serial groups.
+	FindJobsBySerialGroups(ctx context.Context, tc, pn string, serialGroups []string) ([]*Job, error)
 }

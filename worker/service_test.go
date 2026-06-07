@@ -40,6 +40,9 @@ func newTestWorker(ctrl *gomock.Controller) (*Worker, *mock.Service, *mock.Topic
 	// InsertBuildGetVersion is called after every successful get step; allow it globally.
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
+	// NotifySerialGroupPendingBuilds is called by notifyNextPendingBuild; allow it globally.
+	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
 	// GetJobBuild is polled by the cancellation goroutine; return Started by default.
 	svc.EXPECT().GetJobBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&build.Build{Status: build.Started}, nil).AnyTimes()
@@ -285,6 +288,7 @@ func TestInsertBuildGetVersion_CalledWithCorrectArgs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	// Don't use newTestWorker — we need precise control over InsertBuildGetVersion.
 	svc := mock.NewService(ctrl)
+	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	topic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	svc.EXPECT().GetJobBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
@@ -3332,6 +3336,7 @@ func TestProcessJob_Cancellation(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	// Build a worker with custom GetJobBuild behavior (don't use newTestWorker's default).
 	svc := mock.NewService(ctrl)
+	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	topic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
@@ -3564,6 +3569,7 @@ func TestProcessJob_Retry_FailsOnVersionLookupError(t *testing.T) {
 func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := mock.NewService(ctrl)
+	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	topic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
@@ -3692,6 +3698,7 @@ func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 func TestProcessJob_Cancellation_NoUpdateLoopAfterCancel(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := mock.NewService(ctrl)
+	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	topic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
@@ -3845,6 +3852,37 @@ func TestProcessJob_ConcurrencyLimit_Requeues(t *testing.T) {
 
 	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
 		Return(nil, pikoci.ErrConcurrencyLimit)
+
+	// Should re-queue the message
+	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, m.BuildID, body.BuildID)
+		assert.Equal(t, m.JobName, body.JobName)
+		return nil
+	})
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+}
+
+func TestProcessJob_SerialGroupLimit_Requeues(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, topic := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "deploy-staging",
+		BuildID:           10,
+	}
+	pp := testPipeline()
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(nil, pikoci.ErrSerialGroupLimit)
 
 	// Should re-queue the message
 	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {

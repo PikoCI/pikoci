@@ -478,6 +478,38 @@ func (r *BuildRepository) CountRunning(ctx context.Context, tc, pn, jn string) (
 	return count, nil
 }
 
+func (r *BuildRepository) CountRunningInSerialGroups(ctx context.Context, tc, pn string, serialGroups []string, excludeJobName string) (int, error) {
+	if len(serialGroups) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(serialGroups))
+	args := make([]interface{}, 0, len(serialGroups)+3)
+	args = append(args, tc, pn)
+	for i, sg := range serialGroups {
+		placeholders[i] = "?"
+		args = append(args, sg)
+	}
+	args = append(args, excludeJobName)
+	query := fmt.Sprintf(`
+		SELECT COUNT(DISTINCT b.id)
+		FROM builds AS b
+		JOIN jobs AS j ON b.job_id = j.id
+		JOIN pipelines AS p ON j.pipeline_id = p.id
+		JOIN teams AS t ON p.team_id = t.id
+		JOIN job_serial_groups AS sg ON j.id = sg.job_id
+		WHERE t.canonical = ? AND p.canonical = ?
+		  AND sg.serial_group IN (%s)
+		  AND b.status = 'started'
+		  AND j.name != ?
+	`, strings.Join(placeholders, ","))
+	var count int
+	err := r.querier.QueryRowContext(ctx, query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count running builds in serial groups: %w", err)
+	}
+	return count, nil
+}
+
 func (r *BuildRepository) FindByID(ctx context.Context, buildID uint32) (*build.Build, error) {
 	row := r.querier.QueryRowContext(ctx, `
 		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical
