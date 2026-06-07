@@ -42,27 +42,32 @@ job "gen" {
   }
 }
 
-job "by-passed" {
+job "deploy-staging" {
+  serial_groups = ["deploy"]
+
   get "artifact" "cron_output" {
     trigger = true
     passed  = ["gen"]
   }
-  task "print-file" {
+  task "deploy" {
     run "exec" {
       path = "/bin/sh"
-      args = ["-ec", "echo '--- by-passed job ---' && cat cron-output/timestamp.txt"]
+      args = ["-ec", "echo '--- deploy-staging ---' && cat cron-output/timestamp.txt && echo 'deploying to staging...' && sleep 10 && echo 'done'"]
     }
   }
 }
 
-job "by-check" {
+job "deploy-prod" {
+  serial_groups = ["deploy"]
+
   get "artifact" "cron_output" {
     trigger = true
+    passed  = ["gen"]
   }
-  task "print-file" {
+  task "deploy" {
     run "exec" {
       path = "/bin/sh"
-      args = ["-ec", "echo '--- by-check job ---' && cat cron-output/timestamp.txt"]
+      args = ["-ec", "echo '--- deploy-prod ---' && cat cron-output/timestamp.txt && echo 'deploying to prod...' && sleep 10 && echo 'done'"]
     }
   }
 }

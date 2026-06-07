@@ -547,11 +547,15 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 	graph.SetStrict(true)
 	graph.AddAttr(pn, string(gographviz.RankDir), "LR")
 
-	// Collect resources referenced by get steps
+	// Collect resources referenced by get steps without passed constraints.
+	// Resources only accessed via get-with-passed don't need a standalone node
+	// because the passed-edge logic creates its own intermediate resource nodes.
 	referencedResources := make(map[string]bool)
 	for _, j := range pp.Jobs {
 		for _, g := range j.GetSteps() {
-			referencedResources[g.ResourceCanonical()] = true
+			if len(g.Passed) == 0 {
+				referencedResources[g.ResourceCanonical()] = true
+			}
 		}
 	}
 

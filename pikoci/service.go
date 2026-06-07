@@ -157,6 +157,9 @@ type Service interface {
 	StartPendingBuild(ctx context.Context, tc, pn, jn string, buildID uint32) (*build.Build, error)
 	// FindOldestPendingBuild returns the oldest pending build for the specified job.
 	FindOldestPendingBuild(ctx context.Context, tc, pn, jn string) (*build.Build, error)
+	// NotifySerialGroupPendingBuilds finds all jobs sharing serial groups with the
+	// given job and enqueues their oldest pending builds for execution.
+	NotifySerialGroupPendingBuilds(ctx context.Context, tc, pn, jn string)
 
 	// GetPipelineResource retrieves a resource by its canonical name within a pipeline.
 	GetPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error)

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cycloidio/sqlr"
@@ -98,6 +99,10 @@ func (r *JobRepository) Create(ctx context.Context, tc, pn string, j job.Job) (u
 		return 0, fmt.Errorf("failed to get last inserted id: %w", err)
 	}
 
+	if err := r.replaceSerialGroups(ctx, id, j.SerialGroups); err != nil {
+		return 0, fmt.Errorf("failed to insert serial groups: %w", err)
+	}
+
 	return id, nil
 }
 
@@ -126,6 +131,22 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 		return fmt.Errorf("failed to update job: %w", err)
 	}
 
+	// Look up the job ID to replace serial groups.
+	var jobID uint32
+	err = r.querier.QueryRowContext(ctx, `
+		SELECT j.id FROM jobs AS j
+		JOIN pipelines AS p ON j.pipeline_id = p.id
+		JOIN teams AS t ON p.team_id = t.id
+		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
+	`, tc, pn, j.Name).Scan(&jobID)
+	if err != nil {
+		return fmt.Errorf("failed to find job id for serial groups: %w", err)
+	}
+
+	if err := r.replaceSerialGroups(ctx, jobID, j.SerialGroups); err != nil {
+		return fmt.Errorf("failed to update serial groups: %w", err)
+	}
+
 	return nil
 }
 
@@ -144,6 +165,12 @@ func (r *JobRepository) Find(ctx context.Context, tc, pn, jn string) (*job.Job, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan Job: %w", err)
 	}
+
+	sgs, err := r.loadSerialGroups(ctx, j.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load serial groups: %w", err)
+	}
+	j.SerialGroups = sgs
 
 	return j, nil
 }
@@ -165,6 +192,14 @@ func (r *JobRepository) Filter(ctx context.Context, tc, pn string) ([]*job.Job, 
 	jobs, err := scanJobs(rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter jobs: %w", err)
+	}
+
+	for _, j := range jobs {
+		sgs, err := r.loadSerialGroups(ctx, j.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load serial groups for job %q: %w", j.Name, err)
+		}
+		j.SerialGroups = sgs
 	}
 
 	return jobs, nil
@@ -306,3 +341,76 @@ func scanJobs(rows *sql.Rows) ([]*job.Job, error) {
 	}
 	return js, nil
 }
+
+func (r *JobRepository) replaceSerialGroups(ctx context.Context, jobID uint32, groups []string) error {
+	_, err := r.querier.ExecContext(ctx, `DELETE FROM job_serial_groups WHERE job_id = ?`, jobID)
+	if err != nil {
+		return fmt.Errorf("failed to delete old serial groups: %w", err)
+	}
+	for _, sg := range groups {
+		_, err := r.querier.ExecContext(ctx, `INSERT INTO job_serial_groups (job_id, serial_group) VALUES (?, ?)`, jobID, sg)
+		if err != nil {
+			return fmt.Errorf("failed to insert serial group %q: %w", sg, err)
+		}
+	}
+	return nil
+}
+
+func (r *JobRepository) loadSerialGroups(ctx context.Context, jobID uint32) ([]string, error) {
+	rows, err := r.querier.QueryContext(ctx, `SELECT serial_group FROM job_serial_groups WHERE job_id = ? ORDER BY serial_group`, jobID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query serial groups: %w", err)
+	}
+	defer rows.Close()
+
+	var groups []string
+	for rows.Next() {
+		var sg string
+		if err := rows.Scan(&sg); err != nil {
+			return nil, fmt.Errorf("failed to scan serial group: %w", err)
+		}
+		groups = append(groups, sg)
+	}
+	return groups, rows.Err()
+}
+
+func (r *JobRepository) FindJobsBySerialGroups(ctx context.Context, tc, pn string, serialGroups []string) ([]*job.Job, error) {
+	if len(serialGroups) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(serialGroups))
+	args := make([]interface{}, 0, len(serialGroups)+2)
+	args = append(args, tc, pn)
+	for i, sg := range serialGroups {
+		placeholders[i] = "?"
+		args = append(args, sg)
+	}
+	query := fmt.Sprintf(`
+		SELECT DISTINCT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout
+		FROM jobs AS j
+		JOIN pipelines AS p ON j.pipeline_id = p.id
+		JOIN teams AS t ON p.team_id = t.id
+		JOIN job_serial_groups AS sg ON j.id = sg.job_id
+		WHERE t.canonical = ? AND p.canonical = ? AND sg.serial_group IN (%s)
+	`, strings.Join(placeholders, ","))
+	rows, err := r.querier.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find jobs by serial groups: %w", err)
+	}
+
+	jobs, err := scanJobs(rows)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan jobs by serial groups: %w", err)
+	}
+
+	for _, j := range jobs {
+		sgs, err := r.loadSerialGroups(ctx, j.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load serial groups for job %q: %w", j.Name, err)
+		}
+		j.SerialGroups = sgs
+	}
+
+	return jobs, nil
+}
+

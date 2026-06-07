@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `serial_groups` on jobs for cross-job mutual exclusion ([#186](https://github.com/PikoCI/pikoci/issues/186))
 - Step metadata export: get steps auto-forward version metadata to subsequent steps as `GET_<STEPNAME>_<KEY>` env vars, and task steps can write `KEY=VALUE` lines to `$PIKOCI_OUTPUT` to export custom values as `TASK_<STEPNAME>_<KEY>` env vars ([#459](https://github.com/PikoCI/pikoci/issues/459))
 - Loading indicators on action buttons: all mutating buttons (trigger, cancel, retry, delete, pause, unpause, pin, etc.) now show a spinner and loading text while the request is in flight, preventing double-clicks and providing visual feedback ([#453](https://github.com/PikoCI/pikoci/issues/453))
 - Built-in `shell` runner for simplified shell command execution. Supports inline `cmd` mode (`run "shell" { cmd = "..." }`) and script `file` mode (`run "shell" { file = "script.sh" }`), with optional `shell` param to override the default `/bin/sh` ([#458](https://github.com/PikoCI/pikoci/issues/458))

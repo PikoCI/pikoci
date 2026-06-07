@@ -100,6 +100,21 @@ func (mr *JobRepositoryMockRecorder) Find(ctx, tc, pn, jn any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Find", reflect.TypeOf((*JobRepository)(nil).Find), ctx, tc, pn, jn)
 }
 
+// FindJobsBySerialGroups mocks base method.
+func (m *JobRepository) FindJobsBySerialGroups(ctx context.Context, tc, pn string, serialGroups []string) ([]*job.Job, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindJobsBySerialGroups", ctx, tc, pn, serialGroups)
+	ret0, _ := ret[0].([]*job.Job)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindJobsBySerialGroups indicates an expected call of FindJobsBySerialGroups.
+func (mr *JobRepositoryMockRecorder) FindJobsBySerialGroups(ctx, tc, pn, serialGroups any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindJobsBySerialGroups", reflect.TypeOf((*JobRepository)(nil).FindJobsBySerialGroups), ctx, tc, pn, serialGroups)
+}
+
 // PauseAll mocks base method.
 func (m *JobRepository) PauseAll(ctx context.Context, tc, pn string) error {
 	m.ctrl.T.Helper()

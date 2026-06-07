@@ -251,6 +251,36 @@ The optional `concurrency` attribute limits how many builds of the job can run s
 
 The optional `timeout` attribute limits the total wall-clock time for a build's plan steps. When the timeout is reached, the build fails with a "job timed out" error and `on_cancel`/`ensure` hooks still run. If not set, the job runs with no time limit.
 
+#### Serial Groups
+
+The `serial_groups` attribute provides cross-job mutual exclusion — only one job from a group runs at a time. This is useful for deploy jobs that shouldn't overlap, or any set of jobs that share a resource that can't handle concurrent access.
+
+```hcl
+job "deploy-staging" {
+  serial_groups = ["deploy"]
+
+  get "git" "my_repo" { trigger = true }
+  task "deploy" {
+    run "exec" { path = "./deploy.sh" }
+  }
+}
+
+job "deploy-prod" {
+  serial_groups = ["deploy"]
+
+  get "git" "my_repo" {}
+  task "deploy" {
+    run "exec" { path = "./deploy.sh" }
+  }
+}
+```
+
+When `deploy-staging` is running, `deploy-prod` will queue until it finishes, and vice versa. Serial groups are scoped per-pipeline.
+
+A job can belong to multiple serial groups. It will only run when **none** of its groups have a running build from another job.
+
+`serial_groups` is orthogonal to `concurrency` — both checks apply. A build must pass both the per-job concurrency limit and the serial group check before starting. Note that `serial_groups` only provides cross-job mutual exclusion; to also limit a single job to one build at a time, set `concurrency = 1` on the job.
+
 ```hcl
 job "deploy" {
   concurrency = 1

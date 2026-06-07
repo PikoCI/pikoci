@@ -681,6 +681,23 @@ func TestFindOldestPendingBuild_None(t *testing.T) {
 	assert.Nil(t, b)
 }
 
+func TestNotifySerialGroupPendingBuilds(t *testing.T) {
+	called := false
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/pipelines/{pn}/jobs/{jn}/notify-serial-groups", func(w http.ResponseWriter, req *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusNoContent)
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	c.NotifySerialGroupPendingBuilds(context.Background(), "team", "pipe", "job1")
+	assert.True(t, called, "should have called the endpoint")
+}
+
 func TestCreateResourceVersion(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/teams/{tc}/pipelines/{pn}/resources/{rCan}/versions", func(w http.ResponseWriter, req *http.Request) {

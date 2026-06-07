@@ -337,8 +337,8 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 
 	nb, err := w.pikoci.StartPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID)
 	if err != nil {
-		if errors.Is(err, pikoci.ErrConcurrencyLimit) || errors.Is(err, pikoci.ErrJobPaused) {
-			w.logger.Info("concurrency limit or job paused, re-queuing",
+		if errors.Is(err, pikoci.ErrConcurrencyLimit) || errors.Is(err, pikoci.ErrJobPaused) || errors.Is(err, pikoci.ErrSerialGroupLimit) {
+			w.logger.Info("concurrency/serial group limit or job paused, re-queuing",
 				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID)
 			mb, _ := json.Marshal(m)
 			if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
@@ -485,6 +485,10 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 }
 
 func (w *Worker) notifyNextPendingBuild(ctx context.Context, m queue.Body) {
+	// Always notify pending builds for jobs sharing serial groups,
+	// even if this job has no pending builds of its own.
+	w.pikoci.NotifySerialGroupPendingBuilds(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName)
+
 	pending, err := w.pikoci.FindOldestPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName)
 	if err != nil {
 		w.logger.Warn("failed to find next pending build", "error", err)

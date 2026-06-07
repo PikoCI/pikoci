@@ -67,6 +67,64 @@ func TestTriggerPipelineJob(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestCreatePipeline_SerialGroups(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "team-canonical"
+	ppc := "serial-pipeline"
+
+	b, err := os.ReadFile("testdata/serial_groups.hcl")
+	require.NoError(t, err)
+
+	var capturedJobs []job.Job
+	s.Pipelines.EXPECT().Create(ctx, tc, gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, tc, ppc, gomock.Any()).DoAndReturn(
+		func(_ context.Context, _, _ string, j job.Job) (uint32, error) {
+			capturedJobs = append(capturedJobs, j)
+			return uint32(len(capturedJobs)), nil
+		}).Times(2)
+	s.Resources.EXPECT().Create(ctx, tc, ppc, gomock.Any()).Return(uint32(1), nil).Times(1)
+	s.Pipelines.EXPECT().Find(ctx, tc, ppc).Return(&pipeline.Pipeline{Name: ppc}, nil)
+
+	pp, err := s.S.CreatePipeline(ctx, tc, ppc, b, nil)
+	require.NoError(t, err)
+	require.NotNil(t, pp)
+
+	require.Len(t, capturedJobs, 2)
+	assert.Equal(t, []string{"deploy"}, capturedJobs[0].SerialGroups)
+	assert.Equal(t, []string{"deploy"}, capturedJobs[1].SerialGroups)
+}
+
+func TestCreatePipeline_SerialGroups_InvalidName(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hcl := []byte(`
+resource "git" "repo" {
+  params {
+    url = "https://example.com/repo.git"
+  }
+}
+job "bad-job" {
+  serial_groups = ["INVALID NAME"]
+  get "git" "repo" {
+    trigger = true
+  }
+  task "build" {
+    run "exec" {
+      path = "echo"
+    }
+  }
+}
+`)
+
+	_, err := s.S.CreatePipeline(ctx, "team", "pipe", hcl, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid serial_group name")
+}
+
 func TestGetPipelineJob(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)

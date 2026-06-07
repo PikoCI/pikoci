@@ -2201,6 +2201,17 @@ func TestGetPipelineResource_PublicFallback(t *testing.T) {
 	assert.Equal(t, "my-res", got.Resource.Name)
 }
 
+func TestNotifySerialGroupPendingBuilds_Success(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	e.svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), "main", "my-pipe", "build")
+
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/teams/main/pipelines/my-pipe/jobs/build/notify-serial-groups", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+}
+
 func TestListResourceVersions_PublicFallback(t *testing.T) {
 	e := newTestEnv(t)
 	pp := &pipeline.Pipeline{Name: "public-pipe", Canonical: "public-pipe", Public: true}

@@ -57,6 +57,21 @@ func (mr *BuildRepositoryMockRecorder) CountRunning(ctx, tc, pn, jn any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRunning", reflect.TypeOf((*BuildRepository)(nil).CountRunning), ctx, tc, pn, jn)
 }
 
+// CountRunningInSerialGroups mocks base method.
+func (m *BuildRepository) CountRunningInSerialGroups(ctx context.Context, tc, pn string, serialGroups []string, excludeJobName string) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountRunningInSerialGroups", ctx, tc, pn, serialGroups, excludeJobName)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountRunningInSerialGroups indicates an expected call of CountRunningInSerialGroups.
+func (mr *BuildRepositoryMockRecorder) CountRunningInSerialGroups(ctx, tc, pn, serialGroups, excludeJobName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRunningInSerialGroups", reflect.TypeOf((*BuildRepository)(nil).CountRunningInSerialGroups), ctx, tc, pn, serialGroups, excludeJobName)
+}
+
 // Create mocks base method.
 func (m *BuildRepository) Create(ctx context.Context, tc, pn, jn string, b build.Build) (uint32, string, error) {
 	m.ctrl.T.Helper()

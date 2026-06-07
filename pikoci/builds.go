@@ -25,6 +25,9 @@ var (
 	ErrBuildNotPending = build.ErrNotPending
 	// ErrJobPaused is returned when attempting to start a build for a paused job.
 	ErrJobPaused = errors.New("job is paused")
+	// ErrSerialGroupLimit is returned when a build cannot be started because
+	// another job in the same serial group already has a running build.
+	ErrSerialGroupLimit = errors.New("serial group limit reached")
 )
 
 // CreateJobBuild creates a new pending build for the specified job within a unit
@@ -339,6 +342,15 @@ func (q *PikoCI) StartPendingBuild(ctx context.Context, tc, pn, jn string, build
 				return ErrConcurrencyLimit
 			}
 		}
+		if len(j.SerialGroups) > 0 {
+			sgRunning, err := uow.Builds().CountRunningInSerialGroups(ctx, tc, pn, j.SerialGroups, jn)
+			if err != nil {
+				return fmt.Errorf("failed to count running builds in serial groups: %w", err)
+			}
+			if sgRunning > 0 {
+				return ErrSerialGroupLimit
+			}
+		}
 
 		return uow.Builds().StartPending(ctx, tc, pn, jn, buildID)
 	})
@@ -366,7 +378,15 @@ func (q *PikoCI) FindOldestPendingBuild(ctx context.Context, tc, pn, jn string) 
 // notifyNextPendingBuild finds the oldest pending build for the job and sends a
 // message to the job topic so it can be picked up for execution. This is called
 // after a build is cancelled or completes to fill any freed concurrency slots.
+// It also notifies pending builds for other jobs sharing serial groups.
 func (q *PikoCI) notifyNextPendingBuild(ctx context.Context, tc, pc, jn string) {
+	q.sendPendingBuildNotification(ctx, tc, pc, jn)
+	q.NotifySerialGroupPendingBuilds(ctx, tc, pc, jn)
+}
+
+// sendPendingBuildNotification finds the oldest pending build for a single job
+// and sends a message to the job topic.
+func (q *PikoCI) sendPendingBuildNotification(ctx context.Context, tc, pc, jn string) {
 	pending, err := q.Builds.FindOldestPending(ctx, tc, pc, jn)
 	if err != nil || pending == nil {
 		return
@@ -382,6 +402,25 @@ func (q *PikoCI) notifyNextPendingBuild(ctx context.Context, tc, pc, jn string) 
 		return
 	}
 	q.JobTopic.Send(ctx, &pubsub.Message{Body: mb})
+}
+
+// NotifySerialGroupPendingBuilds finds all jobs sharing serial groups with the
+// given job and enqueues their oldest pending builds for execution.
+func (q *PikoCI) NotifySerialGroupPendingBuilds(ctx context.Context, tc, pc, jn string) {
+	j, err := q.Jobs.Find(ctx, tc, pc, jn)
+	if err != nil || len(j.SerialGroups) == 0 {
+		return
+	}
+	peerJobs, err := q.Jobs.FindJobsBySerialGroups(ctx, tc, pc, j.SerialGroups)
+	if err != nil {
+		return
+	}
+	for _, pj := range peerJobs {
+		if pj.Name == jn {
+			continue
+		}
+		q.sendPendingBuildNotification(ctx, tc, pc, pj.Name)
+	}
 }
 
 // ReEnqueuePendingBuilds scans all jobs for pending builds and re-publishes
