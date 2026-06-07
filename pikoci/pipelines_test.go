@@ -1567,6 +1567,18 @@ func TestGetPipelineImage_PassedReusesPutOutputNode(t *testing.T) {
 	assert.Contains(t, dot, `"build-artifact.output-out"--"deploy"`, "passed edge should reuse put output node")
 	// There should NOT be a separate passed node for the same resource
 	assert.NotContains(t, dot, `"build-output-deploy"`, "should not create a separate passed node when put output exists")
+	// The resource should NOT appear as an orphaned standalone node since it's
+	// only accessed via get-with-passed (the put output node handles it)
+	lines := strings.Split(dot, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, "->") || strings.Contains(trimmed, "-out") {
+			continue
+		}
+		if strings.Contains(trimmed, `"artifact.output"`) && strings.Contains(trimmed, "shape") {
+			t.Errorf("resource only accessed via get-with-passed should not appear as standalone node: %s", trimmed)
+		}
+	}
 }
 
 func TestGetPipelineImage_JobStatusColors(t *testing.T) {

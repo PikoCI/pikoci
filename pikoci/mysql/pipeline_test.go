@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
 )
@@ -169,4 +170,120 @@ func TestDeletePipeline_CascadesRunners(t *testing.T) {
 	err = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM runners WHERE pipeline_id = ?`, ppID).Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 0, count, "runners should be cascade-deleted when pipeline is deleted")
+}
+
+func TestJobCreate_PersistsSerialGroups(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'sg-create', 'sg-create')`)
+	require.NoError(t, err)
+
+	jr := mysql.NewJobRepository(db)
+	j := job.Job{Name: "deploy-staging", SerialGroups: []string{"deploy", "infra"}}
+	id, err := jr.Create(ctx, "main", "sg-create", j)
+	require.NoError(t, err)
+	assert.NotZero(t, id)
+
+	found, err := jr.Find(ctx, "main", "sg-create", "deploy-staging")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"deploy", "infra"}, found.SerialGroups)
+}
+
+func TestJobUpdate_ReplacesSerialGroups(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'sg-update', 'sg-update')`)
+	require.NoError(t, err)
+
+	jr := mysql.NewJobRepository(db)
+	j := job.Job{Name: "deploy", SerialGroups: []string{"deploy"}}
+	_, err = jr.Create(ctx, "main", "sg-update", j)
+	require.NoError(t, err)
+
+	j.SerialGroups = []string{"infra"}
+	err = jr.Update(ctx, "main", "sg-update", "deploy", j)
+	require.NoError(t, err)
+
+	found, err := jr.Find(ctx, "main", "sg-update", "deploy")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"infra"}, found.SerialGroups)
+}
+
+func TestFindJobsBySerialGroups(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'sg-find', 'sg-find')`)
+	require.NoError(t, err)
+
+	jr := mysql.NewJobRepository(db)
+
+	_, err = jr.Create(ctx, "main", "sg-find", job.Job{Name: "staging", SerialGroups: []string{"deploy"}})
+	require.NoError(t, err)
+	_, err = jr.Create(ctx, "main", "sg-find", job.Job{Name: "prod", SerialGroups: []string{"deploy"}})
+	require.NoError(t, err)
+	_, err = jr.Create(ctx, "main", "sg-find", job.Job{Name: "unrelated"})
+	require.NoError(t, err)
+
+	jobs, err := jr.FindJobsBySerialGroups(ctx, "main", "sg-find", []string{"deploy"})
+	require.NoError(t, err)
+	assert.Len(t, jobs, 2)
+
+	names := []string{jobs[0].Name, jobs[1].Name}
+	assert.Contains(t, names, "staging")
+	assert.Contains(t, names, "prod")
+}
+
+func TestFindJobsBySerialGroups_Empty(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	jr := mysql.NewJobRepository(db)
+	jobs, err := jr.FindJobsBySerialGroups(ctx, "main", "pipe", []string{})
+	require.NoError(t, err)
+	assert.Nil(t, jobs)
+}
+
+func TestJobFilter_IncludesSerialGroups(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'sg-filter', 'sg-filter')`)
+	require.NoError(t, err)
+
+	jr := mysql.NewJobRepository(db)
+	_, err = jr.Create(ctx, "main", "sg-filter", job.Job{Name: "staging", SerialGroups: []string{"deploy"}})
+	require.NoError(t, err)
+
+	jobs, err := jr.Filter(ctx, "main", "sg-filter")
+	require.NoError(t, err)
+	require.Len(t, jobs, 1)
+	assert.Equal(t, []string{"deploy"}, jobs[0].SerialGroups)
+}
+
+func TestDeletePipeline_CascadesSerialGroups(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'sg-cascade', 'sg-cascade')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'deploy')`, ppID)
+	require.NoError(t, err)
+	jobID, _ := res.LastInsertId()
+
+	_, err = db.ExecContext(ctx, `INSERT INTO job_serial_groups (job_id, serial_group) VALUES (?, 'deploy')`, jobID)
+	require.NoError(t, err)
+
+	pr := mysql.NewPipelineRepository(db)
+	err = pr.Delete(ctx, "main", "sg-cascade")
+	require.NoError(t, err)
+
+	var count int
+	err = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM job_serial_groups WHERE job_id = ?`, jobID).Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count, "serial groups should be cascade-deleted when pipeline is deleted")
 }

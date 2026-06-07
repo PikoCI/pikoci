@@ -389,3 +389,53 @@ func TestFindReadyDownstreamVersion_PicksHighestVersion(t *testing.T) {
 	assert.True(t, ready)
 	assert.Equal(t, uint32(10), vID)
 }
+
+func TestCountRunningInSerialGroups(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'sg-pipe', 'sg-pipe')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'deploy-staging')`, ppID)
+	require.NoError(t, err)
+	stagingID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'deploy-prod')`, ppID)
+	require.NoError(t, err)
+	prodID, _ := res.LastInsertId()
+
+	// Both jobs share serial group "deploy"
+	_, err = db.ExecContext(ctx, `INSERT INTO job_serial_groups (job_id, serial_group) VALUES (?, 'deploy')`, stagingID)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO job_serial_groups (job_id, serial_group) VALUES (?, 'deploy')`, prodID)
+	require.NoError(t, err)
+
+	// deploy-staging has a running build
+	_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'started', '1')`, stagingID)
+	require.NoError(t, err)
+
+	br := mysql.NewBuildRepository(db, mysql.Mem)
+
+	// From deploy-prod's perspective, there's 1 running build in the serial group
+	count, err := br.CountRunningInSerialGroups(ctx, "main", "sg-pipe", []string{"deploy"}, "deploy-prod")
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// From deploy-staging's perspective, its own build is excluded
+	count, err = br.CountRunningInSerialGroups(ctx, "main", "sg-pipe", []string{"deploy"}, "deploy-staging")
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+}
+
+func TestCountRunningInSerialGroups_Empty(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	br := mysql.NewBuildRepository(db, mysql.Mem)
+
+	count, err := br.CountRunningInSerialGroups(ctx, "main", "pipe", []string{}, "job")
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+}

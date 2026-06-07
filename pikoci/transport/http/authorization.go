@@ -52,9 +52,10 @@ var (
 		GetJobBuild:          member,
 		CancelJobBuild:         member,
 		RetryJobBuild:          member,
-		StartPendingBuild:      admin,
-		FindOldestPendingBuild: admin,
-		InsertBuildGetVersion:  admin,
+		StartPendingBuild:              admin,
+		FindOldestPendingBuild:         admin,
+		NotifySerialGroupPendingBuilds: admin,
+		InsertBuildGetVersion:          admin,
 		FindBuildGetVersions:   admin,
 
 		GetPipelineResource:     member,
