@@ -6,6 +6,7 @@ package migrate
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/lopezator/migrator"
@@ -48,6 +49,14 @@ func Migrate(db *sql.DB, system string, opts ...migrator.Option) error {
 // sqliteUUIDExpr is the SQLite expression used to generate UUID v4 values.
 const sqliteUUIDExpr = `lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))`
 
+// modifyColumnRe matches ALTER TABLE ... MODIFY COLUMN statements that SQLite
+// does not support (SQLite doesn't enforce VARCHAR length constraints anyway).
+var modifyColumnRe = regexp.MustCompile(`(?i)ALTER\s+TABLE\s+\S+\s+MODIFY\s+COLUMN\s+[^;]+;?`)
+
+// modifyColumnRePostgres captures table, column and type from MODIFY COLUMN
+// so it can be rewritten to PostgreSQL's ALTER COLUMN ... TYPE syntax.
+var modifyColumnRePostgres = regexp.MustCompile(`(?i)ALTER\s+TABLE\s+(\S+)\s+MODIFY\s+COLUMN\s+(\S+)\s+(\S+)[^;]*;?`)
+
 func replaceSQLiteUUID(sql, replacement string) string {
 	return strings.ReplaceAll(sql, sqliteUUIDExpr, replacement)
 }
@@ -59,6 +68,8 @@ func adaptSQL(sql, system string) string {
 		sql = strings.ReplaceAll(sql, "id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,", "id INTEGER PRIMARY KEY,")
 		// SQLite doesn't support CASCADE on DROP TABLE
 		sql = strings.ReplaceAll(sql, "DROP TABLE IF EXISTS pipelines CASCADE;", "DROP TABLE IF EXISTS pipelines;")
+		// SQLite doesn't support MODIFY COLUMN (and doesn't enforce VARCHAR length)
+		sql = modifyColumnRe.ReplaceAllString(sql, "")
 	case mysql.PostgreSQL:
 		sql = strings.ReplaceAll(sql, "SET sql_mode = 'NO_AUTO_VALUE_ON_ZERO';", "")
 		sql = strings.ReplaceAll(sql, "id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,", "id SERIAL PRIMARY KEY,")
@@ -67,6 +78,8 @@ func adaptSQL(sql, system string) string {
 		// Replace backtick-quoted identifiers with double-quote-quoted ones
 		sql = strings.ReplaceAll(sql, "`type`", `"type"`)
 		sql = strings.ReplaceAll(sql, "`check`", `"check"`)
+		// PostgreSQL uses ALTER COLUMN ... TYPE instead of MODIFY COLUMN
+		sql = modifyColumnRePostgres.ReplaceAllString(sql, "ALTER TABLE $1 ALTER COLUMN $2 TYPE $3;")
 		// PostgreSQL doesn't support RENAME COLUMN with the same syntax in older versions,
 		// but ALTER TABLE ... RENAME COLUMN is standard and works in PG 9.6+
 		// Replace SQLite UUID expression with PostgreSQL's gen_random_uuid()

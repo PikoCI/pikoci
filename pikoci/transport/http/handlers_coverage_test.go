@@ -1773,10 +1773,10 @@ func TestRegenerateWebhookToken_Error(t *testing.T) {
 
 func TestWebhookTrigger_Success(t *testing.T) {
 	e := newTestEnv(t)
-	e.svc.EXPECT().WebhookTrigger(gomock.Any(), "abc123").Return(nil)
+	e.svc.EXPECT().WebhookTrigger(gomock.Any(), "my-repo_abc123").Return(nil)
 
 	// Webhook endpoint uses POST without auth
-	req, err := http.NewRequest(http.MethodPost, e.server.URL+"/webhooks/abc123", nil)
+	req, err := http.NewRequest(http.MethodPost, e.server.URL+"/webhooks/my-repo_abc123", nil)
 	require.NoError(t, err)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)

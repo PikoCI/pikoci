@@ -295,13 +295,31 @@ func (q *PikoCI) RegenerateWebhookToken(ctx context.Context, tc, pc, rCan string
 		return "", fmt.Errorf("failed to find Resource: %w", err)
 	}
 
-	r.WebhookToken = uuid.New().String()
+	r.WebhookToken, err = newWebhookToken(r.Canonical)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate webhook token: %w", err)
+	}
 	err = q.UpdatePipelineResource(ctx, tc, pc, rCan, *r)
 	if err != nil {
 		return "", fmt.Errorf("failed to update Resource: %w", err)
 	}
 
 	return r.WebhookToken, nil
+}
+
+// newWebhookToken generates a webhook token that embeds the resource canonical
+// for readability: "canonical_uuid". The result is capped at 255 chars (DB limit).
+func newWebhookToken(name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("webhook token name must not be empty")
+	}
+	id := uuid.New().String()
+	const maxLen = 255
+	maxName := maxLen - len(id) - 1 // 218
+	if len(name) > maxName {
+		name = name[:maxName]
+	}
+	return name + "_" + id, nil
 }
 
 // validateResourceVersion checks that the given versionID belongs to the

@@ -52,3 +52,28 @@ func TestAdaptSQL(t *testing.T) {
 		assert.Contains(t, result, "INT UNSIGNED")
 	})
 }
+
+func TestAdaptSQL_ModifyColumn(t *testing.T) {
+	input := `ALTER TABLE resources MODIFY COLUMN webhook_token VARCHAR(255) DEFAULT '';`
+
+	t.Run("sqlite strips MODIFY COLUMN", func(t *testing.T) {
+		result := adaptSQL(input, mysql.SQLite)
+		assert.Empty(t, result)
+	})
+
+	t.Run("mem strips MODIFY COLUMN", func(t *testing.T) {
+		result := adaptSQL(input, mysql.Mem)
+		assert.Empty(t, result)
+	})
+
+	t.Run("postgresql rewrites to ALTER COLUMN TYPE", func(t *testing.T) {
+		result := adaptSQL(input, mysql.PostgreSQL)
+		assert.Contains(t, result, "ALTER TABLE resources ALTER COLUMN webhook_token TYPE VARCHAR(255);")
+		assert.NotContains(t, result, "MODIFY")
+	})
+
+	t.Run("mysql keeps MODIFY COLUMN as-is", func(t *testing.T) {
+		result := adaptSQL(input, mysql.MySQL)
+		assert.Contains(t, result, "MODIFY COLUMN")
+	})
+}

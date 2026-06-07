@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/awalterschulze/gographviz"
-	"github.com/google/uuid"
+
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/notification"
@@ -91,7 +91,10 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 				return fmt.Errorf("failed to compute next check for resource %q: %w", r.Name, err)
 			}
 			r.NextCheck = nextCheck
-			r.WebhookToken = uuid.New().String()
+			r.WebhookToken, err = newWebhookToken(r.Canonical)
+			if err != nil {
+				return fmt.Errorf("failed to generate webhook token for resource %q: %w", r.Name, err)
+			}
 			_, err = uow.Resources().Create(ctx, tc, pCan, r)
 			if err != nil {
 				return fmt.Errorf("failed to create Resource %q: %w", r.Name, err)
@@ -293,7 +296,10 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pCan string, rpp []byte
 					return fmt.Errorf("failed to compute next check for resource %q: %w", r.Canonical, err)
 				}
 				r.NextCheck = nextCheck
-				r.WebhookToken = uuid.New().String()
+				r.WebhookToken, err = newWebhookToken(r.Canonical)
+				if err != nil {
+					return fmt.Errorf("failed to generate webhook token for resource %q: %w", r.Canonical, err)
+				}
 				_, err = uow.Resources().Create(ctx, tc, pCan, r)
 				if err != nil {
 					return fmt.Errorf("failed to create Resource %q: %w", r.Canonical, err)

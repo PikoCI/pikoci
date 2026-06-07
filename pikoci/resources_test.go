@@ -3,6 +3,7 @@ package pikoci_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -364,6 +365,7 @@ func TestRegenerateWebhookToken(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, token)
 	assert.NotEqual(t, "old-token", token)
+	assert.True(t, strings.HasPrefix(token, "git.repo_"), "token should start with resource name prefix")
 }
 
 func TestRegenerateWebhookToken_InvalidCanonical(t *testing.T) {
