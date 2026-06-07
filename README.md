@@ -12,6 +12,7 @@
   [![GitHub Release](https://img.shields.io/github/v/release/PikoCI/pikoci)](https://github.com/PikoCI/pikoci/releases/latest)
   [![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Fpikoci%2Fpikoci-blue?logo=docker)](https://github.com/orgs/PikoCI/packages/container/package/pikoci)
   [![codecov](https://codecov.io/gh/PikoCI/pikoci/graph/badge.svg)](https://codecov.io/gh/PikoCI/pikoci)
+  [![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/gctEh24CTm)
 
   [Documentation](https://docs.pikoci.com) · [Quick Start](#quick-start) · [Contributing](#contributing) · [Discord](https://discord.gg/gctEh24CTm)
 </div>
