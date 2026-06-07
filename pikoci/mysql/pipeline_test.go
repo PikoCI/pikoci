@@ -10,6 +10,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
 )
 
 func setupTestDB(t *testing.T) *sql.DB {
@@ -261,6 +262,133 @@ func TestJobFilter_IncludesSerialGroups(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, jobs, 1)
 	assert.Equal(t, []string{"deploy"}, jobs[0].SerialGroups)
+}
+
+func TestJobCreate_ForEachFields(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'fe-create', 'fe-create')`)
+	require.NoError(t, err)
+
+	jr := mysql.NewJobRepository(db)
+	_, err = jr.Create(ctx, "main", "fe-create", job.Job{
+		Name:         "test--1-21",
+		ForEachGroup: "test",
+		ForEachKey:   "1.21",
+	})
+	require.NoError(t, err)
+
+	j, err := jr.Find(ctx, "main", "fe-create", "test--1-21")
+	require.NoError(t, err)
+	assert.Equal(t, "test--1-21", j.Name)
+	assert.Equal(t, "test", j.ForEachGroup)
+	assert.Equal(t, "1.21", j.ForEachKey)
+}
+
+func TestFilterByForEachGroup(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'fe-filter', 'fe-filter')`)
+	require.NoError(t, err)
+
+	jr := mysql.NewJobRepository(db)
+	_, err = jr.Create(ctx, "main", "fe-filter", job.Job{Name: "test--a", ForEachGroup: "test", ForEachKey: "a"})
+	require.NoError(t, err)
+	_, err = jr.Create(ctx, "main", "fe-filter", job.Job{Name: "test--b", ForEachGroup: "test", ForEachKey: "b"})
+	require.NoError(t, err)
+	_, err = jr.Create(ctx, "main", "fe-filter", job.Job{Name: "unrelated"})
+	require.NoError(t, err)
+
+	jobs, err := jr.FilterByForEachGroup(ctx, "main", "fe-filter", "test")
+	require.NoError(t, err)
+	assert.Len(t, jobs, 2)
+	names := []string{jobs[0].Name, jobs[1].Name}
+	assert.Contains(t, names, "test--a")
+	assert.Contains(t, names, "test--b")
+}
+
+func TestFilterByForEachGroup_Empty(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	jr := mysql.NewJobRepository(db)
+	jobs, err := jr.FilterByForEachGroup(ctx, "main", "nonexistent", "test")
+	require.NoError(t, err)
+	assert.Nil(t, jobs)
+}
+
+func TestPipelineFind_IncludesForEachFields(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'fe-find', 'fe-find')`)
+	require.NoError(t, err)
+
+	jr := mysql.NewJobRepository(db)
+	_, err = jr.Create(ctx, "main", "fe-find", job.Job{Name: "test--a", ForEachGroup: "test", ForEachKey: "a"})
+	require.NoError(t, err)
+	_, err = jr.Create(ctx, "main", "fe-find", job.Job{Name: "test--b", ForEachGroup: "test", ForEachKey: "b"})
+	require.NoError(t, err)
+	_, err = jr.Create(ctx, "main", "fe-find", job.Job{Name: "regular"})
+	require.NoError(t, err)
+
+	pr := mysql.NewPipelineRepository(db)
+	pp, err := pr.Find(ctx, "main", "fe-find")
+	require.NoError(t, err)
+	require.Len(t, pp.Jobs, 3)
+
+	jobMap := make(map[string]job.Job)
+	for _, j := range pp.Jobs {
+		jobMap[j.Name] = j
+	}
+
+	assert.Equal(t, "test", jobMap["test--a"].ForEachGroup)
+	assert.Equal(t, "a", jobMap["test--a"].ForEachKey)
+	assert.Equal(t, "test", jobMap["test--b"].ForEachGroup)
+	assert.Equal(t, "b", jobMap["test--b"].ForEachKey)
+	assert.Equal(t, "", jobMap["regular"].ForEachGroup)
+	assert.Equal(t, "", jobMap["regular"].ForEachKey)
+}
+
+func TestPipelineFilterAll_IncludesForEachFields(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'fe-all', 'fe-all')`)
+	require.NoError(t, err)
+
+	jr := mysql.NewJobRepository(db)
+	_, err = jr.Create(ctx, "main", "fe-all", job.Job{Name: "test--a", ForEachGroup: "test", ForEachKey: "a"})
+	require.NoError(t, err)
+	_, err = jr.Create(ctx, "main", "fe-all", job.Job{Name: "regular"})
+	require.NoError(t, err)
+
+	pr := mysql.NewPipelineRepository(db)
+	pps, err := pr.FilterAll(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, pps)
+
+	// Find our pipeline
+	var found *pipeline.WithTeam
+	for _, pwt := range pps {
+		if pwt.Canonical == "fe-all" {
+			found = pwt
+			break
+		}
+	}
+	require.NotNil(t, found, "pipeline fe-all not found in FilterAll results")
+	require.Len(t, found.Jobs, 2)
+
+	jobMap := make(map[string]job.Job)
+	for _, j := range found.Jobs {
+		jobMap[j.Name] = j
+	}
+
+	assert.Equal(t, "test", jobMap["test--a"].ForEachGroup)
+	assert.Equal(t, "a", jobMap["test--a"].ForEachKey)
+	assert.Equal(t, "", jobMap["regular"].ForEachGroup)
 }
 
 func TestDeletePipeline_CascadesSerialGroups(t *testing.T) {

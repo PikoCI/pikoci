@@ -48,6 +48,9 @@ type Job struct {
 	Timeout      time.Duration `json:"timeout,omitempty"`
 	Plan         []PlanStep    `json:"plan"`
 
+	ForEachGroup string `json:"for_each_group,omitempty"`
+	ForEachKey   string `json:"for_each_key,omitempty"`
+
 	OnSuccess []HookStep `json:"on_success,omitempty"`
 	OnFailure []HookStep `json:"on_failure,omitempty"`
 	OnCancel  []HookStep `json:"on_cancel,omitempty"`

@@ -768,12 +768,29 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		}
 	}
 
+	// Build a map of for_each group names to instance names for passed expansion
+	forEachGroupInstances := make(map[string][]string)
+	for _, j := range pp.Jobs {
+		if j.ForEachGroup != "" {
+			forEachGroupInstances[j.ForEachGroup] = append(forEachGroupInstances[j.ForEachGroup], j.Name)
+		}
+	}
+
 	// Now we print all the jobs interconnections depending on resources
 	for _, j := range pp.Jobs {
 		quotedJobName := fmt.Sprintf(`"%s"`, j.Name)
 		for _, g := range j.GetSteps() {
 			if len(g.Passed) != 0 {
-				for _, p := range g.Passed {
+				// Expand for_each group names to instance names
+				var expandedPassed []string
+				for _, name := range g.Passed {
+					if instances, ok := forEachGroupInstances[name]; ok {
+						expandedPassed = append(expandedPassed, instances...)
+					} else {
+						expandedPassed = append(expandedPassed, name)
+					}
+				}
+				for _, p := range expandedPassed {
 					rCan := fmt.Sprintf("%s.%s", g.Type, g.Name)
 
 					// Reuse the put output node if the passed job already has one for this resource

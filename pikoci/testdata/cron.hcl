@@ -71,3 +71,54 @@ job "deploy-prod" {
     }
   }
 }
+
+job "validate" {
+  for_each = toset(["format", "lint", "vet"])
+
+  get "artifact" "cron_output" {
+    trigger = true
+    passed  = ["gen"]
+  }
+  task "run-check" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo 'running ${each.value} check...' && cat cron-output/timestamp.txt && echo '${each.value}: ok'"]
+    }
+  }
+}
+
+job "notify" {
+  for_each = {
+    "slack"   = "#deploys"
+    "discord" = "#ci-alerts"
+  }
+
+  get "artifact" "cron_output" {
+    trigger = true
+    passed  = ["validate"]
+  }
+  task "send" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo 'notifying ${each.key} channel ${each.value}...'"]
+    }
+  }
+}
+
+job "deploy-matrix" {
+  matrix {
+    env    = ["staging", "prod"]
+    region = ["us", "eu"]
+  }
+
+  get "artifact" "cron_output" {
+    trigger = true
+    passed  = ["notify"]
+  }
+  task "deploy" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo 'deploying to ${each.value.env}/${each.value.region}...' && cat cron-output/timestamp.txt && echo 'done'"]
+    }
+  }
+}

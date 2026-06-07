@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `for_each` and `matrix` on jobs: generate multiple job instances from a single definition using `for_each = toset(...)`, `for_each = { key = "value" }`, or `matrix { axis = [...] }`. Each instance gets independent builds, status, and logs. Downstream `passed` constraints automatically fan-in across all instances. Includes `toset()` and `setproduct()` HCL functions ([#193](https://github.com/PikoCI/pikoci/issues/193), [#472](https://github.com/PikoCI/pikoci/issues/472))
 - Include resource name in webhook URLs for readability: tokens now use `{canonical}_{uuid}` format instead of bare UUIDs. Old tokens continue to work unchanged ([#470](https://github.com/PikoCI/pikoci/issues/470))
 - Add `serial_groups` on jobs for cross-job mutual exclusion ([#186](https://github.com/PikoCI/pikoci/issues/186))
 - Step metadata export: get steps auto-forward version metadata to subsequent steps as `GET_<STEPNAME>_<KEY>` env vars, and task steps can write `KEY=VALUE` lines to `$PIKOCI_OUTPUT` to export custom values as `TASK_<STEPNAME>_<KEY>` env vars ([#459](https://github.com/PikoCI/pikoci/issues/459))

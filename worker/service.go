@@ -421,7 +421,7 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 			}
 		}
 	} else {
-		ok, rv := w.checkPassedConstraints(jobCtx, m, &b, j)
+		ok, rv := w.checkPassedConstraints(jobCtx, m, &b, j, pp)
 		if !ok {
 			return
 		}
@@ -513,7 +513,8 @@ func (w *Worker) notifyNextPendingBuild(ctx context.Context, m queue.Body) {
 // successful build that used a common resource version. The returned map
 // contains resourceCanonical → resolvedVersionID for each get step with Passed.
 // If no common version exists, the build is deleted and (false, nil) is returned.
-func (w *Worker) checkPassedConstraints(ctx context.Context, m queue.Body, b *build.Build, j *job.Job) (bool, map[string]uint32) {
+// For for_each jobs, group names in "passed" are expanded to all instance names.
+func (w *Worker) checkPassedConstraints(ctx context.Context, m queue.Body, b *build.Build, j *job.Job, pp *pipeline.Pipeline) (bool, map[string]uint32) {
 	resolvedVersions := make(map[string]uint32)
 	for _, ps := range j.Plan {
 		if ps.Type != job.StepTypeGet || ps.Get == nil {
@@ -525,9 +526,12 @@ func (w *Worker) checkPassedConstraints(ctx context.Context, m queue.Body, b *bu
 		}
 		rCan := g.ResourceCanonical()
 
+		// Expand for_each group names to instance names
+		expandedPassed := resolvePassedJobNames(g.Passed, pp)
+
 		var intersection map[uint32]bool
 		var hasSucceeded bool
-		for _, p := range g.Passed {
+		for _, p := range expandedPassed {
 			builds, _, err := w.pikoci.ListJobBuilds(ctx, m.TeamCanonical, m.PipelineCanonical, p, nil, nil, 0)
 			if err != nil {
 				w.failBuild(ctx, m, *b, fmt.Errorf("failed to list builds for passed job %q: %w", p, err))
@@ -581,6 +585,32 @@ func (w *Worker) checkPassedConstraints(ctx context.Context, m queue.Body, b *bu
 		resolvedVersions[rCan] = best
 	}
 	return true, resolvedVersions
+}
+
+// resolvePassedJobNames expands for_each group names in a passed list to all
+// instance names. If a name matches a for_each group, it is replaced by all
+// instance names in that group. Non-group names are kept as-is.
+func resolvePassedJobNames(passed []string, pp *pipeline.Pipeline) []string {
+	if pp == nil {
+		return passed
+	}
+	// Build a map of group name -> instance names
+	groupInstances := make(map[string][]string)
+	for _, j := range pp.Jobs {
+		if j.ForEachGroup != "" {
+			groupInstances[j.ForEachGroup] = append(groupInstances[j.ForEachGroup], j.Name)
+		}
+	}
+
+	var expanded []string
+	for _, name := range passed {
+		if instances, ok := groupInstances[name]; ok {
+			expanded = append(expanded, instances...)
+		} else {
+			expanded = append(expanded, name)
+		}
+	}
+	return expanded
 }
 
 // checkVersionAvailability verifies that all get steps in the plan have a

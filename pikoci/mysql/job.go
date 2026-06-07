@@ -23,16 +23,18 @@ func NewJobRepository(db sqlr.Querier) *JobRepository {
 }
 
 type dbJob struct {
-	ID          sql.NullInt64
-	Name        sql.NullString
-	Plan        sql.NullString
-	OnSuccess   sql.NullString
-	OnFailure   sql.NullString
-	OnCancel    sql.NullString
-	Ensure      sql.NullString
-	Concurrency sql.NullInt64
-	Paused      sql.NullBool
-	Timeout     sql.NullInt64
+	ID           sql.NullInt64
+	Name         sql.NullString
+	Plan         sql.NullString
+	OnSuccess    sql.NullString
+	OnFailure    sql.NullString
+	OnCancel     sql.NullString
+	Ensure       sql.NullString
+	Concurrency  sql.NullInt64
+	Paused       sql.NullBool
+	Timeout      sql.NullInt64
+	ForEachGroup sql.NullString
+	ForEachKey   sql.NullString
 }
 
 func newDBJob(p job.Job) dbJob {
@@ -42,14 +44,16 @@ func newDBJob(p job.Job) dbJob {
 	c, _ := json.Marshal(p.OnCancel)
 	e, _ := json.Marshal(p.Ensure)
 	dbj := dbJob{
-		Name:        toNullString(p.Name),
-		Plan:        toNullString(string(pl)),
-		OnSuccess:   toNullString(string(s)),
-		OnFailure:   toNullString(string(f)),
-		OnCancel:    toNullString(string(c)),
-		Ensure:      toNullString(string(e)),
-		Concurrency: sql.NullInt64{Int64: int64(p.Concurrency), Valid: true},
-		Paused:      sql.NullBool{Bool: p.Paused, Valid: true},
+		Name:         toNullString(p.Name),
+		Plan:         toNullString(string(pl)),
+		OnSuccess:    toNullString(string(s)),
+		OnFailure:    toNullString(string(f)),
+		OnCancel:     toNullString(string(c)),
+		Ensure:       toNullString(string(e)),
+		Concurrency:  sql.NullInt64{Int64: int64(p.Concurrency), Valid: true},
+		Paused:       sql.NullBool{Bool: p.Paused, Valid: true},
+		ForEachGroup: toNullString(p.ForEachGroup),
+		ForEachKey:   toNullString(p.ForEachKey),
 	}
 	if p.Timeout > 0 {
 		dbj.Timeout = sql.NullInt64{Int64: int64(p.Timeout), Valid: true}
@@ -59,10 +63,12 @@ func newDBJob(p job.Job) dbJob {
 
 func (dbp *dbJob) toDomainEntity() *job.Job {
 	j := &job.Job{
-		ID:          uint32(dbp.ID.Int64),
-		Name:        dbp.Name.String,
-		Concurrency: int(dbp.Concurrency.Int64),
-		Paused:      dbp.Paused.Bool,
+		ID:           uint32(dbp.ID.Int64),
+		Name:         dbp.Name.String,
+		Concurrency:  int(dbp.Concurrency.Int64),
+		Paused:       dbp.Paused.Bool,
+		ForEachGroup: dbp.ForEachGroup.String,
+		ForEachKey:   dbp.ForEachKey.String,
 	}
 	if dbp.Timeout.Valid {
 		j.Timeout = time.Duration(dbp.Timeout.Int64)
@@ -80,8 +86,8 @@ func (dbp *dbJob) toDomainEntity() *job.Job {
 func (r *JobRepository) Create(ctx context.Context, tc, pn string, j job.Job) (uint32, error) {
 	dbj := newDBJob(j)
 	res, err := r.querier.ExecContext(ctx, `
-		INSERT INTO jobs(name, plan, on_success, on_failure, on_cancel, ensure, concurrency, paused, timeout, pipeline_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+		INSERT INTO jobs(name, plan, on_success, on_failure, on_cancel, ensure, concurrency, paused, timeout, for_each_group, for_each_key, pipeline_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 			-- pipeline_id
 			(
 				SELECT p.id
@@ -89,7 +95,7 @@ func (r *JobRepository) Create(ctx context.Context, tc, pn string, j job.Job) (u
 				JOIN teams AS t
 					ON p.team_id = t.id
 				WHERE t.canonical = ? AND p.canonical = ?
-			))`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, dbj.Timeout, tc, pn)
+			))`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, dbj.Timeout, dbj.ForEachGroup, dbj.ForEachKey, tc, pn)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -110,7 +116,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 	dbj := newDBJob(j)
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE jobs AS j
-		SET name = ?, plan = ?, on_success = ?, on_failure = ?, on_cancel = ?, ensure = ?, concurrency = ?, paused = ?, timeout = ?
+		SET name = ?, plan = ?, on_success = ?, on_failure = ?, on_cancel = ?, ensure = ?, concurrency = ?, paused = ?, timeout = ?, for_each_group = ?, for_each_key = ?
 		FROM (
 			SELECT j.id
 			FROM jobs AS j
@@ -121,7 +127,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 		) AS jj
 		WHERE jj.id = j.id
-	`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, dbj.Timeout, tc, pn, jn)
+	`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, dbj.Timeout, dbj.ForEachGroup, dbj.ForEachKey, tc, pn, jn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -152,7 +158,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 
 func (r *JobRepository) Find(ctx context.Context, tc, pn, jn string) (*job.Job, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout
+		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key
 		FROM jobs AS j
 		JOIN pipelines AS p
 			ON j.pipeline_id = p.id
@@ -177,7 +183,7 @@ func (r *JobRepository) Find(ctx context.Context, tc, pn, jn string) (*job.Job, 
 
 func (r *JobRepository) Filter(ctx context.Context, tc, pn string) ([]*job.Job, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout
+		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key
 		FROM jobs AS j
 		JOIN pipelines AS p
 			ON j.pipeline_id = p.id
@@ -314,6 +320,8 @@ func scanJob(s sqlr.Scanner) (*job.Job, error) {
 		&j.Concurrency,
 		&j.Paused,
 		&j.Timeout,
+		&j.ForEachGroup,
+		&j.ForEachKey,
 	)
 
 	if err != nil {
@@ -374,6 +382,36 @@ func (r *JobRepository) loadSerialGroups(ctx context.Context, jobID uint32) ([]s
 	return groups, rows.Err()
 }
 
+func (r *JobRepository) FilterByForEachGroup(ctx context.Context, tc, pn, group string) ([]*job.Job, error) {
+	rows, err := r.querier.QueryContext(ctx, `
+		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key
+		FROM jobs AS j
+		JOIN pipelines AS p
+			ON j.pipeline_id = p.id
+		JOIN teams AS t
+			ON p.team_id = t.id
+		WHERE t.canonical = ? AND p.canonical = ? AND j.for_each_group = ?
+	`, tc, pn, group)
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter jobs by for_each group: %w", err)
+	}
+
+	jobs, err := scanJobs(rows)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan jobs by for_each group: %w", err)
+	}
+
+	for _, j := range jobs {
+		sgs, err := r.loadSerialGroups(ctx, j.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load serial groups for job %q: %w", j.Name, err)
+		}
+		j.SerialGroups = sgs
+	}
+
+	return jobs, nil
+}
+
 func (r *JobRepository) FindJobsBySerialGroups(ctx context.Context, tc, pn string, serialGroups []string) ([]*job.Job, error) {
 	if len(serialGroups) == 0 {
 		return nil, nil
@@ -386,7 +424,7 @@ func (r *JobRepository) FindJobsBySerialGroups(ctx context.Context, tc, pn strin
 		args = append(args, sg)
 	}
 	query := fmt.Sprintf(`
-		SELECT DISTINCT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout
+		SELECT DISTINCT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key
 		FROM jobs AS j
 		JOIN pipelines AS p ON j.pipeline_id = p.id
 		JOIN teams AS t ON p.team_id = t.id
