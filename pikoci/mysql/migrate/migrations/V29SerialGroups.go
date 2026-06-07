@@ -4,7 +4,7 @@ package migrations
 var V29SerialGroups = Migration{
 	Name: "SerialGroups",
 	SQL: `CREATE TABLE job_serial_groups (
-	job_id INTEGER NOT NULL,
+	job_id INT UNSIGNED NOT NULL,
 	serial_group VARCHAR(255) NOT NULL,
 	PRIMARY KEY (job_id, serial_group),
 	FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
