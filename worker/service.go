@@ -435,13 +435,13 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 		}
 	}
 
-	failed, resolved := w.runPlan(jobCtx, m, &b, cwd, pp, j, resolvedVersions)
+	failed, resolved, exportedVars := w.runPlan(jobCtx, m, &b, cwd, pp, j, resolvedVersions)
 
 	// Handle job-level timeout
 	if jobCtx.Err() == context.DeadlineExceeded {
 		w.failBuild(ctx, m, b, fmt.Errorf("job timed out after %s", j.Timeout))
-		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnCancel, "on_cancel", resolved, "cancelled")
-		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.Ensure, "ensure", resolved, "cancelled")
+		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnCancel, "on_cancel", resolved, exportedVars, "cancelled")
+		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.Ensure, "ensure", resolved, exportedVars, "cancelled")
 		w.runAutoNotifications(ctx, m, &b, cwd, pp, resolved)
 		return
 	}
@@ -452,8 +452,8 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 		if err == nil && current.Status == build.Cancelled {
 			b.Status = build.Cancelled
 			w.updateBuild(ctx, m, b)
-			w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnCancel, "on_cancel", resolved, "cancelled")
-			w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.Ensure, "ensure", resolved, "cancelled")
+			w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnCancel, "on_cancel", resolved, exportedVars, "cancelled")
+			w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.Ensure, "ensure", resolved, exportedVars, "cancelled")
 			w.runAutoNotifications(ctx, m, &b, cwd, pp, resolved)
 			return
 		}
@@ -464,7 +464,7 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 		if err := w.updateBuild(ctx, m, b); err != nil {
 			return
 		}
-		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnSuccess, "on_success", resolved, "succeeded")
+		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnSuccess, "on_success", resolved, exportedVars, "succeeded")
 	} else {
 		// Ensure local b reflects the Failed status set by failBuild (which
 		// operates on a copy) so that any subsequent updateBuild calls from
@@ -472,13 +472,13 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 		if b.Status != build.Failed {
 			b.Status = build.Failed
 		}
-		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnFailure, "on_failure", resolved, "failed")
+		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnFailure, "on_failure", resolved, exportedVars, "failed")
 	}
 	status := "succeeded"
 	if b.Status == build.Failed {
 		status = "failed"
 	}
-	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.Ensure, "ensure", resolved, status)
+	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.Ensure, "ensure", resolved, exportedVars, status)
 
 	// Fire automatic notifications based on build status
 	w.runAutoNotifications(ctx, m, &b, cwd, pp, resolved)
@@ -651,7 +651,7 @@ func (w *Worker) checkVersionAvailability(ctx context.Context, m queue.Body, b *
 // Services are started when their position in the plan is reached and stopped
 // unconditionally after the plan completes (or fails).
 // Returns true if the job failed during plan execution.
-func (w *Worker) runPlan(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, j *job.Job, resolvedVersions map[string]uint32) (bool, map[string]string) {
+func (w *Worker) runPlan(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, j *job.Job, resolvedVersions map[string]uint32) (bool, map[string]string, map[string]string) {
 	// Track all started services so we can stop them at the end.
 	var allStartedServices []job.ServiceStep
 	defer func() {
@@ -664,7 +664,7 @@ func (w *Worker) runPlan(ctx context.Context, m queue.Body, b *build.Build, cwd 
 	resolved, err := w.resolveSecretVars(ctx, cwd, pp)
 	if err != nil {
 		w.failBuild(ctx, m, *b, fmt.Errorf("failed to resolve secret vars: %w", err))
-		return true, nil
+		return true, nil, nil
 	}
 
 	// exportedVars accumulates key-value pairs exported by get and task steps
@@ -683,42 +683,42 @@ func (w *Worker) runPlan(ctx context.Context, m queue.Body, b *build.Build, cwd 
 			startedServices := w.startServices(ctx, m, b, cwd, pp, batch)
 			allStartedServices = append(allStartedServices, startedServices...)
 			if len(startedServices) != len(batch) {
-				return true, resolved
+				return true, resolved, exportedVars
 			}
 			if !w.waitForServices(ctx, m, b, cwd, pp, startedServices) {
-				return true, resolved
+				return true, resolved, exportedVars
 			}
 		case job.StepTypeGet:
 			if ps.Get == nil {
 				continue
 			}
 			if w.runGetStep(ctx, m, b, cwd, pp, *ps.Get, ps, resolvedVersions, exportedVars, resolved) {
-				return true, resolved
+				return true, resolved, exportedVars
 			}
 		case job.StepTypeTask:
 			if ps.Task == nil {
 				continue
 			}
 			if w.runTaskStep(ctx, m, b, cwd, pp, *ps.Task, ps, exportedVars, resolved) {
-				return true, resolved
+				return true, resolved, exportedVars
 			}
 		case job.StepTypePut:
 			if ps.Put == nil {
 				continue
 			}
 			if w.runPutStep(ctx, m, b, cwd, pp, *ps.Put, ps, exportedVars, resolved) {
-				return true, resolved
+				return true, resolved, exportedVars
 			}
 		case job.StepTypeNotify:
 			if ps.Notify == nil {
 				continue
 			}
 			if w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, exportedVars, resolved) {
-				return true, resolved
+				return true, resolved, exportedVars
 			}
 		}
 	}
-	return false, resolved
+	return false, resolved, exportedVars
 }
 
 // runGetStep runs a single get step (resource pull).
@@ -841,8 +841,8 @@ func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, c
 		b.Status = build.Failed
 		w.failBuild(ctx, m, *b, nil)
 		w.logger.Error("failed to run get step", "step", g.Name, "error", err)
-		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, g.Name, ps.OnFailure, "on_failure", secretResolved)
-		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, g.Name, ps.Ensure, "ensure", secretResolved)
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, g.Name, ps.OnFailure, "on_failure", secretResolved, exportedVars)
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, g.Name, ps.Ensure, "ensure", secretResolved, exportedVars)
 		return true
 	}
 
@@ -872,8 +872,8 @@ func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, c
 		}
 	}
 
-	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, g.Name, ps.OnSuccess, "on_success", secretResolved)
-	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, g.Name, ps.Ensure, "ensure", secretResolved)
+	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, g.Name, ps.OnSuccess, "on_success", secretResolved, exportedVars)
+	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, g.Name, ps.Ensure, "ensure", secretResolved, exportedVars)
 	return false
 }
 
@@ -926,8 +926,8 @@ func (w *Worker) runGetStepLocal(ctx context.Context, m queue.Body, b *build.Bui
 	logMsg := fmt.Sprintf("using local resource override: %s -> %s", absPath, dirName)
 	b.Steps = append(b.Steps, build.Step{Type: "get", Name: g.Name, Logs: logMsg, Status: build.Succeeded})
 	w.updateBuild(ctx, m, *b)
-	w.runHooks(ctx, m, b, &b.Steps, cwd, nil, g.Name, ps.OnSuccess, "on_success", nil)
-	w.runHooks(ctx, m, b, &b.Steps, cwd, nil, g.Name, ps.Ensure, "ensure", nil)
+	w.runHooks(ctx, m, b, &b.Steps, cwd, nil, g.Name, ps.OnSuccess, "on_success", nil, nil)
+	w.runHooks(ctx, m, b, &b.Steps, cwd, nil, g.Name, ps.Ensure, "ensure", nil, nil)
 	return false
 }
 
@@ -973,8 +973,8 @@ func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, 
 			b.Steps = append(b.Steps, build.Step{Type: "task", Name: t.Name, Logs: errMsg, Status: build.Failed})
 			b.Status = build.Failed
 			w.failBuild(ctx, m, *b, nil)
-			w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.OnFailure, "on_failure", secretResolved)
-			w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.Ensure, "ensure", secretResolved)
+			w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.OnFailure, "on_failure", secretResolved, exportedVars)
+			w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.Ensure, "ensure", secretResolved, exportedVars)
 			return true
 		}
 	}
@@ -1031,8 +1031,8 @@ func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, 
 		b.Steps[stepIdx] = build.Step{Type: "task", Name: t.Name, Logs: out, Duration: d, Status: build.Failed}
 		b.Status = build.Failed
 		w.failBuild(ctx, m, *b, nil)
-		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.OnFailure, "on_failure", secretResolved)
-		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.Ensure, "ensure", secretResolved)
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.OnFailure, "on_failure", secretResolved, exportedVars)
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.Ensure, "ensure", secretResolved, exportedVars)
 		return true
 	}
 
@@ -1044,8 +1044,8 @@ func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, 
 			b.Steps[stepIdx] = build.Step{Type: "task", Name: t.Name, Logs: out + "\n" + errMsg, Duration: d, Status: build.Failed}
 			b.Status = build.Failed
 			w.failBuild(ctx, m, *b, nil)
-			w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.OnFailure, "on_failure", secretResolved)
-			w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.Ensure, "ensure", secretResolved)
+			w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.OnFailure, "on_failure", secretResolved, exportedVars)
+			w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.Ensure, "ensure", secretResolved, exportedVars)
 			return true
 		}
 	}
@@ -1063,8 +1063,8 @@ func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, 
 	if err := w.updateBuild(ctx, m, *b); err != nil {
 		return true
 	}
-	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.OnSuccess, "on_success", secretResolved)
-	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.Ensure, "ensure", secretResolved)
+	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.OnSuccess, "on_success", secretResolved, exportedVars)
+	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, t.Name, ps.Ensure, "ensure", secretResolved, exportedVars)
 	return false
 }
 
@@ -1199,8 +1199,8 @@ func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, c
 		b.Status = build.Failed
 		w.failBuild(ctx, m, *b, nil)
 		w.logger.Error("failed to run put step", "step", p.Name, "error", err)
-		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, p.Name, ps.OnFailure, "on_failure", secretResolved)
-		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, p.Name, ps.Ensure, "ensure", secretResolved)
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, p.Name, ps.OnFailure, "on_failure", secretResolved, exportedVars)
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, p.Name, ps.Ensure, "ensure", secretResolved, exportedVars)
 		return true
 	}
 
@@ -1214,8 +1214,8 @@ func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, c
 	// downstream jobs. This mirrors Concourse's implicit get after put.
 	w.implicitGetAfterPut(ctx, m, b, pp, p, rCan, r, out, stepIdx)
 
-	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, p.Name, ps.OnSuccess, "on_success", secretResolved)
-	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, p.Name, ps.Ensure, "ensure", secretResolved)
+	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, p.Name, ps.OnSuccess, "on_success", secretResolved, exportedVars)
+	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, p.Name, ps.Ensure, "ensure", secretResolved, exportedVars)
 	return false
 }
 
@@ -1316,20 +1316,26 @@ func (w *Worker) runNotifyStep(ctx context.Context, m queue.Body, b *build.Build
 	for k, v := range n.Params {
 		params["notify_"+k] = v
 	}
-	// Message: step message > notification message > empty
-	msg := n.Message
-	if msg == "" {
-		msg = notif.Message
-	}
-	if msg != "" {
-		params["NOTIFY_MESSAGE"] = msg
-	}
 	// Build metadata
 	for k, v := range buildMetadataParams(b, m) {
 		params[k] = v
 	}
 	for k, v := range exportedVars {
 		params[k] = v
+	}
+	// Message: step message > notification message > empty.
+	// Resolved after build metadata and exported vars so that
+	// $BUILD_NUMBER, $GET_*, etc. are expanded in the message.
+	msg := n.Message
+	if msg == "" {
+		msg = notif.Message
+	}
+	if msg != "" {
+		expanded := os.Expand(msg, func(key string) string {
+			return params[key]
+		})
+		// Convert literal \n sequences (e.g. from PIKOCI_OUTPUT values) to real newlines.
+		params["NOTIFY_MESSAGE"] = strings.ReplaceAll(expanded, `\n`, "\n")
 	}
 
 	ru, rc, ok := applyRunnerOverride(pp, nt.Notify, nt.Runner)
@@ -1401,8 +1407,8 @@ func (w *Worker) runNotifyStep(ctx context.Context, m queue.Body, b *build.Build
 		b.Status = build.Failed
 		w.failBuild(ctx, m, *b, nil)
 		w.logger.Error("failed to run notify step", "step", n.Name, "error", err)
-		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, n.Name, ps.OnFailure, "on_failure", secretResolved)
-		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, n.Name, ps.Ensure, "ensure", secretResolved)
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, n.Name, ps.OnFailure, "on_failure", secretResolved, exportedVars)
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, n.Name, ps.Ensure, "ensure", secretResolved, exportedVars)
 		return true
 	}
 
@@ -1410,8 +1416,8 @@ func (w *Worker) runNotifyStep(ctx context.Context, m queue.Body, b *build.Build
 	if err := w.updateBuild(ctx, m, *b); err != nil {
 		return true
 	}
-	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, n.Name, ps.OnSuccess, "on_success", secretResolved)
-	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, n.Name, ps.Ensure, "ensure", secretResolved)
+	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, n.Name, ps.OnSuccess, "on_success", secretResolved, exportedVars)
+	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, n.Name, ps.Ensure, "ensure", secretResolved, exportedVars)
 	return false
 }
 
@@ -1555,7 +1561,7 @@ func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Bui
 
 // runHooks runs a list of hooks (on_success, on_failure, on_cancel, ensure) and appends
 // the results as build steps.
-func (w *Worker) runHooks(ctx context.Context, m queue.Body, b *build.Build, steps *[]build.Step, cwd string, pp *pipeline.Pipeline, stepName string, hooks []job.HookStep, hookType string, resolved map[string]string, buildStatus ...string) {
+func (w *Worker) runHooks(ctx context.Context, m queue.Body, b *build.Build, steps *[]build.Step, cwd string, pp *pipeline.Pipeline, stepName string, hooks []job.HookStep, hookType string, resolved map[string]string, exportedVars map[string]string, buildStatus ...string) {
 	for i, h := range hooks {
 		// Compute step name early so we can use it for the running step
 		name := hookType
@@ -1632,7 +1638,7 @@ func (w *Worker) runHooks(ctx context.Context, m queue.Body, b *build.Build, ste
 				Type:   job.StepTypeNotify,
 				Notify: h.Notify,
 			}
-			w.runNotifyStep(ctx, m, b, cwd, pp, *h.Notify, ps, nil, resolved)
+			w.runNotifyStep(ctx, m, b, cwd, pp, *h.Notify, ps, exportedVars, resolved)
 			continue
 		default:
 			continue

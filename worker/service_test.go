@@ -1369,7 +1369,7 @@ func TestRunHooks(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "60", gomock.Any()).
 		Return(nil).AnyTimes()
 
-	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "task-name", hooks, "on_success", nil)
+	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "task-name", hooks, "on_success", nil, nil)
 
 	require.Len(t, b.Job, 2)
 	assert.Equal(t, "task-name:0:on_success", b.Job[0].Name)
@@ -1400,7 +1400,7 @@ func TestRunHooks_SingleHook_NoIndex(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "61", gomock.Any()).
 		Return(nil).AnyTimes()
 
-	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "step", hooks, "ensure", nil)
+	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "step", hooks, "ensure", nil, nil)
 
 	require.Len(t, b.Job, 1)
 	assert.Equal(t, "step:ensure", b.Job[0].Name)
@@ -1430,7 +1430,7 @@ func TestRunHooks_JobLevel_NoStepName(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "62", gomock.Any()).
 		Return(nil).AnyTimes()
 
-	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", hooks, "on_failure", nil)
+	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", hooks, "on_failure", nil, nil)
 
 	require.Len(t, b.Job, 1)
 	assert.Equal(t, "on_failure", b.Job[0].Name)
@@ -5477,6 +5477,105 @@ func TestRunNotifyStep_WithMessage_And_Params(t *testing.T) {
 	assert.Contains(t, capturedBuild.Steps[0].Logs, "msg=step-level message")
 	assert.Contains(t, capturedBuild.Steps[0].Logs, "channel=#alerts")
 	assert.Contains(t, capturedBuild.Steps[0].Logs, "severity=high")
+}
+
+func TestRunNotifyStep_MessageInterpolation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "interp-job",
+		BuildID:           10,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "interp-job",
+				Plan: []job.PlanStep{
+					// Task that writes to PIKOCI_OUTPUT
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "gen",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"-c", `echo "CHANGELOG=line one\nline two\nline three" >> "$PIKOCI_OUTPUT"`},
+								Params: map[string]string{"path": "/bin/sh"},
+							},
+						},
+					},
+				},
+				OnSuccess: []job.HookStep{
+					{
+						Type: job.StepTypeNotify,
+						Notify: &job.NotifyStep{
+							Type:    "echo-notifier",
+							Name:    "my-alert",
+							Message: "Release $BUILD_NUMBER\n$TASK_GEN_CHANGELOG\ndone",
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "my-alert",
+				Canonical: "echo-notifier.my-alert",
+				Params:    &notification.Params{Params: map[string]string{}},
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					// Print the message so we can verify interpolation
+					Args:   []string{"-c", `printf '%s' "$NOTIFY_MESSAGE"`},
+					Params: map[string]string{"path": "/bin/sh"},
+				},
+				Params: []string{},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(&build.Build{ID: 400, BuildNumber: "42", StartedAt: time.Now()}, nil)
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "42", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	// The notify step is the second step (after the task)
+	require.GreaterOrEqual(t, len(capturedBuild.Steps), 2)
+	notifyLogs := capturedBuild.Steps[1].Logs
+	// $BUILD_NUMBER should be interpolated
+	assert.Contains(t, notifyLogs, "Release 42")
+	// $TASK_GEN_CHANGELOG should be interpolated with \n converted to real newlines
+	assert.Contains(t, notifyLogs, "line one\nline two\nline three")
+	assert.Contains(t, notifyLogs, "done")
 }
 
 // --- runAutoNotifications tests ---

@@ -432,9 +432,45 @@ When triggered by automatic notifications (via the `on` field), the build status
 
 These are constructed from build metadata variables (`$BUILD_PIPELINE_NAME`, `$BUILD_JOB_NAME`, `$BUILD_NUMBER`) and the `$notify_build_status` variable (automatically set by automatic notifications).
 
-The `message` field in HCL supports pipeline variables (`${var.app_name}`), which are resolved at pipeline parse time. Runtime build metadata (`$BUILD_NUMBER`, etc.) is **not** available in the HCL `message` field — it is available as separate environment variables in the notification type script, which can use them to construct or enrich the message.
+The `message` field in HCL supports both pipeline variables (`${var.app_name}`, resolved at parse time) and runtime variable interpolation (`$BUILD_NUMBER`, `$GET_*`, `$TASK_*`, resolved at build time). This means you can include build metadata, resource versions, and task outputs directly in notification messages.
+
+Literal `\n` sequences in the expanded message are converted to real newlines, which is useful when including multiline values from `$PIKOCI_OUTPUT` (see example below).
 
 The resolved message is available as the `$NOTIFY_MESSAGE` environment variable.
+
+### Runtime Variable Interpolation
+
+Any `$VAR` or `${VAR}` reference in the message is expanded against the available runtime variables:
+
+- `$BUILD_NUMBER`, `$BUILD_JOB_NAME`, `$BUILD_PIPELINE_NAME`, `$BUILD_TEAM_NAME`
+- `$GET_<STEP>_<KEY>` — values from get steps (e.g. `$GET_MY_REPO_REF`)
+- `$TASK_<STEP>_<KEY>` — values exported via `$PIKOCI_OUTPUT` from task steps
+
+```hcl
+job "release" {
+  get "git" "repo" { trigger = true }
+
+  task "build" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", <<-EOT
+        TAG=$(git describe --tags --exact-match)
+        BODY=$(sed -n "/^## /,/^## /{//!p;}" CHANGELOG.md)
+        echo "CHANGELOG=$(echo "$BODY" | sed ':a;N;$!ba;s/\n/\\n/g')" >> "$PIKOCI_OUTPUT"
+      EOT
+      ]
+    }
+  }
+
+  on_success {
+    notify "discord" "releases" {
+      message = "🚀 **$GET_REPO_REF** released!\n\n$TASK_BUILD_CHANGELOG\n\n🔗 https://github.com/org/repo/releases/tag/$GET_REPO_REF"
+    }
+  }
+}
+```
+
+To include multiline content (like a changelog), write it to `$PIKOCI_OUTPUT` with newlines replaced by literal `\n`. The notification system converts them back to real newlines automatically.
 
 ## Environment Variables
 
@@ -448,6 +484,8 @@ Notify commands receive all of the following as environment variables:
 - `$BUILD_PIPELINE_NAME` — Pipeline canonical name
 - `$BUILD_TEAM_NAME` — Team canonical name
 - `$WORKDIR` — Working directory (shared with get/task steps)
+- `$GET_<STEP>_<KEY>` — Values from get steps (e.g. `$GET_MY_REPO_REF`)
+- `$TASK_<STEP>_<KEY>` — Values exported via `$PIKOCI_OUTPUT` from task steps
 
 These environment variables are available inside the notification type's `notify` command script. For example, you can reference `$BUILD_NUMBER` in your script even if it wasn't part of `$NOTIFY_MESSAGE`.
 
