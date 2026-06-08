@@ -797,7 +797,13 @@ export var PipelinesNewView = Backbone.View.extend({
       var rLabel = name.substring(dotIdx + 1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       re = new RegExp('(?:resource|notification)\\s+"' + rType + '"\\s+"' + rLabel + '"');
     } else {
-      re = new RegExp('(?:job|resource|resource_type|runner_type|secret_type|service_type|notification_type|notification)\\s+"' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"');
+      // For for_each expanded jobs (name--key), search for the base job name
+      var searchName = name;
+      var dashDashIdx = name.indexOf('--');
+      if (dashDashIdx !== -1) {
+        searchName = name.substring(0, dashDashIdx);
+      }
+      re = new RegExp('(?:job|resource|resource_type|runner_type|secret_type|service_type|notification_type|notification)\\s+"' + searchName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"');
     }
     var match = re.exec(doc);
     if (match) {

@@ -24,4 +24,6 @@ type Repository interface {
 	UnpauseAll(ctx context.Context, tc, pn string) error
 	// FindJobsBySerialGroups returns all jobs in the pipeline that share any of the given serial groups.
 	FindJobsBySerialGroups(ctx context.Context, tc, pn string, serialGroups []string) ([]*Job, error)
+	// FilterByForEachGroup returns all jobs in the pipeline that belong to the given for_each group.
+	FilterByForEachGroup(ctx context.Context, tc, pn, group string) ([]*Job, error)
 }

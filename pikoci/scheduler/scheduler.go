@@ -153,9 +153,12 @@ func (s *Scheduler) evaluateJob(ctx context.Context, pwt *pipeline.WithTeam, j *
 			continue
 		}
 
+		// Expand for_each group names to instance names
+		expandedPassed := resolvePassedJobNames(g.Passed, pwt.Jobs)
+
 		versionID, ready, err := s.builds.FindReadyDownstreamVersion(
 			ctx, pwt.Team.Canonical, pwt.Canonical,
-			g.Passed, j.Name, g.Name, len(g.Passed),
+			expandedPassed, j.Name, g.Name, len(expandedPassed),
 		)
 		if err != nil {
 			s.logger.Error("failed to find ready downstream version",
@@ -236,4 +239,26 @@ func (s *Scheduler) evaluateJob(ctx context.Context, pwt *pipeline.WithTeam, j *
 		s.logger.Error("failed to send downstream trigger message",
 			"job", j.Name, "error", err)
 	}
+}
+
+// resolvePassedJobNames expands for_each group names in a passed list to all
+// instance names. If a name matches a for_each group, it is replaced by all
+// instance names in that group. Non-group names are kept as-is.
+func resolvePassedJobNames(passed []string, jobs []job.Job) []string {
+	groupInstances := make(map[string][]string)
+	for _, j := range jobs {
+		if j.ForEachGroup != "" {
+			groupInstances[j.ForEachGroup] = append(groupInstances[j.ForEachGroup], j.Name)
+		}
+	}
+
+	var expanded []string
+	for _, name := range passed {
+		if instances, ok := groupInstances[name]; ok {
+			expanded = append(expanded, instances...)
+		} else {
+			expanded = append(expanded, name)
+		}
+	}
+	return expanded
 }

@@ -85,6 +85,21 @@ func (mr *JobRepositoryMockRecorder) Filter(ctx, tc, pn any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Filter", reflect.TypeOf((*JobRepository)(nil).Filter), ctx, tc, pn)
 }
 
+// FilterByForEachGroup mocks base method.
+func (m *JobRepository) FilterByForEachGroup(ctx context.Context, tc, pn, group string) ([]*job.Job, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FilterByForEachGroup", ctx, tc, pn, group)
+	ret0, _ := ret[0].([]*job.Job)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FilterByForEachGroup indicates an expected call of FilterByForEachGroup.
+func (mr *JobRepositoryMockRecorder) FilterByForEachGroup(ctx, tc, pn, group any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilterByForEachGroup", reflect.TypeOf((*JobRepository)(nil).FilterByForEachGroup), ctx, tc, pn, group)
+}
+
 // Find mocks base method.
 func (m *JobRepository) Find(ctx context.Context, tc, pn, jn string) (*job.Job, error) {
 	m.ctrl.T.Helper()

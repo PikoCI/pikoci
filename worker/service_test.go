@@ -1095,7 +1095,7 @@ func TestCheckPassedConstraints_AllPassed(t *testing.T) {
 			{Type: "get", Name: "my-cron", VersionID: 5},
 		}}}, false, nil)
 
-	ok, resolved := w.checkPassedConstraints(ctx, m, &b, j)
+	ok, resolved := w.checkPassedConstraints(ctx, m, &b, j, nil)
 	assert.True(t, ok)
 	assert.Equal(t, map[string]uint32{"cron.my-cron": 5}, resolved)
 }
@@ -1140,7 +1140,7 @@ func TestCheckPassedConstraints_NoCommonVersion(t *testing.T) {
 	svc.EXPECT().DeleteJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "51").
 		Return(nil)
 
-	ok, resolved := w.checkPassedConstraints(ctx, m, &b, j)
+	ok, resolved := w.checkPassedConstraints(ctx, m, &b, j, nil)
 	assert.False(t, ok)
 	assert.Nil(t, resolved)
 }
@@ -1192,7 +1192,7 @@ func TestCheckPassedConstraints_PicksNewestCommon(t *testing.T) {
 			}},
 		}, false, nil)
 
-	ok, resolved := w.checkPassedConstraints(ctx, m, &b, j)
+	ok, resolved := w.checkPassedConstraints(ctx, m, &b, j, nil)
 	assert.True(t, ok)
 	assert.Equal(t, map[string]uint32{"git.my-repo": 5}, resolved)
 }
@@ -1222,7 +1222,7 @@ func TestCheckPassedConstraints_NoPassedField(t *testing.T) {
 		},
 	}
 
-	ok, resolved := w.checkPassedConstraints(ctx, m, &b, j)
+	ok, resolved := w.checkPassedConstraints(ctx, m, &b, j, nil)
 	assert.True(t, ok)
 	assert.Equal(t, map[string]uint32{}, resolved)
 }
@@ -1259,7 +1259,7 @@ func TestCheckPassedConstraints_PutStepSatisfiesPassed(t *testing.T) {
 			{Type: "put", Name: "my-artifact", VersionID: 7},
 		}}}, false, nil)
 
-	ok, resolved := w.checkPassedConstraints(ctx, m, &b, j)
+	ok, resolved := w.checkPassedConstraints(ctx, m, &b, j, nil)
 	assert.True(t, ok)
 	assert.Equal(t, map[string]uint32{"artifact.my-artifact": 7}, resolved)
 }

@@ -2,8 +2,11 @@ package pikoci
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"math/big"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/hcl/v2"
@@ -276,48 +279,331 @@ type hclPipeline struct {
 func hclFunctions() map[string]function.Function {
 	return map[string]function.Function{
 		// String
-		"chomp":      stdlib.ChompFunc,
-		"format":     stdlib.FormatFunc,
-		"formatlist": stdlib.FormatListFunc,
-		"indent":     stdlib.IndentFunc,
-		"join":       stdlib.JoinFunc,
-		"lower":      stdlib.LowerFunc,
-		"replace":    stdlib.ReplaceFunc,
-		"split":      stdlib.SplitFunc,
-		"substr":     stdlib.SubstrFunc,
-		"title":      stdlib.TitleFunc,
-		"trim":       stdlib.TrimFunc,
-		"trimprefix": stdlib.TrimPrefixFunc,
-		"trimsuffix": stdlib.TrimSuffixFunc,
-		"trimspace":  stdlib.TrimSpaceFunc,
-		"upper":      stdlib.UpperFunc,
+		"chomp":       stdlib.ChompFunc,
+		"format":      stdlib.FormatFunc,
+		"formatlist":  stdlib.FormatListFunc,
+		"indent":      stdlib.IndentFunc,
+		"join":        stdlib.JoinFunc,
+		"lower":       stdlib.LowerFunc,
+		"replace":     stdlib.ReplaceFunc,
+		"split":       stdlib.SplitFunc,
+		"strlen":      stdlib.StrlenFunc,
+		"strrev":      stdlib.ReverseFunc,
+		"substr":      stdlib.SubstrFunc,
+		"title":       stdlib.TitleFunc,
+		"trim":        stdlib.TrimFunc,
+		"trimprefix":  stdlib.TrimPrefixFunc,
+		"trimsuffix":  stdlib.TrimSuffixFunc,
+		"trimspace":   stdlib.TrimSpaceFunc,
+		"upper":       stdlib.UpperFunc,
+		"startswith":  startswithFunc,
+		"endswith":    endswithFunc,
+		"strcontains": strcontainsFunc,
 		// Collection
-		"concat":   stdlib.ConcatFunc,
-		"contains": stdlib.ContainsFunc,
-		"distinct": stdlib.DistinctFunc,
-		"flatten":  stdlib.FlattenFunc,
-		"keys":     stdlib.KeysFunc,
-		"length":   stdlib.LengthFunc,
-		"lookup":   stdlib.LookupFunc,
-		"merge":    stdlib.MergeFunc,
-		"reverse":  stdlib.ReverseListFunc,
-		"sort":     stdlib.SortFunc,
-		"values":   stdlib.ValuesFunc,
+		"chunklist":    stdlib.ChunklistFunc,
+		"coalesce":     stdlib.CoalesceFunc,
+		"coalescelist": stdlib.CoalesceListFunc,
+		"compact":      stdlib.CompactFunc,
+		"concat":       stdlib.ConcatFunc,
+		"contains":     stdlib.ContainsFunc,
+		"distinct":     stdlib.DistinctFunc,
+		"element":      stdlib.ElementFunc,
+		"flatten":      stdlib.FlattenFunc,
+		"keys":         stdlib.KeysFunc,
+		"length":       stdlib.LengthFunc,
+		"lookup":       stdlib.LookupFunc,
+		"merge":        stdlib.MergeFunc,
+		"one":          oneFunc,
+		"range":        stdlib.RangeFunc,
+		"reverse":      stdlib.ReverseListFunc,
+		"slice":        stdlib.SliceFunc,
+		"sort":         stdlib.SortFunc,
+		"values":       stdlib.ValuesFunc,
+		"zipmap":       stdlib.ZipmapFunc,
+		"alltrue":      alltrueFunc,
+		"anytrue":      anytrueFunc,
+		"sum":          sumFunc,
+		"transpose":    transposeFunc,
 		// Numeric
-		"abs":   stdlib.AbsoluteFunc,
-		"ceil":  stdlib.CeilFunc,
-		"floor": stdlib.FloorFunc,
-		"max":   stdlib.MaxFunc,
-		"min":   stdlib.MinFunc,
+		"abs":     stdlib.AbsoluteFunc,
+		"ceil":    stdlib.CeilFunc,
+		"floor":   stdlib.FloorFunc,
+		"log":     stdlib.LogFunc,
+		"max":     stdlib.MaxFunc,
+		"min":     stdlib.MinFunc,
+		"parseint": stdlib.ParseIntFunc,
+		"pow":     stdlib.PowFunc,
+		"signum":  stdlib.SignumFunc,
 		// Encoding
-		"jsonencode": stdlib.JSONEncodeFunc,
-		"jsondecode": stdlib.JSONDecodeFunc,
-		"csvdecode":  stdlib.CSVDecodeFunc,
+		"jsonencode":  stdlib.JSONEncodeFunc,
+		"jsondecode":  stdlib.JSONDecodeFunc,
+		"csvdecode":   stdlib.CSVDecodeFunc,
+		"base64encode": base64encodeFunc,
+		"base64decode": base64decodeFunc,
+		"urlencode":    urlencodeFunc,
+		// Date/Time
+		"formatdate": stdlib.FormatDateFunc,
+		"timeadd":    stdlib.TimeAddFunc,
+		"timestamp":  timestampFunc,
 		// Regex
 		"regex":        stdlib.RegexFunc,
 		"regexall":     stdlib.RegexAllFunc,
 		"regexreplace": stdlib.RegexReplaceFunc,
+		// Set
+		"toset":           tosetFunc,
+		"setproduct":      stdlib.SetProductFunc,
+		"setintersection": stdlib.SetIntersectionFunc,
+		"setunion":        stdlib.SetUnionFunc,
+		"setsubtract":              stdlib.SetSubtractFunc,
+		"setsymmetricdifference":   stdlib.SetSymmetricDifferenceFunc,
+		// Type conversion
+		"tostring": makeToFunc(cty.String),
+		"tonumber": makeToFunc(cty.Number),
+		"tobool":   makeToFunc(cty.Bool),
+		"tolist":   makeToFunc(cty.List(cty.DynamicPseudoType)),
+		"tomap":    makeToFunc(cty.Map(cty.DynamicPseudoType)),
 	}
+}
+
+// tosetFunc converts a list of strings to a set (deduplicated list) of strings.
+var tosetFunc = function.New(&function.Spec{
+	Params: []function.Parameter{
+		{
+			Name: "list",
+			Type: cty.List(cty.String),
+		},
+	},
+	Type: function.StaticReturnType(cty.Set(cty.String)),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		list := args[0]
+		if !list.IsKnown() {
+			return cty.UnknownVal(cty.Set(cty.String)), nil
+		}
+		if list.LengthInt() == 0 {
+			return cty.SetValEmpty(cty.String), nil
+		}
+		var vals []cty.Value
+		for it := list.ElementIterator(); it.Next(); {
+			_, v := it.Element()
+			vals = append(vals, v)
+		}
+		return cty.SetVal(vals), nil
+	},
+})
+
+var startswithFunc = function.New(&function.Spec{
+	Params: []function.Parameter{
+		{Name: "str", Type: cty.String},
+		{Name: "prefix", Type: cty.String},
+	},
+	Type: function.StaticReturnType(cty.Bool),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() || !args[1].IsKnown() {
+			return cty.UnknownVal(cty.Bool), nil
+		}
+		return cty.BoolVal(strings.HasPrefix(args[0].AsString(), args[1].AsString())), nil
+	},
+})
+
+var endswithFunc = function.New(&function.Spec{
+	Params: []function.Parameter{
+		{Name: "str", Type: cty.String},
+		{Name: "suffix", Type: cty.String},
+	},
+	Type: function.StaticReturnType(cty.Bool),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() || !args[1].IsKnown() {
+			return cty.UnknownVal(cty.Bool), nil
+		}
+		return cty.BoolVal(strings.HasSuffix(args[0].AsString(), args[1].AsString())), nil
+	},
+})
+
+var strcontainsFunc = function.New(&function.Spec{
+	Params: []function.Parameter{
+		{Name: "str", Type: cty.String},
+		{Name: "substr", Type: cty.String},
+	},
+	Type: function.StaticReturnType(cty.Bool),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() || !args[1].IsKnown() {
+			return cty.UnknownVal(cty.Bool), nil
+		}
+		return cty.BoolVal(strings.Contains(args[0].AsString(), args[1].AsString())), nil
+	},
+})
+
+var base64encodeFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "str", Type: cty.String}},
+	Type:   function.StaticReturnType(cty.String),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(cty.String), nil
+		}
+		return cty.StringVal(base64.StdEncoding.EncodeToString([]byte(args[0].AsString()))), nil
+	},
+})
+
+var base64decodeFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "str", Type: cty.String}},
+	Type:   function.StaticReturnType(cty.String),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(cty.String), nil
+		}
+		decoded, err := base64.StdEncoding.DecodeString(args[0].AsString())
+		if err != nil {
+			return cty.NilVal, fmt.Errorf("failed to decode base64: %w", err)
+		}
+		return cty.StringVal(string(decoded)), nil
+	},
+})
+
+var urlencodeFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "str", Type: cty.String}},
+	Type:   function.StaticReturnType(cty.String),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(cty.String), nil
+		}
+		return cty.StringVal(url.QueryEscape(args[0].AsString())), nil
+	},
+})
+
+var timestampFunc = function.New(&function.Spec{
+	Params: []function.Parameter{},
+	Type:   function.StaticReturnType(cty.String),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		return cty.StringVal(time.Now().UTC().Format(time.RFC3339)), nil
+	},
+})
+
+var alltrueFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "list", Type: cty.List(cty.Bool)}},
+	Type:   function.StaticReturnType(cty.Bool),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(cty.Bool), nil
+		}
+		for it := args[0].ElementIterator(); it.Next(); {
+			_, v := it.Element()
+			if v.False() {
+				return cty.False, nil
+			}
+		}
+		return cty.True, nil
+	},
+})
+
+var anytrueFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "list", Type: cty.List(cty.Bool)}},
+	Type:   function.StaticReturnType(cty.Bool),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(cty.Bool), nil
+		}
+		for it := args[0].ElementIterator(); it.Next(); {
+			_, v := it.Element()
+			if v.True() {
+				return cty.True, nil
+			}
+		}
+		return cty.False, nil
+	},
+})
+
+var oneFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "list", Type: cty.DynamicPseudoType}},
+	Type: func(args []cty.Value) (cty.Type, error) {
+		ty := args[0].Type()
+		switch {
+		case ty.IsListType():
+			return ty.ElementType(), nil
+		case ty.IsSetType():
+			return ty.ElementType(), nil
+		case ty.IsTupleType():
+			etys := ty.TupleElementTypes()
+			if len(etys) == 0 {
+				return cty.DynamicPseudoType, nil
+			}
+			return etys[0], nil
+		default:
+			return cty.NilType, fmt.Errorf("argument must be a list, set, or tuple")
+		}
+	},
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		val := args[0]
+		if !val.IsKnown() {
+			return cty.UnknownVal(retType), nil
+		}
+		l := val.LengthInt()
+		if l == 0 {
+			return cty.NullVal(retType), nil
+		}
+		if l != 1 {
+			return cty.NilVal, fmt.Errorf("must be a single element collection, got %d", l)
+		}
+		it := val.ElementIterator()
+		it.Next()
+		_, v := it.Element()
+		return v, nil
+	},
+})
+
+var sumFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "list", Type: cty.List(cty.Number)}},
+	Type:   function.StaticReturnType(cty.Number),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(cty.Number), nil
+		}
+		if args[0].LengthInt() == 0 {
+			return cty.NumberIntVal(0), nil
+		}
+		s := new(big.Float)
+		for it := args[0].ElementIterator(); it.Next(); {
+			_, v := it.Element()
+			s.Add(s, v.AsBigFloat())
+		}
+		return cty.NumberVal(s), nil
+	},
+})
+
+var transposeFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "values", Type: cty.Map(cty.List(cty.String))}},
+	Type:   function.StaticReturnType(cty.Map(cty.List(cty.String))),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(retType), nil
+		}
+		result := make(map[string][]string)
+		for it := args[0].ElementIterator(); it.Next(); {
+			k, v := it.Element()
+			key := k.AsString()
+			for vit := v.ElementIterator(); vit.Next(); {
+				_, elem := vit.Element()
+				val := elem.AsString()
+				result[val] = append(result[val], key)
+			}
+		}
+		if len(result) == 0 {
+			return cty.MapValEmpty(cty.List(cty.String)), nil
+		}
+		m := make(map[string]cty.Value, len(result))
+		for k, v := range result {
+			vals := make([]cty.Value, len(v))
+			for i, s := range v {
+				vals[i] = cty.StringVal(s)
+			}
+			m[k] = cty.ListVal(vals)
+		}
+		return cty.MapVal(m), nil
+	},
+})
+
+// makeToFunc wraps stdlib.MakeToFunc to create type conversion functions.
+func makeToFunc(wantTy cty.Type) function.Function {
+	return stdlib.MakeToFunc(wantTy)
 }
 
 // readPipeline parses raw HCL pipeline configuration bytes into a Pipeline
@@ -412,10 +698,57 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 		Functions: funcs,
 	}
 
+	// Detect for_each/matrix job blocks before the main decode
+	forEachExpansions, err := detectForEachExpansions(rpp, ectx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect for_each expansions: %w", err)
+	}
+
+	// Strip for_each job blocks from the HCL for the main decode
+	decodeRPP, forEachBlockBytes := stripForEachJobBlocks(rpp, forEachExpansions)
+
 	var hp hclPipeline
-	err = hclsimple.Decode("pipeline.hcl", rpp, ectx, &hp)
+	err = hclsimple.Decode("pipeline.hcl", decodeRPP, ectx, &hp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to Decode Pipeline config: %w", err)
+	}
+
+	// Decode for_each job instances and append to hp.Jobs
+	type forEachJobMeta struct {
+		baseName string
+		key      string
+		ectx     *hcl.EvalContext
+	}
+	forEachMetas := make(map[string]forEachJobMeta)
+	cleanedForEachBlocks := make(map[string][]byte) // cache cleaned blocks per base name
+	for _, exp := range forEachExpansions {
+		blockRaw := forEachBlockBytes[exp.baseName]
+		cleanBlock, cErr := removeForEachAndMatrixFromBlock(blockRaw)
+		if cErr != nil {
+			return nil, fmt.Errorf("failed to clean for_each block for job %q: %w", exp.baseName, cErr)
+		}
+		cleanedForEachBlocks[exp.baseName] = cleanBlock
+		for _, inst := range exp.instances {
+			instEctx := makeInstanceEctx(ectx, inst.eachVal)
+			var singleJobFile struct {
+				Jobs []hclJob `hcl:"job,block"`
+			}
+			dErr := hclsimple.Decode("job.hcl", cleanBlock, instEctx, &singleJobFile)
+			if dErr != nil {
+				return nil, fmt.Errorf("failed to decode for_each instance %q of job %q: %w", inst.key, exp.baseName, dErr)
+			}
+			if len(singleJobFile.Jobs) == 0 {
+				return nil, fmt.Errorf("for_each instance %q of job %q produced no job", inst.key, exp.baseName)
+			}
+			expandedJob := singleJobFile.Jobs[0]
+			expandedJob.Name = exp.baseName + "--" + inst.slugKey
+			hp.Jobs = append(hp.Jobs, expandedJob)
+			forEachMetas[expandedJob.Name] = forEachJobMeta{
+				baseName: exp.baseName,
+				key:      inst.key,
+				ectx:     instEctx,
+			}
+		}
 	}
 
 	// Convert intermediate types and resolve sources
@@ -647,8 +980,74 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 		}
 	}
 
-	// Parse the raw HCL to determine block ordering within each job.
-	jobPlans, jobHooksMap, expandedServices, err := parseJobPlans(rpp, ectx, hp.Jobs, services)
+	// Build job block pairs: (hclJob, AST block, ectx) for parseJobPlans.
+	// Regular jobs come from decodeRPP, for_each jobs from their block bytes.
+	var jobPairs []jobBlockPair
+
+	// Parse stripped HCL for regular job AST blocks
+	if len(hp.Jobs) > 0 {
+		regularFile, rDiags := hclsyntax.ParseConfig(decodeRPP, "pipeline.hcl", hcl.Pos{Line: 1, Column: 1})
+		if rDiags.HasErrors() {
+			return nil, fmt.Errorf("failed to parse stripped pipeline HCL: %s", rDiags.Error())
+		}
+		regularBody := regularFile.Body.(*hclsyntax.Body)
+		regularJobIdx := 0
+		for _, block := range regularBody.Blocks {
+			if block.Type != "job" {
+				continue
+			}
+			if regularJobIdx >= len(hp.Jobs)-len(forEachMetas) {
+				break
+			}
+			hj := hp.Jobs[regularJobIdx]
+			// Skip if this is a for_each expanded job (they're appended at the end)
+			if _, isForEach := forEachMetas[hj.Name]; isForEach {
+				continue
+			}
+			jobPairs = append(jobPairs, jobBlockPair{
+				hj:      hj,
+				block:   block,
+				jobEctx: ectx,
+			})
+			regularJobIdx++
+		}
+	}
+
+	// Parse for_each job blocks and add pairs for each instance
+	for _, exp := range forEachExpansions {
+		cleanBlock := cleanedForEachBlocks[exp.baseName]
+		cleanFile, cDiags := hclsyntax.ParseConfig(cleanBlock, "job.hcl", hcl.Pos{Line: 1, Column: 1})
+		if cDiags.HasErrors() {
+			return nil, fmt.Errorf("failed to parse cleaned for_each block for job %q: %s", exp.baseName, cDiags.Error())
+		}
+		cleanBody := cleanFile.Body.(*hclsyntax.Body)
+		var astBlock *hclsyntax.Block
+		for _, b := range cleanBody.Blocks {
+			if b.Type == "job" {
+				astBlock = b
+				break
+			}
+		}
+		if astBlock == nil {
+			return nil, fmt.Errorf("no job block found in cleaned for_each block for %q", exp.baseName)
+		}
+
+		// Find the expanded hclJobs for this base name
+		for _, hj := range hp.Jobs {
+			meta, ok := forEachMetas[hj.Name]
+			if !ok || meta.baseName != exp.baseName {
+				continue
+			}
+			jobPairs = append(jobPairs, jobBlockPair{
+				hj:      hj,
+				block:   astBlock,
+				jobEctx: meta.ectx,
+			})
+		}
+	}
+
+	// Parse job plans using paired blocks
+	jobPlans, jobHooksMap, expandedServices, err := parseJobPlansFromPairs(jobPairs, services)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse job plans: %w", err)
 	}
@@ -692,6 +1091,10 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 			OnCancel:     jh.OnCancel,
 			Ensure:       jh.Ensure,
 		}
+		if meta, ok := forEachMetas[hj.Name]; ok {
+			j.ForEachGroup = meta.baseName
+			j.ForEachKey = meta.key
+		}
 		pp.Jobs = append(pp.Jobs, j)
 	}
 
@@ -699,6 +1102,13 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 		pp.Resources[i].Canonical = utils.ResourceCanonical(r.Type, r.Name)
 	}
 	return &pp, nil
+}
+
+// jobBlockPair associates a decoded hclJob with its AST block and eval context.
+type jobBlockPair struct {
+	hj      hclJob
+	block   *hclsyntax.Block
+	jobEctx *hcl.EvalContext
 }
 
 // jobHooks holds parsed hook steps for a job.
@@ -803,30 +1213,18 @@ func parseHooks(block *hclsyntax.Block, ectx *hcl.EvalContext, hookType string) 
 	return steps
 }
 
-// parseJobPlans walks the raw HCL AST to extract get/task/put blocks in source
-// order for each job, then builds ordered PlanStep slices using the decoded data.
-func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services []service.Service) (map[string][]job.PlanStep, map[string]jobHooks, []service.Service, error) {
-	file, diags := hclsyntax.ParseConfig(rpp, "pipeline.hcl", hcl.Pos{Line: 1, Column: 1})
-	if diags.HasErrors() {
-		return nil, nil, nil, diags
-	}
-
-	body := file.Body.(*hclsyntax.Body)
+// parseJobPlansFromPairs extracts ordered plan steps from pre-paired (hclJob,
+// AST block, eval context) tuples. This supports both regular jobs and for_each
+// expanded jobs where each instance has its own eval context.
+func parseJobPlansFromPairs(pairs []jobBlockPair, services []service.Service) (map[string][]job.PlanStep, map[string]jobHooks, []service.Service, error) {
 	result := make(map[string][]job.PlanStep)
-	jobHooksMap := make(map[string]jobHooks)
+	jhMap := make(map[string]jobHooks)
 
-	jobIndex := 0
-	for _, block := range body.Blocks {
-		if block.Type != "job" {
-			continue
-		}
-		if jobIndex >= len(hclJobs) {
-			break
-		}
-		hj := hclJobs[jobIndex]
-		jobIndex++
+	for _, pair := range pairs {
+		hj := pair.hj
+		block := pair.block
+		pairEctx := pair.jobEctx
 
-		// Build a lookup for services by name
 		serviceByName := make(map[string]service.Service)
 		for _, s := range services {
 			serviceByName[s.Name] = s
@@ -837,6 +1235,9 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 
 		for _, innerBlock := range block.Body.Blocks {
 			switch innerBlock.Type {
+			case "matrix":
+				// Skip matrix blocks (already processed during expansion)
+				continue
 			case "service":
 				if serviceIdx >= len(hj.Service) {
 					continue
@@ -848,7 +1249,6 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 					return nil, nil, nil, fmt.Errorf("service_type %q referenced in job %q does not exist", sr.Name, hj.Name)
 				}
 
-				// Parse param overrides from the remain body
 				params := make(map[string]string)
 				if sr.Remain != nil {
 					if body, ok := sr.Remain.(*hclsyntax.Body); ok {
@@ -901,10 +1301,10 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 						Passed:  g.Passed,
 						Trigger: g.Trigger,
 					},
-					OnSuccess: parseHooks(innerBlock, ectx, "on_success"),
-					OnFailure: parseHooks(innerBlock, ectx, "on_failure"),
-					OnCancel:  parseHooks(innerBlock, ectx, "on_cancel"),
-					Ensure:    parseHooks(innerBlock, ectx, "ensure"),
+					OnSuccess: parseHooks(innerBlock, pairEctx, "on_success"),
+					OnFailure: parseHooks(innerBlock, pairEctx, "on_failure"),
+					OnCancel:  parseHooks(innerBlock, pairEctx, "on_cancel"),
+					Ensure:    parseHooks(innerBlock, pairEctx, "ensure"),
 				})
 			case "task":
 				if taskIdx >= len(hj.Task) {
@@ -933,10 +1333,10 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 						Inputs:  t.Inputs,
 						Outputs: t.Outputs,
 					},
-					OnSuccess: parseHooks(innerBlock, ectx, "on_success"),
-					OnFailure: parseHooks(innerBlock, ectx, "on_failure"),
-					OnCancel:  parseHooks(innerBlock, ectx, "on_cancel"),
-					Ensure:    parseHooks(innerBlock, ectx, "ensure"),
+					OnSuccess: parseHooks(innerBlock, pairEctx, "on_success"),
+					OnFailure: parseHooks(innerBlock, pairEctx, "on_failure"),
+					OnCancel:  parseHooks(innerBlock, pairEctx, "on_cancel"),
+					Ensure:    parseHooks(innerBlock, pairEctx, "ensure"),
 				})
 			case "put":
 				if putIdx >= len(hj.Put) {
@@ -955,13 +1355,12 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 				if p.Attempts < 0 {
 					return nil, nil, nil, fmt.Errorf("invalid attempts %d on put step %q: must be >= 0", p.Attempts, p.Name)
 				}
-				// Extract put params from AST attributes (exclude known fields)
 				putParams := make(map[string]string)
 				for name, attr := range innerBlock.Body.Attributes {
 					if name == "timeout" || name == "attempts" {
 						continue
 					}
-					val, vdiags := attr.Expr.Value(ectx)
+					val, vdiags := attr.Expr.Value(pairEctx)
 					if vdiags.HasErrors() {
 						continue
 					}
@@ -977,10 +1376,10 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 						Name:   p.Name,
 						Params: putParams,
 					},
-					OnSuccess: parseHooks(innerBlock, ectx, "on_success"),
-					OnFailure: parseHooks(innerBlock, ectx, "on_failure"),
-					OnCancel:  parseHooks(innerBlock, ectx, "on_cancel"),
-					Ensure:    parseHooks(innerBlock, ectx, "ensure"),
+					OnSuccess: parseHooks(innerBlock, pairEctx, "on_success"),
+					OnFailure: parseHooks(innerBlock, pairEctx, "on_failure"),
+					OnCancel:  parseHooks(innerBlock, pairEctx, "on_cancel"),
+					Ensure:    parseHooks(innerBlock, pairEctx, "ensure"),
 				})
 			case "notify":
 				if notifyIdx >= len(hj.Notify) {
@@ -988,13 +1387,12 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 				}
 				n := hj.Notify[notifyIdx]
 				notifyIdx++
-				// Extract notify params from AST attributes (exclude known fields)
 				notifyParams := make(map[string]string)
 				for name, attr := range innerBlock.Body.Attributes {
 					if name == "message" {
 						continue
 					}
-					val, vdiags := attr.Expr.Value(ectx)
+					val, vdiags := attr.Expr.Value(pairEctx)
 					if vdiags.HasErrors() {
 						continue
 					}
@@ -1009,25 +1407,24 @@ func parseJobPlans(rpp []byte, ectx *hcl.EvalContext, hclJobs []hclJob, services
 						Params:  notifyParams,
 						Message: n.Message,
 					},
-					OnSuccess: parseHooks(innerBlock, ectx, "on_success"),
-					OnFailure: parseHooks(innerBlock, ectx, "on_failure"),
-					OnCancel:  parseHooks(innerBlock, ectx, "on_cancel"),
-					Ensure:    parseHooks(innerBlock, ectx, "ensure"),
+					OnSuccess: parseHooks(innerBlock, pairEctx, "on_success"),
+					OnFailure: parseHooks(innerBlock, pairEctx, "on_failure"),
+					OnCancel:  parseHooks(innerBlock, pairEctx, "on_cancel"),
+					Ensure:    parseHooks(innerBlock, pairEctx, "ensure"),
 				})
 			}
 		}
 
 		result[hj.Name] = plan
 
-		// Parse job-level hooks
 		jh := jobHooks{
-			OnSuccess: parseHooks(block, ectx, "on_success"),
-			OnFailure: parseHooks(block, ectx, "on_failure"),
-			OnCancel:  parseHooks(block, ectx, "on_cancel"),
-			Ensure:    parseHooks(block, ectx, "ensure"),
+			OnSuccess: parseHooks(block, pairEctx, "on_success"),
+			OnFailure: parseHooks(block, pairEctx, "on_failure"),
+			OnCancel:  parseHooks(block, pairEctx, "on_cancel"),
+			Ensure:    parseHooks(block, pairEctx, "ensure"),
 		}
-		jobHooksMap[hj.Name] = jh
+		jhMap[hj.Name] = jh
 	}
 
-	return result, jobHooksMap, services, nil
+	return result, jhMap, services, nil
 }
