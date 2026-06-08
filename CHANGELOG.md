@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-08
+
 ### Added
 
 - Runtime variable interpolation in notification messages: `message` fields on `notify` steps and `notification` blocks now expand `$VAR` references at build time (`$BUILD_*`, `$GET_*`, `$TASK_*`). Literal `\n` sequences are converted to real newlines, enabling multiline content like changelogs from `$PIKOCI_OUTPUT` ([#477](https://github.com/PikoCI/pikoci/issues/477))
