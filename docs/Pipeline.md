@@ -387,6 +387,17 @@ for_each = {
 }
 ```
 
+You can also build the same cartesian product using raw HCL `for` expressions with `setproduct`, which gives you full control over key construction:
+
+```hcl
+for_each = {
+  for pair in setproduct(["1.21", "1.22"], ["linux", "darwin"]) :
+  "${pair[0]}-${pair[1]}" => { go = pair[0], os = pair[1] }
+}
+```
+
+This produces the same result as the `matrix` block above. Use `setproduct` when you need custom key formatting or want to filter combinations.
+
 `matrix` and `for_each` are **mutually exclusive** on the same job.
 
 #### passed with for_each jobs
