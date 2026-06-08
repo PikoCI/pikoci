@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Runtime variable interpolation in notification messages: `message` fields on `notify` steps and `notification` blocks now expand `$VAR` references at build time (`$BUILD_*`, `$GET_*`, `$TASK_*`). Literal `\n` sequences are converted to real newlines, enabling multiline content like changelogs from `$PIKOCI_OUTPUT` ([#477](https://github.com/PikoCI/pikoci/issues/477))
 - `for_each` and `matrix` on jobs: generate multiple job instances from a single definition using `for_each = toset(...)`, `for_each = { key = "value" }`, or `matrix { axis = [...] }`. Each instance gets independent builds, status, and logs. Downstream `passed` constraints automatically fan-in across all instances. Also expands HCL functions to match Terraform (`startswith`, `endswith`, `base64encode`/`decode`, `urlencode`, `timestamp`, `formatdate`, `alltrue`, `anytrue`, `one`, `sum`, `transpose`, `toset`, `setproduct`, `setintersection`, `setunion`, type conversions, and more) ([#193](https://github.com/PikoCI/pikoci/issues/193), [#472](https://github.com/PikoCI/pikoci/issues/472))
 - Include resource name in webhook URLs for readability: tokens now use `{canonical}_{uuid}` format instead of bare UUIDs. Old tokens continue to work unchanged ([#470](https://github.com/PikoCI/pikoci/issues/470))
 - Add `serial_groups` on jobs for cross-job mutual exclusion ([#186](https://github.com/PikoCI/pikoci/issues/186))
