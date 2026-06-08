@@ -414,11 +414,19 @@ job "gh-release" {
           --notes "$BODY" \
           --repo PikoCI/pikoci \
           builds/linux-amd64 builds/linux-arm64 builds/darwin-amd64 builds/darwin-arm64 builds/windows-amd64
+
+        # Export changelog for notify steps (newlines as \n for single-line format)
+        echo "CHANGELOG=$(echo "$BODY" | sed ':a;N;$$!ba;s/\n/\\n/g')" >> "$$PIKOCI_OUTPUT"
       EOT
       args = [
         "-v", "pikoci-go-mod:/go/pkg/mod",
         "-v", "pikoci-build:/root/.cache/go-build",
       ]
+    }
+  }
+  on_success {
+    notify "discord" "announcements" {
+      message = "🚀 **PikoCI $GET_PIKOCI_TAG_REF** has been released!\n\n$TASK_BUILD_AND_UPLOAD_CHANGELOG\n\n🔗 https://github.com/PikoCI/pikoci/releases/tag/$GET_PIKOCI_TAG_REF"
     }
   }
 }
@@ -467,6 +475,10 @@ notification_type "github-check" {
   source = "pikoci://github-check"
 }
 
+notification_type "discord" {
+  source = "pikoci://discord"
+}
+
 notification "github-check" "ci" {
   params {
     app_id          = var.github_app_id
@@ -474,6 +486,13 @@ notification "github-check" "ci" {
     private_key     = var.pikoci_github_app_pem
     repository      = "PikoCI/pikoci"
     base_url        = "https://${var.pikoci_domain}"
+  }
+}
+
+notification "discord" "announcements" {
+  params {
+    webhook_url = var.discord_announcements_webhook
+    base_url    = "https://${var.pikoci_domain}"
   }
 }
 
@@ -583,5 +602,12 @@ variable "codecov_token" {
   type = string
   secret "env" {
     key = "CODECOV_TOKEN"
+  }
+}
+
+variable "discord_announcements_webhook" {
+  type = string
+  secret "env" {
+    key = "DISCORD_ANNOUNCEMENTS_WEBHOOK"
   }
 }

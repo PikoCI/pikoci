@@ -17,6 +17,17 @@ variable "env" {
   }
 }
 
+notification_type "discord" {
+  source = "pikoci://discord"
+}
+
+notification "discord" "test-builds" {
+  params {
+    webhook_url = "https://discord.com/api/webhooks/1513636375348641802/oPiF3O0bLhSPM3ITVI917ki_fCGSSLn8p8aQz2exvkBk2dRSQDiHSfY-iCLVN5Uik60r"
+  }
+  on = ["success", "failure"]
+}
+
 resource "cron" "my_cron" {
   check_interval = "@every 20s"
 }
