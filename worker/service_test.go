@@ -3898,6 +3898,37 @@ func TestProcessJob_SerialGroupLimit_Requeues(t *testing.T) {
 	w.processJob(ctx, m, cwd, pp)
 }
 
+func TestProcessJob_GenericError_Requeues(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc, topic := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := queue.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           10,
+	}
+	pp := testPipeline()
+	cwd := t.TempDir()
+
+	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
+		Return(nil, fmt.Errorf("database table is locked"))
+
+	// Should re-queue the message
+	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
+		var body queue.Body
+		err := json.Unmarshal(msg.Body, &body)
+		require.NoError(t, err)
+		assert.Equal(t, m.BuildID, body.BuildID)
+		assert.Equal(t, m.JobName, body.JobName)
+		return nil
+	})
+
+	expectPendingBuild(svc, 10)
+	w.processJob(ctx, m, cwd, pp)
+}
+
 func TestRunGetStepLocal_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc, _ := newTestWorker(ctrl)
