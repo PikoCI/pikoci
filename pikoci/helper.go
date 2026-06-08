@@ -2,8 +2,11 @@ package pikoci
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"math/big"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/hcl/v2"
@@ -276,50 +279,89 @@ type hclPipeline struct {
 func hclFunctions() map[string]function.Function {
 	return map[string]function.Function{
 		// String
-		"chomp":      stdlib.ChompFunc,
-		"format":     stdlib.FormatFunc,
-		"formatlist": stdlib.FormatListFunc,
-		"indent":     stdlib.IndentFunc,
-		"join":       stdlib.JoinFunc,
-		"lower":      stdlib.LowerFunc,
-		"replace":    stdlib.ReplaceFunc,
-		"split":      stdlib.SplitFunc,
-		"substr":     stdlib.SubstrFunc,
-		"title":      stdlib.TitleFunc,
-		"trim":       stdlib.TrimFunc,
-		"trimprefix": stdlib.TrimPrefixFunc,
-		"trimsuffix": stdlib.TrimSuffixFunc,
-		"trimspace":  stdlib.TrimSpaceFunc,
-		"upper":      stdlib.UpperFunc,
+		"chomp":       stdlib.ChompFunc,
+		"format":      stdlib.FormatFunc,
+		"formatlist":  stdlib.FormatListFunc,
+		"indent":      stdlib.IndentFunc,
+		"join":        stdlib.JoinFunc,
+		"lower":       stdlib.LowerFunc,
+		"replace":     stdlib.ReplaceFunc,
+		"split":       stdlib.SplitFunc,
+		"strlen":      stdlib.StrlenFunc,
+		"strrev":      stdlib.ReverseFunc,
+		"substr":      stdlib.SubstrFunc,
+		"title":       stdlib.TitleFunc,
+		"trim":        stdlib.TrimFunc,
+		"trimprefix":  stdlib.TrimPrefixFunc,
+		"trimsuffix":  stdlib.TrimSuffixFunc,
+		"trimspace":   stdlib.TrimSpaceFunc,
+		"upper":       stdlib.UpperFunc,
+		"startswith":  startswithFunc,
+		"endswith":    endswithFunc,
+		"strcontains": strcontainsFunc,
 		// Collection
-		"concat":   stdlib.ConcatFunc,
-		"contains": stdlib.ContainsFunc,
-		"distinct": stdlib.DistinctFunc,
-		"flatten":  stdlib.FlattenFunc,
-		"keys":     stdlib.KeysFunc,
-		"length":   stdlib.LengthFunc,
-		"lookup":   stdlib.LookupFunc,
-		"merge":    stdlib.MergeFunc,
-		"reverse":  stdlib.ReverseListFunc,
-		"sort":     stdlib.SortFunc,
-		"values":   stdlib.ValuesFunc,
+		"chunklist":    stdlib.ChunklistFunc,
+		"coalesce":     stdlib.CoalesceFunc,
+		"coalescelist": stdlib.CoalesceListFunc,
+		"compact":      stdlib.CompactFunc,
+		"concat":       stdlib.ConcatFunc,
+		"contains":     stdlib.ContainsFunc,
+		"distinct":     stdlib.DistinctFunc,
+		"element":      stdlib.ElementFunc,
+		"flatten":      stdlib.FlattenFunc,
+		"keys":         stdlib.KeysFunc,
+		"length":       stdlib.LengthFunc,
+		"lookup":       stdlib.LookupFunc,
+		"merge":        stdlib.MergeFunc,
+		"one":          oneFunc,
+		"range":        stdlib.RangeFunc,
+		"reverse":      stdlib.ReverseListFunc,
+		"slice":        stdlib.SliceFunc,
+		"sort":         stdlib.SortFunc,
+		"values":       stdlib.ValuesFunc,
+		"zipmap":       stdlib.ZipmapFunc,
+		"alltrue":      alltrueFunc,
+		"anytrue":      anytrueFunc,
+		"sum":          sumFunc,
+		"transpose":    transposeFunc,
 		// Numeric
-		"abs":   stdlib.AbsoluteFunc,
-		"ceil":  stdlib.CeilFunc,
-		"floor": stdlib.FloorFunc,
-		"max":   stdlib.MaxFunc,
-		"min":   stdlib.MinFunc,
+		"abs":     stdlib.AbsoluteFunc,
+		"ceil":    stdlib.CeilFunc,
+		"floor":   stdlib.FloorFunc,
+		"log":     stdlib.LogFunc,
+		"max":     stdlib.MaxFunc,
+		"min":     stdlib.MinFunc,
+		"parseint": stdlib.ParseIntFunc,
+		"pow":     stdlib.PowFunc,
+		"signum":  stdlib.SignumFunc,
 		// Encoding
-		"jsonencode": stdlib.JSONEncodeFunc,
-		"jsondecode": stdlib.JSONDecodeFunc,
-		"csvdecode":  stdlib.CSVDecodeFunc,
+		"jsonencode":  stdlib.JSONEncodeFunc,
+		"jsondecode":  stdlib.JSONDecodeFunc,
+		"csvdecode":   stdlib.CSVDecodeFunc,
+		"base64encode": base64encodeFunc,
+		"base64decode": base64decodeFunc,
+		"urlencode":    urlencodeFunc,
+		// Date/Time
+		"formatdate": stdlib.FormatDateFunc,
+		"timeadd":    stdlib.TimeAddFunc,
+		"timestamp":  timestampFunc,
 		// Regex
 		"regex":        stdlib.RegexFunc,
 		"regexall":     stdlib.RegexAllFunc,
 		"regexreplace": stdlib.RegexReplaceFunc,
 		// Set
-		"toset":      tosetFunc,
-		"setproduct": stdlib.SetProductFunc,
+		"toset":           tosetFunc,
+		"setproduct":      stdlib.SetProductFunc,
+		"setintersection": stdlib.SetIntersectionFunc,
+		"setunion":        stdlib.SetUnionFunc,
+		"setsubtract":              stdlib.SetSubtractFunc,
+		"setsymmetricdifference":   stdlib.SetSymmetricDifferenceFunc,
+		// Type conversion
+		"tostring": makeToFunc(cty.String),
+		"tonumber": makeToFunc(cty.Number),
+		"tobool":   makeToFunc(cty.Bool),
+		"tolist":   makeToFunc(cty.List(cty.DynamicPseudoType)),
+		"tomap":    makeToFunc(cty.Map(cty.DynamicPseudoType)),
 	}
 }
 
@@ -348,6 +390,221 @@ var tosetFunc = function.New(&function.Spec{
 		return cty.SetVal(vals), nil
 	},
 })
+
+var startswithFunc = function.New(&function.Spec{
+	Params: []function.Parameter{
+		{Name: "str", Type: cty.String},
+		{Name: "prefix", Type: cty.String},
+	},
+	Type: function.StaticReturnType(cty.Bool),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() || !args[1].IsKnown() {
+			return cty.UnknownVal(cty.Bool), nil
+		}
+		return cty.BoolVal(strings.HasPrefix(args[0].AsString(), args[1].AsString())), nil
+	},
+})
+
+var endswithFunc = function.New(&function.Spec{
+	Params: []function.Parameter{
+		{Name: "str", Type: cty.String},
+		{Name: "suffix", Type: cty.String},
+	},
+	Type: function.StaticReturnType(cty.Bool),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() || !args[1].IsKnown() {
+			return cty.UnknownVal(cty.Bool), nil
+		}
+		return cty.BoolVal(strings.HasSuffix(args[0].AsString(), args[1].AsString())), nil
+	},
+})
+
+var strcontainsFunc = function.New(&function.Spec{
+	Params: []function.Parameter{
+		{Name: "str", Type: cty.String},
+		{Name: "substr", Type: cty.String},
+	},
+	Type: function.StaticReturnType(cty.Bool),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() || !args[1].IsKnown() {
+			return cty.UnknownVal(cty.Bool), nil
+		}
+		return cty.BoolVal(strings.Contains(args[0].AsString(), args[1].AsString())), nil
+	},
+})
+
+var base64encodeFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "str", Type: cty.String}},
+	Type:   function.StaticReturnType(cty.String),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(cty.String), nil
+		}
+		return cty.StringVal(base64.StdEncoding.EncodeToString([]byte(args[0].AsString()))), nil
+	},
+})
+
+var base64decodeFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "str", Type: cty.String}},
+	Type:   function.StaticReturnType(cty.String),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(cty.String), nil
+		}
+		decoded, err := base64.StdEncoding.DecodeString(args[0].AsString())
+		if err != nil {
+			return cty.NilVal, fmt.Errorf("failed to decode base64: %w", err)
+		}
+		return cty.StringVal(string(decoded)), nil
+	},
+})
+
+var urlencodeFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "str", Type: cty.String}},
+	Type:   function.StaticReturnType(cty.String),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(cty.String), nil
+		}
+		return cty.StringVal(url.QueryEscape(args[0].AsString())), nil
+	},
+})
+
+var timestampFunc = function.New(&function.Spec{
+	Params: []function.Parameter{},
+	Type:   function.StaticReturnType(cty.String),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		return cty.StringVal(time.Now().UTC().Format(time.RFC3339)), nil
+	},
+})
+
+var alltrueFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "list", Type: cty.List(cty.Bool)}},
+	Type:   function.StaticReturnType(cty.Bool),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(cty.Bool), nil
+		}
+		for it := args[0].ElementIterator(); it.Next(); {
+			_, v := it.Element()
+			if v.False() {
+				return cty.False, nil
+			}
+		}
+		return cty.True, nil
+	},
+})
+
+var anytrueFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "list", Type: cty.List(cty.Bool)}},
+	Type:   function.StaticReturnType(cty.Bool),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(cty.Bool), nil
+		}
+		for it := args[0].ElementIterator(); it.Next(); {
+			_, v := it.Element()
+			if v.True() {
+				return cty.True, nil
+			}
+		}
+		return cty.False, nil
+	},
+})
+
+var oneFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "list", Type: cty.DynamicPseudoType}},
+	Type: func(args []cty.Value) (cty.Type, error) {
+		ty := args[0].Type()
+		switch {
+		case ty.IsListType():
+			return ty.ElementType(), nil
+		case ty.IsSetType():
+			return ty.ElementType(), nil
+		case ty.IsTupleType():
+			etys := ty.TupleElementTypes()
+			if len(etys) == 0 {
+				return cty.DynamicPseudoType, nil
+			}
+			return etys[0], nil
+		default:
+			return cty.NilType, fmt.Errorf("argument must be a list, set, or tuple")
+		}
+	},
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		val := args[0]
+		if !val.IsKnown() {
+			return cty.UnknownVal(retType), nil
+		}
+		l := val.LengthInt()
+		if l == 0 {
+			return cty.NullVal(retType), nil
+		}
+		if l != 1 {
+			return cty.NilVal, fmt.Errorf("must be a single element collection, got %d", l)
+		}
+		it := val.ElementIterator()
+		it.Next()
+		_, v := it.Element()
+		return v, nil
+	},
+})
+
+var sumFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "list", Type: cty.List(cty.Number)}},
+	Type:   function.StaticReturnType(cty.Number),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(cty.Number), nil
+		}
+		if args[0].LengthInt() == 0 {
+			return cty.NumberIntVal(0), nil
+		}
+		s := new(big.Float)
+		for it := args[0].ElementIterator(); it.Next(); {
+			_, v := it.Element()
+			s.Add(s, v.AsBigFloat())
+		}
+		return cty.NumberVal(s), nil
+	},
+})
+
+var transposeFunc = function.New(&function.Spec{
+	Params: []function.Parameter{{Name: "values", Type: cty.Map(cty.List(cty.String))}},
+	Type:   function.StaticReturnType(cty.Map(cty.List(cty.String))),
+	Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+		if !args[0].IsKnown() {
+			return cty.UnknownVal(retType), nil
+		}
+		result := make(map[string][]string)
+		for it := args[0].ElementIterator(); it.Next(); {
+			k, v := it.Element()
+			key := k.AsString()
+			for vit := v.ElementIterator(); vit.Next(); {
+				_, elem := vit.Element()
+				val := elem.AsString()
+				result[val] = append(result[val], key)
+			}
+		}
+		if len(result) == 0 {
+			return cty.MapValEmpty(cty.List(cty.String)), nil
+		}
+		m := make(map[string]cty.Value, len(result))
+		for k, v := range result {
+			vals := make([]cty.Value, len(v))
+			for i, s := range v {
+				vals[i] = cty.StringVal(s)
+			}
+			m[k] = cty.ListVal(vals)
+		}
+		return cty.MapVal(m), nil
+	},
+})
+
+// makeToFunc wraps stdlib.MakeToFunc to create type conversion functions.
+func makeToFunc(wantTy cty.Type) function.Function {
+	return stdlib.MakeToFunc(wantTy)
+}
 
 // readPipeline parses raw HCL pipeline configuration bytes into a Pipeline
 // struct. It handles variable resolution (string, number, bool, and secret
