@@ -281,6 +281,150 @@ A job can belong to multiple serial groups. It will only run when **none** of it
 
 `serial_groups` is orthogonal to `concurrency` — both checks apply. A build must pass both the per-job concurrency limit and the serial group check before starting. Note that `serial_groups` only provides cross-job mutual exclusion; to also limit a single job to one build at a time, set `concurrency = 1` on the job.
 
+#### for_each
+
+`for_each` generates multiple instances of a job, each with different configuration. It follows Terraform's semantics. Each instance is a real, independent job with its own builds, status, and logs.
+
+**Accepted types:**
+
+- **Set of strings** via `toset()`: `for_each = toset(["a", "b", "c"])`
+- **Map**: `for_each = { key1 = "val1", key2 = "val2" }`
+
+Raw lists are not accepted (use `toset()` to convert).
+
+**Accessors:** Inside a `for_each` job, use `each.key` and `each.value`:
+
+- For sets: `each.key` and `each.value` are both the set element
+- For maps: `each.key` is the map key, `each.value` is the map value
+
+**Job naming:** Each instance gets a canonical name of `{jobname}--{slugified-key}`. For example, `test` with keys `["1.21", "1.22"]` produces `test--1-21` and `test--1-22`. Dots, spaces, and special characters are slugified to hyphens.
+
+```hcl
+# Test against multiple Go versions
+job "test" {
+  for_each = toset(["1.21", "1.22", "1.23"])
+
+  get "git" "code" { trigger = true }
+  task "run" {
+    run "docker" {
+      image = "golang:${each.value}"
+      cmd   = "go test ./..."
+    }
+  }
+}
+# Creates: test--1-21, test--1-22, test--1-23
+# each.key = each.value = "1.21", "1.22", "1.23"
+
+# Deploy to named environments
+job "deploy" {
+  for_each = {
+    "staging" = "us-east-1"
+    "prod"    = "eu-west-1"
+  }
+
+  task "deploy" {
+    run "exec" {
+      path = "deploy.sh"
+      args = ["--env", each.key, "--region", each.value]
+    }
+  }
+}
+# Creates: deploy--staging, deploy--prod
+# each.key = "staging", each.value = "us-east-1"
+
+# With variables
+variable "go_versions" {
+  type    = string
+  default = "1.21,1.22"
+}
+
+job "test" {
+  for_each = toset(split(",", var.go_versions))
+  # ...
+}
+```
+
+#### matrix
+
+`matrix` is syntactic sugar for the common case of testing across combinations (cartesian product). It expands to an equivalent `for_each` map.
+
+```hcl
+job "test" {
+  matrix {
+    go = ["1.21", "1.22"]
+    os = ["linux", "darwin"]
+  }
+
+  task "run" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-c", "echo go=${each.value.go} os=${each.value.os}"]
+    }
+  }
+}
+# Creates 4 jobs (cartesian product):
+#   test--1-21-darwin, test--1-21-linux, test--1-22-darwin, test--1-22-linux
+#
+# each.key   = "1-21-linux" (slugified composite key)
+# each.value = { go = "1.21", os = "linux" } (object with named fields)
+```
+
+`matrix` is equivalent to writing the `for_each` map manually:
+
+```hcl
+# This matrix block:
+matrix {
+  go = ["1.21", "1.22"]
+  os = ["linux", "darwin"]
+}
+
+# Is equivalent to:
+for_each = {
+  "1-21-darwin" = { go = "1.21", os = "darwin" }
+  "1-21-linux"  = { go = "1.21", os = "linux" }
+  "1-22-darwin" = { go = "1.22", os = "darwin" }
+  "1-22-linux"  = { go = "1.22", os = "linux" }
+}
+```
+
+`matrix` and `for_each` are **mutually exclusive** on the same job.
+
+#### passed with for_each jobs
+
+When a downstream job has `passed = ["test"]` and `test` is a `for_each` job, **ALL instances** must have successful builds before the downstream job runs:
+
+```hcl
+job "test" {
+  for_each = toset(["unit", "integration"])
+
+  get "git" "code" { trigger = true }
+  task "run" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-c", "make test-${each.value}"]
+    }
+  }
+}
+# Creates: test--unit, test--integration
+
+job "deploy" {
+  get "git" "code" {
+    trigger = true
+    passed  = ["test"]  # waits for BOTH test--unit AND test--integration
+  }
+  task "deploy" {
+    run "exec" { path = "./deploy.sh" }
+  }
+}
+```
+
+#### Lifecycle on pipeline update
+
+- Adding a key creates a new job instance
+- Removing a key deletes that instance (with build history)
+- Existing keys update the instance in place
+- Evaluation happens at pipeline create/update time, not at build runtime
+
 ```hcl
 job "deploy" {
   concurrency = 1

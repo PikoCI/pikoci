@@ -14,7 +14,8 @@ PikoCI is a portable, self-hosted CI/CD system. One binary, any database, any qu
 - [Server Configuration](Server.md) - Server flags and options
 - [Database Backends](Database.md) - Supported database systems
 - [Queue Backends](Queue.md) - Supported queue/pubsub systems
-- [Functions](Functions.md) - HCL functions available in pipelines
+- [Functions](Functions.md) - HCL functions available in pipelines (Terraform-compatible)
+- [for_each and matrix](Pipeline.md#for_each) - Generate multiple job instances from a single definition
 - [Variables](Variables.md) - Pipeline variables
 - [CLI Reference](CLI.md) - Client commands and flags
 - [Pause / Unpause](Pause.md) - Temporarily stop pipelines or jobs
