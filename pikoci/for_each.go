@@ -121,6 +121,9 @@ func expandForEach(attr *hclsyntax.Attribute, ectx *hcl.EvalContext) ([]forEachI
 
 	switch {
 	case ty.IsSetType():
+		if ty.ElementType() != cty.String {
+			return nil, fmt.Errorf("for_each set must contain strings, got set of %s", ty.ElementType().FriendlyName())
+		}
 		return expandForEachSet(val)
 	case ty.IsObjectType(), ty.IsMapType():
 		return expandForEachMap(val)
