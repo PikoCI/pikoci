@@ -337,22 +337,22 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 
 	nb, err := w.pikoci.StartPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID)
 	if err != nil {
-		if errors.Is(err, pikoci.ErrConcurrencyLimit) || errors.Is(err, pikoci.ErrJobPaused) || errors.Is(err, pikoci.ErrSerialGroupLimit) {
-			w.logger.Info("concurrency/serial group limit or job paused, re-queuing",
-				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID)
-			mb, _ := json.Marshal(m)
-			if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
-				w.logger.Error("failed to re-queue", "error", err)
-			}
-			time.Sleep(2 * time.Second)
-			return
-		}
 		if errors.Is(err, pikoci.ErrBuildNotPending) {
 			w.logger.Info("build no longer pending, skipping", "build_id", m.BuildID)
 			return
 		}
-		w.logger.Error("failed to start pending build",
-			"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID, "error", err)
+		if errors.Is(err, pikoci.ErrConcurrencyLimit) || errors.Is(err, pikoci.ErrJobPaused) || errors.Is(err, pikoci.ErrSerialGroupLimit) {
+			w.logger.Info("concurrency/serial group limit or job paused, re-queuing",
+				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID)
+		} else {
+			w.logger.Error("failed to start pending build, re-queuing",
+				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID, "error", err)
+		}
+		mb, _ := json.Marshal(m)
+		if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
+			w.logger.Error("failed to re-queue", "error", err)
+		}
+		time.Sleep(2 * time.Second)
 		return
 	}
 
