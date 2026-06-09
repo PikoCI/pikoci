@@ -88,6 +88,18 @@ export WORKER_TOKEN=eyJhbG...
 export CONCURRENCY=4
 ```
 
+## Worker names
+
+Each worker registers with a unique name. By default, a random name is generated automatically. You can set a custom name with `--name`:
+
+```bash
+pikoci worker --name build-machine-1 ...
+```
+
+Worker names must be unique across all running workers. If two workers use the same `--name`, they will overwrite each other's heartbeat in the database and appear as a single worker in the dashboard. This can be useful for rolling deploys (stop the old worker, start a new one with the same name), but running two workers simultaneously with the same name will cause incorrect status reporting.
+
+When `--concurrency` is greater than 1, each goroutine within the process automatically gets a `-N` suffix (e.g. `build-machine-1-1`, `build-machine-1-2`).
+
 ## Scaling
 
 Run multiple worker instances to increase throughput. Each worker independently subscribes to the queues:
