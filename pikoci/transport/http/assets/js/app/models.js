@@ -204,6 +204,16 @@ export var ResourceVersion = Backbone.Model.extend({
   }
 });
 
+export var Worker = Backbone.Model.extend({
+  idAttribute: "name",
+  parse: function(response) {
+    if (response.data) {
+      return response.data;
+    }
+    return response;
+  },
+});
+
 export var ApiNotice = Backbone.Model.extend({
   defaults: {
     error: "",

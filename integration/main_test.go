@@ -70,7 +70,7 @@ func runTests(m *testing.M) int {
 	str := mysql.NewSecretTypeRepository(db)
 	tgr := mysql.NewTriggerRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
-	var svc = pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
+	var svc = pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, logger)
 	svc.StartScheduler(ctx)
 	var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.Mem, "test", "abc1234")
 	server := httptest.NewServer(handler)
@@ -136,7 +136,7 @@ func runWorker(ctx context.Context, sy string, jobTopic queue.Topic, s pikoci.Se
 		wg.Add(1)
 		nlogger := logger.With("num", i+1)
 		nlogger.Info(fmt.Sprintf("Starting Worker %d", i+1))
-		w := worker.New(s, jobTopic, jobSub, checkSub, nlogger)
+		w := worker.New(s, jobTopic, jobSub, checkSub, nlogger, fmt.Sprintf("test-worker-%d", i+1), "jobs,checks", "test", c)
 
 		go func() {
 			err = w.Run(ctx)

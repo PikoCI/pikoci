@@ -24,6 +24,7 @@ type MockService struct {
 	Triggers          *mock.TriggerRepository
 	NotificationTypes *mock.NotificationTypeRepository
 	Notifications     *mock.NotificationRepository
+	Workers           *mock.WorkerRepository
 
 	S pikoci.Service
 	P *pikoci.PikoCI
@@ -42,6 +43,7 @@ func newService(ctrl *gomock.Controller) MockService {
 	tgr := mock.NewTriggerRepository(ctrl)
 	ntr := mock.NewNotificationTypeRepository(ctrl)
 	nr := mock.NewNotificationRepository(ctrl)
+	wr := mock.NewWorkerRepository(ctrl)
 	t := mock.NewTopic(ctrl)
 	ct := mock.NewTopic(ctrl)
 
@@ -59,7 +61,7 @@ func newService(ctrl *gomock.Controller) MockService {
 		NotificationsRepo:     nr,
 	})
 
-	p := pikoci.New(context.TODO(), t, ct, ur, tr, pr, jr, rr, rtr, br, rur, str, tgr, suow, []byte("test-secret"), nil)
+	p := pikoci.New(context.TODO(), t, ct, ur, tr, pr, jr, rr, rtr, br, rur, str, tgr, wr, suow, []byte("test-secret"), nil)
 	return MockService{
 		Topic:             t,
 		CheckTopic:        ct,
@@ -75,6 +77,7 @@ func newService(ctrl *gomock.Controller) MockService {
 		Triggers:          tgr,
 		NotificationTypes: ntr,
 		Notifications:     nr,
+		Workers:           wr,
 
 		S: p,
 		P: p,

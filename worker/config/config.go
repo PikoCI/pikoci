@@ -10,6 +10,7 @@ type Config struct {
 	PikoCIURL   string `mapstructure:"pikoci-url"`
 	WorkerToken string `mapstructure:"worker-token"`
 
+	Name         string `mapstructure:"name"`
 	Concurrency  int    `mapstructure:"concurrency"`
 	DrainTimeout string `mapstructure:"drain-timeout"`
 	PubSubSystem string `mapstructure:"pubsub-system"`

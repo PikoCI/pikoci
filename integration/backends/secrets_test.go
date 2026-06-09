@@ -63,7 +63,7 @@ func TestSecretsE2E(t *testing.T) {
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 
 	jwtSecret := []byte("test-secret")
-	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
+	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, logger)
 	svc.StartScheduler(ctx)
 
 	// Migration already creates admin user and "main" team.
@@ -87,7 +87,7 @@ func TestSecretsE2E(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		w := worker.New(svc, jobTopic, jobSub, checkSub, logger.With("component", "worker"))
+		w := worker.New(svc, jobTopic, jobSub, checkSub, logger.With("component", "worker"), "test-worker", "jobs,checks", "test", 1)
 		w.Run(ctx)
 	}()
 

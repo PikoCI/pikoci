@@ -20,6 +20,7 @@ import (
 	team "github.com/pikoci/pikoci/pikoci/team"
 	trigger "github.com/pikoci/pikoci/pikoci/trigger"
 	user "github.com/pikoci/pikoci/pikoci/user"
+	wkr "github.com/pikoci/pikoci/pikoci/wkr"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -278,6 +279,20 @@ func (m *Service) DeleteUser(ctx context.Context, un string) error {
 func (mr *ServiceMockRecorder) DeleteUser(ctx, un any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUser", reflect.TypeOf((*Service)(nil).DeleteUser), ctx, un)
+}
+
+// DeleteWorker mocks base method.
+func (m *Service) DeleteWorker(ctx context.Context, name string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteWorker", ctx, name)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteWorker indicates an expected call of DeleteWorker.
+func (mr *ServiceMockRecorder) DeleteWorker(ctx, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorker", reflect.TypeOf((*Service)(nil).DeleteWorker), ctx, name)
 }
 
 // FindBuildGetVersions mocks base method.
@@ -611,6 +626,21 @@ func (m *Service) ListUsers(ctx context.Context) ([]*user.User, error) {
 func (mr *ServiceMockRecorder) ListUsers(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListUsers", reflect.TypeOf((*Service)(nil).ListUsers), ctx)
+}
+
+// ListWorkers mocks base method.
+func (m *Service) ListWorkers(ctx context.Context) ([]*wkr.Worker, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListWorkers", ctx)
+	ret0, _ := ret[0].([]*wkr.Worker)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListWorkers indicates an expected call of ListWorkers.
+func (mr *ServiceMockRecorder) ListWorkers(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkers", reflect.TypeOf((*Service)(nil).ListWorkers), ctx)
 }
 
 // NotifySerialGroupPendingBuilds mocks base method.
@@ -961,4 +991,33 @@ func (m *Service) WebhookTrigger(ctx context.Context, token string) error {
 func (mr *ServiceMockRecorder) WebhookTrigger(ctx, token any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WebhookTrigger", reflect.TypeOf((*Service)(nil).WebhookTrigger), ctx, token)
+}
+
+// WorkerHeartbeat mocks base method.
+func (m *Service) WorkerHeartbeat(ctx context.Context, w wkr.Worker) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WorkerHeartbeat", ctx, w)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WorkerHeartbeat indicates an expected call of WorkerHeartbeat.
+func (mr *ServiceMockRecorder) WorkerHeartbeat(ctx, w any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WorkerHeartbeat", reflect.TypeOf((*Service)(nil).WorkerHeartbeat), ctx, w)
+}
+
+// WorkersHealth mocks base method.
+func (m *Service) WorkersHealth(ctx context.Context) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WorkersHealth", ctx)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WorkersHealth indicates an expected call of WorkersHealth.
+func (mr *ServiceMockRecorder) WorkersHealth(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WorkersHealth", reflect.TypeOf((*Service)(nil).WorkersHealth), ctx)
 }

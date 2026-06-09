@@ -66,7 +66,7 @@ func TestExportE2E(t *testing.T) {
 	suow := unitwork.NewStartUnitOfWork(db, mysql.SQLite)
 
 	jwtSecret := []byte("test-secret")
-	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
+	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, logger)
 	svc.StartScheduler(ctx)
 
 	_, _ = svc.CreateUser(ctx, user.User{
@@ -87,7 +87,7 @@ func TestExportE2E(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		w := worker.New(svc, jobTopic, jobSub, checkSub, logger.With("worker", 1))
+		w := worker.New(svc, jobTopic, jobSub, checkSub, logger.With("worker", 1), "test-worker-1", "jobs,checks", "test", 1)
 		w.Run(ctx)
 	}()
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
@@ -18,6 +19,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/team"
 	thttp "github.com/pikoci/pikoci/pikoci/transport/http"
 	"github.com/pikoci/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/wkr"
 )
 
 // Client is an HTTP client for the PikoCI API. It holds the server URL,
@@ -1019,4 +1021,78 @@ func (cl *Client) RegenerateWebhookToken(ctx context.Context, tc, pn, rCan strin
 	}
 
 	return resp.Token, nil
+}
+
+// WorkerHeartbeat sends a heartbeat for the given worker.
+func (cl *Client) WorkerHeartbeat(ctx context.Context, w wkr.Worker) error {
+	var resp thttp.WorkerHeartbeatResponse
+
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/workers/heartbeat", cl.url), thttp.WorkerHeartbeatRequest{
+		Name:        w.Name,
+		Hostname:    w.Hostname,
+		OS:          w.OS,
+		Arch:        w.Arch,
+		GoVersion:   w.GoVersion,
+		Version:     w.Version,
+		Concurrency: w.Concurrency,
+		Queues:      w.Queues,
+		StartedAt:   w.StartedAt.Format(time.RFC3339),
+	}, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return nil
+}
+
+// ListWorkers retrieves all registered workers.
+func (cl *Client) ListWorkers(ctx context.Context) ([]*wkr.Worker, error) {
+	var resp thttp.ListWorkersResponse
+
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/workers", cl.url), nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return resp.Workers, nil
+}
+
+// WorkersHealth checks if at least one worker is healthy.
+func (cl *Client) WorkersHealth(ctx context.Context) (bool, error) {
+	var resp thttp.WorkersHealthResponse
+
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/workers/health", cl.url), nil, &resp)
+	if err != nil {
+		return false, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return false, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return resp.Healthy, nil
+}
+
+// DeleteWorker removes a worker by name.
+func (cl *Client) DeleteWorker(ctx context.Context, name string) error {
+	var resp thttp.DeleteWorkerResponse
+
+	err := cl.Request(ctx, http.MethodDelete, fmt.Sprintf("%s/workers/%s", cl.url, name), nil, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return nil
 }

@@ -198,7 +198,7 @@ func runLocal(ctx context.Context, logger *slog.Logger, pipelineConfig, jobName 
 
 	// Create service (do NOT start scheduler)
 	jwtSecret := []byte("local-run-secret")
-	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
+	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, logger)
 
 	// Create pipeline
 	pp, err := svc.CreatePipeline(ctx, mainTeamCanonical, "local", hclBytes, vars)
@@ -243,7 +243,7 @@ func runLocal(ctx context.Context, logger *slog.Logger, pipelineConfig, jobName 
 
 	// Create worker with overrides
 	workerLogger := logger.With("service", "worker")
-	w := worker.New(svc, jobTopic, subscription, nil, workerLogger)
+	w := worker.New(svc, jobTopic, subscription, nil, workerLogger, "local-run", "", "", 1)
 	w.ResourceOverrides = workerResourceOverrides
 	w.LocalMode = true
 

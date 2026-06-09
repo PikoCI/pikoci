@@ -4021,7 +4021,10 @@ func TestDrain_UnblocksReceiveImmediately(t *testing.T) {
 		jobSubscription:   jobSub,
 		checkSubscription: checkSub,
 		logger:            logger,
+		StartedAt:         time.Now(),
 	}
+
+	svc.EXPECT().WorkerHeartbeat(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	// Receive blocks until the context is cancelled (simulating waiting for messages)
 	jobSub.EXPECT().Receive(gomock.Any()).DoAndReturn(func(ctx context.Context) (*pubsub.Message, error) {
@@ -7457,6 +7460,6 @@ func TestNew(t *testing.T) {
 	svc := mock.NewService(ctrl)
 	topic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	w := New(svc, topic, nil, nil, logger)
+	w := New(svc, topic, nil, nil, logger, "test-worker", "jobs,checks", "test", 1)
 	assert.NotNil(t, w)
 }

@@ -149,6 +149,23 @@ a:hover { color: var(--primary-hover); }
 .navbar .dropdown-divider { border-color: #2a3a65; }
 
 /* ============================================================
+   WORKER HEALTH BANNER
+   ============================================================ */
+.piko-worker-banner {
+  background: #fff0d0;
+  color: #1D2B53;
+  text-align: center;
+  padding: 6px 16px;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+.piko-worker-banner i { margin-right: 4px; color: #FFA300; }
+[data-theme="dark"] .piko-worker-banner {
+  background: rgba(255, 163, 0, 0.15);
+  color: #FFA300;
+}
+
+/* ============================================================
    BREADCRUMB
    ============================================================ */
 .breadcrumb {

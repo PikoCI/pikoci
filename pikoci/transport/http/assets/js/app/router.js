@@ -1,6 +1,6 @@
 'use strict';
 
-import { session, teams, userSessionKey, Users, Pipelines, Jobs, Builds, Resources, ResourceVersions } from './collections.js';
+import { session, teams, userSessionKey, Users, Pipelines, Jobs, Builds, Resources, ResourceVersions, Workers } from './collections.js';
 import { Pipeline, PipelineImage, Team, Job, User, Resource } from './models.js';
 import { MainView, HeaderView, BreadcrumbView } from './views/layout.js';
 import { SessionNewView } from './views/session.js';
@@ -10,6 +10,7 @@ import { PipelinesNewView } from './views/editor.js';
 import { JobBuildsView } from './views/jobs.js';
 import { ResourceVersionsView } from './views/resources.js';
 import { UsersListView, UserShowView, UsersNewView, ProfileView } from './views/users.js';
+import { WorkersListView } from './views/workers.js';
 
 var isLogin = true;
 
@@ -33,6 +34,7 @@ export var Router = Backbone.Router.extend({
 
     'teams/:tn/pipelines/:pn/resources/:rCan/versions': 'resourceVersions',
 
+    'workers':        'workersIndex',
     'users':          'usersIndex',
     'users/new':      'usersNew',
     'users/:username': 'usersShow',
@@ -276,6 +278,19 @@ export var Router = Backbone.Router.extend({
         window.app.router.navigate("login", { trigger: true });
       }
     });
+  },
+  workersIndex: function() {
+    if (!this.setup(!isLogin)) {
+      return;
+    }
+    if (!session.isAdmin()) {
+      window.app.router.navigate('', { trigger: true });
+      return;
+    }
+    var workers = new Workers();
+    this.contentView = new WorkersListView({collection: workers});
+    $('#main').html(this.contentView.render().el);
+    $('#breadcrumb').html(new BreadcrumbView().render().el);
   },
   usersIndex: function() {
     if (!this.setup(!isLogin)) {
