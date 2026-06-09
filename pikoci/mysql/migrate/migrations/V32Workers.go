@@ -12,8 +12,8 @@ var V32Workers = Migration{
   version VARCHAR(50) NOT NULL DEFAULT '',
   concurrency INT NOT NULL DEFAULT 1,
   queues VARCHAR(255) NOT NULL DEFAULT '',
-  started_at DATETIME NOT NULL,
-  last_ping_at DATETIME NOT NULL
+  started_at TIMESTAMP NOT NULL,
+  last_ping_at TIMESTAMP NOT NULL
 );
 CREATE INDEX idx_workers_last_ping_at ON workers (last_ping_at);`,
 }
