@@ -18,6 +18,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/transport/http/client"
 	"github.com/pikoci/pikoci/worker"
 	"github.com/pikoci/pikoci/worker/config"
+	"github.com/xyproto/randomstring"
 
 	"gocloud.dev/pubsub"
 	"gocloud.dev/pubsub/mempubsub"
@@ -78,7 +79,12 @@ var workerCmd = &cobra.Command{
 			queues = "jobs,checks"
 		}
 
-		workers, wg, cleanup, err := runWorker(ctx, cfg.PubSubSystem, jobTopic, c, cfg.Concurrency, cfg.LogLevel, queues)
+		name := cfg.Name
+		if name == "" {
+			name = randomstring.HumanFriendlyEnglishString(16)
+		}
+
+		workers, wg, cleanup, err := runWorker(ctx, cfg.PubSubSystem, jobTopic, c, cfg.Concurrency, cfg.LogLevel, queues, name)
 		if err != nil {
 			return fmt.Errorf("failed to start worker: %w", err)
 		}
@@ -132,6 +138,7 @@ func init() {
 	workerCmd.Flags().StringP("config", "c", "", "Path to the config file")
 	workerCmd.Flags().StringP("pikoci-url", "u", "localhost:8080", "URL to the PikoCI server")
 	workerCmd.Flags().String("pubsub-system", mempubsub.Scheme, "Which PubSub system to use (mem, nats, rabbit, kafka). Env vars: NATS_SERVER_URL, RABBIT_SERVER_URL, KAFKA_BROKERS")
+	workerCmd.Flags().String("name", "", "Worker name (auto-generated if empty)")
 	workerCmd.Flags().Int("concurrency", 1, "Number of workers to start in one instance")
 	workerCmd.Flags().String("drain-timeout", "10m", "Maximum time to wait for in-flight jobs to finish during graceful shutdown (SIGQUIT)")
 	workerCmd.Flags().String("log-level", "info", "Sets the log level ('debug', 'info', 'warn', 'error')")
@@ -144,7 +151,7 @@ func init() {
 	workerViper.AutomaticEnv()
 }
 
-func runWorker(ctx context.Context, sy string, jobTopic queue.Topic, s pikoci.Service, c int, llvl string, queues string) ([]*worker.Worker, *sync.WaitGroup, func(), error) {
+func runWorker(ctx context.Context, sy string, jobTopic queue.Topic, s pikoci.Service, c int, llvl string, queues string, name string) ([]*worker.Worker, *sync.WaitGroup, func(), error) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: parseSlogLevel(llvl)}))
 	logger = logger.With("service", "worker")
 
@@ -194,9 +201,13 @@ func runWorker(ctx context.Context, sy string, jobTopic queue.Topic, s pikoci.Se
 	var wg sync.WaitGroup
 	for i := range c {
 		wg.Add(1)
-		nlogger := logger.With("num", i+1)
+		workerName := name
+		if c > 1 {
+			workerName = fmt.Sprintf("%s-%d", name, i+1)
+		}
+		nlogger := logger.With("num", i+1, "name", workerName)
 		nlogger.Info(fmt.Sprintf("Starting Worker %d", i+1), "queues", queues)
-		w := worker.New(s, jobTopic, jobSub, checkSub, nlogger)
+		w := worker.New(s, jobTopic, jobSub, checkSub, nlogger, workerName, queues, Version, c)
 		workers = append(workers, w)
 
 		go func() {

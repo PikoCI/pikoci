@@ -1,6 +1,6 @@
 'use strict';
 
-import { Session, ApiNotice, User, Team, Pipeline, PipelineImage, Job, Build, Resource, ResourceVersion, TeamMembers } from './models.js';
+import { Session, ApiNotice, User, Team, Pipeline, PipelineImage, Job, Build, Resource, ResourceVersion, TeamMembers, Worker } from './models.js';
 
 export var Users = Backbone.Collection.extend({
   model: User,
@@ -126,6 +126,14 @@ export var Builds = Backbone.Collection.extend({
     });
     return id;
   },
+});
+
+export var Workers = Backbone.Collection.extend({
+  model: Worker,
+  url: "/workers",
+  parse: function(response) {
+    return response.data;
+  }
 });
 
 export var ResourceVersions = Backbone.Collection.extend({

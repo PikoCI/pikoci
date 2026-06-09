@@ -71,7 +71,7 @@ func TestConcurrentBuildCreation(t *testing.T) {
 	suow := unitwork.NewStartUnitOfWork(db, mysql.SQLite)
 
 	jwtSecret := []byte("test-secret")
-	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
+	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, logger)
 	svc.StartScheduler(ctx)
 
 	_, _ = svc.CreateUser(ctx, user.User{
@@ -94,7 +94,7 @@ func TestConcurrentBuildCreation(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			w := worker.New(svc, jobTopic, jobSub, checkSub, logger.With("worker", i+1))
+			w := worker.New(svc, jobTopic, jobSub, checkSub, logger.With("worker", i+1), fmt.Sprintf("test-worker-%d", i+1), "jobs,checks", "test", 3)
 			w.Run(ctx)
 		}()
 	}

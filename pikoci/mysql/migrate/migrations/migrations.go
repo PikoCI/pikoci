@@ -16,7 +16,7 @@ type Migration struct {
 // Migrations is the ordered list of all schema migrations. It is defined as
 // a fixed-size array so that the compiler catches ordering conflicts when
 // multiple developers add migrations concurrently.
-var Migrations = [32]Migration{
+var Migrations = [33]Migration{
 	V0Initial,
 	V1ResourceCheckInterval,
 	V2JobsAndBuilds,
@@ -49,4 +49,5 @@ var Migrations = [32]Migration{
 	V29SerialGroups,
 	V30WebhookTokenLength,
 	V31ForEachJobs,
+	V32Workers,
 }

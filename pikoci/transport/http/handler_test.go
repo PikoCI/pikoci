@@ -741,3 +741,200 @@ func TestGetPipelineImage_Error_ReturnsJSON(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&result)
 	assert.NotEmpty(t, result.Err)
 }
+
+func TestWorkerHeartbeat_WithWorkerToken(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"is_from_worker": true,
+	})
+	workerJWT, err := token.SignedString(secret)
+	require.NoError(t, err)
+
+	s.EXPECT().WorkerHeartbeat(gomock.Any(), gomock.Any()).Return(nil)
+
+	body := `{"name":"worker-1","hostname":"host1","os":"linux","arch":"amd64","concurrency":2,"queues":"jobs,checks"}`
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/workers/heartbeat", strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+workerJWT)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var got WorkerHeartbeatResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+}
+
+func TestListWorkers_AdminAllowed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+	s.EXPECT().ListWorkers(gomock.Any()).Return(nil, nil)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/workers", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestListWorkers_NonAdminForbidden(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "pepito", Admin: false},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: false}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	s.EXPECT().GetUser(gomock.Any(), "pepito").Return(um, nil).AnyTimes()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/workers", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestWorkersHealth_AdminAllowed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+	s.EXPECT().WorkersHealth(gomock.Any()).Return(true, nil)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/workers/health", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var got WorkersHealthResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.True(t, got.Healthy)
+	assert.Empty(t, got.Err)
+}
+
+func TestDeleteWorker_AdminAllowed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+	s.EXPECT().DeleteWorker(gomock.Any(), "worker-1").Return(nil)
+
+	req, err := http.NewRequest(http.MethodDelete, server.URL+"/workers/worker-1", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var got DeleteWorkerResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+}
+
+func TestDeleteWorker_NonAdminForbidden(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "pepito", Admin: false},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: false}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	s.EXPECT().GetUser(gomock.Any(), "pepito").Return(um, nil).AnyTimes()
+
+	req, err := http.NewRequest(http.MethodDelete, server.URL+"/workers/worker-1", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}

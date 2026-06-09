@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Worker health monitoring: workers send periodic heartbeats to the server, which tracks their status as healthy or stale (no heartbeat for over 90 seconds). Admin users see all workers in a new dashboard at `#workers` with name, status, queues, platform, version, uptime, and last seen time. A warning banner appears when no healthy workers are detected ([#482](https://github.com/PikoCI/pikoci/issues/482))
+- Delete stale workers: admins can remove stale workers from the dashboard via a delete button or the `DELETE /workers/{name}` API endpoint. This only removes the registration from the database, it does not signal the worker process
+- Prometheus `pikoci_workers` gauge metric with `status` label (healthy/stale) for monitoring and alerting on worker availability
+
 ## [0.4.0] - 2026-06-08
 
 ### Added

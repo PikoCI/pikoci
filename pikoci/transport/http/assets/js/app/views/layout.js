@@ -38,6 +38,7 @@ export var HeaderView = Backbone.View.extend({
     'click a#logout': 'clickLogout',
     'click a#nav-profile': 'clickNavLink',
     'click a#nav-users': 'clickNavLink',
+    'click a#nav-workers': 'clickNavLink',
   },
   clickLogo: function(event) {
     event.preventDefault();
@@ -68,6 +69,29 @@ export var HeaderView = Backbone.View.extend({
       this.$('#app-version').text(this.versionText);
     }
     syncThemeSwitch();
+    // Check worker health for admin users (debounce to avoid duplicates)
+    $('#worker-health-banner').remove();
+    if (sjson && sjson.user && sjson.user.admin) {
+      $.ajax({
+        url: '/workers/health',
+        type: 'GET',
+        headers: {
+          'Authorization': 'Bearer ' + session.get("jwt"),
+          'Content-Type': 'application/json',
+        },
+        success: function(resp) {
+          $('#worker-health-banner').remove();
+          if (!resp.error && !resp.healthy) {
+            var banner = $('<div id="worker-health-banner" class="piko-worker-banner"><i class="bi bi-exclamation-triangle"></i> No healthy workers detected. Builds will queue until a worker comes online. <a href="/workers" class="worker-banner-link">View workers</a></div>');
+            banner.on('click', '.worker-banner-link', function(e) {
+              e.preventDefault();
+              window.app.router.navigate('/workers', { trigger: true });
+            });
+            $('header nav').after(banner);
+          }
+        },
+      });
+    }
     return this;
   }
 });

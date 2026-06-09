@@ -135,4 +135,13 @@ const (
 
 	// GetVersion is the route for retrieving the application version.
 	GetVersion
+
+	// WorkerHeartbeat is the route for worker heartbeat registration.
+	WorkerHeartbeat
+	// ListWorkers is the route for listing all registered workers.
+	ListWorkers
+	// WorkersHealth is the route for checking if any worker is healthy.
+	WorkersHealth
+	// DeleteWorker is the route for deleting a worker by name.
+	DeleteWorker
 )

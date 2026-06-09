@@ -22,6 +22,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tebeka/selenium v0.9.9
+	github.com/xyproto/randomstring v1.2.0
 	github.com/zclconf/go-cty v1.16.3
 	go.uber.org/mock v0.6.0
 	gocloud.dev v0.45.0
@@ -29,6 +30,7 @@ require (
 	gocloud.dev/pubsub/natspubsub v0.43.0
 	gocloud.dev/pubsub/rabbitpubsub v0.45.0
 	golang.org/x/crypto v0.48.0
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.50.1
 )
 
@@ -112,7 +114,6 @@ require (
 	google.golang.org/grpc v1.77.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/alecthomas/kingpin.v2 v2.2.4 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/tools v0.7.0 // indirect
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

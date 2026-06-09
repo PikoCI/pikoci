@@ -1,0 +1,137 @@
+package mysql
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"time"
+
+	"github.com/cycloidio/sqlr"
+	"github.com/pikoci/pikoci/pikoci/wkr"
+)
+
+type WorkerRepository struct {
+	querier sqlr.Querier
+	system  string
+}
+
+func NewWorkerRepository(db sqlr.Querier, system string) *WorkerRepository {
+	return &WorkerRepository{
+		querier: db,
+		system:  system,
+	}
+}
+
+func (r *WorkerRepository) Upsert(ctx context.Context, w wkr.Worker) error {
+	var q string
+	switch r.system {
+	case MySQL:
+		q = `INSERT INTO workers (name, hostname, os, arch, go_version, version, concurrency, queues, started_at, last_ping_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON DUPLICATE KEY UPDATE
+				hostname = VALUES(hostname),
+				os = VALUES(os),
+				arch = VALUES(arch),
+				go_version = VALUES(go_version),
+				version = VALUES(version),
+				concurrency = VALUES(concurrency),
+				queues = VALUES(queues),
+				started_at = VALUES(started_at),
+				last_ping_at = VALUES(last_ping_at)`
+	default:
+		// SQLite, mem, PostgreSQL
+		q = `INSERT INTO workers (name, hostname, os, arch, go_version, version, concurrency, queues, started_at, last_ping_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(name) DO UPDATE SET
+				hostname = excluded.hostname,
+				os = excluded.os,
+				arch = excluded.arch,
+				go_version = excluded.go_version,
+				version = excluded.version,
+				concurrency = excluded.concurrency,
+				queues = excluded.queues,
+				started_at = excluded.started_at,
+				last_ping_at = excluded.last_ping_at`
+	}
+
+	_, err := r.querier.ExecContext(ctx, q,
+		w.Name, w.Hostname, w.OS, w.Arch, w.GoVersion, w.Version,
+		w.Concurrency, w.Queues, w.StartedAt, w.LastPingAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to upsert worker: %w", err)
+	}
+	return nil
+}
+
+func (r *WorkerRepository) Filter(ctx context.Context) ([]*wkr.Worker, error) {
+	rows, err := r.querier.QueryContext(ctx, `
+		SELECT id, name, hostname, os, arch, go_version, version, concurrency, queues, started_at, last_ping_at
+		FROM workers
+		ORDER BY name ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query workers: %w", err)
+	}
+	defer rows.Close()
+
+	var workers []*wkr.Worker
+	now := time.Now()
+	for rows.Next() {
+		var (
+			id          sql.NullInt64
+			name        sql.NullString
+			hostname    sql.NullString
+			os          sql.NullString
+			arch        sql.NullString
+			goVersion   sql.NullString
+			version     sql.NullString
+			concurrency sql.NullInt64
+			queues      sql.NullString
+			startedAt   sql.NullTime
+			lastPingAt  sql.NullTime
+		)
+		if err := rows.Scan(&id, &name, &hostname, &os, &arch, &goVersion, &version, &concurrency, &queues, &startedAt, &lastPingAt); err != nil {
+			return nil, fmt.Errorf("failed to scan worker: %w", err)
+		}
+		w := &wkr.Worker{
+			ID:          uint32(id.Int64),
+			Name:        name.String,
+			Hostname:    hostname.String,
+			OS:          os.String,
+			Arch:        arch.String,
+			GoVersion:   goVersion.String,
+			Version:     version.String,
+			Concurrency: int(concurrency.Int64),
+			Queues:      queues.String,
+			StartedAt:   startedAt.Time,
+			LastPingAt:  lastPingAt.Time,
+		}
+		w.ComputeStatus(now)
+		workers = append(workers, w)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+	return workers, nil
+}
+
+func (r *WorkerRepository) DeleteBefore(ctx context.Context, before time.Time) error {
+	_, err := r.querier.ExecContext(ctx, `DELETE FROM workers WHERE last_ping_at < ?`, before)
+	if err != nil {
+		return fmt.Errorf("failed to delete old workers: %w", err)
+	}
+	return nil
+}
+
+func (r *WorkerRepository) DeleteByName(ctx context.Context, name string) error {
+	res, err := r.querier.ExecContext(ctx, `DELETE FROM workers WHERE name = ?`, name)
+	if err != nil {
+		return fmt.Errorf("failed to delete worker: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("worker %q not found", name)
+	}
+	return nil
+}

@@ -80,6 +80,11 @@ var (
 		UnpausePipeline: member,
 		PauseJob:        member,
 		UnpauseJob:      member,
+
+		WorkerHeartbeat: nothing,
+		ListWorkers:     admin,
+		WorkersHealth:   admin,
+		DeleteWorker:    admin,
 	}
 )
 

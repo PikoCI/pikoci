@@ -23,6 +23,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/transport/http/client"
 	"github.com/pikoci/pikoci/pikoci/trigger"
 	"github.com/pikoci/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/wkr"
 )
 
 func Test_IsPikoCI_Service(t *testing.T) {
@@ -2451,4 +2452,155 @@ func TestGetPublicPipelineImage_DelegatesToGetPipelineImage(t *testing.T) {
 	img, err := c.GetPublicPipelineImage(context.Background(), "team1", "pipe", "dot")
 	require.NoError(t, err)
 	assert.Contains(t, string(img), "digraph")
+}
+
+func TestWorkerHeartbeat(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/workers/heartbeat", func(w http.ResponseWriter, req *http.Request) {
+		var hr thttp.WorkerHeartbeatRequest
+		json.NewDecoder(req.Body).Decode(&hr)
+		assert.Equal(t, "worker-1", hr.Name)
+		assert.Equal(t, "host1", hr.Hostname)
+		assert.Equal(t, "linux", hr.OS)
+		assert.Equal(t, "amd64", hr.Arch)
+		assert.Equal(t, 2, hr.Concurrency)
+		jsonHandler(w, thttp.WorkerHeartbeatResponse{})
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	err = c.WorkerHeartbeat(context.Background(), wkr.Worker{
+		Name:        "worker-1",
+		Hostname:    "host1",
+		OS:          "linux",
+		Arch:        "amd64",
+		GoVersion:   "go1.22",
+		Version:     "v0.4.0",
+		Concurrency: 2,
+		Queues:      "jobs,checks",
+	})
+	require.NoError(t, err)
+}
+
+func TestWorkerHeartbeat_Error(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/workers/heartbeat", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.WorkerHeartbeatResponse{Err: "upsert failed"})
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	err = c.WorkerHeartbeat(context.Background(), wkr.Worker{Name: "w1"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "upsert failed")
+}
+
+func TestListWorkers(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/workers", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.ListWorkersResponse{
+			Workers: []*wkr.Worker{
+				{ID: 1, Name: "worker-1", Status: wkr.StatusHealthy},
+				{ID: 2, Name: "worker-2", Status: wkr.StatusStale},
+			},
+		})
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	workers, err := c.ListWorkers(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, workers, 2)
+	assert.Equal(t, "worker-1", workers[0].Name)
+	assert.Equal(t, wkr.StatusHealthy, workers[0].Status)
+}
+
+func TestListWorkers_Error(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/workers", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.ListWorkersResponse{Err: "db error"})
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	workers, err := c.ListWorkers(context.Background())
+	require.Error(t, err)
+	assert.Nil(t, workers)
+}
+
+func TestWorkersHealth(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/workers/health", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.WorkersHealthResponse{Healthy: true})
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	healthy, err := c.WorkersHealth(context.Background())
+	require.NoError(t, err)
+	assert.True(t, healthy)
+}
+
+func TestWorkersHealth_NotHealthy(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/workers/health", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.WorkersHealthResponse{Healthy: false})
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	healthy, err := c.WorkersHealth(context.Background())
+	require.NoError(t, err)
+	assert.False(t, healthy)
+}
+
+func TestDeleteWorker(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/workers/{worker_name}", func(w http.ResponseWriter, req *http.Request) {
+		vars := mux.Vars(req)
+		assert.Equal(t, "worker-1", vars["worker_name"])
+		jsonHandler(w, thttp.DeleteWorkerResponse{})
+	}).Methods("DELETE")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	err = c.DeleteWorker(context.Background(), "worker-1")
+	require.NoError(t, err)
+}
+
+func TestDeleteWorker_Error(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/workers/{worker_name}", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.DeleteWorkerResponse{Err: "worker not found"})
+	}).Methods("DELETE")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	err = c.DeleteWorker(context.Background(), "missing")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "worker not found")
 }

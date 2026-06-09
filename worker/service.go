@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -32,6 +33,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/runner"
 	"github.com/pikoci/pikoci/pikoci/service"
 	"github.com/pikoci/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/wkr"
 	"gocloud.dev/pubsub"
 	"gopkg.in/yaml.v3"
 )
@@ -69,6 +71,13 @@ type Worker struct {
 	// LocalMode enables local execution behavior: skips passed-constraints,
 	// version-availability checks, put steps, and secret resolution.
 	LocalMode bool
+
+	// Heartbeat info
+	Name        string
+	StartedAt   time.Time
+	Queues      string
+	Concurrency int
+	Version     string
 }
 
 func (w *Worker) cacheDir(teamCanonical, pipelineCanonical, resourceCanonical string) (string, error) {
@@ -89,13 +98,18 @@ func resourceCacheEnabled(rt restype.ResourceType, r resource.Resource) bool {
 // New creates a new Worker with the given PikoCI service, job topic, job and
 // check subscriptions, and logger. The returned Worker is ready to be started
 // with Run.
-func New(s pikoci.Service, jobTopic queue.Topic, jobSub, checkSub queue.Subscription, l *slog.Logger) *Worker {
+func New(s pikoci.Service, jobTopic queue.Topic, jobSub, checkSub queue.Subscription, l *slog.Logger, name, queues, version string, concurrency int) *Worker {
 	return &Worker{
 		pikoci:            s,
 		jobTopic:          jobTopic,
 		jobSubscription:   jobSub,
 		checkSubscription: checkSub,
 		logger:            l,
+		Name:              name,
+		StartedAt:         time.Now(),
+		Queues:            queues,
+		Concurrency:       concurrency,
+		Version:           version,
 	}
 }
 
@@ -105,6 +119,38 @@ func (w *Worker) Drain() {
 	w.draining.Store(true)
 	if w.drainCancel != nil {
 		w.drainCancel()
+	}
+}
+
+func (w *Worker) heartbeatLoop(ctx context.Context) {
+	w.sendHeartbeat(ctx)
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			w.sendHeartbeat(ctx)
+		}
+	}
+}
+
+func (w *Worker) sendHeartbeat(ctx context.Context) {
+	hostname, _ := os.Hostname()
+	hw := wkr.Worker{
+		Name:        w.Name,
+		Hostname:    hostname,
+		OS:          runtime.GOOS,
+		Arch:        runtime.GOARCH,
+		GoVersion:   runtime.Version(),
+		Version:     w.Version,
+		Concurrency: w.Concurrency,
+		Queues:      w.Queues,
+		StartedAt:   w.StartedAt,
+	}
+	if err := w.pikoci.WorkerHeartbeat(ctx, hw); err != nil {
+		w.logger.Error("failed to send heartbeat", "error", err)
 	}
 }
 
@@ -161,6 +207,9 @@ func (w *Worker) Run(ctx context.Context) error {
 	// Store the parent context for DB operations that must survive
 	// job-level cancellation but respect server shutdown.
 	w.apiCtx = ctx
+
+	// Start heartbeat loop
+	go w.heartbeatLoop(ctx)
 
 	// receiveCtx is cancelled on Drain() to unblock Receive() calls
 	// immediately while still allowing in-flight jobs to finish.

@@ -21,6 +21,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/trigger"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/wkr"
 
 	"log/slog"
 )
@@ -198,6 +199,15 @@ type Service interface {
 	// ListTriggersAfter returns all trigger events with IDs greater than afterID
 	// for the given trigger name.
 	ListTriggersAfter(ctx context.Context, tc, name string, afterID uint32) ([]*trigger.Trigger, error)
+
+	// WorkerHeartbeat registers or updates a worker's heartbeat.
+	WorkerHeartbeat(ctx context.Context, w wkr.Worker) error
+	// ListWorkers returns all registered workers.
+	ListWorkers(ctx context.Context) ([]*wkr.Worker, error)
+	// WorkersHealth returns true if at least one worker is healthy.
+	WorkersHealth(ctx context.Context) (bool, error)
+	// DeleteWorker removes a worker by name.
+	DeleteWorker(ctx context.Context, name string) error
 }
 
 // PikoCI is the primary implementation of the Service interface. It coordinates
@@ -229,6 +239,8 @@ type PikoCI struct {
 	SecretTypes   sectype.Repository
 	// Triggers is the repository for trigger persistence.
 	Triggers      trigger.Repository
+	// Workers is the repository for worker persistence.
+	Workers       wkr.Repository
 	// StartUoW begins a new unit of work for transactional operations.
 	StartUoW      unitwork.StartUnitOfWork
 	// Ctx is the root context for the service.
@@ -244,7 +256,7 @@ type PikoCI struct {
 // New creates a new PikoCI service instance with all required dependencies. It
 // initializes the internal scheduler for periodic resource checks and returns
 // the configured service ready for use.
-func New(ctx context.Context, jobTopic, checkTopic queue.Topic, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, suow unitwork.StartUnitOfWork, js []byte, l *slog.Logger) *PikoCI {
+func New(ctx context.Context, jobTopic, checkTopic queue.Topic, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, wr wkr.Repository, suow unitwork.StartUnitOfWork, js []byte, l *slog.Logger) *PikoCI {
 	return &PikoCI{
 		Ctx:           ctx,
 		JobTopic:      jobTopic,
@@ -259,6 +271,7 @@ func New(ctx context.Context, jobTopic, checkTopic queue.Topic, ur user.Reposito
 		Runners:       rur,
 		SecretTypes:   str,
 		Triggers:      tgr,
+		Workers:       wr,
 		StartUoW:      suow,
 		JWTSecret:     js,
 		logger:        l,

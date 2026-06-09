@@ -25,6 +25,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/config"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
+	"github.com/xyproto/randomstring"
 	tshttp "github.com/pikoci/pikoci/pikoci/transport/http"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -132,11 +133,12 @@ var serverCmd = &cobra.Command{
 		rur := mysql.NewRunnerRepository(querier)
 		str := mysql.NewSecretTypeRepository(querier)
 		tgr := mysql.NewTriggerRepository(querier)
+		wr := mysql.NewWorkerRepository(querier, cfg.DBSystem)
 
 		suow := unitwork.NewStartUnitOfWork(db, cfg.DBSystem)
 
 		logger.Info("initializing service")
-		var svc = pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, suow, jwtSecret, logger)
+		var svc = pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, suow, jwtSecret, logger)
 		svc.StartScheduler(ctx)
 		logger.Info("initialized service")
 
@@ -157,6 +159,35 @@ var serverCmd = &cobra.Command{
 			[]string{"code", "method"},
 		)
 		reg.MustRegister(httpRequests, httpDuration)
+
+		workersGauge := prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{Name: "pikoci_workers", Help: "Number of registered workers by status."},
+			[]string{"status"},
+		)
+		reg.MustRegister(workersGauge)
+
+		// Update worker metrics periodically
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				workers, err := svc.ListWorkers(ctx)
+				if err == nil {
+					counts := map[string]float64{"healthy": 0, "stale": 0}
+					for _, w := range workers {
+						counts[string(w.Status)]++
+					}
+					for status, count := range counts {
+						workersGauge.WithLabelValues(status).Set(count)
+					}
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
 
 		instrumentedHandler := promhttp.InstrumentHandlerCounter(httpRequests,
 			promhttp.InstrumentHandlerDuration(httpDuration, handler),
@@ -193,7 +224,8 @@ var serverCmd = &cobra.Command{
 			if queues == "" {
 				queues = "jobs,checks"
 			}
-			workers, wg, workerCleanup, werr = runWorker(ctx, cfg.PubSubSystem, jobTopic, svc, cfg.Concurrency, cfg.LogLevel, queues)
+			embeddedName := "embedded-" + randomstring.HumanFriendlyEnglishString(8)
+			workers, wg, workerCleanup, werr = runWorker(ctx, cfg.PubSubSystem, jobTopic, svc, cfg.Concurrency, cfg.LogLevel, queues, embeddedName)
 			if werr != nil {
 				return fmt.Errorf("worker failed to start: %w", werr)
 			}

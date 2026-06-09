@@ -64,6 +64,7 @@
                   <li><a class="dropdown-item" id="nav-profile" href="/profile"><i class="bi bi-person"></i> Profile</a></li>
                   <% if (session.user.admin) { %>
                     <li><a class="dropdown-item" id="nav-users" href="/users"><i class="bi bi-people"></i> Users <span class="badge bg-secondary ms-1">Admin</span></a></li>
+                    <li><a class="dropdown-item" id="nav-workers" href="/workers"><i class="bi bi-cpu"></i> Workers <span class="badge bg-secondary ms-1">Admin</span></a></li>
                     <li><a class="dropdown-item" id="nav-export-db" href="#" onclick="event.preventDefault(); exportDatabase();"><i class="bi bi-download"></i> Export Database <span class="badge bg-secondary ms-1">Admin</span></a></li>
                   <% } %>
                   <li><hr class="dropdown-divider"></li>
@@ -768,6 +769,50 @@
         </div>
         <button type="submit" class="btn btn-warning" data-loading-text="Changing...">Change Password</button>
       </form>
+    </script>
+
+    <script type="text/template" id="workers-list-view">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h1 class="h4 fw-bold mb-0">Workers</h1>
+      </div>
+      <div id="worker-health-banner-container"></div>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Queues</th>
+            <th>Platform</th>
+            <th>Version</th>
+            <th>Uptime</th>
+            <th>Last Seen</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="workers-table-body">
+        </tbody>
+      </table>
+    </script>
+
+    <script type="text/template" id="workers-row-view">
+      <td><%- name %></td>
+      <td>
+        <% if (status === "healthy") { %>
+          <span class="piko-badge piko-badge-succeeded">healthy</span>
+        <% } else { %>
+          <span class="piko-badge piko-badge-started">stale</span>
+        <% } %>
+      </td>
+      <td><%- queues %></td>
+      <td><%- os %>/<%- arch %> (<%- go_version %>)</td>
+      <td><%- version %></td>
+      <td><%- uptime %></td>
+      <td><%- last_seen %></td>
+      <td>
+        <% if (status === "stale") { %>
+          <button class="btn btn-sm btn-outline-danger delete-worker" data-name="<%- name %>"><i class="bi bi-trash"></i></button>
+        <% } %>
+      </td>
     </script>
 
     <script type = "text/javascript">
