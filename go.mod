@@ -5,6 +5,7 @@ go 1.25.1
 require (
 	github.com/VividCortex/mysqlerr v1.0.0
 	github.com/adrg/xdg v0.5.3
+	github.com/agnivade/levenshtein v1.2.1
 	github.com/awalterschulze/gographviz v2.0.3+incompatible
 	github.com/cycloidio/sqlr v1.0.0
 	github.com/go-sql-driver/mysql v1.9.3

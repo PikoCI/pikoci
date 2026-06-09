@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -1507,7 +1508,7 @@ func TestBuildPullParams_WithVersionID(t *testing.T) {
 			{ID: 5, Version: map[string]interface{}{"ref": "def"}},
 		}, false, nil).AnyTimes()
 
-	params, vid := w.buildPullParams(ctx, m, &b, rt, r, g, 0)
+	params, vid, _ := w.buildPullParams(ctx, m, &b, rt, r, g, 0)
 	require.NotNil(t, params)
 	assert.Equal(t, "def", params["version_ref"])
 	assert.Equal(t, "http://example.com", params["param_url"])
@@ -1542,7 +1543,7 @@ func TestBuildPullParams_NoVersionID_UsesLatest(t *testing.T) {
 			{ID: 2, Version: map[string]interface{}{"ref": "latest"}},
 		}, false, nil).AnyTimes()
 
-	params, vid := w.buildPullParams(ctx, m, &b, rt, r, g, 0)
+	params, vid, _ := w.buildPullParams(ctx, m, &b, rt, r, g, 0)
 	require.NotNil(t, params)
 	assert.Equal(t, "latest", params["version_ref"])
 	assert.Equal(t, uint32(2), vid)
@@ -1574,7 +1575,7 @@ func TestBuildPullParams_NoVersions_Fails(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "72", gomock.Any()).
 		Return(nil)
 
-	params, _ := w.buildPullParams(ctx, m, &b, rt, r, g, 0)
+	params, _, _ := w.buildPullParams(ctx, m, &b, rt, r, g, 0)
 	assert.Nil(t, params)
 }
 
@@ -1605,7 +1606,7 @@ func TestBuildPullParams_ResolvedVersionTakesPriority(t *testing.T) {
 		}, false, nil).AnyTimes()
 
 	// resolvedVersionID=10 should take priority over m.VersionID=5
-	params, vid := w.buildPullParams(ctx, m, &b, rt, r, g, 10)
+	params, vid, _ := w.buildPullParams(ctx, m, &b, rt, r, g, 10)
 	require.NotNil(t, params)
 	assert.Equal(t, uint32(10), vid)
 	assert.Equal(t, "resolved-ver", params["version_ref"])
@@ -6763,7 +6764,7 @@ func TestServiceParams(t *testing.T) {
 	cmdParams := map[string]string{"image": "postgres:15"}
 	overrides := map[string]string{"port": "5433"}
 
-	params := w.serviceParams(b, m, cmdParams, overrides)
+	params, warnings := w.serviceParams(b, m, cmdParams, overrides, []string{"port"}, "postgres")
 
 	assert.Equal(t, "postgres:15", params["image"])
 	assert.Equal(t, "99", params["BUILD_NUMBER"])
@@ -6771,6 +6772,108 @@ func TestServiceParams(t *testing.T) {
 	assert.Equal(t, "test-pipeline", params["BUILD_PIPELINE_NAME"])
 	assert.Equal(t, "main", params["BUILD_TEAM_NAME"])
 	assert.Equal(t, "5433", params["param_port"])
+	assert.Empty(t, warnings)
+}
+
+func TestValidateParams(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	t.Run("valid params accepted", func(t *testing.T) {
+		accepted, warnings := validateParams(
+			map[string]string{"token": "abc", "url": "http://x"},
+			[]string{"token", "url"},
+			"param_", logger, "resource_type", "git",
+		)
+		assert.Equal(t, map[string]string{"param_token": "abc", "param_url": "http://x"}, accepted)
+		assert.Empty(t, warnings)
+	})
+
+	t.Run("invalid param with suggestion", func(t *testing.T) {
+		accepted, warnings := validateParams(
+			map[string]string{"toke": "abc"},
+			[]string{"token", "url"},
+			"param_", logger, "resource_type", "git",
+		)
+		assert.Empty(t, accepted)
+		require.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], `param "toke" is not declared by resource_type "git"`)
+		assert.Contains(t, warnings[0], `did you mean "token"`)
+	})
+
+	t.Run("invalid param without suggestion", func(t *testing.T) {
+		accepted, warnings := validateParams(
+			map[string]string{"completely_wrong": "abc"},
+			[]string{"token", "url"},
+			"param_", logger, "resource_type", "git",
+		)
+		assert.Empty(t, accepted)
+		require.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], `param "completely_wrong" is not declared by resource_type "git"`)
+		assert.NotContains(t, warnings[0], "did you mean")
+	})
+
+	t.Run("empty params", func(t *testing.T) {
+		accepted, warnings := validateParams(
+			map[string]string{},
+			[]string{"token"},
+			"param_", logger, "resource_type", "git",
+		)
+		assert.Empty(t, accepted)
+		assert.Empty(t, warnings)
+	})
+
+	t.Run("empty allowed params", func(t *testing.T) {
+		accepted, warnings := validateParams(
+			map[string]string{"token": "abc"},
+			[]string{},
+			"param_", logger, "resource_type", "git",
+		)
+		assert.Empty(t, accepted)
+		require.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], `param "token" is not declared`)
+	})
+}
+
+func TestFormatParamWarnings(t *testing.T) {
+	t.Run("no warnings", func(t *testing.T) {
+		assert.Equal(t, "", formatParamWarnings(nil))
+	})
+
+	t.Run("single warning", func(t *testing.T) {
+		result := formatParamWarnings([]string{"WARNING: something"})
+		assert.Equal(t, "WARNING: something\n", result)
+	})
+
+	t.Run("multiple warnings", func(t *testing.T) {
+		result := formatParamWarnings([]string{"WARNING: a", "WARNING: b"})
+		assert.Equal(t, "WARNING: a\nWARNING: b\n", result)
+	})
+}
+
+func TestValidateTaskRunParams(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	t.Run("typo of args", func(t *testing.T) {
+		warnings := validateTaskRunParams(map[string]string{"arg": "echo hello"}, logger, "my-step")
+		require.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], `"arg"`)
+		assert.Contains(t, warnings[0], `did you mean "args"`)
+	})
+
+	t.Run("known runner param not warned", func(t *testing.T) {
+		warnings := validateTaskRunParams(map[string]string{"cmd": "echo hello"}, logger, "my-step")
+		assert.Empty(t, warnings)
+	})
+
+	t.Run("unrelated param not warned", func(t *testing.T) {
+		warnings := validateTaskRunParams(map[string]string{"my_custom_var": "value"}, logger, "my-step")
+		assert.Empty(t, warnings)
+	})
+
+	t.Run("empty params", func(t *testing.T) {
+		warnings := validateTaskRunParams(map[string]string{}, logger, "my-step")
+		assert.Empty(t, warnings)
+	})
 }
 
 // --- processMessage tests ---

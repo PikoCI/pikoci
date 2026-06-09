@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agnivade/levenshtein"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsimple"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -606,6 +607,255 @@ func makeToFunc(wantTy cty.Type) function.Function {
 	return stdlib.MakeToFunc(wantTy)
 }
 
+// Known block types at each level of the pipeline HCL schema.
+var (
+	pipelineTopBlocks = map[string]bool{
+		"job": true, "resource": true, "resource_type": true,
+		"notification_type": true, "notification": true,
+		"runner_type": true, "secret_type": true, "service_type": true,
+		"variable": true,
+	}
+	jobBlocks = map[string]bool{
+		"get": true, "task": true, "put": true, "notify": true, "service": true,
+		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
+		"matrix": true,
+	}
+	stepHookBlocks = map[string]bool{
+		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
+	}
+	// runnerCommandKnownAttrs are the structurally-parsed attributes of a
+	// RunnerCommand block (check, pull, push, start, stop, notify, get, run).
+	// Anything else ends up in the Params map via ",remain".
+	runnerCommandKnownAttrs = []string{"args"}
+	// readyCheckKnownAttrs are the structurally-parsed attributes of a
+	// ready_check block. Anything else ends up in the Params map via ",remain".
+	readyCheckKnownAttrs = []string{"args", "interval", "timeout"}
+	// Known attributes for each step/block type that uses hcl.Body Remain.
+	// Typos of these silently go into Remain and are ignored.
+	getStepKnownAttrs  = []string{"passed", "trigger", "timeout", "attempts"}
+	taskStepKnownAttrs = []string{"timeout", "attempts", "inputs", "outputs"}
+	putStepKnownAttrs  = []string{"timeout", "attempts"}
+	notifyStepKnownAttrs = []string{"message"}
+	jobKnownAttrs      = []string{"concurrency", "serial_groups", "timeout"}
+	// Known blocks inside task steps (run + hooks).
+	taskKnownBlocks = map[string]bool{
+		"run": true,
+		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
+	}
+)
+
+// validatePipelineSchema walks the raw HCL AST and returns errors for unknown
+// block types and attributes that look like typos of known fields.
+func validatePipelineSchema(raw []byte) error {
+	file, diags := hclsyntax.ParseConfig(raw, "pipeline.hcl", hcl.Pos{Line: 1, Column: 1})
+	if diags.HasErrors() {
+		return nil // syntax errors are reported elsewhere
+	}
+	body := file.Body.(*hclsyntax.Body)
+
+	var errs []string
+
+	for _, block := range body.Blocks {
+		if !pipelineTopBlocks[block.Type] {
+			errs = append(errs, suggestBlockTypo(block.Type, pipelineTopBlocks, "pipeline", block.TypeRange))
+			continue
+		}
+
+		switch block.Type {
+		case "job":
+			errs = append(errs, validateJobBlock(block)...)
+		case "resource_type":
+			errs = append(errs, validateRunnerCommandBlocks(block, blockLabel(block))...)
+		case "notification_type":
+			errs = append(errs, validateRunnerCommandBlocks(block, blockLabel(block))...)
+		case "secret_type":
+			errs = append(errs, validateRunnerCommandBlocks(block, blockLabel(block))...)
+		case "service_type":
+			errs = append(errs, validateServiceTypeBlock(block)...)
+		}
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+	return fmt.Errorf("pipeline schema warnings:\n  - %s", strings.Join(errs, "\n  - "))
+}
+
+// validateJobBlock checks for unknown block types and attribute typos within a job block.
+func validateJobBlock(block *hclsyntax.Block) []string {
+	var errs []string
+	jobName := blockLabel(block)
+	jobCtx := fmt.Sprintf("job %q", jobName)
+
+	errs = append(errs, validateAttrTypos(block, jobCtx, jobKnownAttrs)...)
+
+	for _, inner := range block.Body.Blocks {
+		if !jobBlocks[inner.Type] {
+			errs = append(errs, suggestBlockTypo(inner.Type, jobBlocks, jobCtx, inner.TypeRange))
+			continue
+		}
+
+		switch inner.Type {
+		case "task":
+			errs = append(errs, validateTaskBlock(inner, jobName)...)
+		case "get":
+			errs = append(errs, validateStepBlock(inner, jobName, getStepKnownAttrs)...)
+		case "put":
+			errs = append(errs, validateStepBlock(inner, jobName, putStepKnownAttrs)...)
+		case "notify":
+			errs = append(errs, validateStepBlock(inner, jobName, notifyStepKnownAttrs)...)
+		}
+	}
+	return errs
+}
+
+// validateTaskBlock checks the task step for unknown sub-blocks, attribute typos,
+// and run block attribute typos.
+func validateTaskBlock(block *hclsyntax.Block, jobName string) []string {
+	var errs []string
+	taskName := blockLabel(block)
+	ctx := fmt.Sprintf("task %q in job %q", taskName, jobName)
+
+	errs = append(errs, validateAttrTypos(block, ctx, taskStepKnownAttrs)...)
+
+	for _, inner := range block.Body.Blocks {
+		if inner.Type == "run" {
+			errs = append(errs, validateRunnerCommandAttrs(inner, ctx, runnerCommandKnownAttrs)...)
+		} else if !taskKnownBlocks[inner.Type] {
+			errs = append(errs, suggestBlockTypo(inner.Type, taskKnownBlocks, ctx, inner.TypeRange))
+		}
+	}
+	return errs
+}
+
+// validateStepBlock checks a get/put/notify step for attribute typos and unknown sub-blocks.
+func validateStepBlock(block *hclsyntax.Block, jobName string, knownAttrs []string) []string {
+	var errs []string
+	stepName := blockLabel(block)
+	ctx := fmt.Sprintf("%s %q in job %q", block.Type, stepName, jobName)
+
+	errs = append(errs, validateAttrTypos(block, ctx, knownAttrs)...)
+
+	for _, inner := range block.Body.Blocks {
+		if !stepHookBlocks[inner.Type] {
+			errs = append(errs, suggestBlockTypo(inner.Type, stepHookBlocks, ctx, inner.TypeRange))
+		}
+	}
+	return errs
+}
+
+// validateRunnerCommandBlocks finds check/pull/push/notify/get/start/stop blocks
+// inside a type definition and validates their attributes.
+func validateRunnerCommandBlocks(block *hclsyntax.Block, typeName string) []string {
+	var errs []string
+	for _, inner := range block.Body.Blocks {
+		ctx := fmt.Sprintf("%s block in %s %q", inner.Type, block.Type, typeName)
+		errs = append(errs, validateRunnerCommandAttrs(inner, ctx, runnerCommandKnownAttrs)...)
+	}
+	return errs
+}
+
+// validateServiceTypeBlock validates a service_type block including ready_check.
+func validateServiceTypeBlock(block *hclsyntax.Block) []string {
+	var errs []string
+	svcName := blockLabel(block)
+	for _, inner := range block.Body.Blocks {
+		if inner.Type == "ready_check" {
+			ctx := fmt.Sprintf("ready_check in service_type %q", svcName)
+			errs = append(errs, validateRunnerCommandAttrs(inner, ctx, readyCheckKnownAttrs)...)
+		} else {
+			ctx := fmt.Sprintf("%s block in service_type %q", inner.Type, svcName)
+			errs = append(errs, validateRunnerCommandAttrs(inner, ctx, runnerCommandKnownAttrs)...)
+		}
+	}
+	return errs
+}
+
+// hclPos formats an HCL source range as "pipeline.hcl:LINE,COL-COL:" to match
+// the format expected by the UI's error parser.
+func hclPos(r hcl.Range) string {
+	return fmt.Sprintf("pipeline.hcl:%d,%d-%d:", r.Start.Line, r.Start.Column, r.End.Column)
+}
+
+// validateAttrTypos checks attributes of a block with hcl.Body Remain for
+// possible typos of the block's known HCL attributes.
+func validateAttrTypos(block *hclsyntax.Block, ctx string, knownAttrs []string) []string {
+	var errs []string
+	for name, attr := range block.Body.Attributes {
+		// Skip if it exactly matches a known attr
+		isKnown := false
+		for _, known := range knownAttrs {
+			if name == known {
+				isKnown = true
+				break
+			}
+		}
+		if isKnown {
+			continue
+		}
+		// Check for close matches
+		for _, known := range knownAttrs {
+			if levenshtein.ComputeDistance(name, known) <= 2 {
+				errs = append(errs, fmt.Sprintf("%s %q in %s is not a known attribute (did you mean %q?)", hclPos(attr.SrcRange), name, ctx, known))
+				break
+			}
+		}
+	}
+	return errs
+}
+
+// validateRunnerCommandAttrs checks attributes of a runner command block for
+// possible typos of known fields.
+func validateRunnerCommandAttrs(block *hclsyntax.Block, ctx string, knownAttrs []string) []string {
+	var errs []string
+	for name, attr := range block.Body.Attributes {
+		isKnown := false
+		for _, known := range knownAttrs {
+			if name == known {
+				isKnown = true
+				break
+			}
+		}
+		if isKnown {
+			continue
+		}
+		for _, known := range knownAttrs {
+			if levenshtein.ComputeDistance(name, known) <= 2 {
+				errs = append(errs, fmt.Sprintf("%s %q in %s is not a known attribute (did you mean %q?)", hclPos(attr.SrcRange), name, ctx, known))
+				break
+			}
+		}
+	}
+	return errs
+}
+
+// suggestBlockTypo returns an error message for an unknown block type, with a
+// Levenshtein-based suggestion if one is close enough.
+func suggestBlockTypo(got string, allowed map[string]bool, ctx string, r hcl.Range) string {
+	best := ""
+	bestDist := 3
+	for name := range allowed {
+		d := levenshtein.ComputeDistance(got, name)
+		if d < bestDist {
+			bestDist = d
+			best = name
+		}
+	}
+	msg := fmt.Sprintf("%s unknown block %q in %s", hclPos(r), got, ctx)
+	if best != "" {
+		msg += fmt.Sprintf(" (did you mean %q?)", best)
+	}
+	return msg
+}
+
+// blockLabel returns the first label of an HCL block, or "<unnamed>" if none.
+func blockLabel(block *hclsyntax.Block) string {
+	if len(block.Labels) > 0 {
+		return block.Labels[0]
+	}
+	return "<unnamed>"
+}
+
 // readPipeline parses raw HCL pipeline configuration bytes into a Pipeline
 // struct. It handles variable resolution (string, number, bool, and secret
 // types), source resolution for resource types, runners, secret types, and
@@ -706,6 +956,12 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 
 	// Strip for_each job blocks from the HCL for the main decode
 	decodeRPP, forEachBlockBytes := stripForEachJobBlocks(rpp, forEachExpansions)
+
+	// Run schema validation before decode so typos that cause cryptic HCL
+	// type errors (e.g. "arg = [...]" instead of "args") get a clear message.
+	if schemaErr := validatePipelineSchema(rpp); schemaErr != nil {
+		return nil, schemaErr
+	}
 
 	var hp hclPipeline
 	err = hclsimple.Decode("pipeline.hcl", decodeRPP, ectx, &hp)
