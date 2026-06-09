@@ -16,12 +16,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/adrg/xdg"
+	"github.com/agnivade/levenshtein"
 	"github.com/google/uuid"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
@@ -802,7 +804,7 @@ func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, c
 		passedVersionID = resolvedVersions[rCan]
 	}
 
-	params, usedVersionID := w.buildPullParams(ctx, m, b, rt, r, g, passedVersionID)
+	params, usedVersionID, pullWarnings := w.buildPullParams(ctx, m, b, rt, r, g, passedVersionID)
 	if params == nil {
 		return true
 	}
@@ -847,7 +849,7 @@ func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, c
 	b.Steps = append(b.Steps, build.Step{Type: "get", Name: g.Name, Status: build.Started})
 	w.updateBuild(ctx, m, *b)
 
-	var out string
+	out := formatParamWarnings(pullWarnings)
 	var d time.Duration
 	var err error
 
@@ -996,6 +998,8 @@ func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, 
 		t.Run.Params = make(map[string]string)
 	}
 
+	taskWarnings := validateTaskRunParams(t.Run.Params, w.logger, t.Name)
+
 	replaceSecretPlaceholders(t.Run.Params, secretResolved)
 	replaceSecretPlaceholdersInSlice(t.Run.Args, secretResolved)
 
@@ -1038,7 +1042,7 @@ func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, 
 	b.Steps = append(b.Steps, build.Step{Type: "task", Name: t.Name, Status: build.Started})
 	w.updateBuild(ctx, m, *b)
 
-	var out string
+	out := formatParamWarnings(taskWarnings)
 	var d time.Duration
 	var err error
 
@@ -1155,10 +1159,9 @@ func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, c
 		params[k] = v
 	}
 	// Add resource-level params
-	for k, v := range r.GetParams() {
-		if slices.Contains(rt.Params, k) {
-			params["param_"+k] = v
-		}
+	accepted, putWarnings := validateParams(r.GetParams(), rt.Params, "param_", w.logger, "resource_type", rt.Name)
+	for k, v := range accepted {
+		params[k] = v
 	}
 	// Add put-step-level params with put_ prefix
 	for k, v := range p.Params {
@@ -1205,7 +1208,7 @@ func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, c
 	b.Steps = append(b.Steps, build.Step{Type: "put", Name: p.Name, Status: build.Started})
 	w.updateBuild(ctx, m, *b)
 
-	var out string
+	out := formatParamWarnings(putWarnings)
 	var d time.Duration
 	var err error
 
@@ -1356,10 +1359,9 @@ func (w *Worker) runNotifyStep(ctx context.Context, m queue.Body, b *build.Build
 		params[k] = v
 	}
 	// Notification-level params (param_ prefix)
-	for k, v := range notif.GetParams() {
-		if slices.Contains(nt.Params, k) {
-			params["param_"+k] = v
-		}
+	accepted, notifyWarnings := validateParams(notif.GetParams(), nt.Params, "param_", w.logger, "notification_type", nt.Name)
+	for k, v := range accepted {
+		params[k] = v
 	}
 	// Step-level params (notify_ prefix)
 	for k, v := range n.Params {
@@ -1413,7 +1415,7 @@ func (w *Worker) runNotifyStep(ctx context.Context, m queue.Body, b *build.Build
 	b.Steps = append(b.Steps, build.Step{Type: "notify", Name: n.Name, Status: build.Started})
 	w.updateBuild(ctx, m, *b)
 
-	var out string
+	out := formatParamWarnings(notifyWarnings)
 	var d time.Duration
 	var err error
 
@@ -1547,9 +1549,10 @@ func (w *Worker) runAutoNotifications(ctx context.Context, m queue.Body, b *buil
 }
 
 // buildPullParams assembles the environment parameters needed to pull a resource version.
-// Returns (nil, 0) if an error occurred (error is already handled via failBuild).
+// Returns (nil, 0, nil) if an error occurred (error is already handled via failBuild).
 // The second return value is the version ID actually used.
-func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Build, rt restype.ResourceType, r resource.Resource, g job.GetStep, resolvedVersionID uint32) (map[string]string, uint32) {
+// The third return value contains warnings about unrecognized params.
+func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Build, rt restype.ResourceType, r resource.Resource, g job.GetStep, resolvedVersionID uint32) (map[string]string, uint32, []string) {
 	var params map[string]string
 	if rt.Pull != nil && rt.Pull.Params != nil {
 		params = make(map[string]string)
@@ -1563,7 +1566,7 @@ func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Bui
 	dbvers, _, err := w.pikoci.ListResourceVersions(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, nil, nil, 0)
 	if err != nil {
 		w.failBuild(ctx, m, *b, fmt.Errorf("failed to list resource versions: %w", err))
-		return nil, 0
+		return nil, 0, nil
 	}
 
 	// Version priority: resolvedVersionID (from passed constraints) > m.VersionID (from queue) > latest
@@ -1585,12 +1588,12 @@ func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Bui
 		}
 		if !found {
 			w.failBuild(ctx, m, *b, fmt.Errorf("no version found for resource %q", r.Canonical))
-			return nil, 0
+			return nil, 0, nil
 		}
 	} else {
 		if len(dbvers) == 0 {
 			w.failBuild(ctx, m, *b, fmt.Errorf("no versions for resource %q", r.Canonical))
-			return nil, 0
+			return nil, 0, nil
 		}
 		slices.Reverse(dbvers)
 		versionID = dbvers[0].ID
@@ -1599,13 +1602,12 @@ func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Bui
 		}
 	}
 
-	for k, v := range r.GetParams() {
-		if slices.Contains(rt.Params, k) {
-			params["param_"+k] = v
-		}
+	accepted, pullWarnings := validateParams(r.GetParams(), rt.Params, "param_", w.logger, "resource_type", rt.Name)
+	for k, v := range accepted {
+		params[k] = v
 	}
 
-	return params, versionID
+	return params, versionID, pullWarnings
 }
 
 // runHooks runs a list of hooks (on_success, on_failure, on_cancel, ensure) and appends
@@ -1734,10 +1736,9 @@ func (w *Worker) processResourceCheck(ctx context.Context, m queue.Body, cwd str
 			flattenVersionValue(params, "version_"+k, v)
 		}
 	}
-	for k, v := range r.GetParams() {
-		if slices.Contains(rt.Params, k) {
-			params["param_"+k] = v
-		}
+	accepted, checkWarnings := validateParams(r.GetParams(), rt.Params, "param_", w.logger, "resource_type", rt.Name)
+	for k, v := range accepted {
+		params[k] = v
 	}
 
 	resolved, err := w.resolveSecretVars(ctx, cwd, pp)
@@ -1770,9 +1771,10 @@ func (w *Worker) processResourceCheck(ctx context.Context, m queue.Body, cwd str
 	replaceSecretPlaceholders(rc.Params, resolved)
 	replaceSecretPlaceholdersInSlice(rc.Args, resolved)
 
+	checkWarnStr := formatParamWarnings(checkWarnings)
 	out, _, err := w.runRunner(ctx, ru, cwd, rc)
 	if err != nil {
-		r.Logs = out
+		r.Logs = checkWarnStr + out
 		if nerr := w.pikoci.UpdatePipelineResource(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, r); nerr != nil {
 			w.logger.Error("failed update resource", "resource", r.Canonical, "pipeline", m.PipelineCanonical, "error", nerr)
 		}
@@ -1780,8 +1782,8 @@ func (w *Worker) processResourceCheck(ctx context.Context, m queue.Body, cwd str
 		return
 	}
 
-	if r.Logs != "" {
-		r.Logs = ""
+	if r.Logs != checkWarnStr || checkWarnStr != "" {
+		r.Logs = checkWarnStr
 		if err := w.pikoci.UpdatePipelineResource(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, r); err != nil {
 			w.logger.Error("failed update resource", "resource", r.Canonical, "pipeline", m.PipelineCanonical, "error", err)
 			return
@@ -2207,6 +2209,18 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 	out += sw.String()
 	if err != nil {
 		out += "\n" + err.Error()
+		// List available env var names (not values) to help diagnose typos.
+		names := make([]string, 0, len(envs))
+		for k := range envs {
+			if !isRunnerInternalParam(k) {
+				names = append(names, k)
+			}
+		}
+		sort.Strings(names)
+		out += "\n\n--- Available environment variables ---\n"
+		for _, n := range names {
+			out += n + "\n"
+		}
 	}
 	w.logger.Debug("finished running command", "out", out)
 
@@ -2328,7 +2342,7 @@ func (w *Worker) startServices(ctx context.Context, m queue.Body, b *build.Build
 			return started
 		}
 
-		params := w.serviceParams(b, m, svc.Start.Params, ss.Params)
+		params, svcWarnings := w.serviceParams(b, m, svc.Start.Params, ss.Params, svc.Params, svc.Name)
 		for k, v := range params {
 			rc.Params[k] = v
 		}
@@ -2341,12 +2355,14 @@ func (w *Worker) startServices(ctx context.Context, m queue.Body, b *build.Build
 		b.Steps = append(b.Steps, build.Step{Type: "service", Name: ss.Name + ":start", Status: build.Started})
 		w.updateBuild(ctx, m, *b)
 
+		svcWarnStr := formatParamWarnings(svcWarnings)
 		onPartialLog := func(partial string) {
-			b.Steps[stepIdx].Logs = partial
+			b.Steps[stepIdx].Logs = svcWarnStr + partial
 			w.updateBuild(ctx, m, *b)
 		}
 
 		out, d, err := w.runRunner(ctx, ru, cwd, rc, onPartialLog)
+		out = svcWarnStr + out
 		if err != nil {
 			b.Steps[stepIdx] = build.Step{Type: "service", Name: ss.Name + ":start", Logs: out, Duration: d, Status: build.Failed}
 			b.Status = build.Failed
@@ -2425,6 +2441,77 @@ func isRunnerInternalParam(key string) bool {
 	return runnerInternalParams[key]
 }
 
+// validateParams filters userParams through allowedParams, returning accepted
+// params (with prefix prepended to each key) and warning strings for any
+// unrecognized params. For unrecognized params it uses Levenshtein distance to
+// suggest the closest match if distance <= 2.
+func validateParams(userParams map[string]string, allowedParams []string, prefix string, logger *slog.Logger, typeName, entityName string) (map[string]string, []string) {
+	accepted := make(map[string]string)
+	var warnings []string
+	for k, v := range userParams {
+		if slices.Contains(allowedParams, k) {
+			accepted[prefix+k] = v
+			continue
+		}
+		msg := fmt.Sprintf("WARNING: param %q is not declared by %s %q and was ignored", k, typeName, entityName)
+		best := ""
+		bestDist := 3
+		for _, p := range allowedParams {
+			d := levenshtein.ComputeDistance(k, p)
+			if d < bestDist {
+				bestDist = d
+				best = p
+			}
+		}
+		if best != "" {
+			msg += fmt.Sprintf(" (did you mean %q?)", best)
+		}
+		logger.Warn(msg)
+		warnings = append(warnings, msg)
+	}
+	return accepted, warnings
+}
+
+// formatParamWarnings joins warning strings into a single block suitable for
+// prepending to step log output.
+func formatParamWarnings(warnings []string) string {
+	if len(warnings) == 0 {
+		return ""
+	}
+	return strings.Join(warnings, "\n") + "\n"
+}
+
+// taskRunKnownFields are the HCL field names of RunnerCommand that are parsed
+// structurally. Anything else ends up in the Params map via ",remain". If a
+// Params key is a close Levenshtein match to one of these, the user likely made
+// a typo in their pipeline HCL.
+var taskRunKnownFields = []string{"args"}
+
+// validateTaskRunParams checks whether any keys in the user-supplied Params map
+// of a task's RunnerCommand look like typos of known HCL fields (e.g. "arg"
+// instead of "args"). Returns warning strings for any suspicious keys.
+func validateTaskRunParams(params map[string]string, logger *slog.Logger, stepName string) []string {
+	var warnings []string
+	for k := range params {
+		// Skip keys that are known runner-internal params — these are
+		// legitimate user-supplied values consumed by the runner template.
+		if isRunnerInternalParam(k) {
+			continue
+		}
+		for _, field := range taskRunKnownFields {
+			if k == field {
+				continue
+			}
+			if levenshtein.ComputeDistance(k, field) <= 2 {
+				msg := fmt.Sprintf("WARNING: %q in task %q is not a known field and was treated as a param (did you mean %q?)", k, stepName, field)
+				logger.Warn(msg)
+				warnings = append(warnings, msg)
+			}
+		}
+	}
+	return warnings
+}
+
 // sanitizeStepName converts a step name to a safe environment variable prefix
 // by uppercasing it and replacing non-alphanumeric characters with underscores.
 func sanitizeStepName(name string) string {
@@ -2486,7 +2573,7 @@ func parseOutputFile(path string, logger *slog.Logger) map[string]string {
 
 // serviceParams builds the environment parameters for a service command,
 // merging the command's own params with build info and per-job overrides.
-func (w *Worker) serviceParams(b *build.Build, m queue.Body, cmdParams map[string]string, overrides map[string]string) map[string]string {
+func (w *Worker) serviceParams(b *build.Build, m queue.Body, cmdParams map[string]string, overrides map[string]string, allowedParams []string, svcName string) (map[string]string, []string) {
 	params := make(map[string]string)
 	for k, v := range cmdParams {
 		params[k] = v
@@ -2494,10 +2581,11 @@ func (w *Worker) serviceParams(b *build.Build, m queue.Body, cmdParams map[strin
 	for k, v := range buildMetadataParams(b, m) {
 		params[k] = v
 	}
-	for k, v := range overrides {
-		params["param_"+k] = v
+	accepted, warnings := validateParams(overrides, allowedParams, "param_", w.logger, "service_type", svcName)
+	for k, v := range accepted {
+		params[k] = v
 	}
-	return params
+	return params, warnings
 }
 
 // waitForServices runs ready_check for all started services that have one.
@@ -2669,7 +2757,7 @@ func (w *Worker) stopServices(m queue.Body, b *build.Build, cwd string, pp *pipe
 			continue
 		}
 
-		params := w.serviceParams(b, m, svc.Stop.Params, ss.Params)
+		params, stopWarnings := w.serviceParams(b, m, svc.Stop.Params, ss.Params, svc.Params, svc.Name)
 		for k, v := range params {
 			rc.Params[k] = v
 		}
@@ -2682,12 +2770,14 @@ func (w *Worker) stopServices(m queue.Body, b *build.Build, cwd string, pp *pipe
 		b.Steps = append(b.Steps, build.Step{Type: "service", Name: ss.Name + ":stop", Status: build.Started})
 		w.updateBuild(stopCtx, m, *b)
 
+		stopWarnStr := formatParamWarnings(stopWarnings)
 		onPartialLog := func(partial string) {
-			b.Steps[stepIdx].Logs = partial
+			b.Steps[stepIdx].Logs = stopWarnStr + partial
 			w.updateBuild(stopCtx, m, *b)
 		}
 
 		out, d, err := w.runRunner(stopCtx, ru, cwd, rc, onPartialLog)
+		out = stopWarnStr + out
 		stepStatus := build.Succeeded
 		if err != nil {
 			stepStatus = build.Failed

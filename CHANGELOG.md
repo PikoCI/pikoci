@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Worker health monitoring: workers send periodic heartbeats to the server, which tracks their status as healthy or stale (no heartbeat for over 90 seconds). Admin users see all workers in a new dashboard with status, queues, platform, version, and uptime. A warning banner appears when no healthy workers are detected. Admins can delete stale workers from the UI or via `DELETE /workers/{name}`. Includes a `pikoci_workers` Prometheus gauge with `status` label for alerting ([#482](https://github.com/PikoCI/pikoci/issues/482))
+- Better error reporting for param typos: pipeline schema validation now catches typos in block names (e.g. `tsk` → `task`) and attributes (e.g. `triggr` → `trigger`, `arg` → `args`) at save time with line-accurate errors and Levenshtein-based suggestions. At runtime, unrecognized resource/notification/service params show warnings in step logs with "did you mean?" hints, and failed commands list available environment variable names to help diagnose missing params ([#116](https://github.com/PikoCI/pikoci/issues/116))
 
 ## [0.4.0] - 2026-06-08
 
