@@ -221,10 +221,6 @@ type Service interface {
 // resource check dispatching, and a background scheduler for periodic resource
 // checks.
 type PikoCI struct {
-	// JobTopic is the message queue topic used to dispatch job build executions.
-	JobTopic queue.Topic
-	// CheckTopic is the message queue topic used to dispatch resource checks.
-	CheckTopic queue.Topic
 	// Notifier broadcasts work availability to waiting workers.
 	Notifier *notifier.WorkNotifier
 	// Users is the repository for user persistence.
@@ -264,11 +260,9 @@ type PikoCI struct {
 // New creates a new PikoCI service instance with all required dependencies. It
 // initializes the internal scheduler for periodic resource checks and returns
 // the configured service ready for use.
-func New(ctx context.Context, jobTopic, checkTopic queue.Topic, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, wr wkr.Repository, suow unitwork.StartUnitOfWork, js []byte, wn *notifier.WorkNotifier, l *slog.Logger) *PikoCI {
+func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, wr wkr.Repository, suow unitwork.StartUnitOfWork, js []byte, wn *notifier.WorkNotifier, l *slog.Logger) *PikoCI {
 	return &PikoCI{
 		Ctx:           ctx,
-		JobTopic:      jobTopic,
-		CheckTopic:    checkTopic,
 		Notifier:      wn,
 		Users:         ur,
 		Teams:         tr,

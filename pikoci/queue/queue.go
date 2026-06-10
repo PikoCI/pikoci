@@ -1,48 +1,7 @@
-// Package queue defines the publish/subscribe abstractions used by the scheduler
-// and worker to exchange job and resource-check messages. The Topic and
-// Subscription interfaces mirror the gocloud.dev/pubsub API so that
-// implementations can be swapped between in-memory, NATS, or other backends.
+// Package queue defines the work-item types exchanged between the server and
+// workers. Topic and Subscription interfaces have been removed; workers now
+// receive work via HTTP long-poll instead of pub/sub.
 package queue
-
-import (
-	"context"
-
-	"gocloud.dev/pubsub"
-)
-
-//go:generate go tool mockgen -destination=../mock/topic.go -mock_names=Topic=Topic -package mock github.com/pikoci/pikoci/pikoci/queue Topic
-//go:generate go tool mockgen -destination=../mock/subscription.go -mock_names=Subscription=Subscription -package mock github.com/pikoci/pikoci/pikoci/queue Subscription
-
-// Topic publishes messages to all its subscribers. The interface is modeled
-// after gocloud.dev/pubsub.Topic so that concrete implementations can be
-// used interchangeably.
-type Topic interface {
-	// Send publishes a message. It only returns after the message has been sent, or failed to be sent. Send can be called from multiple goroutines at once.
-	Send(ctx context.Context, m *pubsub.Message) (err error)
-	// ErrorAs converts err to driver-specific types
-	ErrorAs(err error, i any) bool
-	// As converts i to driver-specific types.
-	As(i any) bool
-
-	// Shutdown flushes pending message sends and disconnects the Topic. It only returns after all pending messages have been sent.
-	Shutdown(ctx context.Context) (err error)
-}
-
-// Subscription receives messages published to a topic. The interface is modeled
-// after gocloud.dev/pubsub.Subscription.
-type Subscription interface {
-	// As converts i to driver-specific types
-	As(i any) bool
-
-	// ErrorAs converts err to driver-specific types.
-	ErrorAs(err error, i any) bool
-
-	// Receive receives and returns the next message from the Subscription's queue, blocking and polling if none are available. It can be called concurrently from multiple goroutines.
-	Receive(ctx context.Context) (_ *pubsub.Message, err error)
-
-	// Shutdown flushes pending ack sends and disconnects the Subscription.
-	Shutdown(ctx context.Context) (err error)
-}
 
 // WorkItem represents a unit of work for a worker to process.
 type WorkItem struct {

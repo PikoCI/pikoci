@@ -10,8 +10,6 @@ import (
 )
 
 type MockService struct {
-	Topic             *mock.Topic // used as JobTopic in tests
-	CheckTopic        *mock.Topic
 	Users             *mock.UserRepository
 	Teams             *mock.TeamRepository
 	Pipelines         *mock.PipelineRepository
@@ -44,8 +42,6 @@ func newService(ctrl *gomock.Controller) MockService {
 	ntr := mock.NewNotificationTypeRepository(ctrl)
 	nr := mock.NewNotificationRepository(ctrl)
 	wr := mock.NewWorkerRepository(ctrl)
-	t := mock.NewTopic(ctrl)
-	ct := mock.NewTopic(ctrl)
 
 	suow := unitwork.NewNoopStartUnitOfWork(unitwork.Repositories{
 		UsersRepo:             ur,
@@ -61,10 +57,8 @@ func newService(ctrl *gomock.Controller) MockService {
 		NotificationsRepo:     nr,
 	})
 
-	p := pikoci.New(context.TODO(), t, ct, ur, tr, pr, jr, rr, rtr, br, rur, str, tgr, wr, suow, []byte("test-secret"), nil, nil)
+	p := pikoci.New(context.TODO(), ur, tr, pr, jr, rr, rtr, br, rur, str, tgr, wr, suow, []byte("test-secret"), nil, nil)
 	return MockService{
-		Topic:             t,
-		CheckTopic:        ct,
 		Users:             ur,
 		Teams:             tr,
 		Pipelines:         pr,
