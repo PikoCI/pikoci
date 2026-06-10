@@ -209,6 +209,11 @@ type Service interface {
 	WorkersHealth(ctx context.Context) (bool, error)
 	// DeleteWorker removes a worker by name.
 	DeleteWorker(ctx context.Context, name string) error
+
+	// NextWork finds the next available work item (pending build or due resource check).
+	NextWork(ctx context.Context) (*queue.WorkItem, error)
+	// PollNextWork blocks until work is available or timeout (30s).
+	PollNextWork(ctx context.Context) (*queue.WorkItem, error)
 }
 
 // PikoCI is the primary implementation of the Service interface. It coordinates

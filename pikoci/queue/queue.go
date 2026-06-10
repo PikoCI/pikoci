@@ -44,6 +44,12 @@ type Subscription interface {
 	Shutdown(ctx context.Context) (err error)
 }
 
+// WorkItem represents a unit of work for a worker to process.
+type WorkItem struct {
+	Type string `json:"type"` // "job" or "check"
+	Body Body   `json:"body"`
+}
+
 // Body is the JSON-serializable payload carried inside every pub/sub message.
 // Depending on the queue, different fields are populated to identify the target
 // team, pipeline, job, resource, or build.
