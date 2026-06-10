@@ -58,25 +58,6 @@
       ]
     },
     {
-      "title": "NATS Connections",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 3, "x": 6, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "gnatsd_varz_connections",
-          "legendFormat": "connections",
-          "refId": "A"
-        }
-      ]
-    },
-    {
       "title": "Uptime",
       "type": "stat",
       "gridPos": { "h": 4, "w": 3, "x": 9, "y": 0 },
@@ -134,50 +115,6 @@
       ]
     },
     {
-      "title": "NATS Slow Consumers",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 3, "x": 18, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "steps": [
-              { "value": 0, "color": "green" },
-              { "value": 1, "color": "red" }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "gnatsd_varz_slow_consumers",
-          "legendFormat": "slow consumers",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "NATS Subscriptions",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 3, "x": 21, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "gnatsd_varz_subscriptions",
-          "legendFormat": "subscriptions",
-          "refId": "A"
-        }
-      ]
-    },
-    {
       "title": "HTTP Request Rate",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
@@ -230,62 +167,6 @@
           "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
-        }
-      ]
-    },
-    {
-      "title": "NATS Messages In/Out Rate",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "rate(gnatsd_varz_in_msgs[5m])",
-          "legendFormat": "messages in",
-          "refId": "A"
-        },
-        {
-          "expr": "rate(gnatsd_varz_out_msgs[5m])",
-          "legendFormat": "messages out",
-          "refId": "B"
-        }
-      ]
-    },
-    {
-      "title": "NATS Bytes In/Out",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Bps",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "rate(gnatsd_varz_in_bytes[5m])",
-          "legendFormat": "bytes in",
-          "refId": "A"
-        },
-        {
-          "expr": "rate(gnatsd_varz_out_bytes[5m])",
-          "legendFormat": "bytes out",
-          "refId": "B"
         }
       ]
     },

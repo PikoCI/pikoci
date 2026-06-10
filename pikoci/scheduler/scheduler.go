@@ -68,9 +68,7 @@ func (s *Scheduler) tickResources(ctx context.Context) {
 
 	if len(due) > 0 {
 		s.logger.Info("Found due resources", "count", len(due))
-		if s.notifier != nil {
-			s.notifier.Notify()
-		}
+		s.notifier.Notify()
 	}
 }
 
@@ -183,9 +181,7 @@ func (s *Scheduler) evaluateJob(ctx context.Context, pwt *pipeline.WithTeam, j *
 	s.logger.Info("created pending build for downstream job",
 		"pipeline", pwt.Canonical, "job", j.Name, "build_id", id, "build_number", buildNumber)
 
-	if s.notifier != nil {
-		s.notifier.Notify()
-	}
+	s.notifier.Notify()
 }
 
 // resolvePassedJobNames expands for_each group names in a passed list to all

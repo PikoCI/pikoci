@@ -195,9 +195,7 @@ func (q *PikoCI) TriggerResourceVersion(ctx context.Context, tc, pc, rCan string
 		}
 	}
 
-	if q.Notifier != nil {
-		q.Notifier.Notify()
-	}
+	q.Notifier.Notify()
 
 	return nil
 }
@@ -218,9 +216,7 @@ func (q *PikoCI) TriggerPipelineResource(ctx context.Context, tc, pc, rCan strin
 		return fmt.Errorf("failed to find Resource: %w", err)
 	}
 
-	if q.Notifier != nil {
-		q.Notifier.Notify()
-	}
+	q.Notifier.Notify()
 	now := time.Now()
 	r.LastCheck = now
 	spec := r.CheckInterval

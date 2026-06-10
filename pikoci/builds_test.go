@@ -384,7 +384,7 @@ func TestCancelJobBuild_Running_NotifiesNextPending_WithPendingBuild(t *testing.
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	// Cancel a running build — Notify() is called instead of querying DB
+	// Cancel a running build, Notify() is called instead of querying DB
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "1").
 		Return(&build.Build{ID: 1, BuildNumber: "1", Status: build.Started}, nil)
 	s.Builds.EXPECT().Update(ctx, "main", "my-pipeline", "my-job", "1", gomock.Any()).Return(nil)

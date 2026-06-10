@@ -2,15 +2,17 @@ package pikoci
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"github.com/pikoci/pikoci/pikoci/workitem"
 	"github.com/pikoci/pikoci/pikoci/scheduler"
+	"github.com/pikoci/pikoci/pikoci/workitem"
 )
 
 // NextWork finds the next available work item by scanning all pipelines for
 // pending builds, then checking for due resource checks. It returns nil if
-// no work is available.
+// no work is available. For job builds, it calls StartPendingBuild to claim
+// the build atomically, respecting concurrency and serial group limits.
 func (q *PikoCI) NextWork(ctx context.Context) (*workitem.Item, error) {
 	// Phase 1: Look for pending job builds.
 	pps, err := q.Pipelines.FilterAll(ctx)
@@ -34,14 +36,31 @@ func (q *PikoCI) NextWork(ctx context.Context) (*workitem.Item, error) {
 				continue
 			}
 
+			// Attempt to start the build. This checks concurrency limits
+			// and serial groups atomically. If the build cannot start,
+			// skip to the next job.
+			started, err := q.StartPendingBuild(ctx, pwt.Team.Canonical, pwt.Canonical, j.Name, pending.ID)
+			if err != nil {
+				if errors.Is(err, ErrBuildNotPending) ||
+					errors.Is(err, ErrConcurrencyLimit) ||
+					errors.Is(err, ErrJobPaused) ||
+					errors.Is(err, ErrSerialGroupLimit) {
+					continue
+				}
+				q.logger.Error("NextWork: failed to start pending build",
+					"pipeline", pwt.Canonical, "job", j.Name, "build_id", pending.ID, "error", err)
+				continue
+			}
+
 			return &workitem.Item{
 				Type: "job",
 				Body: workitem.Body{
 					TeamCanonical:     pwt.Team.Canonical,
 					PipelineCanonical: pwt.Canonical,
 					JobName:           j.Name,
-					BuildID:           pending.ID,
-					VersionID:         pending.VersionID,
+					BuildID:           started.ID,
+					BuildNumber:       started.BuildNumber,
+					VersionID:         started.VersionID,
 				},
 			}, nil
 		}

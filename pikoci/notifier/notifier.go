@@ -14,8 +14,11 @@ type WorkNotifier struct {
 // New creates a new WorkNotifier.
 func New() *WorkNotifier { return &WorkNotifier{} }
 
-// Notify wakes all waiting workers.
+// Notify wakes all waiting workers. It is safe to call on a nil receiver.
 func (n *WorkNotifier) Notify() {
+	if n == nil {
+		return
+	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	for _, ch := range n.waiters {

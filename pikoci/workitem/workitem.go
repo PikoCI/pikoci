@@ -18,6 +18,7 @@ type Body struct {
 	ResourceCanonical string `json:"resource_canonical,omitempty"`
 	VersionID         uint32 `json:"version_id,omitempty"`
 	BuildID           uint32 `json:"build_id,omitempty"`
+	BuildNumber       string `json:"build_number,omitempty"`
 	RetryBuildNumber  string `json:"retry_build_number,omitempty"` // parent build number for retry numbering
 	RetryBuildID      uint32 `json:"retry_build_id,omitempty"`     // build ID to copy resource versions from
 }

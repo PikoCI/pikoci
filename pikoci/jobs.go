@@ -56,9 +56,7 @@ func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) erro
 		return fmt.Errorf("failed to create pending build for Job %q on Pipeline %q: %w", jn, pc, err)
 	}
 
-	if q.Notifier != nil {
-		q.Notifier.Notify()
-	}
+	q.Notifier.Notify()
 
 	return nil
 }

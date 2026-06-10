@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -298,36 +297,6 @@ func (w *Worker) processMessage(ctx context.Context, m workitem.Body, cwd string
 // runs the plan steps, and runs hooks. Downstream job triggering is handled
 // by the scheduler.
 func (w *Worker) processJob(ctx context.Context, m workitem.Body, cwd string, pp *pipeline.Pipeline) {
-	// Resolve the oldest pending build from the DB rather than trusting the
-	// message's BuildID. Queue messages are treated as wake-up signals — the
-	// DB is the source of truth for ordering. This ensures strict FIFO even
-	// when pub/sub backends deliver messages out of order.
-	if !w.LocalMode {
-		oldest, err := w.pikoci.FindOldestPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName)
-		if err != nil {
-			w.logger.Error("failed to find oldest pending build",
-				"pipeline", m.PipelineCanonical, "job", m.JobName, "error", err)
-			return
-		}
-		if oldest == nil {
-			w.logger.Info("no pending builds, skipping",
-				"pipeline", m.PipelineCanonical, "job", m.JobName, "msg_build_id", m.BuildID)
-			return
-		}
-		if oldest.ID != m.BuildID {
-			w.logger.Info("reordering: oldest pending build differs from message",
-				"pipeline", m.PipelineCanonical, "job", m.JobName,
-				"msg_build_id", m.BuildID, "oldest_build_id", oldest.ID)
-		}
-		m.BuildID = oldest.ID
-		if oldest.VersionID != 0 {
-			m.VersionID = oldest.VersionID
-		}
-		if oldest.ResourceCanonical != "" {
-			m.ResourceCanonical = oldest.ResourceCanonical
-		}
-	}
-
 	if m.BuildID == 0 {
 		w.logger.Error("missing build_id in message",
 			"pipeline", m.PipelineCanonical, "job", m.JobName)
@@ -338,19 +307,30 @@ func (w *Worker) processJob(ctx context.Context, m workitem.Body, cwd string, pp
 		"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID,
 		"version_id", m.VersionID, "resource", m.ResourceCanonical)
 
-	nb, err := w.pikoci.StartPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID)
-	if err != nil {
-		if errors.Is(err, pikoci.ErrBuildNotPending) {
-			w.logger.Info("build no longer pending, skipping", "build_id", m.BuildID)
+	var nb *build.Build
+
+	if m.BuildNumber != "" {
+		// Build was already started by NextWork (poll-based flow).
+		// Retrieve the started build directly.
+		var err error
+		nb, err = w.pikoci.GetJobBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildNumber)
+		if err != nil {
+			w.logger.Error("failed to get already-started build",
+				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_number", m.BuildNumber, "error", err)
 			return
 		}
-		if errors.Is(err, pikoci.ErrConcurrencyLimit) || errors.Is(err, pikoci.ErrJobPaused) || errors.Is(err, pikoci.ErrSerialGroupLimit) {
-			w.logger.Info("concurrency/serial group limit or job paused, skipping",
-				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID)
-		} else {
+	} else if w.LocalMode {
+		// Local mode: start the build here.
+		var err error
+		nb, err = w.pikoci.StartPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID)
+		if err != nil {
 			w.logger.Error("failed to start pending build",
 				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID, "error", err)
+			return
 		}
+	} else {
+		w.logger.Error("build_number not set and not in local mode",
+			"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID)
 		return
 	}
 

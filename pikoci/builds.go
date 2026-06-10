@@ -54,9 +54,7 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 		return nil, err
 	}
 
-	if q.Notifier != nil {
-		q.Notifier.Notify()
-	}
+	q.Notifier.Notify()
 
 	return &b, nil
 }
@@ -176,9 +174,7 @@ func (q *PikoCI) UpdateJobBuild(ctx context.Context, tc, pc, jn string, buildNum
 
 	// When a build completes, a concurrency slot may have opened.
 	// Notify polling workers so pending builds can start.
-	if q.Notifier != nil {
-		q.Notifier.Notify()
-	}
+	q.Notifier.Notify()
 
 	return nil
 }
@@ -239,9 +235,7 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 		return fmt.Errorf("failed to create pending retry build: %w", err)
 	}
 
-	if q.Notifier != nil {
-		q.Notifier.Notify()
-	}
+	q.Notifier.Notify()
 
 	return nil
 }
@@ -365,9 +359,7 @@ func (q *PikoCI) notifyNextPendingBuild(ctx context.Context, tc, pc, jn string) 
 // sendPendingBuildNotification finds the oldest pending build for a single job
 // and sends a message to the job topic.
 func (q *PikoCI) sendPendingBuildNotification(ctx context.Context, tc, pc, jn string) {
-	if q.Notifier != nil {
-		q.Notifier.Notify()
-	}
+	q.Notifier.Notify()
 }
 
 // NotifySerialGroupPendingBuilds finds all jobs sharing serial groups with the
@@ -398,8 +390,6 @@ func (q *PikoCI) NotifySerialGroupPendingBuilds(ctx context.Context, tc, pc, jn 
 // on the DB to determine which build to run (worker/service.go:238-266).
 // Duplicate messages simply result in redundant DB lookups with no side effects.
 func (q *PikoCI) ReEnqueuePendingBuilds(ctx context.Context) error {
-	if q.Notifier != nil {
-		q.Notifier.Notify()
-	}
+	q.Notifier.Notify()
 	return nil
 }
