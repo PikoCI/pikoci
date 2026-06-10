@@ -2,7 +2,6 @@ package pikoci
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -33,19 +32,6 @@ func (q *PikoCI) NextWork(ctx context.Context) (*queue.WorkItem, error) {
 				continue
 			}
 			if pending == nil {
-				continue
-			}
-
-			_, err = q.StartPendingBuild(ctx, pwt.Team.Canonical, pwt.Canonical, j.Name, pending.ID)
-			if err != nil {
-				if errors.Is(err, ErrBuildNotPending) ||
-					errors.Is(err, ErrConcurrencyLimit) ||
-					errors.Is(err, ErrJobPaused) ||
-					errors.Is(err, ErrSerialGroupLimit) {
-					continue
-				}
-				q.logger.Error("NextWork: failed to start pending build",
-					"pipeline", pwt.Canonical, "job", j.Name, "build_id", pending.ID, "error", err)
 				continue
 			}
 

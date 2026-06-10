@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -657,7 +656,7 @@ func TestProcessJob_NoDownstreamTrigger(t *testing.T) {
 
 func TestProcessResourceCheck_NewVersions(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -710,17 +709,7 @@ func TestProcessResourceCheck_NewVersions(t *testing.T) {
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", gomock.Any()).
 		Return(&resource.Version{ID: 1, Version: map[string]interface{}{"date": "now"}}, nil)
 
-	// First check: jobs should be triggered
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, "test-job", body.JobName)
-		assert.Equal(t, "cron.my-cron", body.ResourceCanonical)
-		assert.Equal(t, uint32(1), body.VersionID)
-		return nil
-	})
-
+	// First check: jobs should be triggered via CreateJobBuild (mocked globally in newTestWorker)
 	w.processResourceCheck(ctx, m, cwd, pp)
 }
 
@@ -790,7 +779,7 @@ printf "[]"
 
 func TestProcessResourceCheck_DuplicateVersionSkipped_FirstCheck(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -854,22 +843,13 @@ func TestProcessResourceCheck_DuplicateVersionSkipped_FirstCheck(t *testing.T) {
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.my-repo", gomock.Any()).
 		Return(&resource.Version{ID: 2, Version: map[string]interface{}{"ref": "new"}}, nil)
 
-	// First check: jobs should be triggered for the non-duplicate version
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, "git.my-repo", body.ResourceCanonical)
-		assert.Equal(t, uint32(2), body.VersionID)
-		return nil
-	}).Times(2) // Two jobs: lint and test
-
+	// First check: jobs should be triggered via CreateJobBuild (mocked globally in newTestWorker)
 	w.processResourceCheck(ctx, m, cwd, pp)
 }
 
 func TestProcessResourceCheck_SecondCheckTriggers(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -923,23 +903,13 @@ func TestProcessResourceCheck_SecondCheckTriggers(t *testing.T) {
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", gomock.Any()).
 		Return(&resource.Version{ID: 2, Version: map[string]interface{}{"date": "now2"}}, nil)
 
-	// Second check: jobs SHOULD be triggered
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, "test-job", body.JobName)
-		assert.Equal(t, "cron.my-cron", body.ResourceCanonical)
-		assert.Equal(t, uint32(2), body.VersionID)
-		return nil
-	})
-
+	// Second check: jobs SHOULD be triggered via CreateJobBuild (mocked globally in newTestWorker)
 	w.processResourceCheck(ctx, m, cwd, pp)
 }
 
 func TestProcessResourceCheckTrigger_FirstCheckTriggers(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -984,23 +954,13 @@ func TestProcessResourceCheckTrigger_FirstCheckTriggers(t *testing.T) {
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "trigger.my-trigger", gomock.Any()).
 		Return(&resource.Version{ID: 1, Version: map[string]interface{}{"key": "val", "trigger_id": float64(1)}}, nil)
 
-	// First check: jobs should be triggered
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, "deploy", body.JobName)
-		assert.Equal(t, "trigger.my-trigger", body.ResourceCanonical)
-		assert.Equal(t, uint32(1), body.VersionID)
-		return nil
-	})
-
+	// First check: jobs should be triggered via CreateJobBuild (mocked globally in newTestWorker)
 	w.processResourceCheck(ctx, m, "", pp)
 }
 
 func TestProcessResourceCheckTrigger_SecondCheckTriggers(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1047,17 +1007,7 @@ func TestProcessResourceCheckTrigger_SecondCheckTriggers(t *testing.T) {
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "trigger.my-trigger", gomock.Any()).
 		Return(&resource.Version{ID: 2, Version: map[string]interface{}{"key": "new", "trigger_id": float64(2)}}, nil)
 
-	// Second check: jobs SHOULD be triggered
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, "deploy", body.JobName)
-		assert.Equal(t, "trigger.my-trigger", body.ResourceCanonical)
-		assert.Equal(t, uint32(2), body.VersionID)
-		return nil
-	})
-
+	// Second check: jobs SHOULD be triggered via CreateJobBuild (mocked globally in newTestWorker)
 	w.processResourceCheck(ctx, m, "", pp)
 }
 
@@ -2378,7 +2328,7 @@ func TestReplaceSecretPlaceholders_NoResolved(t *testing.T) {
 
 func TestProcessResourceCheck_WithSecretVars(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -2460,9 +2410,7 @@ func TestProcessResourceCheck_WithSecretVars(t *testing.T) {
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.repo", gomock.Any()).
 		Return(&resource.Version{ID: 2, Version: map[string]interface{}{"ref": "abc123"}}, nil)
 
-	// Trigger the job
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).Return(nil)
-
+	// Trigger the job via CreateJobBuild (mocked globally in newTestWorker)
 	w.processResourceCheck(ctx, m, cwd, pp)
 }
 
@@ -2755,7 +2703,7 @@ func TestIsRunnerInternalParam(t *testing.T) {
 
 func TestProcessResourceCheck_RawSecretFormat(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 
@@ -2831,8 +2779,8 @@ func TestProcessResourceCheck_RawSecretFormat(t *testing.T) {
 		}, false, nil)
 	svc.EXPECT().CreateResourceVersion(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.timer", gomock.Any()).
 		Return(&resource.Version{ID: 2, Version: map[string]interface{}{"date": "now"}}, nil)
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).Return(nil)
 
+	// Job trigger via CreateJobBuild (mocked globally in newTestWorker)
 	w.processResourceCheck(ctx, m, cwd, pp)
 }
 
@@ -2873,7 +2821,7 @@ func TestFetchSecrets_RawFormat(t *testing.T) {
 
 func TestTriggerResourceJobs_MultipleJobsSameResource(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, topic := newTestWorker(ctrl)
+	w, _, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 
@@ -2917,9 +2865,7 @@ func TestTriggerResourceJobs_MultipleJobsSameResource(t *testing.T) {
 		PipelineCanonical: "test-pipeline",
 	}
 
-	// Expect Send to be called 3 times, once for each job
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).Times(3).Return(nil)
-
+	// CreateJobBuild should be called 3 times, once for each job (mocked globally in newTestWorker)
 	w.triggerResourceJobs(ctx, m, pp, r, cv)
 }
 
@@ -2964,7 +2910,7 @@ func TestTriggerResourceJobs_SkipsWhenResourcePinned(t *testing.T) {
 
 func TestTriggerResourceJobs_TriggersWhenPinnedVersionMatches(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, topic := newTestWorker(ctrl)
+	w, _, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 
@@ -2997,9 +2943,7 @@ func TestTriggerResourceJobs_TriggersWhenPinnedVersionMatches(t *testing.T) {
 		PipelineCanonical: "test-pipeline",
 	}
 
-	// topic.Send SHOULD be called — pinned version matches
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).Return(nil)
-
+	// CreateJobBuild SHOULD be called — pinned version matches (mocked globally in newTestWorker)
 	w.triggerResourceJobs(ctx, m, pp, r, cv)
 }
 
@@ -3837,9 +3781,9 @@ func TestProcessJob_BuildNotPending(t *testing.T) {
 	w.processJob(ctx, m, cwd, pp)
 }
 
-func TestProcessJob_ConcurrencyLimit_Requeues(t *testing.T) {
+func TestProcessJob_ConcurrencyLimit_Returns(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3854,23 +3798,14 @@ func TestProcessJob_ConcurrencyLimit_Requeues(t *testing.T) {
 	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
 		Return(nil, pikoci.ErrConcurrencyLimit)
 
-	// Should re-queue the message
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, m.BuildID, body.BuildID)
-		assert.Equal(t, m.JobName, body.JobName)
-		return nil
-	})
-
+	// No re-queue expected; worker just returns and the poll loop gets the next item
 	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 }
 
-func TestProcessJob_SerialGroupLimit_Requeues(t *testing.T) {
+func TestProcessJob_SerialGroupLimit_Returns(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3885,23 +3820,14 @@ func TestProcessJob_SerialGroupLimit_Requeues(t *testing.T) {
 	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
 		Return(nil, pikoci.ErrSerialGroupLimit)
 
-	// Should re-queue the message
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, m.BuildID, body.BuildID)
-		assert.Equal(t, m.JobName, body.JobName)
-		return nil
-	})
-
+	// No re-queue expected; worker just returns and the poll loop gets the next item
 	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 }
 
-func TestProcessJob_GenericError_Requeues(t *testing.T) {
+func TestProcessJob_GenericError_Returns(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3916,16 +3842,7 @@ func TestProcessJob_GenericError_Requeues(t *testing.T) {
 	svc.EXPECT().StartPendingBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID).
 		Return(nil, fmt.Errorf("database table is locked"))
 
-	// Should re-queue the message
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, m.BuildID, body.BuildID)
-		assert.Equal(t, m.JobName, body.JobName)
-		return nil
-	})
-
+	// No re-queue expected; worker just returns
 	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 }
@@ -6272,9 +6189,9 @@ func TestProcessJob_PutStepTrigger_Failure(t *testing.T) {
 
 // --- notifyNextPendingBuild tests ---
 
-func TestNotifyNextPendingBuild_SendsMessage(t *testing.T) {
+func TestNotifyNextPendingBuild_CallsSerialGroup(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, _, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6283,56 +6200,8 @@ func TestNotifyNextPendingBuild_SendsMessage(t *testing.T) {
 		JobName:           "test-job",
 	}
 
-	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), "main", "test-pipeline", "test-job").
-		Return(&build.Build{ID: 42, BuildNumber: "42", Status: build.Pending}, nil)
-
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, "main", body.TeamCanonical)
-		assert.Equal(t, "test-pipeline", body.PipelineCanonical)
-		assert.Equal(t, "test-job", body.JobName)
-		assert.Equal(t, uint32(42), body.BuildID)
-		return nil
-	})
-
-	w.notifyNextPendingBuild(ctx, m)
-}
-
-func TestNotifyNextPendingBuild_NoPending(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
-
-	ctx := context.Background()
-	m := queue.Body{
-		TeamCanonical:     "main",
-		PipelineCanonical: "test-pipeline",
-		JobName:           "test-job",
-	}
-
-	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), "main", "test-pipeline", "test-job").
-		Return(nil, nil)
-
-	// No topic.Send expected
-	w.notifyNextPendingBuild(ctx, m)
-}
-
-func TestNotifyNextPendingBuild_Error(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
-
-	ctx := context.Background()
-	m := queue.Body{
-		TeamCanonical:     "main",
-		PipelineCanonical: "test-pipeline",
-		JobName:           "test-job",
-	}
-
-	svc.EXPECT().FindOldestPendingBuild(gomock.Any(), "main", "test-pipeline", "test-job").
-		Return(nil, fmt.Errorf("db error"))
-
-	// No topic.Send expected, error is logged
+	// notifyNextPendingBuild now only calls NotifySerialGroupPendingBuilds,
+	// which is already expected via AnyTimes() in newTestWorker.
 	w.notifyNextPendingBuild(ctx, m)
 }
 

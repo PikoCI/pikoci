@@ -37,7 +37,6 @@ import (
 	"github.com/pikoci/pikoci/pikoci/service"
 	"github.com/pikoci/pikoci/pikoci/utils"
 	"github.com/pikoci/pikoci/pikoci/wkr"
-	"gocloud.dev/pubsub"
 	"gopkg.in/yaml.v3"
 )
 
@@ -437,17 +436,12 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 			return
 		}
 		if errors.Is(err, pikoci.ErrConcurrencyLimit) || errors.Is(err, pikoci.ErrJobPaused) || errors.Is(err, pikoci.ErrSerialGroupLimit) {
-			w.logger.Info("concurrency/serial group limit or job paused, re-queuing",
+			w.logger.Info("concurrency/serial group limit or job paused, skipping",
 				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID)
 		} else {
-			w.logger.Error("failed to start pending build, re-queuing",
+			w.logger.Error("failed to start pending build",
 				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID, "error", err)
 		}
-		mb, _ := json.Marshal(m)
-		if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
-			w.logger.Error("failed to re-queue", "error", err)
-		}
-		time.Sleep(2 * time.Second)
 		return
 	}
 
@@ -580,28 +574,11 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 }
 
 func (w *Worker) notifyNextPendingBuild(ctx context.Context, m queue.Body) {
-	// Always notify pending builds for jobs sharing serial groups,
-	// even if this job has no pending builds of its own.
+	// Notify serial-group peers and the same job's pending builds.
+	// The server-side NotifySerialGroupPendingBuilds and
+	// sendPendingBuildNotification both call Notifier.Notify(),
+	// which wakes up any polling workers.
 	w.pikoci.NotifySerialGroupPendingBuilds(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName)
-
-	pending, err := w.pikoci.FindOldestPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName)
-	if err != nil {
-		w.logger.Warn("failed to find next pending build", "error", err)
-		return
-	}
-	if pending == nil {
-		return
-	}
-	msg := queue.Body{
-		TeamCanonical:     m.TeamCanonical,
-		PipelineCanonical: m.PipelineCanonical,
-		JobName:           m.JobName,
-		BuildID:           pending.ID,
-	}
-	mb, _ := json.Marshal(msg)
-	if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
-		w.logger.Warn("failed to notify next pending build", "build_id", pending.ID, "error", err)
-	}
 }
 
 // checkPassedConstraints verifies that all jobs in the "passed" list have a
@@ -1982,7 +1959,8 @@ func (w *Worker) triggerResourceJobs(ctx context.Context, m queue.Body, pp *pipe
 			// If Passed is not 0 it means is waiting for another job
 			// and this trigger is only for resources
 			if g.Name == r.Name && g.Type == r.Type && g.Trigger && len(g.Passed) == 0 {
-				// Create a pending build first
+				// Create a pending build. The server-side CreateJobBuild
+				// calls Notifier.Notify() to wake polling workers.
 				nb, err := w.pikoci.CreateJobBuild(ctx, m.TeamCanonical, pp.Canonical, j.Name, build.Build{
 					Status:            build.Pending,
 					VersionID:         cv.ID,
@@ -1992,25 +1970,9 @@ func (w *Worker) triggerResourceJobs(ctx context.Context, m queue.Body, pp *pipe
 					w.logger.Error("failed to create pending build for trigger", "job", j.Name, "error", err)
 					continue
 				}
-				qb := queue.Body{
-					TeamCanonical:     m.TeamCanonical,
-					PipelineCanonical: pp.Canonical,
-					JobName:           j.Name,
-					BuildID:           nb.ID,
-					ResourceCanonical: r.Canonical,
-					VersionID:         cv.ID,
-				}
-				mb, err := json.Marshal(qb)
-				if err != nil {
-					w.logger.Error("failed to marshal trigger body", "error", err)
-					continue
-				}
-				w.logger.Info("sending trigger message",
+				w.logger.Info("created trigger build",
 					"pipeline", pp.Canonical, "job", j.Name, "resource", r.Canonical,
 					"version_id", cv.ID, "step", g.Name, "build_id", nb.ID)
-				if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
-					w.logger.Error("failed to send trigger message", "job", j.Name, "error", err)
-				}
 			}
 		}
 	}

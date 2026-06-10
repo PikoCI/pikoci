@@ -54,6 +54,10 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 		return nil, err
 	}
 
+	if q.Notifier != nil {
+		q.Notifier.Notify()
+	}
+
 	return &b, nil
 }
 
@@ -168,6 +172,12 @@ func (q *PikoCI) UpdateJobBuild(ctx context.Context, tc, pc, jn string, buildNum
 
 	if err = q.Builds.Update(ctx, tc, pc, jn, buildNumber, b); err != nil {
 		return fmt.Errorf("failed to Update Build: %w", err)
+	}
+
+	// When a build completes, a concurrency slot may have opened.
+	// Notify polling workers so pending builds can start.
+	if q.Notifier != nil {
+		q.Notifier.Notify()
 	}
 
 	return nil
