@@ -2,11 +2,10 @@ package pikoci
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	cron "github.com/netresearch/go-cron"
 	"github.com/pikoci/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/scheduler"
 )
 
 // NextWork finds the next available work item. It first scans all pipelines for
@@ -62,7 +61,7 @@ func (q *PikoCI) NextWork(ctx context.Context) (*queue.WorkItem, error) {
 		if spec == "" {
 			spec = "@every 1m"
 		}
-		nextCheck, err := computeNextCheck(spec, now)
+		nextCheck, err := scheduler.ComputeNextCheck(spec, now)
 		if err != nil {
 			q.logger.Error("NextWork: failed to compute next check",
 				"pipeline", rwp.PipelineCanonical, "resource", rwp.Canonical, "error", err)
@@ -88,19 +87,6 @@ func (q *PikoCI) NextWork(ctx context.Context) (*queue.WorkItem, error) {
 	}
 
 	return nil, nil
-}
-
-// checkParser is a pre-configured cron expression parser matching the one used
-// by the scheduler package, duplicated here to avoid an import cycle.
-var checkParser = cron.MustNewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor).WithMinEveryInterval(10 * time.Second)
-
-// computeNextCheck computes the next check time from the given spec and reference time.
-func computeNextCheck(spec string, from time.Time) (time.Time, error) {
-	s, err := checkParser.Parse(spec)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to parse check interval %q: %w", spec, err)
-	}
-	return s.Next(from), nil
 }
 
 // PollNextWork blocks until work is available or a 30-second timeout expires.
