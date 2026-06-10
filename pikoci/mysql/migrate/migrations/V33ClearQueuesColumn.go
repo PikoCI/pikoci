@@ -1,6 +1,6 @@
 package migrations
 
 var V33ClearQueuesColumn = Migration{
-	Name: "ClearQueuesColumn",
-	SQL:  `UPDATE workers SET queues = '';`,
+	Name: "DropQueuesColumn",
+	SQL:  `ALTER TABLE workers DROP COLUMN queues;`,
 }
