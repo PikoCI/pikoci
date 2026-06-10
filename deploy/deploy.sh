@@ -58,7 +58,7 @@ set -euo pipefail
 #   /etc/pikoci/pikoci.env             — env vars for PikoCI (secrets)
 #   /var/lib/pikoci/                   — PikoCI data (SQLite DB, XDG data)
 #   /opt/pikoci/                       — Docker Compose stack
-#   /opt/pikoci/docker-compose.yml     — Caddy, Prometheus, Grafana, Node Exporter
+#   /opt/pikoci/docker-compose.yml     — Caddy, Prometheus, Grafana
 #   /opt/pikoci/Caddyfile              — reverse proxy config
 #   /opt/pikoci/prometheus.yml         — Prometheus scrape targets
 #   /opt/pikoci/pikoci.env             — env vars for Docker Compose containers
