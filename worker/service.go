@@ -1,7 +1,7 @@
 // Package worker implements the background job execution engine for PikoCI.
-// It receives messages from pub/sub subscriptions for job builds and resource
-// checks, then executes the corresponding pipeline steps using the configured
-// runners and resource types.
+// It polls for work items (job builds and resource checks) via the server API
+// and executes the corresponding pipeline steps using the configured runners
+// and resource types.
 package worker
 
 import (
@@ -41,10 +41,9 @@ import (
 )
 
 // Service is the interface for running the worker event loop. Implementations
-// listen for incoming messages and process them until the context is cancelled.
+// poll for work items and process them until the context is cancelled.
 type Service interface {
-	// Run starts the worker loop, consuming messages from the queue identified
-	// by q and publishing to the topic identified by t.
+	// Run starts the worker loop, polling for work items and processing them.
 	Run(ctx context.Context, q, t string) error
 }
 

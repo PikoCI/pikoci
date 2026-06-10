@@ -9,9 +9,9 @@ type WorkItem struct {
 	Body Body   `json:"body"`
 }
 
-// Body is the JSON-serializable payload carried inside every pub/sub message.
-// Depending on the queue, different fields are populated to identify the target
-// team, pipeline, job, resource, or build.
+// Body is the JSON-serializable payload carried inside every work item.
+// Different fields are populated depending on the work type to identify the
+// target team, pipeline, job, resource, or build.
 type Body struct {
 	TeamCanonical     string `json:"team_canonical,omitempty"`
 	PipelineCanonical string `json:"pipeline_canonical,omitempty"`

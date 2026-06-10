@@ -217,7 +217,7 @@ type Service interface {
 }
 
 // PikoCI is the primary implementation of the Service interface. It coordinates
-// between repository backends for persistence, message queues for async job and
+// between repository backends for persistence, a work notifier for async job and
 // resource check dispatching, and a background scheduler for periodic resource
 // checks.
 type PikoCI struct {

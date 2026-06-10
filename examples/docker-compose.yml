@@ -9,7 +9,6 @@ services:
     command: >
       server
       --db-system mem
-      --pubsub-system mem
       --jwt-secret example-secret
       --run-worker
       --pipeline-name hello-world
