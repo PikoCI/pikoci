@@ -16,7 +16,6 @@ Run everything in memory:
 ./pikoci server \
   --jwt-secret my-secret \
   --db-system mem \
-  --pubsub-system mem \
   --pipeline-name my-pipeline \
   --pipeline-config pipeline.hcl
 ```

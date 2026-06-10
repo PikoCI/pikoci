@@ -4,29 +4,25 @@ By default, PikoCI runs an embedded worker inside the server process. For produc
 
 ## Architecture
 
-PikoCI uses two separate queues: one for **jobs** and one for **resource checks**. This prevents long-running jobs (e.g. Docker builds) from blocking resource check processing.
+Workers use HTTP long polling to request work from the server. Each worker calls `GET /work/next` and the server holds the connection open until a job or resource check is available, then responds with the work item. The worker executes it and reports results back via the PikoCI API.
 
 ```
                     ┌─────────┐
                     │  Server  │  --run-worker=false
                     └────┬────┘
-                    ┌────┴────┐
-              ┌─────┤  Queues ├─────┐
-              │     └─────────┘     │
-         jobs │                     │ checks
-              │                     │
-         ┌────┴───┐           ┌────┴───┐
-         │Worker 1│           │Worker 2│
-         │(all)   │           │(checks)│
-         └────────┘           └────────┘
+                         │ HTTP long poll
+              ┌──────────┼──────────┐
+              │          │          │
+         ┌────┴───┐  ┌───┴────┐  ┌─┴──────┐
+         │Worker 1│  │Worker 2│  │Worker 3│
+         └────────┘  └────────┘  └────────┘
 ```
 
-The server publishes jobs and resource checks to separate queues. Workers subscribe, execute the work, and report results back via the PikoCI API.
+Workers connect to the server over HTTP, execute work, and report results back via the PikoCI API. No external queue service is required.
 
 ## Requirements
 
-- A non-memory queue backend (`nats`, `rabbit`, or `kafka`). The `mem` backend only works within a single process.
-- Workers must be able to reach the server URL and the queue backend.
+- Workers must be able to reach the server URL.
 - Workers need a worker token for authentication. Generate one with `pikoci worker-token --jwt-secret <secret>` or copy it from the server startup logs.
 
 ## Server setup
@@ -42,7 +38,6 @@ pikoci server \
   --db-user pikoci \
   --db-password secret \
   --db-name pikoci \
-  --pubsub-system nats \
   --run-worker=false
 # Server logs: Worker token for standalone workers token=eyJhbG...
 ```
@@ -59,7 +54,6 @@ pikoci worker-token --jwt-secret my-secret
 ```bash
 pikoci worker \
   --pikoci-url http://server:8080 \
-  --pubsub-system nats \
   --worker-token eyJhbG... \
   --concurrency 4
 ```
@@ -69,8 +63,6 @@ pikoci worker \
 | Flag | Alias | Default | Required | Description |
 |------|-------|---------|----------|-------------|
 | `--pikoci-url` | `-u` | `localhost:8080` | no | PikoCI server URL |
-| `--pubsub-system` | | `mem` | no | Queue backend (must match server) |
-| `--queues` | | `jobs,checks` | no | Which queues to listen on: `jobs`, `checks`, or `jobs,checks` |
 | `--concurrency` | | `1` | no | Number of parallel job goroutines |
 | `--drain-timeout` | | `10m` | no | Max time to wait for in-flight jobs during graceful shutdown (`SIGQUIT`) |
 | `--log-level` | | `info` | no | Log level: `debug`, `info`, `warn`, `error` |
@@ -83,7 +75,6 @@ Worker flags can be set via environment variables:
 
 ```bash
 export PIKOCI_URL=http://server:8080
-export PUBSUB_SYSTEM=nats
 export WORKER_TOKEN=eyJhbG...
 export CONCURRENCY=4
 ```
@@ -102,22 +93,18 @@ When `--concurrency` is greater than 1, each goroutine within the process automa
 
 ## Scaling
 
-Run multiple worker instances to increase throughput. Each worker independently subscribes to the queues:
+Run multiple worker instances to increase throughput. Each worker independently polls the server for work:
 
 ```bash
-# Machine A — handles both jobs and checks (default)
-pikoci worker --pikoci-url http://server:8080 --pubsub-system nats --worker-token eyJhbG... --concurrency 2
+# Machine A
+pikoci worker --pikoci-url http://server:8080 --worker-token eyJhbG... --concurrency 2
 
-# Machine B — dedicated job runner
-pikoci worker --pikoci-url http://server:8080 --pubsub-system nats --worker-token eyJhbG... --concurrency 4 --queues jobs
+# Machine B
+pikoci worker --pikoci-url http://server:8080 --worker-token eyJhbG... --concurrency 4
 
-# Machine C — dedicated check worker (never blocked by long jobs)
-pikoci worker --pikoci-url http://server:8080 --pubsub-system nats --worker-token eyJhbG... --queues checks
+# Machine C
+pikoci worker --pikoci-url http://server:8080 --worker-token eyJhbG...
 ```
-
-## Dedicated check workers
-
-When jobs take minutes (e.g. Docker builds), a single worker processing both queues will block resource checks until the job finishes. Use `--queues checks` to run a dedicated check worker that detects new versions promptly, regardless of job load.
 
 ## Monitoring workers
 
@@ -128,7 +115,6 @@ Workers send periodic heartbeats to the server. The server tracks each worker's 
 Admin users can view all registered workers at **`#workers`** in the web UI. Each worker shows:
 
 - **Status**: `healthy` (heartbeat received within the last 90 seconds) or `stale` (no heartbeat for over 90 seconds)
-- **Queues**: which queues the worker listens on (`jobs`, `checks`, or both)
 - **Platform**: OS, architecture, and Go version
 - **Version**: the PikoCI binary version
 - **Uptime**: how long the worker has been running

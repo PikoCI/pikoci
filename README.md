@@ -3,7 +3,7 @@
 
   # PikoCI
 
-  **The CI/CD that grows with you. One binary, any database, any queue, runs anywhere.**
+  **The CI/CD that grows with you. One binary, any database, runs anywhere.**
 
   [![Go Version](https://img.shields.io/badge/go-1.25+-blue)](https://golang.org)
   [![License](https://img.shields.io/badge/license-Apache%202.0-yellow)](LICENSE)
@@ -23,7 +23,7 @@
 
 PikoCI is a self-hosted CI/CD system built around a resource/resource-type pipeline model, inspired by [Concourse CI](https://concourse-ci.org), but designed to run anywhere without operational pain.
 
-Most CI/CD tools either lock you into a cloud platform or require spinning up multiple services just to get started. PikoCI runs as a single binary with pluggable database and queue backends. Use what you already have, or run entirely in memory with zero external dependencies. Bundle your binary, your pipelines, and your database file, and move them anywhere.
+Most CI/CD tools either lock you into a cloud platform or require spinning up multiple services just to get started. PikoCI runs as a single binary with a pluggable database backend. Use what you already have, or run entirely in memory with zero external dependencies. Bundle your binary, your pipelines, and your database file, and move them anywhere.
 
 Pipelines are defined in [HCL](https://github.com/hashicorp/hcl). The runner abstraction means you're not locked into a specific execution environment.
 
@@ -34,7 +34,6 @@ Pipelines are defined in [HCL](https://github.com/hashicorp/hcl). The runner abs
 - **Truly portable**: bundle the binary with your pipeline config and SQLite file. Move it anywhere, run it instantly.
 - **In-memory mode**: run the entire system in memory for development and testing. Zero files, zero cleanup.
 - **Any SQL database**: SQLite (built-in), MySQL, PostgreSQL, and any other SQL-compatible backend.
-- **Any queue backend**: pluggable via [google/go-cloud](https://gocloud.dev/howto/pubsub/), including NATS, Kafka, and RabbitMQ. [AWS SQS and GCP Pub/Sub planned (#209)](https://github.com/PikoCI/pikoci/issues/209).
 - **Resource model**: pipelines built from resources and resource types. Clean, composable, reusable.
 - **HCL pipelines**: more expressive and readable than YAML. Familiar to anyone who has used Terraform.
 - **Flexible runners**: run jobs on the host machine, in Docker containers, or define your own runner.
@@ -80,7 +79,6 @@ The fastest way to get started. Pass a pipeline config directly at launch. When 
 ```bash
 ./pikoci server \
   --db-system mem \
-  --pubsub-system mem \
   --jwt-secret my-secret \
   --run-worker \
   --pipeline-name my-pipeline \
@@ -92,7 +90,6 @@ Or with Docker:
 ```bash
 docker run -p 8080:8080 ghcr.io/pikoci/pikoci:latest server \
   --db-system mem \
-  --pubsub-system mem \
   --jwt-secret my-secret \
   --run-worker \
   --pipeline-name my-pipeline \
@@ -128,7 +125,7 @@ job "gen" {
 
 ## Local Execution
 
-Run a single pipeline job locally without starting a server. PikoCI spins up an in-memory database, pubsub, and worker in a single process, executes the job, streams the output, and exits with an appropriate exit code.
+Run a single pipeline job locally without starting a server. PikoCI spins up an in-memory database and worker in a single process, executes the job, streams the output, and exits with an appropriate exit code.
 
 ```bash
 # Run a job from a pipeline file
@@ -173,13 +170,13 @@ For production setups, run the server and workers as separate processes on diffe
 
 ```bash
 # Server (logs a worker token on startup)
-./pikoci server --db-system mysql --pubsub-system nats --jwt-secret my-secret --run-worker=false
+./pikoci server --db-system mysql --jwt-secret my-secret --run-worker=false
 
 # Generate a worker token (or copy from server logs)
 ./pikoci worker-token --jwt-secret my-secret
 
-# Worker, can run anywhere with access to the server
-./pikoci worker --pikoci-url http://your-server:8080 --pubsub-system nats --worker-token <token>
+# Worker, can run anywhere with HTTP access to the server
+./pikoci worker --pikoci-url http://your-server:8080 --worker-token <token>
 ```
 
 Full server and worker configuration options are covered in the [documentation](https://docs.pikoci.com/Server).
@@ -280,7 +277,6 @@ Full documentation is at [docs.pikoci.com](https://docs.pikoci.com):
 - [Server configuration](https://docs.pikoci.com/Server)
 - [Variables and secrets](https://docs.pikoci.com/Variables)
 - [Database backends](https://docs.pikoci.com/Database)
-- [Queue backends](https://docs.pikoci.com/Queue)
 - [CLI reference](https://docs.pikoci.com/CLI)
 - [Public pipelines](https://docs.pikoci.com/Public-Pipelines)
 - [Running workers separately](https://docs.pikoci.com/Workers)

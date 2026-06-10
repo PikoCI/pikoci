@@ -1,8 +1,8 @@
 # Deployment
 
-This guide covers deploying PikoCI on a single server. This setup uses in-memory pubsub and an embedded worker, which is suitable for demos and small teams.
+This guide covers deploying PikoCI on a single server. This setup uses an embedded worker, which is suitable for demos and small teams.
 
-For production scaling with multiple workers or high availability, use an external queue backend and run workers separately. See [Queue Backends](Queue.md) and [Running Workers Separately](Workers.md).
+For production scaling with multiple workers or high availability, run workers separately. See [Running Workers Separately](Workers.md).
 
 ## Quick start
 
@@ -42,7 +42,7 @@ Alternatively, use the Docker image:
 
 ```bash
 docker pull ghcr.io/pikoci/pikoci:latest
-docker run -p 8080:8080 ghcr.io/pikoci/pikoci:latest server --db-system mem --pubsub-system mem --jwt-secret my-secret --run-worker
+docker run -p 8080:8080 ghcr.io/pikoci/pikoci:latest server --db-system mem --jwt-secret my-secret --run-worker
 ```
 
 The image is based on Alpine and includes git, jq, curl, openssl, and docker-cli. See the [Dockerfile](https://github.com/PikoCI/pikoci/blob/master/Dockerfile) for details.
@@ -79,7 +79,6 @@ Edit `deploy/pikoci.env` with your secrets:
 JWT_SECRET=your-secure-random-secret
 DB_SYSTEM=sqlite
 DB_NAME=/var/lib/pikoci/pikoci.db
-PUBSUB_SYSTEM=mem
 RUN_WORKER=true
 GF_SECURITY_ADMIN_PASSWORD=your-grafana-password
 ```
