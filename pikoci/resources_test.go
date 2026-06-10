@@ -2,7 +2,6 @@ package pikoci_test
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -11,10 +10,8 @@ import (
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
-	"github.com/pikoci/pikoci/pikoci/queue"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"go.uber.org/mock/gomock"
-	"gocloud.dev/pubsub"
 )
 
 func TestCreateResourceVersion(t *testing.T) {
@@ -136,14 +133,6 @@ func TestTriggerPipelineResource(t *testing.T) {
 		ID: 1, Canonical: "git.repo",
 	}, nil)
 
-	expectedBody := queue.Body{
-		TeamCanonical:     "main",
-		PipelineCanonical: "my-pipeline",
-		ResourceCanonical: "git.repo",
-	}
-	mb, _ := json.Marshal(expectedBody)
-	s.CheckTopic.EXPECT().Send(ctx, &pubsub.Message{Body: mb}).Return(nil)
-
 	// UpdatePipelineResource is called to set LastCheck
 	s.Resources.EXPECT().Update(ctx, "main", "my-pipeline", "git.repo", gomock.Any()).Return(nil)
 
@@ -262,17 +251,6 @@ func TestTriggerResourceVersion(t *testing.T) {
 	}, nil)
 	// CreateJobBuild for the matching job
 	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "my-job", gomock.Any()).Return(uint32(1), "1", nil)
-	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, "main", body.TeamCanonical)
-		assert.Equal(t, "my-pipeline", body.PipelineCanonical)
-		assert.Equal(t, "my-job", body.JobName)
-		assert.Equal(t, uint32(10), body.VersionID)
-		assert.Equal(t, "git.repo", body.ResourceCanonical)
-		return nil
-	})
 
 	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
 	require.NoError(t, err)
@@ -328,11 +306,10 @@ func TestWebhookTrigger(t *testing.T) {
 	s.Resources.EXPECT().FindByWebhookToken(ctx, "my-token").Return(&resource.Resource{
 		ID: 1, Canonical: "git.repo",
 	}, "main", "my-pipeline", nil)
-	// TriggerPipelineResource chain: Find, Send, Update
+	// TriggerPipelineResource chain: Find, Notify, Update
 	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").Return(&resource.Resource{
 		ID: 1, Canonical: "git.repo",
 	}, nil)
-	s.CheckTopic.EXPECT().Send(ctx, gomock.Any()).Return(nil)
 	s.Resources.EXPECT().Update(ctx, "main", "my-pipeline", "git.repo", gomock.Any()).Return(nil)
 
 	err := s.S.WebhookTrigger(ctx, "my-token")

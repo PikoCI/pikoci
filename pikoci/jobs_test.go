@@ -2,16 +2,13 @@ package pikoci_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/pikoci/pikoci/pikoci/job"
-	"github.com/pikoci/pikoci/pikoci/queue"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"go.uber.org/mock/gomock"
-	"gocloud.dev/pubsub"
 )
 
 func TestGetPipelineJob_InvalidCanonical(t *testing.T) {
@@ -66,19 +63,16 @@ func TestTriggerPipelineJob_NotFound(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestTriggerPipelineJob_SendError(t *testing.T) {
+func TestTriggerPipelineJob_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
 	ctx := context.TODO()
 
 	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(&job.Job{ID: 1}, nil)
-	// TriggerPipelineJob now creates a pending build first
 	s.Builds.EXPECT().Create(ctx, "main", "pp", "jn", gomock.Any()).Return(uint32(1), "1", nil)
-	s.Topic.EXPECT().Send(ctx, gomock.Any()).Return(assert.AnError)
 
 	err := s.S.TriggerPipelineJob(ctx, "main", "pp", "jn")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to Trigger Job")
+	require.NoError(t, err)
 }
 
 func TestTriggerPipelineJob_PinsLatestVersion(t *testing.T) {
@@ -112,21 +106,8 @@ func TestTriggerPipelineJob_PinsLatestVersion(t *testing.T) {
 	// Resource is not pinned — falls through to latest version
 	s.Resources.EXPECT().Find(ctx, tc, ppc, rCan).Return(&resource.Resource{}, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, tc, ppc, rCan, (*uint32)(nil), (*uint32)(nil), uint32(0)).Return(versions, nil)
-	// TriggerPipelineJob now creates a pending build first
+	// TriggerPipelineJob creates a pending build and calls Notify()
 	s.Builds.EXPECT().Create(ctx, tc, ppc, jn, gomock.Any()).Return(uint32(5), "1", nil)
-
-	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, tc, body.TeamCanonical)
-		assert.Equal(t, ppc, body.PipelineCanonical)
-		assert.Equal(t, jn, body.JobName)
-		assert.Equal(t, rCan, body.ResourceCanonical)
-		assert.Equal(t, uint32(30), body.VersionID)
-		assert.Equal(t, uint32(5), body.BuildID)
-		return nil
-	})
 
 	err := s.S.TriggerPipelineJob(ctx, tc, ppc, jn)
 	require.NoError(t, err)
@@ -159,15 +140,6 @@ func TestTriggerPipelineJob_UsesPinnedVersion(t *testing.T) {
 	s.Resources.EXPECT().Find(ctx, tc, ppc, rCan).Return(&resource.Resource{PinnedVersionID: &pinnedVersion}, nil)
 	// FilterVersions should NOT be called — pinned version is used directly
 	s.Builds.EXPECT().Create(ctx, tc, ppc, jn, gomock.Any()).Return(uint32(5), "1", nil)
-
-	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, rCan, body.ResourceCanonical)
-		assert.Equal(t, uint32(20), body.VersionID)
-		return nil
-	})
 
 	err := s.S.TriggerPipelineJob(ctx, tc, ppc, jn)
 	require.NoError(t, err)

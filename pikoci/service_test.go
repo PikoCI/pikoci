@@ -2,7 +2,6 @@ package pikoci_test
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -11,10 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
-	"github.com/pikoci/pikoci/pikoci/queue"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"go.uber.org/mock/gomock"
-	"gocloud.dev/pubsub"
 )
 
 func TestCreatePipeline(t *testing.T) {
@@ -57,19 +54,8 @@ func TestTriggerPipelineJob(t *testing.T) {
 	jn := "job-name"
 
 	s.Jobs.EXPECT().Find(ctx, tc, ppc, jn).Return(&job.Job{ID: 2}, nil)
-	// TriggerPipelineJob now creates a pending build first
+	// TriggerPipelineJob creates a pending build and calls Notify()
 	s.Builds.EXPECT().Create(ctx, tc, ppc, jn, gomock.Any()).Return(uint32(1), "1", nil)
-
-	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, tc, body.TeamCanonical)
-		assert.Equal(t, ppc, body.PipelineCanonical)
-		assert.Equal(t, jn, body.JobName)
-		assert.Equal(t, uint32(1), body.BuildID)
-		return nil
-	})
 
 	err := s.S.TriggerPipelineJob(ctx, tc, ppc, jn)
 	require.NoError(t, err)

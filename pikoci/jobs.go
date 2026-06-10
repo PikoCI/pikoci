@@ -2,14 +2,11 @@ package pikoci
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
-	"github.com/pikoci/pikoci/pikoci/queue"
 	"github.com/pikoci/pikoci/pikoci/utils"
-	"gocloud.dev/pubsub"
 )
 
 // TriggerPipelineJob creates a pending build for the specified job, pins the
@@ -54,30 +51,13 @@ func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) erro
 		}
 	}
 
-	nb, err := q.CreateJobBuild(ctx, tc, pc, jn, bb)
+	_, err = q.CreateJobBuild(ctx, tc, pc, jn, bb)
 	if err != nil {
 		return fmt.Errorf("failed to create pending build for Job %q on Pipeline %q: %w", jn, pc, err)
 	}
 
-	m := queue.Body{
-		TeamCanonical:     tc,
-		PipelineCanonical: pc,
-		JobName:           jn,
-		BuildID:           nb.ID,
-		ResourceCanonical: nb.ResourceCanonical,
-		VersionID:         nb.VersionID,
-	}
-
-	mb, err := json.Marshal(m)
-	if err != nil {
-		return fmt.Errorf("failed to marshal Message Body: %w", err)
-	}
-
-	err = q.JobTopic.Send(ctx, &pubsub.Message{
-		Body: mb,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to Trigger Job %q on Pipeline %q: %w", jn, pc, err)
+	if q.Notifier != nil {
+		q.Notifier.Notify()
 	}
 
 	return nil

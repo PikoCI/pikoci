@@ -2,7 +2,6 @@ package pikoci
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"time"
@@ -10,11 +9,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
-	"github.com/pikoci/pikoci/pikoci/queue"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/scheduler"
 	"github.com/pikoci/pikoci/pikoci/utils"
-	"gocloud.dev/pubsub"
 )
 
 // CreateResourceVersion creates a new version for the specified resource.
@@ -189,34 +186,17 @@ func (q *PikoCI) TriggerResourceVersion(ctx context.Context, tc, pc, rCan string
 				ResourceCanonical: rCan,
 			}
 
-			nb, err := q.CreateJobBuild(ctx, tc, pc, j.Name, bb)
+			_, err := q.CreateJobBuild(ctx, tc, pc, j.Name, bb)
 			if err != nil {
 				return fmt.Errorf("failed to create pending build for Job %q: %w", j.Name, err)
 			}
 
-			m := queue.Body{
-				TeamCanonical:     tc,
-				PipelineCanonical: pc,
-				JobName:           j.Name,
-				BuildID:           nb.ID,
-				ResourceCanonical: rCan,
-				VersionID:         versionID,
-			}
-
-			mb, err := json.Marshal(m)
-			if err != nil {
-				return fmt.Errorf("failed to marshal Message Body: %w", err)
-			}
-
-			err = q.JobTopic.Send(ctx, &pubsub.Message{
-				Body: mb,
-			})
-			if err != nil {
-				return fmt.Errorf("failed to Trigger Job %q: %w", j.Name, err)
-			}
-
 			break // only trigger once per job
 		}
+	}
+
+	if q.Notifier != nil {
+		q.Notifier.Notify()
 	}
 
 	return nil
@@ -238,20 +218,8 @@ func (q *PikoCI) TriggerPipelineResource(ctx context.Context, tc, pc, rCan strin
 		return fmt.Errorf("failed to find Resource: %w", err)
 	}
 
-	m := queue.Body{
-		TeamCanonical:     tc,
-		PipelineCanonical: pc,
-		ResourceCanonical: rCan,
-	}
-	mb, err := json.Marshal(m)
-	if err != nil {
-		return fmt.Errorf("failed to marshal Message Body: %w", err)
-	}
-	err = q.CheckTopic.Send(ctx, &pubsub.Message{
-		Body: mb,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to Trigger Queue on Pipeline %q: %w", pc, err)
+	if q.Notifier != nil {
+		q.Notifier.Notify()
 	}
 	now := time.Now()
 	r.LastCheck = now
