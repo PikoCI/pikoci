@@ -8,222 +8,9 @@
   "links": [],
   "panels": [
     {
-      "title": "Workers (Healthy)",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 3, "x": 0, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "steps": [
-              { "value": 0, "color": "red" },
-              { "value": 1, "color": "green" }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "pikoci_workers{status=\"healthy\"}",
-          "legendFormat": "healthy",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "Workers (Stale)",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 3, "x": 3, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "steps": [
-              { "value": 0, "color": "green" },
-              { "value": 1, "color": "red" }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "pikoci_workers{status=\"stale\"}",
-          "legendFormat": "stale",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "Uptime",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 3, "x": 9, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "time() - process_start_time_seconds",
-          "legendFormat": "uptime",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "Total HTTP Requests",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 3, "x": 12, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "sum(http_requests_total)",
-          "legendFormat": "total",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "Current Goroutines",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 3, "x": 15, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "go_goroutines",
-          "legendFormat": "goroutines",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "HTTP Request Rate",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(http_requests_total[5m])) by (code)",
-          "legendFormat": "{{code}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "HTTP Request Duration (p50 / p90 / p99)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p50",
-          "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.90, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p90",
-          "refId": "B"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p99",
-          "refId": "C"
-        }
-      ]
-    },
-    {
-      "title": "HTTP Requests by Method",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 50
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(http_requests_total[5m])) by (method)",
-          "legendFormat": "{{method}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "Error Rate (4xx + 5xx)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 20
-          },
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "red"
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(http_requests_total{code=~\"4..|5..\"}[5m]))",
-          "legendFormat": "errors",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "CPU Usage",
+      "title": "CPU",
       "type": "gauge",
-      "gridPos": { "h": 6, "w": 4, "x": 0, "y": 28 },
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -249,9 +36,9 @@
       ]
     },
     {
-      "title": "Memory Usage",
+      "title": "Memory",
       "type": "gauge",
-      "gridPos": { "h": 6, "w": 4, "x": 4, "y": 28 },
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -277,9 +64,9 @@
       ]
     },
     {
-      "title": "Disk Usage",
+      "title": "Disk",
       "type": "gauge",
-      "gridPos": { "h": 6, "w": 4, "x": 8, "y": 28 },
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -305,9 +92,78 @@
       ]
     },
     {
-      "title": "Total CPU Cores",
+      "title": "Workers (Healthy)",
       "type": "stat",
-      "gridPos": { "h": 6, "w": 4, "x": 12, "y": 28 },
+      "gridPos": { "h": 5, "w": 3, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 1, "color": "green" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "pikoci_workers{status=\"healthy\"}",
+          "legendFormat": "healthy",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Workers (Stale)",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 3, "x": 15, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 1, "color": "red" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "pikoci_workers{status=\"stale\"}",
+          "legendFormat": "stale",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Uptime",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 3, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "time() - process_start_time_seconds",
+          "legendFormat": "uptime",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Load Average",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 3, "x": 21, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -316,55 +172,15 @@
         "overrides": []
       },
       "targets": [
-        {
-          "expr": "count(node_cpu_seconds_total{mode=\"idle\"})",
-          "legendFormat": "cores",
-          "refId": "A"
-        }
+        { "expr": "node_load1", "legendFormat": "1m", "refId": "A" },
+        { "expr": "node_load5", "legendFormat": "5m", "refId": "B" },
+        { "expr": "node_load15", "legendFormat": "15m", "refId": "C" }
       ]
     },
     {
-      "title": "Total Memory",
-      "type": "stat",
-      "gridPos": { "h": 6, "w": 4, "x": 16, "y": 28 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "node_memory_MemTotal_bytes",
-          "legendFormat": "total",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "Total Disk",
-      "type": "stat",
-      "gridPos": { "h": 6, "w": 4, "x": 20, "y": 28 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "node_filesystem_size_bytes{mountpoint=\"/\"}",
-          "legendFormat": "total",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "System CPU Usage %",
+      "title": "System CPU %",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 34 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 5 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -397,9 +213,9 @@
       ]
     },
     {
-      "title": "System Memory Usage",
+      "title": "System Memory",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 34 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 5 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -425,9 +241,9 @@
       ]
     },
     {
-      "title": "System Disk Usage",
+      "title": "System Disk",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 34 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 5 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -453,9 +269,92 @@
       ]
     },
     {
-      "title": "Process CPU Usage",
+      "title": "HTTP Request Rate",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 42 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[5m])) by (code)",
+          "legendFormat": "{{code}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "HTTP Request Duration (p50 / p90 / p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p90",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "Error Rate (4xx + 5xx)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{code=~\"4..|5..\"}[5m]))",
+          "legendFormat": "errors",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Process CPU",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 21 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -476,9 +375,9 @@
       ]
     },
     {
-      "title": "Process Resident Memory",
+      "title": "Process Memory",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 42 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 21 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -504,37 +403,9 @@
       ]
     },
     {
-      "title": "Open File Descriptors",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 42 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "process_open_fds",
-          "legendFormat": "open FDs",
-          "refId": "A"
-        },
-        {
-          "expr": "process_max_fds",
-          "legendFormat": "max FDs",
-          "refId": "B"
-        }
-      ]
-    },
-    {
       "title": "Goroutines",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 50 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 21 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -555,9 +426,9 @@
       ]
     },
     {
-      "title": "Go Memory Usage",
+      "title": "Go Memory",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 50 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 29 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -590,7 +461,7 @@
     {
       "title": "GC Pause Duration",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 50 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 29 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -611,20 +482,31 @@
       ]
     },
     {
-      "title": "System Load Average",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 58 },
+      "title": "Open File Descriptors",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 29 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
         },
         "overrides": []
       },
       "targets": [
-        { "expr": "node_load1", "legendFormat": "1m", "refId": "A" },
-        { "expr": "node_load5", "legendFormat": "5m", "refId": "B" },
-        { "expr": "node_load15", "legendFormat": "15m", "refId": "C" }
+        {
+          "expr": "process_open_fds",
+          "legendFormat": "open FDs",
+          "refId": "A"
+        },
+        {
+          "expr": "process_max_fds",
+          "legendFormat": "max FDs",
+          "refId": "B"
+        }
       ]
     }
   ],
