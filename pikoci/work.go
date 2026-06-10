@@ -8,9 +8,9 @@ import (
 	"github.com/pikoci/pikoci/pikoci/scheduler"
 )
 
-// NextWork finds the next available work item. It first scans all pipelines for
-// pending builds that can be started, then checks for due resource checks. Returns
-// nil if no work is available.
+// NextWork finds the next available work item by scanning all pipelines for
+// pending builds, then checking for due resource checks. It returns nil if
+// no work is available.
 func (q *PikoCI) NextWork(ctx context.Context) (*queue.WorkItem, error) {
 	// Phase 1: Look for pending job builds.
 	pps, err := q.Pipelines.FilterAll(ctx)
@@ -90,7 +90,7 @@ func (q *PikoCI) NextWork(ctx context.Context) (*queue.WorkItem, error) {
 }
 
 // PollNextWork blocks until work is available or a 30-second timeout expires.
-// It first checks for immediately available work, then waits for a notification
+// It checks for immediately available work first, then waits for a notification
 // from the WorkNotifier before checking again.
 func (q *PikoCI) PollNextWork(ctx context.Context) (*queue.WorkItem, error) {
 	w, err := q.NextWork(ctx)

@@ -1,9 +1,11 @@
+// Package notifier provides a broadcast mechanism for notifying workers
+// that new work is available via Go channels.
 package notifier
 
 import "sync"
 
 // WorkNotifier broadcasts wake-up signals to waiting workers.
-// Workers call Wait() to block until Notify() is called.
+// Workers call Wait to block until Notify is called.
 type WorkNotifier struct {
 	mu      sync.Mutex
 	waiters []chan struct{}
@@ -24,7 +26,7 @@ func (n *WorkNotifier) Notify() {
 	}
 }
 
-// Wait returns a channel that receives when Notify() is called,
+// Wait returns a channel that receives when Notify is called,
 // and a cleanup function that removes the waiter.
 func (n *WorkNotifier) Wait() (<-chan struct{}, func()) {
 	ch := make(chan struct{}, 1)

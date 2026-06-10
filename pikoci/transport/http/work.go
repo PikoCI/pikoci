@@ -8,4 +8,5 @@ type PollNextWorkResponse struct {
 	Err      string          `json:"error,omitempty"`
 }
 
+// Error returns the error message string, satisfying the Errorer interface.
 func (r PollNextWorkResponse) Error() string { return r.Err }

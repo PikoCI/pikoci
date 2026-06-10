@@ -47,8 +47,8 @@ type Service interface {
 	Run(ctx context.Context, q, t string) error
 }
 
-// Worker processes job and resource-check messages received from pub/sub
-// subscriptions. It manages build lifecycle, executes pipeline steps, and
+// Worker processes job builds and resource checks received via HTTP long
+// polling. It manages build lifecycle, executes pipeline steps, and
 // supports graceful draining.
 type Worker struct {
 	pikoci            pikoci.Service
@@ -190,8 +190,8 @@ func applyRunnerOverride(pp *pipeline.Pipeline, typeCmd *utils.RunnerCommand, ov
 	return ru, rc, ok
 }
 
-// Run starts the worker event loop. It launches goroutines that receive
-// messages from the job and check subscriptions and process them concurrently.
+// Run starts the worker event loop. It launches a poll loop that receives
+// work items via HTTP long polling and processes them sequentially.
 // Run blocks until the context is cancelled or an unrecoverable error occurs.
 func (w *Worker) Run(ctx context.Context) error {
 	w.logger.Info("Worker waiting for messages...")
