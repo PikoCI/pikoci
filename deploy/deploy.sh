@@ -32,14 +32,14 @@ set -euo pipefail
 #   1. Validates that deploy/pikoci.env exists
 #   2. Detects the server's CPU architecture (amd64 or arm64)
 #   3. Obtains the PikoCI binary (download release or build from source)
-#   4. Stops the running PikoCI systemd service (if any)
+#   4. Stops the running PikoCI and worker systemd services (if any)
 #   5. Copies the binary to /usr/local/bin/pikoci on the server
 #   6. Creates server directories, system user, and sets ownership:
 #      - /opt/pikoci      — Docker Compose configs and supporting services
 #      - /etc/pikoci       — PikoCI environment/config (restricted permissions)
 #      - /var/lib/pikoci   — PikoCI data directory (owned by pikoci user)
 #   7. Copies config files to the server:
-#      - pikoci.service    → /etc/systemd/system/
+#      - pikoci.service, pikoci-worker@.service → /etc/systemd/system/
 #      - docker-compose.yml, Caddyfile, prometheus.yml → /opt/pikoci/
 #   8. Copies the env file to two locations:
 #      - /etc/pikoci/pikoci.env  — read by systemd (chmod 600)
@@ -48,16 +48,17 @@ set -euo pipefail
 #                                  Docker Compose variable interpolation in
 #                                  docker-compose.yml (avoids bcrypt $ warnings)
 #   9. Installs Docker on the server if not already present
-#  10. Reloads systemd and restarts the PikoCI service
-#  11. Runs docker compose up -d for supporting services
+#  10. Runs docker compose up -d for supporting services (NATS must start first)
+#  11. Reloads systemd and restarts PikoCI server + worker services
 #
 # SERVER LAYOUT:
 #   /usr/local/bin/pikoci              — PikoCI binary
-#   /etc/systemd/system/pikoci.service — systemd unit
+#   /etc/systemd/system/pikoci.service — systemd unit (server)
+#   /etc/systemd/system/pikoci-worker@.service — systemd template (workers)
 #   /etc/pikoci/pikoci.env             — env vars for PikoCI (secrets)
 #   /var/lib/pikoci/                   — PikoCI data (SQLite DB, XDG data)
 #   /opt/pikoci/                       — Docker Compose stack
-#   /opt/pikoci/docker-compose.yml     — Caddy, Prometheus, Grafana, Node Exporter
+#   /opt/pikoci/docker-compose.yml     — Caddy, Prometheus, Grafana, Node Exporter, NATS
 #   /opt/pikoci/Caddyfile              — reverse proxy config
 #   /opt/pikoci/prometheus.yml         — Prometheus scrape targets
 #   /opt/pikoci/pikoci.env             — env vars for Docker Compose containers
@@ -131,7 +132,8 @@ fi
 # --- Stop running service ---
 # Must stop before copying to avoid "text file busy" errors.
 
-echo "==> Stopping PikoCI service..."
+echo "==> Stopping PikoCI services..."
+ssh "$SSH_HOST" 'systemctl stop pikoci-worker@worker-1 pikoci-worker@worker-2 2>/dev/null || true'
 ssh "$SSH_HOST" 'systemctl stop pikoci 2>/dev/null || true'
 
 # --- Copy binary ---
@@ -146,6 +148,7 @@ ssh "$SSH_HOST" 'chown pikoci:pikoci /usr/local/bin/pikoci'
 echo "==> Syncing deploy configs..."
 ssh "$SSH_HOST" 'mkdir -p /opt/pikoci /etc/pikoci /var/lib/pikoci /var/www/pikoci.com /var/www/docs.pikoci.com && id -u pikoci &>/dev/null || useradd --system --no-create-home pikoci && chown pikoci:pikoci /var/lib/pikoci /var/www/pikoci.com /var/www/docs.pikoci.com && usermod -aG docker pikoci 2>/dev/null || true'
 scp "$DEPLOY_DIR/pikoci.service" "$SSH_HOST":/etc/systemd/system/pikoci.service
+scp "$DEPLOY_DIR/pikoci-worker@.service" "$SSH_HOST":/etc/systemd/system/pikoci-worker@.service
 scp "$DEPLOY_DIR/docker-compose.yml" "$SSH_HOST":/opt/pikoci/docker-compose.yml
 scp "$DEPLOY_DIR/Caddyfile" "$SSH_HOST":/opt/pikoci/Caddyfile
 scp "$DEPLOY_DIR/prometheus.yml" "$SSH_HOST":/opt/pikoci/prometheus.yml
@@ -217,10 +220,10 @@ fi
 
 # --- Restart services ---
 
-echo "==> Restarting PikoCI service..."
-ssh "$SSH_HOST" 'systemctl daemon-reload && systemctl restart pikoci'
-
 echo "==> Updating Docker Compose services..."
 ssh "$SSH_HOST" 'cd /opt/pikoci && docker compose up -d'
+
+echo "==> Restarting PikoCI services..."
+ssh "$SSH_HOST" 'systemctl daemon-reload && systemctl restart pikoci && systemctl enable --now pikoci-worker@worker-1 pikoci-worker@worker-2'
 
 echo "==> Deploy complete."

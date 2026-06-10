@@ -320,7 +320,7 @@ job "deploy" {
     }
   }
   on_success "shell" {
-    cmd = "kill -QUIT $(pidof pikoci)"
+    cmd = "systemctl kill --signal=QUIT pikoci pikoci-worker@worker-1 pikoci-worker@worker-2"
   }
 }
 
