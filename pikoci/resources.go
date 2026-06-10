@@ -10,7 +10,6 @@ import (
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/resource"
-	"github.com/pikoci/pikoci/pikoci/scheduler"
 	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
@@ -216,18 +215,12 @@ func (q *PikoCI) TriggerPipelineResource(ctx context.Context, tc, pc, rCan strin
 		return fmt.Errorf("failed to find Resource: %w", err)
 	}
 
-	q.Notifier.Notify()
-	now := time.Now()
-	r.LastCheck = now
-	spec := r.CheckInterval
-	if spec == "" {
-		spec = "@every 1m"
-	}
-	nextCheck, err := scheduler.ComputeNextCheck(spec, now)
-	if err == nil {
-		r.NextCheck = nextCheck
-	}
+	// Set NextCheck to now so FilterDueResources returns it immediately.
+	// NextWork will update LastCheck and NextCheck when it claims the check.
+	r.NextCheck = time.Now()
 	_ = q.UpdatePipelineResource(ctx, tc, pc, r.Canonical, *r)
+
+	q.Notifier.Notify()
 
 	return nil
 }

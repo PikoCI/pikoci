@@ -15,8 +15,8 @@ help: Makefile ## This help dialog
 export GOCACHE
 
 .PHONY: test-services-up
-test-services-up: ## Start all external test services (DB, pubsub, vault)
-	@docker-compose -f docker/docker-compose.yml -f docker/develop.yml up -d mariadb postgresql nats rabbitmq kafka vault
+test-services-up: ## Start all external test services (DB, vault)
+	@docker-compose -f docker/docker-compose.yml -f docker/develop.yml up -d mariadb postgresql vault
 
 .PHONY: test-services-down
 test-services-down: ## Stop all external test services
@@ -68,18 +68,13 @@ test-mock: ## Runs unit/mock tests (no services needed)
 .PHONY: test-integration
 test-integration: ## Runs UI and backend integration tests (requires geckodriver + Xvfb + Firefox)
 	@PIKOCI_TEST_DB_SYSTEMS=$${PIKOCI_TEST_DB_SYSTEMS:-mem,sqlite} \
-	PIKOCI_TEST_PUBSUB_SYSTEMS=$${PIKOCI_TEST_PUBSUB_SYSTEMS:-mem} \
 	go test -tags integration ./integration/
 
 .PHONY: test-backends
 test-backends: ## Runs integration tests with all backends (requires test-services-up)
 	@PIKOCI_TEST_DB_SYSTEMS=mem,sqlite,mysql,postgresql \
-	PIKOCI_TEST_PUBSUB_SYSTEMS=mem,nats \
 	PIKOCI_TEST_VAULT=1 \
 	PIKOCI_TEST_VAULT_ADDR=http://127.0.0.1:8200 \
-	NATS_SERVER_URL=nats://127.0.0.1:4222 \
-	RABBIT_SERVER_URL=amqp://guest:guest@127.0.0.1:5672/ \
-	KAFKA_BROKERS=127.0.0.1:9092 \
 	go test -tags integration ./integration/backends/... -coverprofile=coverage-backends.out
 
 .PHONY: tag
