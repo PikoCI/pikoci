@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -73,6 +74,10 @@ type Worker struct {
 	// LocalMode enables local execution behavior: skips passed-constraints,
 	// version-availability checks, put steps, and secret resolution.
 	LocalMode bool
+
+	// UseLongPoll enables the HTTP long-poll work loop instead of
+	// pub/sub receive loops.
+	UseLongPoll bool
 
 	// Heartbeat info
 	Name        string
@@ -222,24 +227,34 @@ func (w *Worker) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
 
-	if w.jobSubscription != nil {
+	if w.UseLongPoll {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := w.receiveLoop(receiveCtx, ctx, w.jobSubscription, "job"); err != nil {
+			if err := w.pollLoop(receiveCtx); err != nil {
 				errs <- err
 			}
 		}()
-	}
+	} else {
+		if w.jobSubscription != nil {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := w.receiveLoop(receiveCtx, ctx, w.jobSubscription, "job"); err != nil {
+					errs <- err
+				}
+			}()
+		}
 
-	if w.checkSubscription != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := w.receiveLoop(receiveCtx, ctx, w.checkSubscription, "check"); err != nil {
-				errs <- err
-			}
-		}()
+		if w.checkSubscription != nil {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := w.receiveLoop(receiveCtx, ctx, w.checkSubscription, "check"); err != nil {
+					errs <- err
+				}
+			}()
+		}
 	}
 
 	done := make(chan struct{})
@@ -288,6 +303,35 @@ func (w *Worker) receiveLoop(receiveCtx, processCtx context.Context, sub queue.S
 		}
 
 		w.processMessage(processCtx, m, cwd)
+		os.RemoveAll(cwd)
+	}
+}
+
+// pollLoop uses HTTP long polling to receive work items. It handles both
+// job builds and resource checks through a single loop.
+func (w *Worker) pollLoop(ctx context.Context) error {
+	for {
+		if w.draining.Load() {
+			return nil
+		}
+		item, err := w.pikoci.PollNextWork(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			w.logger.Error("poll error", "error", err)
+			jitter := time.Duration(rand.Intn(5000)) * time.Millisecond
+			time.Sleep(jitter)
+			continue
+		}
+		if item == nil {
+			continue
+		}
+		cwd, err := w.createWorkDir()
+		if err != nil {
+			return err
+		}
+		w.processMessage(ctx, item.Body, cwd)
 		os.RemoveAll(cwd)
 	}
 }
