@@ -14,6 +14,7 @@ import (
 
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/queue"
 	"github.com/pikoci/pikoci/pikoci/resource"
@@ -27,18 +28,20 @@ type Scheduler struct {
 	builds     build.Repository
 	jobTopic   queue.Topic
 	checkTopic queue.Topic
+	notifier   *notifier.WorkNotifier
 	logger     *slog.Logger
 	interval   time.Duration
 }
 
 // New creates a new Scheduler.
-func New(resources resource.Repository, pipelines pipeline.Repository, builds build.Repository, jobTopic, checkTopic queue.Topic, logger *slog.Logger) *Scheduler {
+func New(resources resource.Repository, pipelines pipeline.Repository, builds build.Repository, jobTopic, checkTopic queue.Topic, wn *notifier.WorkNotifier, logger *slog.Logger) *Scheduler {
 	return &Scheduler{
 		resources:  resources,
 		pipelines:  pipelines,
 		builds:     builds,
 		jobTopic:   jobTopic,
 		checkTopic: checkTopic,
+		notifier:   wn,
 		logger:     logger,
 		interval:   10 * time.Second,
 	}

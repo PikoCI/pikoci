@@ -15,9 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
-	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
+	"github.com/pikoci/pikoci/pikoci/notifier"
+	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
 	"github.com/pikoci/pikoci/worker"
@@ -71,7 +72,7 @@ func TestConcurrentBuildCreation(t *testing.T) {
 	suow := unitwork.NewStartUnitOfWork(db, mysql.SQLite)
 
 	jwtSecret := []byte("test-secret")
-	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, logger)
+	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, notifier.New(), logger)
 	svc.StartScheduler(ctx)
 
 	_, _ = svc.CreateUser(ctx, user.User{

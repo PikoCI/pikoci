@@ -13,6 +13,7 @@ import (
 
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/mysql"
+	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
 	"github.com/pikoci/pikoci/pikoci/queue"
 	tshttp "github.com/pikoci/pikoci/pikoci/transport/http"
@@ -70,7 +71,8 @@ func runTests(m *testing.M) int {
 	str := mysql.NewSecretTypeRepository(db)
 	tgr := mysql.NewTriggerRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
-	var svc = pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, logger)
+	wn := notifier.New()
+	var svc = pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, wn, logger)
 	svc.StartScheduler(ctx)
 	var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.Mem, "test", "abc1234")
 	server := httptest.NewServer(handler)

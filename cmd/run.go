@@ -14,6 +14,7 @@ import (
 	"github.com/cycloidio/sqlr"
 	"github.com/spf13/cobra"
 	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/lopezator/migrator"
@@ -198,7 +199,7 @@ func runLocal(ctx context.Context, logger *slog.Logger, pipelineConfig, jobName 
 
 	// Create service (do NOT start scheduler)
 	jwtSecret := []byte("local-run-secret")
-	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, logger)
+	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, notifier.New(), logger)
 
 	// Create pipeline
 	pp, err := svc.CreatePipeline(ctx, mainTeamCanonical, "local", hclBytes, vars)

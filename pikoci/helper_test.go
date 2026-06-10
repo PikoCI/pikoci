@@ -61,7 +61,7 @@ func newService(ctrl *gomock.Controller) MockService {
 		NotificationsRepo:     nr,
 	})
 
-	p := pikoci.New(context.TODO(), t, ct, ur, tr, pr, jr, rr, rtr, br, rur, str, tgr, wr, suow, []byte("test-secret"), nil)
+	p := pikoci.New(context.TODO(), t, ct, ur, tr, pr, jr, rr, rtr, br, rur, str, tgr, wr, suow, []byte("test-secret"), nil, nil)
 	return MockService{
 		Topic:             t,
 		CheckTopic:        ct,

@@ -27,7 +27,7 @@ func newTestScheduler(ctrl *gomock.Controller) (*Scheduler, *mock.ResourceReposi
 	jobTopic := mock.NewTopic(ctrl)
 	checkTopic := mock.NewTopic(ctrl)
 	logger := slog.Default()
-	s := New(rr, pr, br, jobTopic, checkTopic, logger)
+	s := New(rr, pr, br, jobTopic, checkTopic, nil, logger)
 	return s, rr, pr, br, jobTopic, checkTopic
 }
 

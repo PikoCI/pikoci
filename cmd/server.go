@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/config"
+	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
 	"github.com/xyproto/randomstring"
@@ -137,8 +138,10 @@ var serverCmd = &cobra.Command{
 
 		suow := unitwork.NewStartUnitOfWork(db, cfg.DBSystem)
 
+		wn := notifier.New()
+
 		logger.Info("initializing service")
-		var svc = pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, suow, jwtSecret, logger)
+		var svc = pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, suow, jwtSecret, wn, logger)
 		svc.StartScheduler(ctx)
 		logger.Info("initialized service")
 
