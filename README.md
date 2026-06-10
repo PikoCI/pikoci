@@ -238,9 +238,6 @@ job "test-backends" {
 
   service "mariadb" {}
   service "postgresql" {}
-  service "nats" {}
-  service "rabbitmq" {}
-  service "kafka" {}
   service "vault" {}
 
   task "make" {
@@ -253,7 +250,7 @@ job "test-backends" {
 }
 ```
 
-The `test-backends` job uses [service types](https://docs.pikoci.com/Services) to spin up MariaDB, PostgreSQL, NATS, RabbitMQ, Kafka, and Vault as Docker containers, runs the backend integration tests against them, then tears everything down. See the [full pipeline](deploy/pipeline.hcl) for secrets, variables, and service definitions.
+The `test-backends` job uses [service types](https://docs.pikoci.com/Services) to spin up MariaDB, PostgreSQL, and Vault as Docker containers, runs the backend integration tests against them, then tears everything down. See the [full pipeline](deploy/pipeline.hcl) for secrets, variables, and service definitions.
 
 
 ## Coming from Concourse?
