@@ -284,7 +284,7 @@ func New(ctx context.Context, jobTopic, checkTopic queue.Topic, ur user.Reposito
 		StartUoW:      suow,
 		JWTSecret:     js,
 		logger:        l,
-		scheduler:     scheduler.New(rr, pr, br, jobTopic, checkTopic, wn, l),
+		scheduler:     scheduler.New(rr, pr, br, wn, l),
 	}
 }
 
