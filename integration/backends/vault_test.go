@@ -23,8 +23,6 @@ import (
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
 	"github.com/pikoci/pikoci/worker"
-	"gocloud.dev/pubsub"
-	"gocloud.dev/pubsub/mempubsub"
 )
 
 // setupVault returns the vault address and token, either from an already-running
@@ -128,14 +126,6 @@ func TestSecretsVaultE2E(t *testing.T) {
 	err = migrate.Migrate(db, mysql.Mem)
 	require.NoError(t, err)
 
-	jobTopic, err := pubsub.OpenTopic(ctx, fmt.Sprintf("%s://vault-test-jobs", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer jobTopic.Shutdown(ctx)
-
-	checkTopic, err := pubsub.OpenTopic(ctx, fmt.Sprintf("%s://vault-test-checks", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer checkTopic.Shutdown(ctx)
-
 	ur := mysql.NewUserRepository(db)
 	tr := mysql.NewTeamRepository(db)
 	ppr := mysql.NewPipelineRepository(db)
@@ -148,7 +138,7 @@ func TestSecretsVaultE2E(t *testing.T) {
 	tgr := mysql.NewTriggerRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 
-	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, []byte("jwt"), notifier.New(), logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, []byte("jwt"), notifier.New(), logger)
 	svc.StartScheduler(ctx)
 
 	_, _ = svc.CreateUser(ctx, user.User{
@@ -157,19 +147,11 @@ func TestSecretsVaultE2E(t *testing.T) {
 	}, true)
 
 	// Start worker
-	jobSub, err := pubsub.OpenSubscription(ctx, fmt.Sprintf("%s://vault-test-jobs", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer jobSub.Shutdown(ctx)
-
-	checkSub, err := pubsub.OpenSubscription(ctx, fmt.Sprintf("%s://vault-test-checks", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer checkSub.Shutdown(ctx)
-
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		w := worker.New(svc, jobTopic, jobSub, checkSub, logger.With("component", "worker"), "test-worker", "jobs,checks", "test", 1)
+		w := worker.New(svc, logger.With("component", "worker"), "test-worker", "test", 1)
 		w.Run(ctx)
 	}()
 

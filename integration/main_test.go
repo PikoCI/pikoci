@@ -15,14 +15,10 @@ import (
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
-	"github.com/pikoci/pikoci/pikoci/queue"
 	tshttp "github.com/pikoci/pikoci/pikoci/transport/http"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
 	"github.com/pikoci/pikoci/worker"
-	"gocloud.dev/pubsub"
-	"gocloud.dev/pubsub/mempubsub"
-	"gocloud.dev/pubsub/natspubsub"
 )
 
 var pikoURL string
@@ -48,18 +44,6 @@ func runTests(m *testing.M) int {
 		panic(err)
 	}
 
-	jobTopic, err := pubsub.OpenTopic(ctx, getTopicURL(mempubsub.Scheme, "pikoci-jobs"))
-	if err != nil {
-		panic(fmt.Errorf("failed to open job topic: %v", err).Error())
-	}
-	defer jobTopic.Shutdown(ctx)
-
-	checkTopic, err := pubsub.OpenTopic(ctx, getTopicURL(mempubsub.Scheme, "pikoci-checks"))
-	if err != nil {
-		panic(fmt.Errorf("failed to open check topic: %v", err).Error())
-	}
-	defer checkTopic.Shutdown(ctx)
-
 	ur := mysql.NewUserRepository(db)
 	tr := mysql.NewTeamRepository(db)
 	ppr := mysql.NewPipelineRepository(db)
@@ -72,7 +56,7 @@ func runTests(m *testing.M) int {
 	tgr := mysql.NewTriggerRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 	wn := notifier.New()
-	var svc = pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, wn, logger)
+	var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, wn, logger)
 	svc.StartScheduler(ctx)
 	var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.Mem, "test", "abc1234")
 	server := httptest.NewServer(handler)
@@ -83,31 +67,13 @@ func runTests(m *testing.M) int {
 	_, _ = svc.CreateUser(ctx, user.User{FullName: "pepito", Username: "pepito", Password: "$2a$14$rwQk8Qvc2rij7qhFO4P1W.OiSF6AkgVU1RCrLaY2wawJcpkPEKwbm"}, isHash)
 	_, _ = svc.CreateUser(ctx, user.User{FullName: "grillo", Username: "grillo", Password: "$2a$14$SvWir17.jlXxiZfe0pJuDedznetc/HWKv43YPsQQNo6MJiuypS2q6"}, isHash)
 	go func() {
-		runWorker(ctx, mempubsub.Scheme, jobTopic, svc, 1, "DEBUG")
+		runWorker(ctx, svc, 1, "DEBUG")
 	}()
 
 	return m.Run()
 }
 
-func getTopicURL(s, name string) string {
-	u := fmt.Sprintf("%s://%s", s, name)
-	switch s {
-	case natspubsub.Scheme:
-		u += "?natsv2"
-	}
-	return u
-}
-
-func getSubscriptionURL(s, name string) string {
-	u := fmt.Sprintf("%s://%s", s, name)
-	switch s {
-	case natspubsub.Scheme:
-		u += fmt.Sprintf("?queue=%s&natsv2", name)
-	}
-	return u
-}
-
-func runWorker(ctx context.Context, sy string, jobTopic queue.Topic, s pikoci.Service, c int, llvl string) error {
+func runWorker(ctx context.Context, s pikoci.Service, c int, llvl string) error {
 	var lvl slog.Level
 	switch llvl {
 	case "DEBUG":
@@ -121,27 +87,15 @@ func runWorker(ctx context.Context, sy string, jobTopic queue.Topic, s pikoci.Se
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl})).With("service", "worker")
 
-	jobSub, err := pubsub.OpenSubscription(ctx, getSubscriptionURL(sy, "pikoci-jobs"))
-	if err != nil {
-		return fmt.Errorf("failed to open job subscription: %w", err)
-	}
-	defer jobSub.Shutdown(ctx)
-
-	checkSub, err := pubsub.OpenSubscription(ctx, getSubscriptionURL(sy, "pikoci-checks"))
-	if err != nil {
-		return fmt.Errorf("failed to open check subscription: %w", err)
-	}
-	defer checkSub.Shutdown(ctx)
-
 	var wg sync.WaitGroup
 	for i := range c {
 		wg.Add(1)
 		nlogger := logger.With("num", i+1)
 		nlogger.Info(fmt.Sprintf("Starting Worker %d", i+1))
-		w := worker.New(s, jobTopic, jobSub, checkSub, nlogger, fmt.Sprintf("test-worker-%d", i+1), "jobs,checks", "test", c)
+		w := worker.New(s, nlogger, fmt.Sprintf("test-worker-%d", i+1), "test", c)
 
 		go func() {
-			err = w.Run(ctx)
+			err := w.Run(ctx)
 			if err != nil {
 				logger.Error("failed to Run worker", "error", err)
 			}

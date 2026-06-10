@@ -22,8 +22,6 @@ import (
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
 	"github.com/pikoci/pikoci/worker"
-	"gocloud.dev/pubsub"
-	"gocloud.dev/pubsub/mempubsub"
 )
 
 // TestConcurrentBuildCreation verifies that when a resource triggers multiple
@@ -51,14 +49,6 @@ func TestConcurrentBuildCreation(t *testing.T) {
 	err = migrate.Migrate(db, mysql.SQLite)
 	require.NoError(t, err)
 
-	jobTopic, err := pubsub.OpenTopic(ctx, fmt.Sprintf("%s://concurrent-test-jobs", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer jobTopic.Shutdown(ctx)
-
-	checkTopic, err := pubsub.OpenTopic(ctx, fmt.Sprintf("%s://concurrent-test-checks", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer checkTopic.Shutdown(ctx)
-
 	ur := mysql.NewUserRepository(db)
 	tr := mysql.NewTeamRepository(db)
 	ppr := mysql.NewPipelineRepository(db)
@@ -72,7 +62,7 @@ func TestConcurrentBuildCreation(t *testing.T) {
 	suow := unitwork.NewStartUnitOfWork(db, mysql.SQLite)
 
 	jwtSecret := []byte("test-secret")
-	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, notifier.New(), logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, notifier.New(), logger)
 	svc.StartScheduler(ctx)
 
 	_, _ = svc.CreateUser(ctx, user.User{
@@ -81,21 +71,13 @@ func TestConcurrentBuildCreation(t *testing.T) {
 		Password: "$2a$14$rwQk8Qvc2rij7qhFO4P1W.OiSF6AkgVU1RCrLaY2wawJcpkPEKwbm",
 	}, true)
 
-	jobSub, err := pubsub.OpenSubscription(ctx, fmt.Sprintf("%s://concurrent-test-jobs", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer jobSub.Shutdown(ctx)
-
-	checkSub, err := pubsub.OpenSubscription(ctx, fmt.Sprintf("%s://concurrent-test-checks", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer checkSub.Shutdown(ctx)
-
 	// Start 3 concurrent workers (same as production CONCURRENCY=3)
 	var wg sync.WaitGroup
 	for i := range 3 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			w := worker.New(svc, jobTopic, jobSub, checkSub, logger.With("worker", i+1), fmt.Sprintf("test-worker-%d", i+1), "jobs,checks", "test", 3)
+			w := worker.New(svc, logger.With("worker", i+1), fmt.Sprintf("test-worker-%d", i+1), "test", 3)
 			w.Run(ctx)
 		}()
 	}

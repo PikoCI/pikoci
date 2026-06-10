@@ -23,8 +23,6 @@ import (
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
 	"github.com/pikoci/pikoci/worker"
-	"gocloud.dev/pubsub"
-	"gocloud.dev/pubsub/mempubsub"
 )
 
 func TestSecretsE2E(t *testing.T) {
@@ -43,14 +41,6 @@ func TestSecretsE2E(t *testing.T) {
 	err = migrate.Migrate(db, mysql.Mem)
 	require.NoError(t, err)
 
-	jobTopic, err := pubsub.OpenTopic(ctx, fmt.Sprintf("%s://secrets-test-jobs", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer jobTopic.Shutdown(ctx)
-
-	checkTopic, err := pubsub.OpenTopic(ctx, fmt.Sprintf("%s://secrets-test-checks", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer checkTopic.Shutdown(ctx)
-
 	ur := mysql.NewUserRepository(db)
 	tr := mysql.NewTeamRepository(db)
 	ppr := mysql.NewPipelineRepository(db)
@@ -64,7 +54,7 @@ func TestSecretsE2E(t *testing.T) {
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 
 	jwtSecret := []byte("test-secret")
-	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, notifier.New(), logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, notifier.New(), logger)
 	svc.StartScheduler(ctx)
 
 	// Migration already creates admin user and "main" team.
@@ -76,19 +66,11 @@ func TestSecretsE2E(t *testing.T) {
 	}, true)
 
 	// Start worker
-	jobSub, err := pubsub.OpenSubscription(ctx, fmt.Sprintf("%s://secrets-test-jobs", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer jobSub.Shutdown(ctx)
-
-	checkSub, err := pubsub.OpenSubscription(ctx, fmt.Sprintf("%s://secrets-test-checks", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer checkSub.Shutdown(ctx)
-
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		w := worker.New(svc, jobTopic, jobSub, checkSub, logger.With("component", "worker"), "test-worker", "jobs,checks", "test", 1)
+		w := worker.New(svc, logger.With("component", "worker"), "test-worker", "test", 1)
 		w.Run(ctx)
 	}()
 
