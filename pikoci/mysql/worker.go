@@ -56,7 +56,7 @@ func (r *WorkerRepository) Upsert(ctx context.Context, w wkr.Worker) error {
 
 	_, err := r.querier.ExecContext(ctx, q,
 		w.Name, w.Hostname, w.OS, w.Arch, w.GoVersion, w.Version,
-		w.Concurrency, w.Queues, w.StartedAt, w.LastPingAt,
+		w.Concurrency, "", w.StartedAt, w.LastPingAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to upsert worker: %w", err)
@@ -103,7 +103,6 @@ func (r *WorkerRepository) Filter(ctx context.Context) ([]*wkr.Worker, error) {
 			GoVersion:   goVersion.String,
 			Version:     version.String,
 			Concurrency: int(concurrency.Int64),
-			Queues:      queues.String,
 			StartedAt:   startedAt.Time,
 			LastPingAt:  lastPingAt.Time,
 		}

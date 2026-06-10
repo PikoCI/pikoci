@@ -2480,7 +2480,6 @@ func TestWorkerHeartbeat(t *testing.T) {
 		GoVersion:   "go1.22",
 		Version:     "v0.4.0",
 		Concurrency: 2,
-		Queues:      "jobs,checks",
 	})
 	require.NoError(t, err)
 }

@@ -1036,7 +1036,6 @@ func (cl *Client) WorkerHeartbeat(ctx context.Context, w wkr.Worker) error {
 		GoVersion:   w.GoVersion,
 		Version:     w.Version,
 		Concurrency: w.Concurrency,
-		Queues:      w.Queues,
 		StartedAt:   w.StartedAt.Format(time.RFC3339),
 	}, &resp)
 	if err != nil {

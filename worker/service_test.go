@@ -29,12 +29,10 @@ import (
 	"github.com/pikoci/pikoci/pikoci/trigger"
 	"github.com/pikoci/pikoci/pikoci/utils"
 	"go.uber.org/mock/gomock"
-	"gocloud.dev/pubsub"
 )
 
-func newTestWorker(ctrl *gomock.Controller) (*Worker, *mock.Service, *mock.Topic) {
+func newTestWorker(ctrl *gomock.Controller) (*Worker, *mock.Service) {
 	svc := mock.NewService(ctrl)
-	jobTopic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	// InsertBuildGetVersion is called after every successful get step; allow it globally.
@@ -62,11 +60,10 @@ func newTestWorker(ctrl *gomock.Controller) (*Worker, *mock.Service, *mock.Topic
 		}).AnyTimes()
 
 	w := &Worker{
-		pikoci:   svc,
-		jobTopic: jobTopic,
-		logger:   logger,
+		pikoci: svc,
+		logger: logger,
 	}
-	return w, svc, jobTopic
+	return w, svc
 }
 
 // expectPendingBuild sets up a FindOldestPendingBuild expectation using
@@ -162,7 +159,7 @@ func testPipeline() *pipeline.Pipeline {
 
 func TestProcessJob_Success_TaskOnly(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -216,7 +213,7 @@ func TestProcessJob_Success_TaskOnly(t *testing.T) {
 
 func TestProcessJob_Success_WithGetAndTask(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -289,7 +286,6 @@ func TestInsertBuildGetVersion_CalledWithCorrectArgs(t *testing.T) {
 	// Don't use newTestWorker — we need precise control over InsertBuildGetVersion.
 	svc := mock.NewService(ctrl)
 	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	topic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	svc.EXPECT().GetJobBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&build.Build{Status: build.Started}, nil).AnyTimes()
@@ -302,7 +298,7 @@ func TestInsertBuildGetVersion_CalledWithCorrectArgs(t *testing.T) {
 			}
 			return nil, nil
 		}).AnyTimes()
-	w := &Worker{pikoci: svc, jobTopic: topic, logger: logger}
+	w := &Worker{pikoci: svc, logger: logger}
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -373,7 +369,7 @@ func TestInsertBuildGetVersion_CalledWithCorrectArgs(t *testing.T) {
 
 func TestProcessJob_FailedPassedConstraint_NoBuilds(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -427,7 +423,7 @@ func TestProcessJob_FailedPassedConstraint_NoBuilds(t *testing.T) {
 
 func TestProcessJob_FailedPassedConstraint_NotSucceeded(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -481,7 +477,7 @@ func TestProcessJob_FailedPassedConstraint_NotSucceeded(t *testing.T) {
 
 func TestProcessJob_TaskFailure_RunsHooks(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -574,7 +570,7 @@ func TestProcessJob_NoDownstreamTrigger(t *testing.T) {
 	// Downstream triggering is now handled by the scheduler (pull-based).
 	// This test verifies that the worker does NOT send downstream trigger messages.
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -656,7 +652,7 @@ func TestProcessJob_NoDownstreamTrigger(t *testing.T) {
 
 func TestProcessResourceCheck_NewVersions(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -715,7 +711,7 @@ func TestProcessResourceCheck_NewVersions(t *testing.T) {
 
 func TestProcessResourceCheck_NestedVersionFlattened(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -779,7 +775,7 @@ printf "[]"
 
 func TestProcessResourceCheck_DuplicateVersionSkipped_FirstCheck(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -849,7 +845,7 @@ func TestProcessResourceCheck_DuplicateVersionSkipped_FirstCheck(t *testing.T) {
 
 func TestProcessResourceCheck_SecondCheckTriggers(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -909,7 +905,7 @@ func TestProcessResourceCheck_SecondCheckTriggers(t *testing.T) {
 
 func TestProcessResourceCheckTrigger_FirstCheckTriggers(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -960,7 +956,7 @@ func TestProcessResourceCheckTrigger_FirstCheckTriggers(t *testing.T) {
 
 func TestProcessResourceCheckTrigger_SecondCheckTriggers(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1013,7 +1009,7 @@ func TestProcessResourceCheckTrigger_SecondCheckTriggers(t *testing.T) {
 
 func TestCheckPassedConstraints_AllPassed(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1053,7 +1049,7 @@ func TestCheckPassedConstraints_AllPassed(t *testing.T) {
 
 func TestCheckPassedConstraints_NoCommonVersion(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1098,7 +1094,7 @@ func TestCheckPassedConstraints_NoCommonVersion(t *testing.T) {
 
 func TestCheckPassedConstraints_PicksNewestCommon(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1150,7 +1146,7 @@ func TestCheckPassedConstraints_PicksNewestCommon(t *testing.T) {
 
 func TestCheckPassedConstraints_NoPassedField(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1180,7 +1176,7 @@ func TestCheckPassedConstraints_NoPassedField(t *testing.T) {
 
 func TestCheckPassedConstraints_PutStepSatisfiesPassed(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1217,7 +1213,7 @@ func TestCheckPassedConstraints_PutStepSatisfiesPassed(t *testing.T) {
 
 func TestImplicitGetAfterPut_CreatesVersionAndRecords(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1259,7 +1255,7 @@ func TestImplicitGetAfterPut_CreatesVersionAndRecords(t *testing.T) {
 
 func TestImplicitGetAfterPut_InvalidJSON_Skips(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1291,7 +1287,7 @@ func TestImplicitGetAfterPut_InvalidJSON_Skips(t *testing.T) {
 
 func TestRunHooks(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1329,7 +1325,7 @@ func TestRunHooks(t *testing.T) {
 
 func TestRunHooks_SingleHook_NoIndex(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1359,7 +1355,7 @@ func TestRunHooks_SingleHook_NoIndex(t *testing.T) {
 
 func TestRunHooks_JobLevel_NoStepName(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1389,7 +1385,7 @@ func TestRunHooks_JobLevel_NoStepName(t *testing.T) {
 
 func TestProcessMessage_JobDispatch(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1425,7 +1421,7 @@ func TestProcessMessage_JobDispatch(t *testing.T) {
 
 func TestBuildPullParams_WithVersionID(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1467,7 +1463,7 @@ func TestBuildPullParams_WithVersionID(t *testing.T) {
 
 func TestBuildPullParams_NoVersionID_UsesLatest(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1501,7 +1497,7 @@ func TestBuildPullParams_NoVersionID_UsesLatest(t *testing.T) {
 
 func TestBuildPullParams_NoVersions_Fails(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1531,7 +1527,7 @@ func TestBuildPullParams_NoVersions_Fails(t *testing.T) {
 
 func TestBuildPullParams_ResolvedVersionTakesPriority(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1564,7 +1560,7 @@ func TestBuildPullParams_ResolvedVersionTakesPriority(t *testing.T) {
 
 func TestCheckVersionAvailability_NoVersions_DeletesBuild(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1610,7 +1606,7 @@ func TestCheckVersionAvailability_NoVersions_DeletesBuild(t *testing.T) {
 
 func TestCheckVersionAvailability_VersionExists_Passes(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1649,7 +1645,7 @@ func TestCheckVersionAvailability_VersionExists_Passes(t *testing.T) {
 
 func TestProcessJob_PutStep_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1724,7 +1720,7 @@ func TestProcessJob_PutStep_Success(t *testing.T) {
 
 func TestProcessJob_PutStep_CacheDirSet(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1806,7 +1802,7 @@ func TestProcessJob_PutStep_CacheDirSet(t *testing.T) {
 
 func TestProcessJob_OrderedPlan_GetTaskPut(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1882,7 +1878,7 @@ func TestProcessJob_OrderedPlan_GetTaskPut(t *testing.T) {
 
 func TestProcessJob_TaskTimeout(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -1961,7 +1957,7 @@ func TestProcessJob_TaskTimeout(t *testing.T) {
 
 func TestProcessJob_GetTimeout(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -2034,7 +2030,7 @@ func TestProcessJob_GetTimeout(t *testing.T) {
 
 func TestProcessJob_NoTimeout_Succeeds(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -2093,7 +2089,7 @@ func TestProcessJob_NoTimeout_Succeeds(t *testing.T) {
 
 func TestProcessJob_TaskRetry_SucceedsOnSecondAttempt(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	cwd := t.TempDir()
@@ -2169,7 +2165,7 @@ fi
 
 func TestProcessJob_TaskRetry_ExhaustsAttempts(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	cwd := t.TempDir()
@@ -2237,7 +2233,7 @@ func TestProcessJob_TaskRetry_ExhaustsAttempts(t *testing.T) {
 
 func TestProcessJob_TaskRetry_WithTimeout(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	cwd := t.TempDir()
@@ -2328,7 +2324,7 @@ func TestReplaceSecretPlaceholders_NoResolved(t *testing.T) {
 
 func TestProcessResourceCheck_WithSecretVars(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -2487,7 +2483,7 @@ func TestParseEnvFormat(t *testing.T) {
 
 func TestProcessResourceCheck_SecretResolutionError_UpdatesResourceLogs(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -2558,7 +2554,7 @@ func TestRunRunner_ShellVariablesNotDestroyed(t *testing.T) {
 	// Verifies that shell-local variables in command args are not
 	// destroyed by os.Expand — they should pass through to the shell.
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	cwd := t.TempDir()
@@ -2584,7 +2580,7 @@ func TestRunRunner_ShellVariablesNotDestroyed(t *testing.T) {
 func TestRunRunner_AwkPositionalArgsWork(t *testing.T) {
 	// Verifies that awk $1, $0 etc. work in command args.
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	cwd := t.TempDir()
@@ -2609,7 +2605,7 @@ func TestRunRunner_AwkPositionalArgsWork(t *testing.T) {
 func TestRunRunner_ParamVarsExpandedByShell(t *testing.T) {
 	// Verifies that $param_* variables are available to the shell via env vars.
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	cwd := t.TempDir()
@@ -2637,7 +2633,7 @@ func TestRunRunner_EnvPlaceholder(t *testing.T) {
 	// Verifies that $env injects -e KEY=VALUE flags for metadata vars
 	// and excludes runner-internal params like cmd, image, WORKDIR.
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	cwd := t.TempDir()
@@ -2703,7 +2699,7 @@ func TestIsRunnerInternalParam(t *testing.T) {
 
 func TestProcessResourceCheck_RawSecretFormat(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 
@@ -2786,7 +2782,7 @@ func TestProcessResourceCheck_RawSecretFormat(t *testing.T) {
 
 func TestFetchSecrets_RawFormat(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	cwd := t.TempDir()
@@ -2821,7 +2817,7 @@ func TestFetchSecrets_RawFormat(t *testing.T) {
 
 func TestTriggerResourceJobs_MultipleJobsSameResource(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 
@@ -2871,7 +2867,7 @@ func TestTriggerResourceJobs_MultipleJobsSameResource(t *testing.T) {
 
 func TestTriggerResourceJobs_SkipsWhenResourcePinned(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 
@@ -2910,7 +2906,7 @@ func TestTriggerResourceJobs_SkipsWhenResourcePinned(t *testing.T) {
 
 func TestTriggerResourceJobs_TriggersWhenPinnedVersionMatches(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 
@@ -2949,7 +2945,7 @@ func TestTriggerResourceJobs_TriggersWhenPinnedVersionMatches(t *testing.T) {
 
 func TestProcessJob_TaskInputMissing(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3012,7 +3008,7 @@ func TestProcessJob_TaskInputMissing(t *testing.T) {
 
 func TestProcessJob_TaskOutputMissing(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3075,7 +3071,7 @@ func TestProcessJob_TaskOutputMissing(t *testing.T) {
 
 func TestProcessJob_TaskInputsOutputs_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3144,7 +3140,7 @@ func TestProcessJob_TaskInputsOutputs_Success(t *testing.T) {
 
 func TestProcessJob_TaskMultipleInputs_FailsOnFirst(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3213,7 +3209,7 @@ func TestProcessJob_TaskMultipleInputs_FailsOnFirst(t *testing.T) {
 
 func TestProcessJob_TaskMultipleOutputs_FailsOnFirst(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3282,7 +3278,6 @@ func TestProcessJob_Cancellation(t *testing.T) {
 	// Build a worker with custom GetJobBuild behavior (don't use newTestWorker's default).
 	svc := mock.NewService(ctrl)
 	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	topic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	var pendingCallCount int32
@@ -3297,7 +3292,6 @@ func TestProcessJob_Cancellation(t *testing.T) {
 
 	w := &Worker{
 		pikoci: svc,
-		jobTopic: topic,
 		logger: logger,
 	}
 
@@ -3382,7 +3376,7 @@ func TestProcessJob_Cancellation(t *testing.T) {
 
 func TestProcessJob_Retry_UsesCreateRetryAndResolvedVersions(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3461,7 +3455,7 @@ func TestProcessJob_Retry_UsesCreateRetryAndResolvedVersions(t *testing.T) {
 
 func TestProcessJob_Retry_FailsOnVersionLookupError(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3515,7 +3509,6 @@ func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := mock.NewService(ctrl)
 	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	topic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	var pendingCallCount int32
@@ -3530,7 +3523,6 @@ func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 
 	w := &Worker{
 		pikoci: svc,
-		jobTopic: topic,
 		logger: logger,
 	}
 
@@ -3644,7 +3636,6 @@ func TestProcessJob_Cancellation_NoUpdateLoopAfterCancel(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := mock.NewService(ctrl)
 	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	topic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	var pendingCallCount int32
@@ -3658,9 +3649,8 @@ func TestProcessJob_Cancellation_NoUpdateLoopAfterCancel(t *testing.T) {
 		}).AnyTimes()
 
 	w := &Worker{
-		pikoci:   svc,
-		jobTopic: topic,
-		logger:   logger,
+		pikoci: svc,
+		logger: logger,
 	}
 
 	ctx := context.Background()
@@ -3740,7 +3730,7 @@ func TestProcessJob_Cancellation_NoUpdateLoopAfterCancel(t *testing.T) {
 
 func TestProcessJob_MissingBuildID(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3761,7 +3751,7 @@ func TestProcessJob_MissingBuildID(t *testing.T) {
 
 func TestProcessJob_BuildNotPending(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3783,7 +3773,7 @@ func TestProcessJob_BuildNotPending(t *testing.T) {
 
 func TestProcessJob_ConcurrencyLimit_Returns(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3805,7 +3795,7 @@ func TestProcessJob_ConcurrencyLimit_Returns(t *testing.T) {
 
 func TestProcessJob_SerialGroupLimit_Returns(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3827,7 +3817,7 @@ func TestProcessJob_SerialGroupLimit_Returns(t *testing.T) {
 
 func TestProcessJob_GenericError_Returns(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -3849,7 +3839,7 @@ func TestProcessJob_GenericError_Returns(t *testing.T) {
 
 func TestRunGetStepLocal_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	dir := t.TempDir()
 	// Create a local resource directory
@@ -3896,7 +3886,7 @@ func TestRunGetStepLocal_Success(t *testing.T) {
 
 func TestRunGetStepLocal_MissingPath(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	dir := t.TempDir()
 	cwd := filepath.Join(dir, "workdir")
@@ -3927,29 +3917,21 @@ func TestRunGetStepLocal_MissingPath(t *testing.T) {
 	assert.Contains(t, b.Steps[0].Logs, "does not exist")
 }
 
-func TestDrain_UnblocksReceiveImmediately(t *testing.T) {
+func TestDrain_UnblocksPollLoopImmediately(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := mock.NewService(ctrl)
-	jobSub := mock.NewSubscription(ctrl)
-	checkSub := mock.NewSubscription(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	w := &Worker{
-		pikoci:            svc,
-		jobSubscription:   jobSub,
-		checkSubscription: checkSub,
-		logger:            logger,
-		StartedAt:         time.Now(),
+		pikoci:    svc,
+		logger:    logger,
+		StartedAt: time.Now(),
 	}
 
 	svc.EXPECT().WorkerHeartbeat(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
-	// Receive blocks until the context is cancelled (simulating waiting for messages)
-	jobSub.EXPECT().Receive(gomock.Any()).DoAndReturn(func(ctx context.Context) (*pubsub.Message, error) {
-		<-ctx.Done()
-		return nil, ctx.Err()
-	}).AnyTimes()
-	checkSub.EXPECT().Receive(gomock.Any()).DoAndReturn(func(ctx context.Context) (*pubsub.Message, error) {
+	// PollNextWork blocks until context is cancelled
+	svc.EXPECT().PollNextWork(gomock.Any()).DoAndReturn(func(ctx context.Context) (*queue.WorkItem, error) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}).AnyTimes()
@@ -3960,7 +3942,7 @@ func TestDrain_UnblocksReceiveImmediately(t *testing.T) {
 		done <- w.Run(ctx)
 	}()
 
-	// Give Run() time to start the receive loops
+	// Give Run() time to start the poll loop
 	time.Sleep(50 * time.Millisecond)
 
 	w.Drain()
@@ -4193,7 +4175,7 @@ func TestResourceCacheEnabled(t *testing.T) {
 
 func TestCacheDir(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	dir, err := w.cacheDir("myteam", "mypipeline", "git.myrepo")
 	require.NoError(t, err)
@@ -4210,7 +4192,7 @@ func TestCacheDir(t *testing.T) {
 
 func TestProcessJob_JobTimeout(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -4272,7 +4254,7 @@ func TestProcessJob_JobTimeout(t *testing.T) {
 
 func TestProcessJob_JobTimeout_NotReached(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -4461,7 +4443,7 @@ func TestPrepareShellRunner_ErrorNeitherCmdNorFile(t *testing.T) {
 
 func TestRunRunner_ShellCmdMode(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	cwd := t.TempDir()
@@ -4482,7 +4464,7 @@ func TestRunRunner_ShellCmdMode(t *testing.T) {
 
 func TestRunRunner_ShellFileMode(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	cwd := t.TempDir()
@@ -4649,7 +4631,7 @@ func TestParseOutputFile(t *testing.T) {
 
 func TestProcessJob_GetStepExportsVersionMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -4734,7 +4716,7 @@ func TestProcessJob_GetStepExportsVersionMetadata(t *testing.T) {
 
 func TestProcessJob_TaskExportsPikoOutput(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -4807,7 +4789,7 @@ func TestProcessJob_TaskExportsPikoOutput(t *testing.T) {
 
 func TestProcessJob_ExportedVarsAccumulate(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -4903,7 +4885,7 @@ func TestProcessJob_ExportedVarsAccumulate(t *testing.T) {
 
 func TestProcessJob_FailedStepDoesNotExport(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -4979,7 +4961,7 @@ func TestProcessJob_FailedStepDoesNotExport(t *testing.T) {
 
 func TestProcessJob_NotifyStep_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -5060,7 +5042,7 @@ func TestProcessJob_NotifyStep_Success(t *testing.T) {
 
 func TestProcessJob_NotifyStep_Failure(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -5135,7 +5117,7 @@ func TestProcessJob_NotifyStep_Failure(t *testing.T) {
 
 func TestRunNotifyStep_LocalMode_Skips(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 	w.LocalMode = true
 
 	ctx := context.Background()
@@ -5182,9 +5164,6 @@ func TestRunNotifyStep_LocalMode_Skips(t *testing.T) {
 			return nil
 		}).AnyTimes()
 
-	// Allow topic.Send for notifyNextPendingBuild
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-
 	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 
@@ -5197,7 +5176,7 @@ func TestRunNotifyStep_LocalMode_Skips(t *testing.T) {
 
 func TestRunNotifyStep_NotificationNotFound_NoFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -5255,7 +5234,7 @@ func TestRunNotifyStep_NotificationNotFound_NoFailure(t *testing.T) {
 
 func TestRunNotifyStep_NotificationTypeNotFound_NoFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -5318,7 +5297,7 @@ func TestRunNotifyStep_NotificationTypeNotFound_NoFailure(t *testing.T) {
 
 func TestRunNotifyStep_WithMessage_And_Params(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -5402,7 +5381,7 @@ func TestRunNotifyStep_WithMessage_And_Params(t *testing.T) {
 
 func TestRunNotifyStep_MessageInterpolation(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -5503,7 +5482,7 @@ func TestRunNotifyStep_MessageInterpolation(t *testing.T) {
 
 func TestRunAutoNotifications_SuccessEvent(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -5582,7 +5561,7 @@ func TestRunAutoNotifications_SuccessEvent(t *testing.T) {
 
 func TestRunAutoNotifications_FailureEvent(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -5661,7 +5640,7 @@ func TestRunAutoNotifications_FailureEvent(t *testing.T) {
 
 func TestRunAutoNotifications_EventNotMatched(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -5738,7 +5717,7 @@ func TestRunAutoNotifications_EventNotMatched(t *testing.T) {
 
 func TestRunAutoNotifications_AllEvent(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -5814,7 +5793,7 @@ func TestRunAutoNotifications_AllEvent(t *testing.T) {
 
 func TestRunAutoNotifications_JobScope(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -5891,7 +5870,7 @@ func TestRunAutoNotifications_JobScope(t *testing.T) {
 
 func TestRunAutoNotifications_ExcludeJob(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -5967,7 +5946,7 @@ func TestRunAutoNotifications_ExcludeJob(t *testing.T) {
 
 func TestRunAutoNotifications_NoOnField_Skips(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6045,7 +6024,7 @@ func TestRunAutoNotifications_NoOnField_Skips(t *testing.T) {
 
 func TestProcessJob_PutStepTrigger_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6120,7 +6099,7 @@ func TestProcessJob_PutStepTrigger_Success(t *testing.T) {
 
 func TestProcessJob_PutStepTrigger_Failure(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6191,7 +6170,7 @@ func TestProcessJob_PutStepTrigger_Failure(t *testing.T) {
 
 func TestNotifyNextPendingBuild_CallsSerialGroup(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6209,7 +6188,7 @@ func TestNotifyNextPendingBuild_CallsSerialGroup(t *testing.T) {
 
 func TestProcessJob_ServiceStep_StartAndStop(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6299,7 +6278,7 @@ func TestProcessJob_ServiceStep_StartAndStop(t *testing.T) {
 
 func TestProcessJob_ServiceStep_StartFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6380,7 +6359,7 @@ func TestProcessJob_ServiceStep_StartFailure(t *testing.T) {
 
 func TestProcessJob_ServiceStep_NotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6432,7 +6411,7 @@ func TestProcessJob_ServiceStep_NotFound(t *testing.T) {
 
 func TestProcessJob_ServiceStep_WithReadyCheck(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6524,7 +6503,7 @@ func TestProcessJob_ServiceStep_WithReadyCheck(t *testing.T) {
 
 func TestProcessJob_ServiceStep_ReadyCheckTimeout(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6622,7 +6601,7 @@ func TestProcessJob_ServiceStep_ReadyCheckTimeout(t *testing.T) {
 
 func TestServiceParams(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, _, _ := newTestWorker(ctrl)
+	w, _ := newTestWorker(ctrl)
 
 	b := &build.Build{BuildNumber: "99"}
 	m := queue.Body{
@@ -6749,7 +6728,7 @@ func TestValidateTaskRunParams(t *testing.T) {
 
 func TestProcessMessage_ResourceCheckDispatch(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6794,7 +6773,7 @@ func TestProcessMessage_ResourceCheckDispatch(t *testing.T) {
 
 func TestProcessMessage_GetPipelineError(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6814,7 +6793,7 @@ func TestProcessMessage_GetPipelineError(t *testing.T) {
 
 func TestProcessMessage_EmptyJobAndResource(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6835,7 +6814,7 @@ func TestProcessMessage_EmptyJobAndResource(t *testing.T) {
 
 func TestProcessJob_BuildID_Zero(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 	w.LocalMode = true // skip FindOldestPendingBuild
 
 	ctx := context.Background()
@@ -6861,7 +6840,7 @@ func TestProcessJob_BuildID_Zero(t *testing.T) {
 
 func TestProcessJob_NoPendingBuild(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6888,7 +6867,7 @@ func TestProcessJob_NoPendingBuild(t *testing.T) {
 
 func TestProcessJob_FindOldestPendingBuild_Error(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -6913,7 +6892,7 @@ func TestProcessJob_FindOldestPendingBuild_Error(t *testing.T) {
 
 func TestProcessJob_PutStep_LocalMode_Skips(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, topic := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 	w.LocalMode = true
 
 	ctx := context.Background()
@@ -6960,9 +6939,6 @@ func TestProcessJob_PutStep_LocalMode_Skips(t *testing.T) {
 			return nil
 		}).AnyTimes()
 
-	// Allow topic.Send for notifyNextPendingBuild
-	topic.EXPECT().Send(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-
 	expectPendingBuild(svc, 10)
 	w.processJob(ctx, m, cwd, pp)
 
@@ -6973,7 +6949,7 @@ func TestProcessJob_PutStep_LocalMode_Skips(t *testing.T) {
 
 func TestProcessJob_OnSuccessHook(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -7045,7 +7021,7 @@ func TestProcessJob_OnSuccessHook(t *testing.T) {
 
 func TestProcessJob_OnFailureHook_WithAutoNotification(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -7135,7 +7111,7 @@ func TestProcessJob_OnFailureHook_WithAutoNotification(t *testing.T) {
 
 func TestRunPlan_EmptyPlan(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -7182,7 +7158,7 @@ func TestRunPlan_EmptyPlan(t *testing.T) {
 
 func TestRunPlan_MixedSteps_GetTaskPutNotify(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -7294,7 +7270,7 @@ func TestRunPlan_MixedSteps_GetTaskPutNotify(t *testing.T) {
 
 func TestProcessJob_GetPipelineJob_Error(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -7331,7 +7307,7 @@ func TestProcessJob_GetPipelineJob_Error(t *testing.T) {
 
 func TestProcessJob_NotifyStep_WithHooks(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	w, svc, _ := newTestWorker(ctrl)
+	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
 	m := queue.Body{
@@ -7430,8 +7406,7 @@ func TestCreateWorkDir(t *testing.T) {
 func TestNew(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := mock.NewService(ctrl)
-	topic := mock.NewTopic(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	w := New(svc, topic, nil, nil, logger, "test-worker", "jobs,checks", "test", 1)
+	w := New(svc, logger, "test-worker", "test", 1)
 	assert.NotNil(t, w)
 }

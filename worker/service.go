@@ -52,10 +52,7 @@ type Service interface {
 // subscriptions. It manages build lifecycle, executes pipeline steps, and
 // supports graceful draining.
 type Worker struct {
-	jobTopic          queue.Topic
 	pikoci            pikoci.Service
-	jobSubscription   queue.Subscription
-	checkSubscription queue.Subscription
 
 	draining    atomic.Bool
 	drainCancel context.CancelFunc
@@ -74,14 +71,9 @@ type Worker struct {
 	// version-availability checks, put steps, and secret resolution.
 	LocalMode bool
 
-	// UseLongPoll enables the HTTP long-poll work loop instead of
-	// pub/sub receive loops.
-	UseLongPoll bool
-
 	// Heartbeat info
 	Name        string
 	StartedAt   time.Time
-	Queues      string
 	Concurrency int
 	Version     string
 }
@@ -101,21 +93,17 @@ func resourceCacheEnabled(rt restype.ResourceType, r resource.Resource) bool {
 	return rt.Cache
 }
 
-// New creates a new Worker with the given PikoCI service, job topic, job and
-// check subscriptions, and logger. The returned Worker is ready to be started
-// with Run.
-func New(s pikoci.Service, jobTopic queue.Topic, jobSub, checkSub queue.Subscription, l *slog.Logger, name, queues, version string, concurrency int) *Worker {
+// New creates a new Worker with the given PikoCI service and logger. The
+// returned Worker is ready to be started with Run, which uses HTTP long-poll
+// to receive work items.
+func New(s pikoci.Service, l *slog.Logger, name, version string, concurrency int) *Worker {
 	return &Worker{
-		pikoci:            s,
-		jobTopic:          jobTopic,
-		jobSubscription:   jobSub,
-		checkSubscription: checkSub,
-		logger:            l,
-		Name:              name,
-		StartedAt:         time.Now(),
-		Queues:            queues,
-		Concurrency:       concurrency,
-		Version:           version,
+		pikoci:      s,
+		logger:      l,
+		Name:        name,
+		StartedAt:   time.Now(),
+		Concurrency: concurrency,
+		Version:     version,
 	}
 }
 
@@ -152,7 +140,6 @@ func (w *Worker) sendHeartbeat(ctx context.Context) {
 		GoVersion:   runtime.Version(),
 		Version:     w.Version,
 		Concurrency: w.Concurrency,
-		Queues:      w.Queues,
 		StartedAt:   w.StartedAt,
 	}
 	if err := w.pikoci.WorkerHeartbeat(ctx, hw); err != nil {
@@ -223,87 +210,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	w.drainCancel = receiveCancel
 	defer receiveCancel()
 
-	var wg sync.WaitGroup
-	errs := make(chan error, 2)
-
-	if w.UseLongPoll {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := w.pollLoop(receiveCtx); err != nil {
-				errs <- err
-			}
-		}()
-	} else {
-		if w.jobSubscription != nil {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				if err := w.receiveLoop(receiveCtx, ctx, w.jobSubscription, "job"); err != nil {
-					errs <- err
-				}
-			}()
-		}
-
-		if w.checkSubscription != nil {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				if err := w.receiveLoop(receiveCtx, ctx, w.checkSubscription, "check"); err != nil {
-					errs <- err
-				}
-			}()
-		}
-	}
-
-	done := make(chan struct{})
-	go func() { wg.Wait(); close(done) }()
-
-	select {
-	case err := <-errs:
-		return err
-	case <-done:
-		return nil
-	}
-}
-
-func (w *Worker) receiveLoop(receiveCtx, processCtx context.Context, sub queue.Subscription, kind string) error {
-	for {
-		if w.draining.Load() {
-			w.logger.Info("Worker draining, stopping message receive", "queue", kind)
-			return nil
-		}
-		msg, err := sub.Receive(receiveCtx)
-		if err != nil {
-			if w.draining.Load() {
-				w.logger.Info("Worker draining, stopping message receive", "queue", kind)
-				return nil
-			}
-			return fmt.Errorf("failed to receive %s message: %w", kind, err)
-		}
-
-		w.logger.Info("received message", "queue", kind, "body", string(msg.Body))
-
-		var m queue.Body
-		if err := json.Unmarshal(msg.Body, &m); err != nil {
-			w.logger.Error("failed unmarshal message body", "queue", kind, "error", err)
-			msg.Ack()
-			continue
-		}
-
-		// Ack immediately to prevent re-delivery while the job runs.
-		// Jobs can take minutes (e.g. docker builds), which exceeds
-		// the pubsub ack deadline and causes duplicate triggers.
-		msg.Ack()
-
-		cwd, err := w.createWorkDir()
-		if err != nil {
-			return err
-		}
-
-		w.processMessage(processCtx, m, cwd)
-		os.RemoveAll(cwd)
-	}
+	return w.pollLoop(receiveCtx)
 }
 
 // pollLoop uses HTTP long polling to receive work items. It handles both
@@ -315,6 +222,9 @@ func (w *Worker) pollLoop(ctx context.Context) error {
 		}
 		item, err := w.pikoci.PollNextWork(ctx)
 		if err != nil {
+			if w.draining.Load() {
+				return nil
+			}
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}

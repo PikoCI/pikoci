@@ -18,7 +18,6 @@ type WorkerHeartbeatRequest struct {
 	GoVersion   string `json:"go_version"`
 	Version     string `json:"version"`
 	Concurrency int    `json:"concurrency"`
-	Queues      string `json:"queues"`
 	StartedAt   string `json:"started_at"`
 }
 type WorkerHeartbeatResponse struct {
@@ -52,7 +51,6 @@ func workerHeartbeat(s pikoci.Service) http.HandlerFunc {
 			GoVersion:   req.GoVersion,
 			Version:     req.Version,
 			Concurrency: req.Concurrency,
-			Queues:      req.Queues,
 			StartedAt:   startedAt,
 		}
 
