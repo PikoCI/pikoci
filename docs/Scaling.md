@@ -76,7 +76,7 @@ Good for: teams that want history, projects that need to survive restarts.
 ## Phase 3 — Distributed workers
 
 Add more workers without changing the server. Workers use HTTP long polling
-and only need network access to the server — no external queue service required.
+and only need network access to the server, no external queue service required.
 
 **Step 1 — Restart the server without a built-in worker:**
 
