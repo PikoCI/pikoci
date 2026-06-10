@@ -81,6 +81,7 @@ var (
 		PauseJob:        member,
 		UnpauseJob:      member,
 
+		PollNextWork:    nothing,
 		WorkerHeartbeat: nothing,
 		ListWorkers:     admin,
 		WorkersHealth:   admin,

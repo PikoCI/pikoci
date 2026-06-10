@@ -1107,7 +1107,7 @@ func (cl *Client) NextWork(ctx context.Context) (*queue.WorkItem, error) {
 func (cl *Client) PollNextWork(ctx context.Context) (*queue.WorkItem, error) {
 	var resp thttp.PollNextWorkResponse
 
-	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/work/poll", cl.url), nil, &resp)
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/work/next", cl.url), nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}

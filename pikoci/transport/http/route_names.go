@@ -144,4 +144,7 @@ const (
 	WorkersHealth
 	// DeleteWorker is the route for deleting a worker by name.
 	DeleteWorker
+
+	// PollNextWork is the route for long-polling the next available work item.
+	PollNextWork
 )
