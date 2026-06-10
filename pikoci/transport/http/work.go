@@ -1,10 +1,10 @@
 package http
 
-import "github.com/pikoci/pikoci/pikoci/queue"
+import "github.com/pikoci/pikoci/pikoci/workitem"
 
 // PollNextWorkResponse is the JSON response for the poll-next-work endpoint.
 type PollNextWorkResponse struct {
-	WorkItem *queue.WorkItem `json:"work_item,omitempty"`
+	WorkItem *workitem.Item `json:"work_item,omitempty"`
 	Err      string          `json:"error,omitempty"`
 }
 

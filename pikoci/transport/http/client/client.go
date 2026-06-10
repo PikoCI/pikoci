@@ -15,7 +15,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
-	"github.com/pikoci/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/workitem"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/team"
 	thttp "github.com/pikoci/pikoci/pikoci/transport/http"
@@ -1098,12 +1098,12 @@ func (cl *Client) DeleteWorker(ctx context.Context, name string) error {
 }
 
 // NextWork is not used by the client; it is a server-side method.
-func (cl *Client) NextWork(ctx context.Context) (*queue.WorkItem, error) {
+func (cl *Client) NextWork(ctx context.Context) (*workitem.Item, error) {
 	return nil, fmt.Errorf("NextWork is not available via HTTP client")
 }
 
 // PollNextWork calls the server's long-poll endpoint to wait for available work.
-func (cl *Client) PollNextWork(ctx context.Context) (*queue.WorkItem, error) {
+func (cl *Client) PollNextWork(ctx context.Context) (*workitem.Item, error) {
 	var resp thttp.PollNextWorkResponse
 
 	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/work/next", cl.url), nil, &resp)

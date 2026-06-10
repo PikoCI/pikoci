@@ -20,7 +20,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/notification"
 	"github.com/pikoci/pikoci/pikoci/notiftype"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
-	"github.com/pikoci/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/workitem"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
@@ -162,7 +162,7 @@ func TestProcessJob_Success_TaskOnly(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "echo-job",
@@ -216,7 +216,7 @@ func TestProcessJob_Success_WithGetAndTask(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -301,7 +301,7 @@ func TestInsertBuildGetVersion_CalledWithCorrectArgs(t *testing.T) {
 	w := &Worker{pikoci: svc, logger: logger}
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -372,7 +372,7 @@ func TestProcessJob_FailedPassedConstraint_NoBuilds(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "downstream-job",
@@ -426,7 +426,7 @@ func TestProcessJob_FailedPassedConstraint_NotSucceeded(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "downstream-job",
@@ -480,7 +480,7 @@ func TestProcessJob_TaskFailure_RunsHooks(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "failing-job",
@@ -573,7 +573,7 @@ func TestProcessJob_NoDownstreamTrigger(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "upstream-job",
@@ -655,7 +655,7 @@ func TestProcessResourceCheck_NewVersions(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "cron.my-cron",
@@ -714,7 +714,7 @@ func TestProcessResourceCheck_NestedVersionFlattened(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "custom.my-res",
@@ -778,7 +778,7 @@ func TestProcessResourceCheck_DuplicateVersionSkipped_FirstCheck(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "git.my-repo",
@@ -848,7 +848,7 @@ func TestProcessResourceCheck_SecondCheckTriggers(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "cron.my-cron",
@@ -908,7 +908,7 @@ func TestProcessResourceCheckTrigger_FirstCheckTriggers(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "trigger.my-trigger",
@@ -959,7 +959,7 @@ func TestProcessResourceCheckTrigger_SecondCheckTriggers(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "trigger.my-trigger",
@@ -1012,7 +1012,7 @@ func TestCheckPassedConstraints_AllPassed(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "downstream-job",
@@ -1052,7 +1052,7 @@ func TestCheckPassedConstraints_NoCommonVersion(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "downstream-job",
@@ -1097,7 +1097,7 @@ func TestCheckPassedConstraints_PicksNewestCommon(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "deploy",
@@ -1149,7 +1149,7 @@ func TestCheckPassedConstraints_NoPassedField(t *testing.T) {
 	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "simple-job",
@@ -1179,7 +1179,7 @@ func TestCheckPassedConstraints_PutStepSatisfiesPassed(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "downstream-job",
@@ -1216,7 +1216,7 @@ func TestImplicitGetAfterPut_CreatesVersionAndRecords(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "gen-job",
@@ -1258,7 +1258,7 @@ func TestImplicitGetAfterPut_InvalidJSON_Skips(t *testing.T) {
 	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "gen-job",
@@ -1290,7 +1290,7 @@ func TestRunHooks(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -1328,7 +1328,7 @@ func TestRunHooks_SingleHook_NoIndex(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -1358,7 +1358,7 @@ func TestRunHooks_JobLevel_NoStepName(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -1388,7 +1388,7 @@ func TestProcessMessage_JobDispatch(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -1424,7 +1424,7 @@ func TestBuildPullParams_WithVersionID(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -1466,7 +1466,7 @@ func TestBuildPullParams_NoVersionID_UsesLatest(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -1500,7 +1500,7 @@ func TestBuildPullParams_NoVersions_Fails(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -1530,7 +1530,7 @@ func TestBuildPullParams_ResolvedVersionTakesPriority(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -1563,7 +1563,7 @@ func TestCheckVersionAvailability_NoVersions_DeletesBuild(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -1609,7 +1609,7 @@ func TestCheckVersionAvailability_VersionExists_Passes(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -1648,7 +1648,7 @@ func TestProcessJob_PutStep_Success(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "deploy-job",
@@ -1723,7 +1723,7 @@ func TestProcessJob_PutStep_CacheDirSet(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "artifact-job",
@@ -1805,7 +1805,7 @@ func TestProcessJob_OrderedPlan_GetTaskPut(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "ordered-job",
@@ -1881,7 +1881,7 @@ func TestProcessJob_TaskTimeout(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "timeout-job",
@@ -1960,7 +1960,7 @@ func TestProcessJob_GetTimeout(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "get-timeout-job",
@@ -2033,7 +2033,7 @@ func TestProcessJob_NoTimeout_Succeeds(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "no-timeout-job",
@@ -2093,7 +2093,7 @@ func TestProcessJob_TaskRetry_SucceedsOnSecondAttempt(t *testing.T) {
 
 	ctx := context.Background()
 	cwd := t.TempDir()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "retry-job",
@@ -2169,7 +2169,7 @@ func TestProcessJob_TaskRetry_ExhaustsAttempts(t *testing.T) {
 
 	ctx := context.Background()
 	cwd := t.TempDir()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "exhaust-job",
@@ -2237,7 +2237,7 @@ func TestProcessJob_TaskRetry_WithTimeout(t *testing.T) {
 
 	ctx := context.Background()
 	cwd := t.TempDir()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "timeout-retry-job",
@@ -2327,7 +2327,7 @@ func TestProcessResourceCheck_WithSecretVars(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "git.repo",
@@ -2486,7 +2486,7 @@ func TestProcessResourceCheck_SecretResolutionError_UpdatesResourceLogs(t *testi
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "git.repo",
@@ -2709,7 +2709,7 @@ func TestProcessResourceCheck_RawSecretFormat(t *testing.T) {
 	pemContent := "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn\n-----END RSA PRIVATE KEY-----\n"
 	os.WriteFile(pemFile, []byte(pemContent), 0644)
 
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "cron.timer",
@@ -2856,7 +2856,7 @@ func TestTriggerResourceJobs_MultipleJobsSameResource(t *testing.T) {
 		},
 	}
 
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "tc",
 		PipelineCanonical: "test-pipeline",
 	}
@@ -2895,7 +2895,7 @@ func TestTriggerResourceJobs_SkipsWhenResourcePinned(t *testing.T) {
 		},
 	}
 
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "tc",
 		PipelineCanonical: "test-pipeline",
 	}
@@ -2934,7 +2934,7 @@ func TestTriggerResourceJobs_TriggersWhenPinnedVersionMatches(t *testing.T) {
 		},
 	}
 
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "tc",
 		PipelineCanonical: "test-pipeline",
 	}
@@ -2948,7 +2948,7 @@ func TestProcessJob_TaskInputMissing(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "input-job",
@@ -3011,7 +3011,7 @@ func TestProcessJob_TaskOutputMissing(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "output-job",
@@ -3074,7 +3074,7 @@ func TestProcessJob_TaskInputsOutputs_Success(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "io-job",
@@ -3143,7 +3143,7 @@ func TestProcessJob_TaskMultipleInputs_FailsOnFirst(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "multi-input-job",
@@ -3212,7 +3212,7 @@ func TestProcessJob_TaskMultipleOutputs_FailsOnFirst(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "multi-output-job",
@@ -3296,7 +3296,7 @@ func TestProcessJob_Cancellation(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "cancel-job",
@@ -3379,7 +3379,7 @@ func TestProcessJob_Retry_UsesCreateRetryAndResolvedVersions(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -3458,7 +3458,7 @@ func TestProcessJob_Retry_FailsOnVersionLookupError(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -3527,7 +3527,7 @@ func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "cancel-hook-job",
@@ -3654,7 +3654,7 @@ func TestProcessJob_Cancellation_NoUpdateLoopAfterCancel(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "cancel-loop-job",
@@ -3733,7 +3733,7 @@ func TestProcessJob_MissingBuildID(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -3754,7 +3754,7 @@ func TestProcessJob_BuildNotPending(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -3776,7 +3776,7 @@ func TestProcessJob_ConcurrencyLimit_Returns(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -3798,7 +3798,7 @@ func TestProcessJob_SerialGroupLimit_Returns(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "deploy-staging",
@@ -3820,7 +3820,7 @@ func TestProcessJob_GenericError_Returns(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -3850,7 +3850,7 @@ func TestRunGetStepLocal_Success(t *testing.T) {
 	cwd := filepath.Join(dir, "workdir")
 	require.NoError(t, os.MkdirAll(cwd, 0755))
 
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -3892,7 +3892,7 @@ func TestRunGetStepLocal_MissingPath(t *testing.T) {
 	cwd := filepath.Join(dir, "workdir")
 	require.NoError(t, os.MkdirAll(cwd, 0755))
 
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -3931,7 +3931,7 @@ func TestDrain_UnblocksPollLoopImmediately(t *testing.T) {
 	svc.EXPECT().WorkerHeartbeat(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	// PollNextWork blocks until context is cancelled
-	svc.EXPECT().PollNextWork(gomock.Any()).DoAndReturn(func(ctx context.Context) (*queue.WorkItem, error) {
+	svc.EXPECT().PollNextWork(gomock.Any()).DoAndReturn(func(ctx context.Context) (*workitem.Item, error) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}).AnyTimes()
@@ -4195,7 +4195,7 @@ func TestProcessJob_JobTimeout(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "job-timeout-job",
@@ -4257,7 +4257,7 @@ func TestProcessJob_JobTimeout_NotReached(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "job-timeout-ok",
@@ -4634,7 +4634,7 @@ func TestProcessJob_GetStepExportsVersionMetadata(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -4719,7 +4719,7 @@ func TestProcessJob_TaskExportsPikoOutput(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -4792,7 +4792,7 @@ func TestProcessJob_ExportedVarsAccumulate(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -4888,7 +4888,7 @@ func TestProcessJob_FailedStepDoesNotExport(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -4964,7 +4964,7 @@ func TestProcessJob_NotifyStep_Success(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "notify-job",
@@ -5045,7 +5045,7 @@ func TestProcessJob_NotifyStep_Failure(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "notify-fail-job",
@@ -5121,7 +5121,7 @@ func TestRunNotifyStep_LocalMode_Skips(t *testing.T) {
 	w.LocalMode = true
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "local-notify-job",
@@ -5179,7 +5179,7 @@ func TestRunNotifyStep_NotificationNotFound_NoFailure(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "missing-notif-job",
@@ -5237,7 +5237,7 @@ func TestRunNotifyStep_NotificationTypeNotFound_NoFailure(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "missing-type-job",
@@ -5300,7 +5300,7 @@ func TestRunNotifyStep_WithMessage_And_Params(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "notify-msg-job",
@@ -5384,7 +5384,7 @@ func TestRunNotifyStep_MessageInterpolation(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "interp-job",
@@ -5485,7 +5485,7 @@ func TestRunAutoNotifications_SuccessEvent(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "auto-notif-job",
@@ -5564,7 +5564,7 @@ func TestRunAutoNotifications_FailureEvent(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "auto-fail-job",
@@ -5643,7 +5643,7 @@ func TestRunAutoNotifications_EventNotMatched(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "auto-no-match-job",
@@ -5720,7 +5720,7 @@ func TestRunAutoNotifications_AllEvent(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "auto-all-job",
@@ -5796,7 +5796,7 @@ func TestRunAutoNotifications_JobScope(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "unscoped-job",
@@ -5873,7 +5873,7 @@ func TestRunAutoNotifications_ExcludeJob(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "excluded-job",
@@ -5949,7 +5949,7 @@ func TestRunAutoNotifications_NoOnField_Skips(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "no-on-job",
@@ -6027,7 +6027,7 @@ func TestProcessJob_PutStepTrigger_Success(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "trigger-job",
@@ -6102,7 +6102,7 @@ func TestProcessJob_PutStepTrigger_Failure(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "trigger-fail-job",
@@ -6173,7 +6173,7 @@ func TestNotifyNextPendingBuild_CallsSerialGroup(t *testing.T) {
 	w, _ := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -6191,7 +6191,7 @@ func TestProcessJob_ServiceStep_StartAndStop(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "service-job",
@@ -6281,7 +6281,7 @@ func TestProcessJob_ServiceStep_StartFailure(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "service-fail-job",
@@ -6362,7 +6362,7 @@ func TestProcessJob_ServiceStep_NotFound(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "missing-svc-job",
@@ -6414,7 +6414,7 @@ func TestProcessJob_ServiceStep_WithReadyCheck(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "ready-svc-job",
@@ -6506,7 +6506,7 @@ func TestProcessJob_ServiceStep_ReadyCheckTimeout(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "ready-timeout-job",
@@ -6604,7 +6604,7 @@ func TestServiceParams(t *testing.T) {
 	w, _ := newTestWorker(ctrl)
 
 	b := &build.Build{BuildNumber: "99"}
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -6731,7 +6731,7 @@ func TestProcessMessage_ResourceCheckDispatch(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		ResourceCanonical: "cron.my-cron",
@@ -6776,7 +6776,7 @@ func TestProcessMessage_GetPipelineError(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -6796,7 +6796,7 @@ func TestProcessMessage_EmptyJobAndResource(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		// No JobName, no ResourceCanonical
@@ -6818,7 +6818,7 @@ func TestProcessJob_BuildID_Zero(t *testing.T) {
 	w.LocalMode = true // skip FindOldestPendingBuild
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -6843,7 +6843,7 @@ func TestProcessJob_NoPendingBuild(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -6870,7 +6870,7 @@ func TestProcessJob_FindOldestPendingBuild_Error(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "test-job",
@@ -6896,7 +6896,7 @@ func TestProcessJob_PutStep_LocalMode_Skips(t *testing.T) {
 	w.LocalMode = true
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "local-put-job",
@@ -6952,7 +6952,7 @@ func TestProcessJob_OnSuccessHook(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "success-hook-job",
@@ -7024,7 +7024,7 @@ func TestProcessJob_OnFailureHook_WithAutoNotification(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "fail-hook-notif-job",
@@ -7114,7 +7114,7 @@ func TestRunPlan_EmptyPlan(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "empty-plan-job",
@@ -7161,7 +7161,7 @@ func TestRunPlan_MixedSteps_GetTaskPutNotify(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "mixed-job",
@@ -7273,7 +7273,7 @@ func TestProcessJob_GetPipelineJob_Error(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "error-job",
@@ -7310,7 +7310,7 @@ func TestProcessJob_NotifyStep_WithHooks(t *testing.T) {
 	w, svc := newTestWorker(ctrl)
 
 	ctx := context.Background()
-	m := queue.Body{
+	m := workitem.Body{
 		TeamCanonical:     "main",
 		PipelineCanonical: "test-pipeline",
 		JobName:           "notify-hook-job",

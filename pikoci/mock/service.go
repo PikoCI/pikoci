@@ -16,12 +16,12 @@ import (
 	build "github.com/pikoci/pikoci/pikoci/build"
 	job "github.com/pikoci/pikoci/pikoci/job"
 	pipeline "github.com/pikoci/pikoci/pikoci/pipeline"
-	queue "github.com/pikoci/pikoci/pikoci/queue"
 	resource "github.com/pikoci/pikoci/pikoci/resource"
 	team "github.com/pikoci/pikoci/pikoci/team"
 	trigger "github.com/pikoci/pikoci/pikoci/trigger"
 	user "github.com/pikoci/pikoci/pikoci/user"
 	wkr "github.com/pikoci/pikoci/pikoci/wkr"
+	workitem "github.com/pikoci/pikoci/pikoci/workitem"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -645,10 +645,10 @@ func (mr *ServiceMockRecorder) ListWorkers(ctx any) *gomock.Call {
 }
 
 // NextWork mocks base method.
-func (m *Service) NextWork(ctx context.Context) (*queue.WorkItem, error) {
+func (m *Service) NextWork(ctx context.Context) (*workitem.Item, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NextWork", ctx)
-	ret0, _ := ret[0].(*queue.WorkItem)
+	ret0, _ := ret[0].(*workitem.Item)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -714,10 +714,10 @@ func (mr *ServiceMockRecorder) PinResourceVersion(ctx, tc, pn, rCan, versionID a
 }
 
 // PollNextWork mocks base method.
-func (m *Service) PollNextWork(ctx context.Context) (*queue.WorkItem, error) {
+func (m *Service) PollNextWork(ctx context.Context) (*workitem.Item, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PollNextWork", ctx)
-	ret0, _ := ret[0].(*queue.WorkItem)
+	ret0, _ := ret[0].(*workitem.Item)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

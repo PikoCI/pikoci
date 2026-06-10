@@ -1,10 +1,9 @@
-// Package queue defines the work-item types exchanged between the server and
-// workers. Topic and Subscription interfaces have been removed; workers now
-// receive work via HTTP long-poll instead of pub/sub.
-package queue
+// Package workitem defines the types exchanged between the server and workers
+// for dispatching job builds and resource checks.
+package workitem
 
-// WorkItem represents a unit of work for a worker to process.
-type WorkItem struct {
+// Item represents a unit of work for a worker to process.
+type Item struct {
 	Type string `json:"type"` // "job" or "check"
 	Body Body   `json:"body"`
 }

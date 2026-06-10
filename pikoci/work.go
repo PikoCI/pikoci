@@ -4,14 +4,14 @@ import (
 	"context"
 	"time"
 
-	"github.com/pikoci/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/workitem"
 	"github.com/pikoci/pikoci/pikoci/scheduler"
 )
 
 // NextWork finds the next available work item by scanning all pipelines for
 // pending builds, then checking for due resource checks. It returns nil if
 // no work is available.
-func (q *PikoCI) NextWork(ctx context.Context) (*queue.WorkItem, error) {
+func (q *PikoCI) NextWork(ctx context.Context) (*workitem.Item, error) {
 	// Phase 1: Look for pending job builds.
 	pps, err := q.Pipelines.FilterAll(ctx)
 	if err != nil {
@@ -34,9 +34,9 @@ func (q *PikoCI) NextWork(ctx context.Context) (*queue.WorkItem, error) {
 				continue
 			}
 
-			return &queue.WorkItem{
+			return &workitem.Item{
 				Type: "job",
-				Body: queue.Body{
+				Body: workitem.Body{
 					TeamCanonical:     pwt.Team.Canonical,
 					PipelineCanonical: pwt.Canonical,
 					JobName:           j.Name,
@@ -76,9 +76,9 @@ func (q *PikoCI) NextWork(ctx context.Context) (*queue.WorkItem, error) {
 			continue
 		}
 
-		return &queue.WorkItem{
+		return &workitem.Item{
 			Type: "check",
-			Body: queue.Body{
+			Body: workitem.Body{
 				TeamCanonical:     rwp.TeamCanonical,
 				PipelineCanonical: rwp.PipelineCanonical,
 				ResourceCanonical: rwp.Canonical,
@@ -92,7 +92,7 @@ func (q *PikoCI) NextWork(ctx context.Context) (*queue.WorkItem, error) {
 // PollNextWork blocks until work is available or a 30-second timeout expires.
 // It checks for immediately available work first, then waits for a notification
 // from the WorkNotifier before checking again.
-func (q *PikoCI) PollNextWork(ctx context.Context) (*queue.WorkItem, error) {
+func (q *PikoCI) PollNextWork(ctx context.Context) (*workitem.Item, error) {
 	w, err := q.NextWork(ctx)
 	if err != nil || w != nil {
 		return w, err
