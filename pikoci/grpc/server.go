@@ -10,7 +10,6 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
-	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/workitem"
@@ -19,11 +18,19 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// WorkDispatcher is the interface the gRPC server uses for finding work.
+// It is satisfied by *pikoci.PikoCI but not the Service interface (since
+// NextWork is an internal method not exposed to HTTP clients).
+type WorkDispatcher interface {
+	NextWork(ctx context.Context) (*workitem.Item, error)
+	WorkerHeartbeat(ctx context.Context, w wkr.Worker) error
+}
+
 // Server implements the WorkerService gRPC server.
 type Server struct {
 	workerv1.UnimplementedWorkerServiceServer
 
-	svc       pikoci.Service
+	svc       WorkDispatcher
 	notifier  *notifier.WorkNotifier
 	streams   *WorkerStreamManager
 	jwtSecret []byte
@@ -31,7 +38,7 @@ type Server struct {
 }
 
 // NewServer creates a new gRPC WorkerService server.
-func NewServer(svc pikoci.Service, n *notifier.WorkNotifier, sm *WorkerStreamManager, jwtSecret []byte, l *slog.Logger) *Server {
+func NewServer(svc WorkDispatcher, n *notifier.WorkNotifier, sm *WorkerStreamManager, jwtSecret []byte, l *slog.Logger) *Server {
 	return &Server{
 		svc:       svc,
 		notifier:  n,

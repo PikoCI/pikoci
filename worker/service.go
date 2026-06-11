@@ -47,11 +47,19 @@ type Service interface {
 	Run(ctx context.Context, q, t string) error
 }
 
+// WorkPoller is implemented by *pikoci.PikoCI and provides PollNextWork
+// for the embedded worker's poll loop. It is not part of the Service interface
+// because standalone workers use gRPC streaming instead.
+type WorkPoller interface {
+	PollNextWork(ctx context.Context) (*workitem.Item, error)
+}
+
 // Worker processes job builds and resource checks received via HTTP long
-// polling. It manages build lifecycle, executes pipeline steps, and
-// supports graceful draining.
+// polling or gRPC streaming. It manages build lifecycle, executes pipeline
+// steps, and supports graceful draining.
 type Worker struct {
 	pikoci            pikoci.Service
+	workPoller        WorkPoller
 
 	draining    atomic.Bool
 	drainCancel context.CancelFunc
@@ -110,9 +118,10 @@ func resourceCacheEnabled(rt restype.ResourceType, r resource.Resource) bool {
 
 // New creates a new Worker with the given PikoCI service and logger. The
 // returned Worker is ready to be started with Run, which uses HTTP long-poll
-// to receive work items (embedded mode).
+// to receive work items (embedded mode). The service must implement WorkPoller
+// (satisfied by *pikoci.PikoCI) for the embedded poll loop.
 func New(s pikoci.Service, l *slog.Logger, name, version string, concurrency int) *Worker {
-	return &Worker{
+	w := &Worker{
 		pikoci:      s,
 		logger:      l,
 		Name:        name,
@@ -120,6 +129,10 @@ func New(s pikoci.Service, l *slog.Logger, name, version string, concurrency int
 		Concurrency: concurrency,
 		Version:     version,
 	}
+	if wp, ok := s.(WorkPoller); ok {
+		w.workPoller = wp
+	}
+	return w
 }
 
 // NewGRPC creates a Worker configured for gRPC streaming mode.
@@ -254,7 +267,7 @@ func (w *Worker) pollLoop(ctx context.Context) error {
 		if w.draining.Load() {
 			return nil
 		}
-		item, err := w.pikoci.PollNextWork(ctx)
+		item, err := w.workPoller.PollNextWork(ctx)
 		if err != nil {
 			if w.draining.Load() {
 				return nil

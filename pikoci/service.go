@@ -12,7 +12,6 @@ import (
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/notifier"
-	"github.com/pikoci/pikoci/pikoci/workitem"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
@@ -210,10 +209,6 @@ type Service interface {
 	// DeleteWorker removes a worker by name.
 	DeleteWorker(ctx context.Context, name string) error
 
-	// NextWork finds the next available work item (pending build or due resource check).
-	NextWork(ctx context.Context) (*workitem.Item, error)
-	// PollNextWork blocks until work is available or timeout (30s).
-	PollNextWork(ctx context.Context) (*workitem.Item, error)
 }
 
 // PikoCI is the primary implementation of the Service interface. It coordinates

@@ -21,7 +21,6 @@ import (
 	trigger "github.com/pikoci/pikoci/pikoci/trigger"
 	user "github.com/pikoci/pikoci/pikoci/user"
 	wkr "github.com/pikoci/pikoci/pikoci/wkr"
-	workitem "github.com/pikoci/pikoci/pikoci/workitem"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -644,21 +643,6 @@ func (mr *ServiceMockRecorder) ListWorkers(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkers", reflect.TypeOf((*Service)(nil).ListWorkers), ctx)
 }
 
-// NextWork mocks base method.
-func (m *Service) NextWork(ctx context.Context) (*workitem.Item, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NextWork", ctx)
-	ret0, _ := ret[0].(*workitem.Item)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// NextWork indicates an expected call of NextWork.
-func (mr *ServiceMockRecorder) NextWork(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextWork", reflect.TypeOf((*Service)(nil).NextWork), ctx)
-}
-
 // NotifySerialGroupPendingBuilds mocks base method.
 func (m *Service) NotifySerialGroupPendingBuilds(ctx context.Context, tc, pn, jn string) {
 	m.ctrl.T.Helper()
@@ -711,21 +695,6 @@ func (m *Service) PinResourceVersion(ctx context.Context, tc, pn, rCan string, v
 func (mr *ServiceMockRecorder) PinResourceVersion(ctx, tc, pn, rCan, versionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PinResourceVersion", reflect.TypeOf((*Service)(nil).PinResourceVersion), ctx, tc, pn, rCan, versionID)
-}
-
-// PollNextWork mocks base method.
-func (m *Service) PollNextWork(ctx context.Context) (*workitem.Item, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PollNextWork", ctx)
-	ret0, _ := ret[0].(*workitem.Item)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// PollNextWork indicates an expected call of PollNextWork.
-func (mr *ServiceMockRecorder) PollNextWork(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollNextWork", reflect.TypeOf((*Service)(nil).PollNextWork), ctx)
 }
 
 // RefreshToken mocks base method.

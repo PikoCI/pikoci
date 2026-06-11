@@ -3786,24 +3786,28 @@ func TestRunGetStepLocal_MissingPath(t *testing.T) {
 	assert.Contains(t, b.Steps[0].Logs, "does not exist")
 }
 
+// blockingPoller is a test helper that blocks PollNextWork until ctx is cancelled.
+type blockingPoller struct{}
+
+func (bp *blockingPoller) PollNextWork(ctx context.Context) (*workitem.Item, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 func TestDrain_UnblocksPollLoopImmediately(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := mock.NewService(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
+	poller := &blockingPoller{}
 	w := &Worker{
-		pikoci:    svc,
-		logger:    logger,
-		StartedAt: time.Now(),
+		pikoci:     svc,
+		workPoller: poller,
+		logger:     logger,
+		StartedAt:  time.Now(),
 	}
 
 	svc.EXPECT().WorkerHeartbeat(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-
-	// PollNextWork blocks until context is cancelled
-	svc.EXPECT().PollNextWork(gomock.Any()).DoAndReturn(func(ctx context.Context) (*workitem.Item, error) {
-		<-ctx.Done()
-		return nil, ctx.Err()
-	}).AnyTimes()
 
 	ctx := context.Background()
 	done := make(chan error, 1)
