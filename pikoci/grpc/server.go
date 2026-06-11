@@ -36,10 +36,15 @@ type Server struct {
 	jwtSecret []byte
 	logger    *slog.Logger
 
-	// registeredMaxJobs stores max_jobs from Register calls, keyed by worker ID.
-	// Used by Execute to set the correct MaxJobs on the stream.
+	// registeredWorkers stores registration info from Register calls.
+	// Entries expire after 30 seconds if Execute is not called.
 	registeredMu      sync.Mutex
-	registeredMaxJobs map[string]int32
+	registeredWorkers map[string]*registeredWorker
+}
+
+type registeredWorker struct {
+	maxJobs    int32
+	registedAt time.Time
 }
 
 // NewServer creates a new gRPC WorkerService server.
@@ -50,7 +55,7 @@ func NewServer(svc WorkDispatcher, n *notifier.WorkNotifier, sm *WorkerStreamMan
 		streams:           sm,
 		jwtSecret:         jwtSecret,
 		logger:            l,
-		registeredMaxJobs: make(map[string]int32),
+		registeredWorkers: make(map[string]*registeredWorker),
 	}
 }
 
@@ -72,7 +77,10 @@ func (s *Server) Register(ctx context.Context, req *workerv1.RegisterRequest) (*
 	s.logger.Info("worker registered via gRPC", "worker_id", req.WorkerId, "max_jobs", req.MaxJobs)
 
 	s.registeredMu.Lock()
-	s.registeredMaxJobs[req.WorkerId] = req.MaxJobs
+	s.registeredWorkers[req.WorkerId] = &registeredWorker{
+		maxJobs:    req.MaxJobs,
+		registedAt: time.Now(),
+	}
 	s.registeredMu.Unlock()
 
 	return &workerv1.RegisterResponse{
@@ -99,17 +107,28 @@ func (s *Server) Execute(stream workerv1.WorkerService_ExecuteServer) error {
 		return status.Errorf(codes.InvalidArgument, "worker_id is required in initial heartbeat")
 	}
 
-	// Look up max_jobs from the Register call — rejects workers that
+	// Look up registration from the Register call — rejects workers that
 	// haven't called Register (which validates the JWT token).
+	// Registrations expire after 30 seconds to prevent stale entries.
 	s.registeredMu.Lock()
-	maxJobs, ok := s.registeredMaxJobs[workerID]
+	rw, ok := s.registeredWorkers[workerID]
 	if ok {
-		delete(s.registeredMaxJobs, workerID)
+		delete(s.registeredWorkers, workerID)
+	}
+	// Clean up any stale registrations while holding the lock
+	for id, w := range s.registeredWorkers {
+		if time.Since(w.registedAt) > 30*time.Second {
+			delete(s.registeredWorkers, id)
+		}
 	}
 	s.registeredMu.Unlock()
 	if !ok {
 		return status.Errorf(codes.Unauthenticated, "worker %q has not called Register", workerID)
 	}
+	if time.Since(rw.registedAt) > 30*time.Second {
+		return status.Errorf(codes.Unauthenticated, "registration for worker %q has expired", workerID)
+	}
+	maxJobs := rw.maxJobs
 	if maxJobs <= 0 {
 		maxJobs = 1
 	}
