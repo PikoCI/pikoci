@@ -170,7 +170,7 @@ func (q *PikoCI) TriggerResourceVersion(ctx context.Context, tc, pc, rCan string
 		if j.Paused {
 			continue
 		}
-		for _, ps := range j.Plan {
+		for _, ps := range j.FlatPlanSteps() {
 			if ps.Type != job.StepTypeGet || ps.Get == nil {
 				continue
 			}
@@ -306,7 +306,7 @@ func (q *PikoCI) cancelMismatchedPendingBuilds(ctx context.Context, tc, pc, rCan
 	for _, j := range p.Jobs {
 		// Check if this job uses the pinned resource in any get step.
 		usesResource := false
-		for _, ps := range j.Plan {
+		for _, ps := range j.FlatPlanSteps() {
 			if ps.Type == job.StepTypeGet && ps.Get != nil && ps.Get.ResourceCanonical() == rCan {
 				usesResource = true
 				break

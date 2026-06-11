@@ -366,6 +366,49 @@ job "build" {
 	assert.Contains(t, err.Error(), `did you mean "message"`)
 }
 
+func TestValidatePipelineSchema_InParallelBlock(t *testing.T) {
+	hcl := []byte(`
+job "test" {
+  in_parallel {
+    get "git" "repo" {}
+    task "lint" {
+      run "exec" { args = ["/bin/sh"] }
+    }
+  }
+}
+`)
+	err := validatePipelineSchema(hcl)
+	assert.NoError(t, err)
+}
+
+func TestValidatePipelineSchema_InParallelRejectsService(t *testing.T) {
+	hcl := []byte(`
+job "test" {
+  in_parallel {
+    service "db" {}
+  }
+}
+`)
+	err := validatePipelineSchema(hcl)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "service")
+	assert.Contains(t, err.Error(), "not allowed")
+}
+
+func TestValidatePipelineSchema_InParallelRejectsNested(t *testing.T) {
+	hcl := []byte(`
+job "test" {
+  in_parallel {
+    in_parallel {}
+  }
+}
+`)
+	err := validatePipelineSchema(hcl)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "in_parallel")
+	assert.Contains(t, err.Error(), "not allowed")
+}
+
 func TestValidatePipelineSchema_JobConcurrencyTypo(t *testing.T) {
 	hcl := []byte(`
 job "build" {

@@ -461,7 +461,7 @@ func (w *Worker) processJob(ctx context.Context, m workitem.Body, cwd string, pp
 		}
 		// Convert step_name keys to resource_canonical keys
 		resolvedVersions = make(map[string]uint32)
-		for _, ps := range j.Plan {
+		for _, ps := range j.FlatPlanSteps() {
 			if ps.Type != job.StepTypeGet || ps.Get == nil {
 				continue
 			}
@@ -548,7 +548,7 @@ func (w *Worker) notifyNextPendingBuild(ctx context.Context, m workitem.Body) {
 // For for_each jobs, group names in "passed" are expanded to all instance names.
 func (w *Worker) checkPassedConstraints(ctx context.Context, m workitem.Body, b *build.Build, j *job.Job, pp *pipeline.Pipeline) (bool, map[string]uint32) {
 	resolvedVersions := make(map[string]uint32)
-	for _, ps := range j.Plan {
+	for _, ps := range j.FlatPlanSteps() {
 		if ps.Type != job.StepTypeGet || ps.Get == nil {
 			continue
 		}
@@ -650,7 +650,7 @@ func resolvePassedJobNames(passed []string, pp *pipeline.Pipeline) []string {
 // deleted and false is returned (same behavior as checkPassedConstraints).
 // This prevents hooks from running when no work can be done.
 func (w *Worker) checkVersionAvailability(ctx context.Context, m workitem.Body, b *build.Build, j *job.Job, pp *pipeline.Pipeline) bool {
-	for _, ps := range j.Plan {
+	for _, ps := range j.FlatPlanSteps() {
 		if ps.Type != job.StepTypeGet || ps.Get == nil {
 			continue
 		}
@@ -748,9 +748,220 @@ func (w *Worker) runPlan(ctx context.Context, m workitem.Body, b *build.Build, c
 			if w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, exportedVars, resolved) {
 				return true, resolved, exportedVars
 			}
+		case job.StepTypeInParallel:
+			if ps.InParallel == nil {
+				continue
+			}
+			if w.runInParallelStep(ctx, m, b, cwd, pp, *ps.InParallel, ps, resolvedVersions, exportedVars, resolved) {
+				return true, resolved, exportedVars
+			}
 		}
 	}
 	return false, resolved, exportedVars
+}
+
+// runInParallelStep runs inner steps concurrently.
+// Returns true if the parallel group failed.
+func (w *Worker) runInParallelStep(
+	ctx context.Context, m workitem.Body, b *build.Build,
+	cwd string, pp *pipeline.Pipeline, ip job.InParallelStep,
+	ps job.PlanStep, resolvedVersions map[string]uint32,
+	exportedVars map[string]string, resolved map[string]string,
+) bool {
+	start := time.Now()
+
+	// Empty block is a no-op
+	if len(ip.Steps) == 0 {
+		b.Steps = append(b.Steps, build.Step{
+			Type: "in_parallel", Status: build.Succeeded, Duration: 0,
+		})
+		w.updateBuild(ctx, m, *b)
+		return false
+	}
+
+	// Add parent step placeholder
+	parentIdx := len(b.Steps)
+	b.Steps = append(b.Steps, build.Step{
+		Type: "in_parallel", Status: build.Started,
+	})
+	w.updateBuild(ctx, m, *b)
+
+	// Snapshot exportedVars (read-only base for all goroutines)
+	snapshotVars := make(map[string]string, len(exportedVars))
+	for k, v := range exportedVars {
+		snapshotVars[k] = v
+	}
+
+	// Shared cancellation context for fail_fast
+	parallelCtx, cancelParallel := context.WithCancel(ctx)
+	defer cancelParallel()
+
+	// Semaphore for limit
+	var sem chan struct{}
+	if ip.Limit > 0 {
+		sem = make(chan struct{}, ip.Limit)
+	}
+
+	type parallelResult struct {
+		exportedVars map[string]string
+		failed       bool
+	}
+
+	results := make([]parallelResult, len(ip.Steps))
+	var wg sync.WaitGroup
+	var mu sync.Mutex // protects b and updateBuild calls
+
+	// syncSubSteps copies localBuild.Steps into the parent's SubSteps at the
+	// goroutine's reserved offset, then persists the real build.
+	// Called under mu by each goroutine whenever its local state changes.
+	type subStepSlot struct {
+		steps []build.Step
+	}
+	slots := make([]subStepSlot, len(ip.Steps))
+	// Pre-populate slots with pending steps so the UI shows queued tasks
+	for i, innerPS := range ip.Steps {
+		var name, typ string
+		switch innerPS.Type {
+		case job.StepTypeGet:
+			if innerPS.Get != nil {
+				name, typ = innerPS.Get.Name, "get"
+			}
+		case job.StepTypeTask:
+			if innerPS.Task != nil {
+				name, typ = innerPS.Task.Name, "task"
+			}
+		case job.StepTypePut:
+			if innerPS.Put != nil {
+				name, typ = innerPS.Put.Name, "put"
+			}
+		case job.StepTypeNotify:
+			if innerPS.Notify != nil {
+				name, typ = innerPS.Notify.Name, "notify"
+			}
+		}
+		slots[i] = subStepSlot{steps: []build.Step{{Type: typ, Name: name, Status: build.Pending}}}
+	}
+	rebuildSubSteps := func() {
+		var merged []build.Step
+		for _, sl := range slots {
+			merged = append(merged, sl.steps...)
+		}
+		b.Steps[parentIdx].SubSteps = merged
+		w.updateBuild(ctx, m, *b)
+	}
+	rebuildSubSteps() // persist initial pending state
+
+	for i, innerPS := range ip.Steps {
+		wg.Add(1)
+		go func(idx int, ps job.PlanStep) {
+			defer wg.Done()
+
+			// Acquire semaphore
+			if sem != nil {
+				select {
+				case sem <- struct{}{}:
+					defer func() { <-sem }()
+				case <-parallelCtx.Done():
+					results[idx] = parallelResult{failed: true}
+					return
+				}
+			}
+
+			// Check if cancelled before starting
+			if parallelCtx.Err() != nil {
+				results[idx] = parallelResult{failed: true}
+				return
+			}
+
+			// Per-goroutine state
+			localVars := make(map[string]string, len(snapshotVars))
+			for k, v := range snapshotVars {
+				localVars[k] = v
+			}
+
+			// Create a local build that syncs its steps to the parent on every update.
+			localBuild := &build.Build{SuppressUpdates: true}
+			localBuild.OnUpdate = func() {
+				mu.Lock()
+				defer mu.Unlock()
+				slots[idx].steps = make([]build.Step, len(localBuild.Steps))
+				copy(slots[idx].steps, localBuild.Steps)
+				rebuildSubSteps()
+			}
+
+			var failed bool
+			switch ps.Type {
+			case job.StepTypeGet:
+				if ps.Get != nil {
+					failed = w.runGetStep(parallelCtx, m, localBuild, cwd, pp, *ps.Get, ps, resolvedVersions, localVars, resolved)
+				}
+			case job.StepTypeTask:
+				if ps.Task != nil {
+					failed = w.runTaskStep(parallelCtx, m, localBuild, cwd, pp, *ps.Task, ps, localVars, resolved)
+				}
+			case job.StepTypePut:
+				if ps.Put != nil {
+					failed = w.runPutStep(parallelCtx, m, localBuild, cwd, pp, *ps.Put, ps, localVars, resolved)
+				}
+			case job.StepTypeNotify:
+				if ps.Notify != nil {
+					failed = w.runNotifyStep(parallelCtx, m, localBuild, cwd, pp, *ps.Notify, ps, localVars, resolved)
+				}
+			}
+
+			results[idx] = parallelResult{
+				exportedVars: localVars,
+				failed:       failed,
+			}
+
+			// Final sync
+			mu.Lock()
+			slots[idx].steps = make([]build.Step, len(localBuild.Steps))
+			copy(slots[idx].steps, localBuild.Steps)
+			rebuildSubSteps()
+			mu.Unlock()
+
+			if failed && ip.FailFast {
+				cancelParallel()
+			}
+		}(i, innerPS)
+	}
+
+	wg.Wait()
+
+	// Aggregate results
+	anyFailed := false
+	for _, r := range results {
+		if r.failed {
+			anyFailed = true
+		}
+		// Merge new exported vars (keys added by this step)
+		for k, v := range r.exportedVars {
+			if _, exists := snapshotVars[k]; !exists {
+				exportedVars[k] = v
+			}
+		}
+	}
+
+	// Update parent step with final status
+	status := build.Succeeded
+	if anyFailed {
+		status = build.Failed
+		b.Status = build.Failed
+	}
+	b.Steps[parentIdx].Status = status
+	b.Steps[parentIdx].Duration = time.Since(start)
+	w.updateBuild(ctx, m, *b)
+
+	// Run in_parallel-level hooks
+	if anyFailed {
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, "", ps.OnFailure, "on_failure", resolved, exportedVars)
+	} else {
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, "", ps.OnSuccess, "on_success", resolved, exportedVars)
+	}
+	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, "", ps.Ensure, "ensure", resolved, exportedVars)
+
+	return anyFailed
 }
 
 // runGetStep runs a single get step (resource pull).
@@ -1911,7 +2122,7 @@ func (w *Worker) triggerResourceJobs(ctx context.Context, m workitem.Body, pp *p
 		if j.Paused {
 			continue
 		}
-		for _, ps := range j.Plan {
+		for _, ps := range j.FlatPlanSteps() {
 			if ps.Type != job.StepTypeGet || ps.Get == nil {
 				continue
 			}
@@ -1975,6 +2186,12 @@ func (w *Worker) pollForCancellation(apiCtx, jobCtx context.Context, cancel cont
 // It uses apiCtx (the parent server context) so that DB writes survive
 // job-level cancellation but are still cancelled on server shutdown.
 func (w *Worker) updateBuild(_ context.Context, m workitem.Body, b build.Build) error {
+	if b.SuppressUpdates {
+		if b.OnUpdate != nil {
+			b.OnUpdate()
+		}
+		return nil
+	}
 	dbCtx := w.dbContext()
 	err := w.pikoci.UpdateJobBuild(dbCtx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b)
 	if err != nil {
@@ -1988,6 +2205,9 @@ func (w *Worker) failBuild(_ context.Context, m workitem.Body, b build.Build, er
 	if err != nil {
 		b.Error = err.Error()
 		w.logger.Error(err.Error())
+	}
+	if b.SuppressUpdates {
+		return
 	}
 	dbCtx := w.dbContext()
 	if uerr := w.pikoci.UpdateJobBuild(dbCtx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b); uerr != nil {

@@ -82,7 +82,8 @@ type hclJob struct {
 	Task         []hclTaskStep    `hcl:"task,block"`
 	Put          []hclPutStep     `hcl:"put,block"`
 	Notify       []hclNotifyStep  `hcl:"notify,block"`
-	Service      []hclServiceRef  `hcl:"service,block"`
+	Service      []hclServiceRef      `hcl:"service,block"`
+	InParallel   []hclInParallelBlock `hcl:"in_parallel,block"`
 
 	Remain hcl.Body `hcl:",remain"` // absorbs hook blocks; parsed by parseHooks from AST
 }
@@ -251,6 +252,18 @@ type hclNotifyStep struct {
 	Type    string `hcl:"type,label"`
 	Name    string `hcl:"name,label"`
 	Message string `hcl:"message,optional"`
+
+	Remain hcl.Body `hcl:",remain"`
+}
+
+// hclInParallelBlock is the HCL-decoded in_parallel block inside a job.
+type hclInParallelBlock struct {
+	Limit    int              `hcl:"limit,optional"`
+	FailFast bool             `hcl:"fail_fast,optional"`
+	Get      []hclGetStep     `hcl:"get,block"`
+	Task     []hclTaskStep    `hcl:"task,block"`
+	Put      []hclPutStep     `hcl:"put,block"`
+	Notify   []hclNotifyStep  `hcl:"notify,block"`
 
 	Remain hcl.Body `hcl:",remain"`
 }
@@ -619,6 +632,7 @@ var (
 	}
 	jobBlocks = map[string]bool{
 		"get": true, "task": true, "put": true, "notify": true, "service": true,
+		"in_parallel": true,
 		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
 		"matrix": true,
 	}
@@ -638,7 +652,12 @@ var (
 	taskStepKnownAttrs = []string{"timeout", "attempts", "inputs", "outputs"}
 	putStepKnownAttrs  = []string{"timeout", "attempts"}
 	notifyStepKnownAttrs = []string{"message"}
-	jobKnownAttrs      = []string{"concurrency", "serial_groups", "timeout"}
+	jobKnownAttrs          = []string{"concurrency", "serial_groups", "timeout"}
+	inParallelKnownAttrs   = []string{"limit", "fail_fast"}
+	inParallelBlocks       = map[string]bool{
+		"get": true, "task": true, "put": true, "notify": true,
+		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
+	}
 	// Known blocks inside task steps (run + hooks).
 	taskKnownBlocks = map[string]bool{
 		"run": true,
@@ -697,6 +716,43 @@ func validateJobBlock(block *hclsyntax.Block) []string {
 			continue
 		}
 
+		switch inner.Type {
+		case "task":
+			errs = append(errs, validateTaskBlock(inner, jobName)...)
+		case "get":
+			errs = append(errs, validateStepBlock(inner, jobName, getStepKnownAttrs)...)
+		case "put":
+			errs = append(errs, validateStepBlock(inner, jobName, putStepKnownAttrs)...)
+		case "notify":
+			errs = append(errs, validateStepBlock(inner, jobName, notifyStepKnownAttrs)...)
+		case "in_parallel":
+			errs = append(errs, validateInParallelBlock(inner, jobName)...)
+		}
+	}
+	return errs
+}
+
+// validateInParallelBlock checks for unknown blocks/attrs and rejects
+// service and nested in_parallel inside in_parallel blocks.
+func validateInParallelBlock(block *hclsyntax.Block, jobName string) []string {
+	var errs []string
+	ctx := fmt.Sprintf("in_parallel in job %q", jobName)
+
+	errs = append(errs, validateAttrTypos(block, ctx, inParallelKnownAttrs)...)
+
+	for _, inner := range block.Body.Blocks {
+		if inner.Type == "service" {
+			errs = append(errs, fmt.Sprintf("%s: service steps are not allowed inside in_parallel (line %d)", ctx, inner.TypeRange.Start.Line))
+			continue
+		}
+		if inner.Type == "in_parallel" {
+			errs = append(errs, fmt.Sprintf("%s: nested in_parallel is not allowed (line %d)", ctx, inner.TypeRange.Start.Line))
+			continue
+		}
+		if !inParallelBlocks[inner.Type] {
+			errs = append(errs, suggestBlockTypo(inner.Type, inParallelBlocks, ctx, inner.TypeRange))
+			continue
+		}
 		switch inner.Type {
 		case "task":
 			errs = append(errs, validateTaskBlock(inner, jobName)...)
@@ -1496,7 +1552,7 @@ func parseJobPlansFromPairs(pairs []jobBlockPair, services []service.Service) (m
 		}
 
 		var plan []job.PlanStep
-		getIdx, taskIdx, putIdx, notifyIdx, serviceIdx := 0, 0, 0, 0, 0
+		getIdx, taskIdx, putIdx, notifyIdx, serviceIdx, inParallelIdx := 0, 0, 0, 0, 0, 0
 
 		for _, innerBlock := range block.Body.Blocks {
 			switch innerBlock.Type {
@@ -1671,6 +1727,141 @@ func parseJobPlansFromPairs(pairs []jobBlockPair, services []service.Service) (m
 						Name:    n.Name,
 						Params:  notifyParams,
 						Message: n.Message,
+					},
+					OnSuccess: parseHooks(innerBlock, pairEctx, "on_success"),
+					OnFailure: parseHooks(innerBlock, pairEctx, "on_failure"),
+					OnCancel:  parseHooks(innerBlock, pairEctx, "on_cancel"),
+					Ensure:    parseHooks(innerBlock, pairEctx, "ensure"),
+				})
+			case "in_parallel":
+				if inParallelIdx >= len(hj.InParallel) {
+					continue
+				}
+				ipb := hj.InParallel[inParallelIdx]
+				inParallelIdx++
+
+				var innerPlan []job.PlanStep
+				innerGetIdx, innerTaskIdx, innerPutIdx, innerNotifyIdx := 0, 0, 0, 0
+
+				for _, ipInner := range innerBlock.Body.Blocks {
+					switch ipInner.Type {
+					case "get":
+						if innerGetIdx >= len(ipb.Get) {
+							continue
+						}
+						g := ipb.Get[innerGetIdx]
+						innerGetIdx++
+						var timeout time.Duration
+						if g.Timeout != "" {
+							var err error
+							timeout, err = time.ParseDuration(g.Timeout)
+							if err != nil {
+								return nil, nil, nil, fmt.Errorf("invalid timeout %q on get step %q in in_parallel: %w", g.Timeout, g.Name, err)
+							}
+						}
+						innerPlan = append(innerPlan, job.PlanStep{
+							Type:      job.StepTypeGet,
+							Timeout:   timeout,
+							Attempts:  g.Attempts,
+							Get:       &job.GetStep{Type: g.Type, Name: g.Name, Passed: g.Passed, Trigger: g.Trigger},
+							OnSuccess: parseHooks(ipInner, pairEctx, "on_success"),
+							OnFailure: parseHooks(ipInner, pairEctx, "on_failure"),
+							OnCancel:  parseHooks(ipInner, pairEctx, "on_cancel"),
+							Ensure:    parseHooks(ipInner, pairEctx, "ensure"),
+						})
+					case "task":
+						if innerTaskIdx >= len(ipb.Task) {
+							continue
+						}
+						t := ipb.Task[innerTaskIdx]
+						innerTaskIdx++
+						var timeout time.Duration
+						if t.Timeout != "" {
+							var err error
+							timeout, err = time.ParseDuration(t.Timeout)
+							if err != nil {
+								return nil, nil, nil, fmt.Errorf("invalid timeout %q on task step %q in in_parallel: %w", t.Timeout, t.Name, err)
+							}
+						}
+						innerPlan = append(innerPlan, job.PlanStep{
+							Type:      job.StepTypeTask,
+							Timeout:   timeout,
+							Attempts:  t.Attempts,
+							Task:      &job.TaskStep{Name: t.Name, Run: t.Run, Inputs: t.Inputs, Outputs: t.Outputs},
+							OnSuccess: parseHooks(ipInner, pairEctx, "on_success"),
+							OnFailure: parseHooks(ipInner, pairEctx, "on_failure"),
+							OnCancel:  parseHooks(ipInner, pairEctx, "on_cancel"),
+							Ensure:    parseHooks(ipInner, pairEctx, "ensure"),
+						})
+					case "put":
+						if innerPutIdx >= len(ipb.Put) {
+							continue
+						}
+						p := ipb.Put[innerPutIdx]
+						innerPutIdx++
+						var timeout time.Duration
+						if p.Timeout != "" {
+							var err error
+							timeout, err = time.ParseDuration(p.Timeout)
+							if err != nil {
+								return nil, nil, nil, fmt.Errorf("invalid timeout %q on put step %q in in_parallel: %w", p.Timeout, p.Name, err)
+							}
+						}
+						putParams := make(map[string]string)
+						for name, attr := range ipInner.Body.Attributes {
+							if name == "timeout" || name == "attempts" {
+								continue
+							}
+							val, vdiags := attr.Expr.Value(pairEctx)
+							if vdiags.HasErrors() {
+								continue
+							}
+							putParams[name] = val.AsString()
+						}
+						innerPlan = append(innerPlan, job.PlanStep{
+							Type:      job.StepTypePut,
+							Timeout:   timeout,
+							Attempts:  p.Attempts,
+							Put:       &job.PutStep{Type: p.Type, Name: p.Name, Params: putParams},
+							OnSuccess: parseHooks(ipInner, pairEctx, "on_success"),
+							OnFailure: parseHooks(ipInner, pairEctx, "on_failure"),
+							OnCancel:  parseHooks(ipInner, pairEctx, "on_cancel"),
+							Ensure:    parseHooks(ipInner, pairEctx, "ensure"),
+						})
+					case "notify":
+						if innerNotifyIdx >= len(ipb.Notify) {
+							continue
+						}
+						n := ipb.Notify[innerNotifyIdx]
+						innerNotifyIdx++
+						notifyParams := make(map[string]string)
+						for name, attr := range ipInner.Body.Attributes {
+							if name == "message" {
+								continue
+							}
+							val, vdiags := attr.Expr.Value(pairEctx)
+							if vdiags.HasErrors() {
+								continue
+							}
+							notifyParams[name] = val.AsString()
+						}
+						innerPlan = append(innerPlan, job.PlanStep{
+							Type:   job.StepTypeNotify,
+							Notify: &job.NotifyStep{Type: n.Type, Name: n.Name, Params: notifyParams, Message: n.Message},
+							OnSuccess: parseHooks(ipInner, pairEctx, "on_success"),
+							OnFailure: parseHooks(ipInner, pairEctx, "on_failure"),
+							OnCancel:  parseHooks(ipInner, pairEctx, "on_cancel"),
+							Ensure:    parseHooks(ipInner, pairEctx, "ensure"),
+						})
+					}
+				}
+
+				plan = append(plan, job.PlanStep{
+					Type: job.StepTypeInParallel,
+					InParallel: &job.InParallelStep{
+						Steps:    innerPlan,
+						Limit:    ipb.Limit,
+						FailFast: ipb.FailFast,
 					},
 					OnSuccess: parseHooks(innerBlock, pairEctx, "on_success"),
 					OnFailure: parseHooks(innerBlock, pairEctx, "on_failure"),

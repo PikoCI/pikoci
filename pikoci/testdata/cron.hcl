@@ -31,10 +31,25 @@ job "gen" {
   get "cron" "my_cron" {
     trigger = true
   }
-  task "create-file" {
-    run "exec" {
-      path = "/bin/sh"
-      args = ["-ec", "mkdir -p output && echo \"cron triggered at: $(date)\" > output/timestamp.txt && cat output/timestamp.txt"]
+  in_parallel {
+    limit = 2
+    task "create-file" {
+      run "exec" {
+        path = "/bin/sh"
+        args = ["-ec", "for i in $(seq 1 10); do echo \"create-file: waiting $i/10...\"; sleep 1; done && mkdir -p output && echo \"cron triggered at: $(date)\" > output/timestamp.txt && cat output/timestamp.txt"]
+      }
+    }
+    task "show-date" {
+      run "exec" {
+        path = "/bin/sh"
+        args = ["-ec", "for i in $(seq 1 10); do echo \"show-date: waiting $i/10...\"; sleep 1; done && echo \"current date: $(date)\""]
+      }
+    }
+    task "quick-check" {
+      run "exec" {
+        path = "/bin/sh"
+        args = ["-ec", "for i in $(seq 1 5); do echo \"quick-check: step $i/5...\"; sleep 1; done && echo \"quick-check failed!\" && exit 1"]
+      }
     }
   }
   put "artifact" "cron_output" {

@@ -237,6 +237,8 @@ func runLocal(ctx context.Context, logger *slog.Logger, pipelineConfig, jobName 
 	// Poll loop: stream output and wait for terminal status
 	printedSteps := 0
 	printedBytes := make(map[int]int)
+	printedSubSteps := make(map[int]int)   // per parent step: how many sub-steps printed
+	printedSubBytes := make(map[string]int) // "parentIdx-subIdx" -> bytes printed
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -275,12 +277,46 @@ func runLocal(ctx context.Context, logger *slog.Logger, pipelineConfig, jobName 
 					}
 					printedBytes[i] = len(step.Logs)
 				}
+				// Incrementally print new/updated sub-steps for in_parallel
+				if len(step.SubSteps) > 0 {
+					prevSubs := printedSubSteps[i]
+					for si := prevSubs; si < len(step.SubSteps); si++ {
+						sub := step.SubSteps[si]
+						fmt.Fprintf(os.Stdout, "  ==> [%s] %s\n", sub.Type, sub.Name)
+						if len(sub.Logs) > 0 {
+							fmt.Fprint(os.Stdout, sub.Logs)
+							if !strings.HasSuffix(sub.Logs, "\n") {
+								fmt.Fprintln(os.Stdout)
+							}
+							printedSubBytes[fmt.Sprintf("%d-%d", i, si)] = len(sub.Logs)
+						}
+					}
+					// Update logs for already-printed sub-steps
+					for si := 0; si < prevSubs && si < len(step.SubSteps); si++ {
+						sub := step.SubSteps[si]
+						key := fmt.Sprintf("%d-%d", i, si)
+						prevBytes := printedSubBytes[key]
+						if len(sub.Logs) > prevBytes {
+							delta := sub.Logs[prevBytes:]
+							fmt.Fprint(os.Stdout, delta)
+							if !strings.HasSuffix(delta, "\n") {
+								fmt.Fprintln(os.Stdout)
+							}
+							printedSubBytes[key] = len(sub.Logs)
+						}
+					}
+					printedSubSteps[i] = len(step.SubSteps)
+				}
 			}
 
 			// Print new steps and their logs
 			for i := printedSteps; i < len(b.Steps); i++ {
 				step := b.Steps[i]
-				fmt.Fprintf(os.Stdout, "==> [%s] %s\n", step.Type, step.Name)
+				if step.Type == "in_parallel" {
+					fmt.Fprintf(os.Stdout, "==> [%s] (%d steps)\n", step.Type, len(step.SubSteps))
+				} else {
+					fmt.Fprintf(os.Stdout, "==> [%s] %s\n", step.Type, step.Name)
+				}
 				if len(step.Logs) > 0 {
 					fmt.Fprint(os.Stdout, step.Logs)
 					if !strings.HasSuffix(step.Logs, "\n") {
@@ -288,6 +324,18 @@ func runLocal(ctx context.Context, logger *slog.Logger, pipelineConfig, jobName 
 					}
 					printedBytes[i] = len(step.Logs)
 				}
+				// Print any sub-steps already present
+				for si, sub := range step.SubSteps {
+					fmt.Fprintf(os.Stdout, "  ==> [%s] %s\n", sub.Type, sub.Name)
+					if len(sub.Logs) > 0 {
+						fmt.Fprint(os.Stdout, sub.Logs)
+						if !strings.HasSuffix(sub.Logs, "\n") {
+							fmt.Fprintln(os.Stdout)
+						}
+						printedSubBytes[fmt.Sprintf("%d-%d", i, si)] = len(sub.Logs)
+					}
+				}
+				printedSubSteps[i] = len(step.SubSteps)
 				printedSteps = i + 1
 			}
 

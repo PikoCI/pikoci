@@ -684,6 +684,44 @@ job "test" {
 
 An empty body references a top-level `service` block by name. Attributes in the body are param overrides.
 
+### in_parallel
+
+Runs multiple steps concurrently within a job.
+
+```hcl
+job "build" {
+  in_parallel {
+    limit     = 2        # optional: max concurrent steps (0 = unlimited)
+    fail_fast = true     # optional: cancel remaining on first failure (default: false)
+
+    get "git" "frontend" { trigger = true }
+    get "git" "backend"  { trigger = true }
+    task "lint" {
+      run "exec" { path = "/bin/sh" args = ["-c", "echo linting"] }
+    }
+  }
+
+  task "build" {
+    run "exec" { path = "/bin/sh" args = ["-c", "echo building"] }
+  }
+}
+```
+
+| Field       | Required | Description                                          |
+|-------------|----------|------------------------------------------------------|
+| `limit`     | no       | Max concurrent steps. `0` or omitted = no limit.     |
+| `fail_fast` | no       | Cancel remaining steps on first failure. Default: `false`. |
+
+**Allowed inner step types:** `get`, `task`, `put`, `notify`. Services are not allowed inside `in_parallel`.
+
+**Nesting:** `in_parallel` blocks cannot be nested inside other `in_parallel` blocks.
+
+**Exported variables:** Steps inside `in_parallel` see variables exported by steps *before* the block, but not by sibling parallel steps. After the block completes, all exported variables are available to subsequent steps.
+
+**Timeout/Attempts:** `timeout` on the block applies to wall-clock time of the entire group. `attempts` retries the entire block. Inner steps can have their own `timeout` and `attempts` independently.
+
+**Hooks:** The `in_parallel` block supports `on_success`, `on_failure`, `on_cancel`, and `ensure` hooks, which fire based on whether the group as a whole succeeded or failed.
+
 ### Step hooks
 
 Each step (and the job itself) can have `on_success`, `on_failure`, `on_cancel`, and `ensure` blocks:
