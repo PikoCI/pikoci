@@ -135,16 +135,16 @@ func updateJobBuild(s pikoci.Service) http.HandlerFunc {
 			req UpdateJobBuildRequest
 			ctx = r.Context()
 		)
-		vars := mux.Vars(r)
-		req.TeamCanonical = vars["team_canonical"]
-		req.PipelineCanonical = vars["pipeline_canonical"]
-		req.JobName = vars["job_name"]
-		req.BuildNumber = vars["build_number"]
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			encodeResponse(UpdateJobBuildResponse{Err: err.Error()}, w)
 			return
 		}
+		vars := mux.Vars(r)
+		req.TeamCanonical = vars["team_canonical"]
+		req.PipelineCanonical = vars["pipeline_canonical"]
+		req.JobName = vars["job_name"]
+		req.BuildNumber = vars["build_number"]
 		err = s.UpdateJobBuild(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName, req.BuildNumber, req.Build)
 		var errs string
 		if err != nil {
@@ -318,15 +318,15 @@ func createRetryJobBuild(s pikoci.Service) http.HandlerFunc {
 			req CreateRetryJobBuildRequest
 			ctx = r.Context()
 		)
-		vars := mux.Vars(r)
-		req.TeamCanonical = vars["team_canonical"]
-		req.PipelineCanonical = vars["pipeline_canonical"]
-		req.JobName = vars["job_name"]
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			encodeResponse(CreateRetryJobBuildResponse{Err: err.Error()}, w)
 			return
 		}
+		vars := mux.Vars(r)
+		req.TeamCanonical = vars["team_canonical"]
+		req.PipelineCanonical = vars["pipeline_canonical"]
+		req.JobName = vars["job_name"]
 		b, err := s.CreateRetryJobBuild(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName, req.ParentBuildNumber, req.Build)
 		var errs string
 		if err != nil {
