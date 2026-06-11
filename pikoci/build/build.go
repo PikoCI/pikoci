@@ -45,6 +45,14 @@ type Build struct {
 
 	VersionID         uint32 `json:"version_id,omitempty"`
 	ResourceCanonical string `json:"resource_canonical,omitempty"`
+
+	// SuppressUpdates prevents updateBuild from persisting this build.
+	// Used by in_parallel goroutines that operate on local build copies.
+	SuppressUpdates bool `json:"-"`
+
+	// OnUpdate is called by updateBuild when SuppressUpdates is true.
+	// Used by in_parallel goroutines to sync their steps to the parent build.
+	OnUpdate func() `json:"-"`
 }
 
 // Step represents an individual step within a build, such as a get, put, or task
@@ -56,4 +64,5 @@ type Step struct {
 	Logs      string        `json:"logs"`
 	Duration  time.Duration `json:"duration"`
 	Status    Status        `json:"status"`
+	SubSteps  []Step        `json:"sub_steps,omitempty"`
 }

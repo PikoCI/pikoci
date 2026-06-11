@@ -102,7 +102,7 @@ func (s *Scheduler) evaluateJob(ctx context.Context, pwt *pipeline.WithTeam, j *
 	}
 	var candidates []candidate
 
-	for _, ps := range j.Plan {
+	for _, ps := range j.FlatPlanSteps() {
 		if ps.Type != job.StepTypeGet || ps.Get == nil {
 			continue
 		}

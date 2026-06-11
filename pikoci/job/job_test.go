@@ -239,6 +239,78 @@ func TestJob_AllPutSteps(t *testing.T) {
 	})
 }
 
+func TestGetSteps_IncludesInParallelSteps(t *testing.T) {
+	j := job.Job{
+		Plan: []job.PlanStep{
+			{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo-a"}},
+			{Type: job.StepTypeInParallel, InParallel: &job.InParallelStep{
+				Steps: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo-b"}},
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo-c"}},
+				},
+			}},
+		},
+	}
+	steps := j.GetSteps()
+	require.Len(t, steps, 3)
+	assert.Equal(t, "repo-a", steps[0].Name)
+	assert.Equal(t, "repo-b", steps[1].Name)
+	assert.Equal(t, "repo-c", steps[2].Name)
+}
+
+func TestAllPutSteps_IncludesInParallelSteps(t *testing.T) {
+	j := job.Job{
+		Plan: []job.PlanStep{
+			{Type: job.StepTypeInParallel, InParallel: &job.InParallelStep{
+				Steps: []job.PlanStep{
+					{Type: job.StepTypePut, Put: &job.PutStep{Type: "s3", Name: "upload"}},
+				},
+			}},
+		},
+	}
+	steps := j.AllPutSteps()
+	require.Len(t, steps, 1)
+	assert.Equal(t, "upload", steps[0].Name)
+}
+
+func TestFlatPlanSteps(t *testing.T) {
+	j := job.Job{
+		Plan: []job.PlanStep{
+			{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo-a"}},
+			{Type: job.StepTypeInParallel, InParallel: &job.InParallelStep{
+				Steps: []job.PlanStep{
+					{Type: job.StepTypeTask, Task: &job.TaskStep{Name: "lint"}},
+					{Type: job.StepTypeTask, Task: &job.TaskStep{Name: "test"}},
+				},
+			}},
+			{Type: job.StepTypePut, Put: &job.PutStep{Type: "git", Name: "repo-a"}},
+		},
+	}
+	flat := j.FlatPlanSteps()
+	require.Len(t, flat, 4)
+	assert.Equal(t, job.StepTypeGet, flat[0].Type)
+	assert.Equal(t, job.StepTypeTask, flat[1].Type)
+	assert.Equal(t, "lint", flat[1].Task.Name)
+	assert.Equal(t, job.StepTypeTask, flat[2].Type)
+	assert.Equal(t, "test", flat[2].Task.Name)
+	assert.Equal(t, job.StepTypePut, flat[3].Type)
+}
+
+func TestPlanGetSteps_IncludesInParallelSteps(t *testing.T) {
+	j := job.Job{
+		Plan: []job.PlanStep{
+			{Type: job.StepTypeInParallel, InParallel: &job.InParallelStep{
+				Steps: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "inner"}},
+				},
+			}},
+		},
+	}
+	steps := j.PlanGetSteps()
+	require.Len(t, steps, 1)
+	assert.Equal(t, job.StepTypeGet, steps[0].Type)
+}
+
 func TestNotifyStep_NotificationCanonical(t *testing.T) {
 	n := &job.NotifyStep{Type: "slack", Name: "deploy-alerts"}
 	assert.Equal(t, "slack.deploy-alerts", n.NotificationCanonical())

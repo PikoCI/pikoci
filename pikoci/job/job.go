@@ -25,6 +25,8 @@ const (
 	StepTypeRunner StepType = "runner"
 	// StepTypeNotify represents a step that sends a notification.
 	StepTypeNotify StepType = "notify"
+	// StepTypeInParallel represents a step that runs multiple sub-steps concurrently.
+	StepTypeInParallel StepType = "in_parallel"
 )
 
 // HookStep represents a single step inside a hook (on_success, on_failure, on_cancel, ensure).
@@ -61,7 +63,7 @@ type Job struct {
 // GetSteps returns all get steps from the plan in order.
 func (j *Job) GetSteps() []GetStep {
 	var steps []GetStep
-	for _, p := range j.Plan {
+	for _, p := range j.FlatPlanSteps() {
 		if p.Type == StepTypeGet && p.Get != nil {
 			steps = append(steps, *p.Get)
 		}
@@ -91,7 +93,7 @@ func (j *Job) AllPutSteps() []PutStep {
 			}
 		}
 	}
-	for _, p := range j.Plan {
+	for _, p := range j.FlatPlanSteps() {
 		if p.Type == StepTypePut {
 			add(p.Put)
 		}
@@ -107,10 +109,24 @@ func (j *Job) AllPutSteps() []PutStep {
 	return steps
 }
 
+// FlatPlanSteps returns all plan steps flattened — steps inside in_parallel
+// blocks are inlined alongside top-level steps.
+func (j *Job) FlatPlanSteps() []PlanStep {
+	var steps []PlanStep
+	for _, p := range j.Plan {
+		if p.Type == StepTypeInParallel && p.InParallel != nil {
+			steps = append(steps, p.InParallel.Steps...)
+		} else {
+			steps = append(steps, p)
+		}
+	}
+	return steps
+}
+
 // PlanGetSteps returns all PlanSteps that are get steps.
 func (j *Job) PlanGetSteps() []PlanStep {
 	var steps []PlanStep
-	for _, p := range j.Plan {
+	for _, p := range j.FlatPlanSteps() {
 		if p.Type == StepTypeGet {
 			steps = append(steps, p)
 		}
@@ -128,8 +144,9 @@ type PlanStep struct {
 	Get       *GetStep      `json:"get,omitempty"`
 	Task      *TaskStep     `json:"task,omitempty"`
 	Put       *PutStep      `json:"put,omitempty"`
-	Notify    *NotifyStep   `json:"notify,omitempty"`
-	Service   *ServiceStep  `json:"service,omitempty"`
+	Notify     *NotifyStep     `json:"notify,omitempty"`
+	Service    *ServiceStep   `json:"service,omitempty"`
+	InParallel *InParallelStep `json:"in_parallel,omitempty"`
 	OnSuccess []HookStep    `json:"on_success,omitempty"`
 	OnFailure []HookStep    `json:"on_failure,omitempty"`
 	OnCancel  []HookStep    `json:"on_cancel,omitempty"`
@@ -196,4 +213,13 @@ func (n *NotifyStep) NotificationCanonical() string {
 type ServiceStep struct {
 	Name   string            `json:"name"`
 	Params map[string]string `json:"params,omitempty"`
+}
+
+// InParallelStep defines a step that runs multiple sub-steps concurrently.
+// Limit controls max concurrency (0 = unlimited). FailFast cancels remaining
+// steps on first failure.
+type InParallelStep struct {
+	Steps    []PlanStep `json:"steps"`
+	Limit    int        `json:"limit,omitempty"`
+	FailFast bool       `json:"fail_fast,omitempty"`
 }

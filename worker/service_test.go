@@ -7185,3 +7185,613 @@ func TestNew(t *testing.T) {
 	w := New(svc, logger, "test-worker", "test", 1, nil, false)
 	assert.NotNil(t, w)
 }
+
+func TestProcessJob_InParallel_BasicExecution(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "parallel-job",
+		BuildID:           10,
+		BuildNumber:       "10",
+	}
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "parallel-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeInParallel,
+						InParallel: &job.InParallelStep{
+							Steps: []job.PlanStep{
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "echo-a",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"hello-a"}, Params: map[string]string{"path": "echo"}},
+									},
+								},
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "echo-b",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"hello-b"}, Params: map[string]string{"path": "echo"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var lastBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			lastBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	// Build should have succeeded
+	assert.Equal(t, build.Succeeded, lastBuild.Status)
+
+	// Should have one in_parallel step
+	require.GreaterOrEqual(t, len(lastBuild.Steps), 1)
+	found := false
+	for _, s := range lastBuild.Steps {
+		if s.Type == "in_parallel" {
+			found = true
+			assert.Equal(t, build.Succeeded, s.Status)
+			assert.Len(t, s.SubSteps, 2)
+			break
+		}
+	}
+	assert.True(t, found, "should have an in_parallel step")
+}
+
+func TestProcessJob_InParallel_Empty(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "parallel-empty",
+		BuildID:           10,
+		BuildNumber:       "10",
+	}
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "parallel-empty",
+				Plan: []job.PlanStep{
+					{
+						Type:       job.StepTypeInParallel,
+						InParallel: &job.InParallelStep{Steps: []job.PlanStep{}},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var lastBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			lastBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, lastBuild.Status)
+}
+
+func TestProcessJob_InParallel_FailFast(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "parallel-ff",
+		BuildID:           10,
+		BuildNumber:       "10",
+	}
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "parallel-ff",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeInParallel,
+						InParallel: &job.InParallelStep{
+							FailFast: true,
+							Limit:    1, // force sequential so first failure cancels second
+							Steps: []job.PlanStep{
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "fail-task",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"-c", "exit 1"}, Params: map[string]string{"path": "/bin/sh"}},
+									},
+								},
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "should-not-run",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"should-not-reach"}, Params: map[string]string{"path": "echo"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var lastBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			lastBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Failed, lastBuild.Status)
+
+	// The in_parallel step itself should be failed
+	for _, s := range lastBuild.Steps {
+		if s.Type == "in_parallel" {
+			assert.Equal(t, build.Failed, s.Status)
+			break
+		}
+	}
+}
+
+func TestProcessJob_InParallel_NoFailFast(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "parallel-noff",
+		BuildID:           10,
+		BuildNumber:       "10",
+	}
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "parallel-noff",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeInParallel,
+						InParallel: &job.InParallelStep{
+							FailFast: false,
+							Steps: []job.PlanStep{
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "fail-task",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"-c", "exit 1"}, Params: map[string]string{"path": "/bin/sh"}},
+									},
+								},
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "pass-task",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"ok"}, Params: map[string]string{"path": "echo"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var lastBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			lastBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	// Build should be failed because one step failed
+	assert.Equal(t, build.Failed, lastBuild.Status)
+
+	// Both steps should have run (2 sub-steps in the in_parallel step)
+	for _, s := range lastBuild.Steps {
+		if s.Type == "in_parallel" {
+			assert.Equal(t, build.Failed, s.Status)
+			assert.Len(t, s.SubSteps, 2)
+			break
+		}
+	}
+}
+
+func TestProcessJob_InParallel_SubStepsVisibleWhileRunning(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "parallel-live",
+		BuildID:           10,
+		BuildNumber:       "10",
+	}
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "parallel-live",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeInParallel,
+						InParallel: &job.InParallelStep{
+							Steps: []job.PlanStep{
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "slow-a",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"-c", "sleep 0.2 && echo done-a"}, Params: map[string]string{"path": "/bin/sh"}},
+									},
+								},
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "slow-b",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"-c", "sleep 0.2 && echo done-b"}, Params: map[string]string{"path": "/bin/sh"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	// Track all intermediate build updates to verify sub-steps appear while running
+	var sawStartedSubStep bool
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			for _, s := range b.Steps {
+				if s.Type == "in_parallel" && s.Status == build.Started {
+					for _, sub := range s.SubSteps {
+						if sub.Status == build.Started {
+							sawStartedSubStep = true
+						}
+					}
+				}
+			}
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.True(t, sawStartedSubStep, "should have seen a sub-step with status=started during execution")
+}
+
+func TestProcessJob_InParallel_Limit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "parallel-limit",
+		BuildID:           10,
+		BuildNumber:       "10",
+	}
+
+	// Three tasks that each sleep 200ms. With limit=1 they run sequentially (~600ms).
+	// Without limit they'd run concurrently (~200ms).
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "parallel-limit",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeInParallel,
+						InParallel: &job.InParallelStep{
+							Limit: 1,
+							Steps: []job.PlanStep{
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "task-a",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"-c", "sleep 0.2 && echo a"}, Params: map[string]string{"path": "/bin/sh"}},
+									},
+								},
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "task-b",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"-c", "sleep 0.2 && echo b"}, Params: map[string]string{"path": "/bin/sh"}},
+									},
+								},
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "task-c",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"-c", "sleep 0.2 && echo c"}, Params: map[string]string{"path": "/bin/sh"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var lastBuild build.Build
+	// Track max concurrent started sub-steps across all updates
+	var maxConcurrent int
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			lastBuild = b
+			for _, s := range b.Steps {
+				if s.Type == "in_parallel" {
+					running := 0
+					for _, sub := range s.SubSteps {
+						if sub.Status == build.Started {
+							running++
+						}
+					}
+					if running > maxConcurrent {
+						maxConcurrent = running
+					}
+				}
+			}
+			return nil
+		}).AnyTimes()
+
+	start := time.Now()
+	w.processJob(ctx, m, cwd, pp)
+	elapsed := time.Since(start)
+
+	assert.Equal(t, build.Succeeded, lastBuild.Status)
+	// With limit=1, should take >= 600ms (3 * 200ms sequential)
+	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(500), "limit=1 should enforce sequential execution")
+	// Should never have more than 1 task running at a time
+	assert.LessOrEqual(t, maxConcurrent, 1, "limit=1 should allow at most 1 concurrent sub-step")
+}
+
+func TestProcessJob_InParallel_FailFast_CancelsRunning(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "parallel-ff-cancel",
+		BuildID:           10,
+		BuildNumber:       "10",
+	}
+
+	// First task fails after 100ms, second task would take 2s.
+	// With fail_fast, the second should be cancelled and total time << 2s.
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "parallel-ff-cancel",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeInParallel,
+						InParallel: &job.InParallelStep{
+							FailFast: true,
+							Steps: []job.PlanStep{
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "fast-fail",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{}, Params: map[string]string{"path": "false"}},
+									},
+								},
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "slow-task",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"10"}, Params: map[string]string{"path": "sleep"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var lastBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			lastBuild = b
+			return nil
+		}).AnyTimes()
+
+	start := time.Now()
+	w.processJob(ctx, m, cwd, pp)
+	elapsed := time.Since(start)
+
+	assert.Equal(t, build.Failed, lastBuild.Status)
+	// Should finish well before the 10s slow task would complete
+	assert.Less(t, elapsed.Milliseconds(), int64(5000), "fail_fast should cancel the slow task")
+}
+
+func TestProcessJob_InParallel_PendingSubSteps(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "parallel-pending",
+		BuildID:           10,
+		BuildNumber:       "10",
+	}
+
+	// 3 tasks with limit=1: while the first runs, the other two should be pending
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "parallel-pending",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeInParallel,
+						InParallel: &job.InParallelStep{
+							Limit: 1,
+							Steps: []job.PlanStep{
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "task-a",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"-c", "sleep 0.2 && echo a"}, Params: map[string]string{"path": "/bin/sh"}},
+									},
+								},
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "task-b",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"-c", "sleep 0.2 && echo b"}, Params: map[string]string{"path": "/bin/sh"}},
+									},
+								},
+								{
+									Type: job.StepTypeTask,
+									Task: &job.TaskStep{
+										Name: "task-c",
+										Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"-c", "sleep 0.2 && echo c"}, Params: map[string]string{"path": "/bin/sh"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var sawPendingSubSteps bool
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			for _, s := range b.Steps {
+				if s.Type == "in_parallel" {
+					pendingCount := 0
+					for _, sub := range s.SubSteps {
+						if sub.Status == build.Pending {
+							pendingCount++
+						}
+					}
+					// With limit=1 and 3 tasks, at least 2 should be pending at some point
+					if pendingCount >= 2 {
+						sawPendingSubSteps = true
+					}
+				}
+			}
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.True(t, sawPendingSubSteps, "should have seen sub-steps with status=pending while waiting for semaphore")
+}

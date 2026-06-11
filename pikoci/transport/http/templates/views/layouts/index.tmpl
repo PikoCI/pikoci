@@ -507,6 +507,53 @@
         <% var _job = job || []; %>
         <% var lastStep = _steps.length > 0 ? _steps[_steps.length-1] : null; %>
         <% _.each(_steps, function(s, i) { %>
+          <% if (s.type === "in_parallel") { %>
+          <div class="piko-step-row piko-parallel-group" data-status="<%= s.status %>">
+            <div class="piko-step-row-header" onclick="var body=this.nextElementSibling;body.style.display=body.style.display==='none'?'block':'none'">
+              <span><span class="piko-step-label"><i class="bi bi-arrows-expand"></i> in_parallel</span> <span style="color:var(--text-muted);">(<%= (s.sub_steps || []).length %> steps, <%- s.duration %>)</span></span>
+              <span style="display:flex;align-items:center;gap:6px;">
+                <% if (s.status === "failed") { %>
+                  <span class="piko-badge piko-badge-failed">fail</span>
+                <% } else if (s.status === "started") { %>
+                  <span class="piko-badge piko-badge-started">running</span>
+                <% } else if (s.status === "succeeded") { %>
+                  <span class="piko-badge piko-badge-succeeded">ok</span>
+                <% } %>
+              </span>
+            </div>
+            <div class="piko-step-row-body" style="display:block;padding:4px 4px 4px 16px;">
+              <% _.each(s.sub_steps || [], function(child) { %>
+                <div class="piko-step-row" data-status="<%= child.status %>">
+                  <div class="piko-step-row-header" onclick="var body=this.nextElementSibling;body.style.display=body.style.display==='none'?'block':'none'">
+                    <span><span class="piko-step-label"><i class="bi <%= ({get:'bi-cloud-download',task:'bi-terminal',put:'bi-cloud-upload',notify:'bi-bell'})[child.type] || 'bi-terminal' %>"></i> <%- child.type || "step" %></span> <%- child.name %> <span style="color:var(--text-muted);">(<%- child.duration %>)</span></span>
+                    <span style="display:flex;align-items:center;gap:6px;">
+                      <% if (child.logs) { %>
+                        <button class="piko-copy-logs-header-btn" onclick="event.stopPropagation();var pre=this.closest('.piko-step-row').querySelector('pre');navigator.clipboard.writeText(pre.textContent.trim());var icon=this.querySelector('i');icon.className='bi bi-check2';setTimeout(function(){icon.className='bi bi-clipboard';},1500);" title="Copy logs"><i class="bi bi-clipboard"></i></button>
+                      <% } %>
+                      <% if (child.status === "failed") { %>
+                        <span class="piko-badge piko-badge-failed">fail</span>
+                      <% } else if (child.status === "started") { %>
+                        <span class="piko-badge piko-badge-started">running</span>
+                      <% } else if (child.status === "pending") { %>
+                        <span class="piko-badge piko-badge-pending">pending</span>
+                      <% } else if (child.status === "cancelled") { %>
+                        <span class="piko-badge piko-badge-cancelled">cancel</span>
+                      <% } else if (child.status === "succeeded" || child.logs) { %>
+                        <span class="piko-badge piko-badge-succeeded">ok</span>
+                      <% } %>
+                    </span>
+                  </div>
+                  <div class="piko-step-row-body" style="display:<%= (child.status === 'started') ? 'block' : 'none' %>;">
+                    <div style="position:relative;">
+                      <button class="piko-goto-bottom-btn" onclick="var pre=this.parentElement.querySelector('pre');pre.scrollTop=pre.scrollHeight;" title="Go to bottom"><i class="bi bi-arrow-down"></i></button>
+<pre><%- processLogs(child.logs) %></pre>
+                    </div>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+          <% } else { %>
           <div class="piko-step-row" data-status="<%= s.status %>">
             <div class="piko-step-row-header" onclick="var body=this.nextElementSibling;body.style.display=body.style.display==='none'?'block':'none'">
               <span><span class="piko-step-label"><i class="bi <%= ({get:'bi-cloud-download',task:'bi-terminal',put:'bi-cloud-upload',notify:'bi-bell',service:'bi-hdd-stack',runner:'bi-gear'})[s.type] || 'bi-terminal' %>"></i> <%- s.type || "step" %></span> <%- s.name %> <span style="color:var(--text-muted);">(<%- s.duration %>)</span></span>
@@ -538,6 +585,7 @@
               </div>
             </div>
           </div>
+          <% } %>
         <% }) %>
         <% var lastJob = _job.length > 0 ? _job[_job.length-1] : null; %>
         <% _.each(_job, function(j, i) { %>
