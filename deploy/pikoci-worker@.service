@@ -18,7 +18,7 @@ RestartSec=5
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/pikoci /tmp
+ReadWritePaths=/var/lib/pikoci /var/www /tmp
 
 [Install]
 WantedBy=multi-user.target
