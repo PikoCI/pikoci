@@ -46,9 +46,11 @@ func (w *Worker) grpcLoop(ctx context.Context) error {
 func (w *Worker) grpcSession(ctx context.Context) error {
 	// Register with the server
 	regResp, err := w.grpcClient.Register(ctx, &workerv1.RegisterRequest{
-		WorkerId:    w.Name,
-		WorkerToken: w.WorkerToken,
-		MaxJobs:     int32(w.Concurrency),
+		WorkerId:      w.Name,
+		WorkerToken:   w.WorkerToken,
+		MaxJobs:       int32(w.Concurrency),
+		Tags:          w.Tags,
+		ExclusiveTags: w.ExclusiveTags,
 	})
 	if err != nil {
 		return fmt.Errorf("register failed: %w", err)

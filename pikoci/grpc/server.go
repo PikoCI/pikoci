@@ -21,7 +21,7 @@ import (
 // It is satisfied by *pikoci.PikoCI but not the Service interface (since
 // NextWork is an internal method not exposed to HTTP clients).
 type WorkDispatcher interface {
-	NextWork(ctx context.Context) (*workitem.Item, error)
+	NextWork(ctx context.Context, wc workitem.WorkerContext) (*workitem.Item, error)
 }
 
 // Server implements the WorkerService gRPC server.
@@ -41,8 +41,10 @@ type Server struct {
 }
 
 type registeredWorker struct {
-	maxJobs    int32
-	registedAt time.Time
+	maxJobs       int32
+	tags          []string
+	exclusiveTags bool
+	registeredAt    time.Time
 }
 
 // NewServer creates a new gRPC WorkerService server.
@@ -76,8 +78,10 @@ func (s *Server) Register(ctx context.Context, req *workerv1.RegisterRequest) (*
 
 	s.registeredMu.Lock()
 	s.registeredWorkers[req.WorkerId] = &registeredWorker{
-		maxJobs:    req.MaxJobs,
-		registedAt: time.Now(),
+		maxJobs:       req.MaxJobs,
+		tags:          req.Tags,
+		exclusiveTags: req.ExclusiveTags,
+		registeredAt:    time.Now(),
 	}
 	s.registeredMu.Unlock()
 
@@ -115,7 +119,7 @@ func (s *Server) Execute(stream workerv1.WorkerService_ExecuteServer) error {
 	}
 	// Clean up any stale registrations while holding the lock
 	for id, w := range s.registeredWorkers {
-		if time.Since(w.registedAt) > 30*time.Second {
+		if time.Since(w.registeredAt) > 30*time.Second {
 			delete(s.registeredWorkers, id)
 		}
 	}
@@ -123,14 +127,14 @@ func (s *Server) Execute(stream workerv1.WorkerService_ExecuteServer) error {
 	if !ok {
 		return status.Errorf(codes.Unauthenticated, "worker %q has not called Register", workerID)
 	}
-	if time.Since(rw.registedAt) > 30*time.Second {
+	if time.Since(rw.registeredAt) > 30*time.Second {
 		return status.Errorf(codes.Unauthenticated, "registration for worker %q has expired", workerID)
 	}
 	maxJobs := rw.maxJobs
 	if maxJobs <= 0 {
 		maxJobs = 1
 	}
-	ws := NewWorkerStream(workerID, maxJobs)
+	ws := NewWorkerStream(workerID, maxJobs, rw.tags, rw.exclusiveTags)
 	s.streams.Register(ws)
 	defer s.streams.Unregister(workerID)
 
@@ -215,8 +219,12 @@ func (s *Server) dispatchLoop(ctx context.Context, ws *WorkerStream) {
 
 // tryDispatch attempts to find work and send it to the worker, filling capacity.
 func (s *Server) tryDispatch(ctx context.Context, ws *WorkerStream) {
+	wc := workitem.WorkerContext{
+		Tags:          ws.Tags,
+		ExclusiveTags: ws.ExclusiveTags,
+	}
 	for ws.HasCapacity() {
-		item, err := s.svc.NextWork(ctx)
+		item, err := s.svc.NextWork(ctx, wc)
 		if err != nil {
 			s.logger.Error("NextWork failed in dispatch", "worker_id", ws.WorkerID, "error", err)
 			return

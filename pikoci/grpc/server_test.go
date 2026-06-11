@@ -64,7 +64,7 @@ func TestServer_Register_ValidToken(t *testing.T) {
 	secret := []byte("test-secret")
 	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, testLogger)
 
-	resp, err := s.Register(nil, &workerv1.RegisterRequest{
+	resp, err := s.Register(context.TODO(), &workerv1.RegisterRequest{
 		WorkerId:    "w1",
 		WorkerToken: validWorkerToken(secret),
 		MaxJobs:     2,
@@ -84,7 +84,7 @@ func TestServer_Register_InvalidToken(t *testing.T) {
 	secret := []byte("test-secret")
 	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, testLogger)
 
-	resp, err := s.Register(nil, &workerv1.RegisterRequest{
+	resp, err := s.Register(context.TODO(), &workerv1.RegisterRequest{
 		WorkerId:    "w2",
 		WorkerToken: "bad-token",
 		MaxJobs:     1,
@@ -104,7 +104,7 @@ func TestServer_Register_ConsumedByExecute(t *testing.T) {
 	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, testLogger)
 
 	// Register stores entry
-	s.Register(nil, &workerv1.RegisterRequest{
+	s.Register(context.TODO(), &workerv1.RegisterRequest{
 		WorkerId:    "w1",
 		WorkerToken: validWorkerToken(secret),
 		MaxJobs:     3,
@@ -136,7 +136,7 @@ func TestServer_CancelBuild(t *testing.T) {
 	assert.Error(t, err)
 
 	// Register a worker with the build
-	ws := NewWorkerStream("w1", 2)
+	ws := NewWorkerStream("w1", 2, nil, false)
 	ws.AddBuild("b1")
 	s.streams.Register(ws)
 
@@ -153,7 +153,7 @@ func TestServer_CancelBuild(t *testing.T) {
 
 func TestServer_SendWorkItem(t *testing.T) {
 	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), nil, testLogger)
-	ws := NewWorkerStream("w1", 2)
+	ws := NewWorkerStream("w1", 2, nil, false)
 
 	item := &workitem.Item{
 		Type: "job",
@@ -186,7 +186,7 @@ func TestServer_SendWorkItem(t *testing.T) {
 
 func TestServer_SendWorkItem_ResourceCheck(t *testing.T) {
 	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), nil, testLogger)
-	ws := NewWorkerStream("w1", 2)
+	ws := NewWorkerStream("w1", 2, nil, false)
 
 	item := &workitem.Item{
 		Type: "check",
@@ -210,7 +210,7 @@ func TestServer_SendWorkItem_ResourceCheck(t *testing.T) {
 func TestServer_TryDispatch_FillsCapacity(t *testing.T) {
 	callCount := 0
 	dispatcher := &fakeDispatcher{
-		nextWorkFn: func(ctx context.Context) (*workitem.Item, error) {
+		nextWorkFn: func(ctx context.Context, wc workitem.WorkerContext) (*workitem.Item, error) {
 			callCount++
 			if callCount > 2 {
 				return nil, nil // no more work
@@ -229,7 +229,7 @@ func TestServer_TryDispatch_FillsCapacity(t *testing.T) {
 	}
 
 	s := NewServer(dispatcher, notifier.New(), NewWorkerStreamManager(), nil, testLogger)
-	ws := NewWorkerStream("w1", 3)
+	ws := NewWorkerStream("w1", 3, nil, false)
 
 	s.tryDispatch(context.Background(), ws)
 
@@ -240,7 +240,7 @@ func TestServer_TryDispatch_FillsCapacity(t *testing.T) {
 func TestServer_HandleJobResult_NotifiesAndRemovesBuild(t *testing.T) {
 	n := notifier.New()
 	s := NewServer(nil, n, NewWorkerStreamManager(), nil, testLogger)
-	ws := NewWorkerStream("w1", 2)
+	ws := NewWorkerStream("w1", 2, nil, false)
 	ws.AddBuild("b1")
 
 	// Set up a waiter before the notification
@@ -437,7 +437,7 @@ func TestGRPC_ServerDispatchesJobOnNotify(t *testing.T) {
 	n := notifier.New()
 	dispatched := make(chan struct{}, 1)
 	dispatcher := &fakeDispatcher{
-		nextWorkFn: func(ctx context.Context) (*workitem.Item, error) {
+		nextWorkFn: func(ctx context.Context, wc workitem.WorkerContext) (*workitem.Item, error) {
 			select {
 			case dispatched <- struct{}{}:
 			default:
@@ -495,7 +495,7 @@ func TestGRPC_ServerSendsCancelToWorker(t *testing.T) {
 	n := notifier.New()
 	// Return no work so dispatch doesn't interfere
 	dispatcher := &fakeDispatcher{
-		nextWorkFn: func(ctx context.Context) (*workitem.Item, error) {
+		nextWorkFn: func(ctx context.Context, wc workitem.WorkerContext) (*workitem.Item, error) {
 			return nil, nil
 		},
 	}
@@ -543,12 +543,12 @@ func TestGRPC_ServerSendsCancelToWorker(t *testing.T) {
 // --- Fakes ---
 
 type fakeDispatcher struct {
-	nextWorkFn func(ctx context.Context) (*workitem.Item, error)
+	nextWorkFn func(ctx context.Context, wc workitem.WorkerContext) (*workitem.Item, error)
 }
 
-func (f *fakeDispatcher) NextWork(ctx context.Context) (*workitem.Item, error) {
+func (f *fakeDispatcher) NextWork(ctx context.Context, wc workitem.WorkerContext) (*workitem.Item, error) {
 	if f.nextWorkFn != nil {
-		return f.nextWorkFn(ctx)
+		return f.nextWorkFn(ctx, wc)
 	}
 	return nil, nil
 }

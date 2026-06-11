@@ -70,6 +70,8 @@ pikoci worker \
 |------|-------|---------|----------|-------------|
 | `--pikoci-url` | `-u` | `localhost:8080` | no | PikoCI server URL |
 | `--concurrency` | | `1` | no | Number of parallel job goroutines |
+| `--tags` | | | no | Comma-separated worker tags for job/resource routing (e.g. `gpu,vpn`) |
+| `--exclusive-tags` | | `false` | no | When set, worker only handles work matching its tags (skips untagged jobs/resources) |
 | `--drain-timeout` | | `10m` | no | Max time to wait for in-flight jobs during graceful shutdown (`SIGQUIT`) |
 | `--log-level` | | `info` | no | Log level: `debug`, `info`, `warn`, `error` |
 | `--worker-token` | | | **yes** | Worker authentication token (from `pikoci worker-token` or server startup logs) |
@@ -83,6 +85,8 @@ Worker flags can be set via environment variables:
 export PIKOCI_URL=http://server:8080
 export WORKER_TOKEN=eyJhbG...
 export CONCURRENCY=4
+export TAGS=gpu,vpn
+export EXCLUSIVE_TAGS=true
 ```
 
 ## Worker names
@@ -96,6 +100,78 @@ pikoci worker --name build-machine-1 ...
 Worker names must be unique across all running workers. If two workers use the same `--name`, they will overwrite each other's heartbeat in the database and appear as a single worker in the dashboard. This can be useful for rolling deploys (stop the old worker, start a new one with the same name), but running two workers simultaneously with the same name will cause incorrect status reporting.
 
 When `--concurrency` is greater than 1, each goroutine within the process automatically gets a `-N` suffix (e.g. `build-machine-1-1`, `build-machine-1-2`).
+
+## Tags
+
+Tags route specific jobs and resource checks to specific workers. A job with `tags = ["gpu"]` in its pipeline definition will only be dispatched to workers started with `--tags gpu`.
+
+### Matching rules
+
+- **AND logic**: a job with `tags = ["gpu", "vpn"]` requires a worker with **both** tags.
+- **Untagged jobs** run on any non-exclusive worker (including tagged workers).
+- **Tagged jobs** only run on workers that have all of the job's tags.
+- Tags on resources work the same way — a resource with `tags = ["vpn"]` will only have its checks run on workers with the `vpn` tag.
+
+### Exclusive mode
+
+By default, a tagged worker handles both tagged work matching its tags AND untagged work. Adding `--exclusive-tags` restricts the worker to only handle work that matches its tags:
+
+```bash
+# Handles gpu-tagged jobs AND untagged jobs
+pikoci worker --tags gpu --worker-token eyJhbG...
+
+# Handles ONLY gpu-tagged jobs (ignores untagged jobs)
+pikoci worker --tags gpu --exclusive-tags --worker-token eyJhbG...
+```
+
+### Example setup
+
+```hcl
+# Pipeline: gpu-job only runs on gpu workers, deploy-job on deploy workers
+job "build" {
+  task "compile" { run "exec" { path = "make" } }
+}
+
+job "train-model" {
+  tags = ["gpu"]
+  task "train" { run "exec" { path = "./train.sh" } }
+}
+
+job "deploy" {
+  tags = ["deploy"]
+  task "release" { run "exec" { path = "./deploy.sh" } }
+}
+```
+
+```bash
+# General worker — handles "build" (untagged)
+pikoci worker --worker-token eyJhbG...
+
+# GPU worker — handles "build" + "train-model"
+pikoci worker --tags gpu --worker-token eyJhbG...
+
+# Deploy worker (exclusive) — handles ONLY "deploy"
+pikoci worker --tags deploy --exclusive-tags --worker-token eyJhbG...
+```
+
+### Tag matching reference
+
+| Job tags | Worker tags | Worker exclusive | Match? |
+|----------|------------|-----------------|--------|
+| none | none | no | Yes |
+| none | `["gpu"]` | no | Yes |
+| none | `["gpu"]` | yes | No |
+| `["gpu"]` | none | no | No |
+| `["gpu"]` | `["gpu"]` | no | Yes |
+| `["gpu"]` | `["gpu"]` | yes | Yes |
+| `["gpu"]` | `["gpu", "vpn"]` | no | Yes |
+| `["gpu", "vpn"]` | `["gpu"]` | no | No |
+
+### Validation
+
+Tags must be valid slugs: lowercase letters, digits, and hyphens. Maximum 10 tags per job, resource, or worker. Invalid tags are rejected at pipeline parse time (for jobs/resources) or worker startup (for workers).
+
+Tags are visible in the workers dashboard alongside the worker status and platform information.
 
 ## Reverse proxy configuration
 
@@ -145,6 +221,7 @@ Workers send periodic heartbeats to the server. The server tracks each worker's 
 Admin users can view all registered workers at **`#workers`** in the web UI. Each worker shows:
 
 - **Status**: `healthy` (heartbeat received within the last 90 seconds) or `stale` (no heartbeat for over 90 seconds)
+- **Tags**: the worker's tags and whether it's in exclusive mode
 - **Platform**: OS, architecture, and Go version
 - **Version**: the PikoCI binary version
 - **Uptime**: how long the worker has been running

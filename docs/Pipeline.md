@@ -83,6 +83,7 @@ resource "cron" "every_10s" {
 | `name`           | yes      | Label, unique name for this resource              |
 | `params`         | no       | Block with key/value pairs passed to the resource type |
 | `check_interval` | no       | Cron expression or `@every <duration>` for automatic checks |
+| `tags`           | no       | List of tags to route resource checks to matching workers (see [Workers](Workers.md#tags)) |
 | `cache`          | no       | Override the resource type's cache setting (see [Resource Types](Resource-Types.md#caching)) |
 
 ## notification_type
@@ -250,6 +251,24 @@ Jobs contain a plan of steps executed in order. Each step is one of `get`, `task
 The optional `concurrency` attribute limits how many builds of the job can run simultaneously. When the limit is reached, new builds are re-queued and wait until a slot frees up. The default value `0` means unlimited.
 
 The optional `timeout` attribute limits the total wall-clock time for a build's plan steps. When the timeout is reached, the build fails with a "job timed out" error and `on_cancel`/`ensure` hooks still run. If not set, the job runs with no time limit.
+
+#### Tags
+
+The `tags` attribute routes a job to workers with matching tags. A job with `tags = ["gpu"]` will only run on workers started with `--tags gpu`. The matching uses AND logic — a job with `tags = ["gpu", "vpn"]` requires a worker with **both** tags.
+
+Jobs without tags run on any non-exclusive worker.
+
+```hcl
+job "train-model" {
+  tags = ["gpu"]
+
+  task "train" {
+    run "exec" { path = "./train.sh" }
+  }
+}
+```
+
+Tags must be valid slugs (lowercase alphanumeric and hyphens). Maximum 10 tags per job. See [Workers](Workers.md#tags) for the worker-side configuration.
 
 #### Serial Groups
 

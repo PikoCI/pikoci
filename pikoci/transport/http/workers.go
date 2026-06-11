@@ -11,14 +11,16 @@ import (
 )
 
 type WorkerHeartbeatRequest struct {
-	Name        string `json:"name"`
-	Hostname    string `json:"hostname"`
-	OS          string `json:"os"`
-	Arch        string `json:"arch"`
-	GoVersion   string `json:"go_version"`
-	Version     string `json:"version"`
-	Concurrency int    `json:"concurrency"`
-	StartedAt   string `json:"started_at"`
+	Name          string   `json:"name"`
+	Hostname      string   `json:"hostname"`
+	OS            string   `json:"os"`
+	Arch          string   `json:"arch"`
+	GoVersion     string   `json:"go_version"`
+	Version       string   `json:"version"`
+	Concurrency   int      `json:"concurrency"`
+	Tags          []string `json:"tags"`
+	ExclusiveTags bool     `json:"exclusive_tags"`
+	StartedAt     string   `json:"started_at"`
 }
 type WorkerHeartbeatResponse struct {
 	Err string `json:"error,omitempty"`
@@ -44,14 +46,16 @@ func workerHeartbeat(s pikoci.Service) http.HandlerFunc {
 		}
 
 		wk := wkr.Worker{
-			Name:        req.Name,
-			Hostname:    req.Hostname,
-			OS:          req.OS,
-			Arch:        req.Arch,
-			GoVersion:   req.GoVersion,
-			Version:     req.Version,
-			Concurrency: req.Concurrency,
-			StartedAt:   startedAt,
+			Name:          req.Name,
+			Hostname:      req.Hostname,
+			OS:            req.OS,
+			Arch:          req.Arch,
+			GoVersion:     req.GoVersion,
+			Version:       req.Version,
+			Concurrency:   req.Concurrency,
+			Tags:          req.Tags,
+			ExclusiveTags: req.ExclusiveTags,
+			StartedAt:     startedAt,
 		}
 
 		err = s.WorkerHeartbeat(ctx, wk)

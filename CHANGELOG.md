@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Worker tagging: route jobs and resource checks to specific workers using `tags = ["gpu"]` on jobs/resources in the pipeline HCL and `--tags gpu` on workers. Matching uses AND logic (all job tags must be present on the worker). Untagged work runs on any non-exclusive worker. Add `--exclusive-tags` to restrict a worker to only handle matching tagged work. Tags and exclusive status are visible in the workers dashboard ([#98](https://github.com/PikoCI/pikoci/issues/98))
+
+### Fixed
+
+- Resource checks could be dispatched to multiple workers simultaneously, causing trigger builds to be lost due to database locking. Resource check dispatch now uses optimistic locking to ensure only one worker processes each check
 - Worker health monitoring: workers send periodic heartbeats to the server, which tracks their status as healthy or stale (no heartbeat for over 90 seconds). Admin users see all workers in a new dashboard with status, queues, platform, version, and uptime. A warning banner appears when no healthy workers are detected. Admins can delete stale workers from the UI or via `DELETE /workers/{name}`. Includes a `pikoci_workers` Prometheus gauge with `status` label for alerting ([#482](https://github.com/PikoCI/pikoci/issues/482))
 - Better error reporting for param typos: pipeline schema validation now catches typos in block names (e.g. `tsk` → `task`) and attributes (e.g. `triggr` → `trigger`, `arg` → `args`) at save time with line-accurate errors and Levenshtein-based suggestions. At runtime, unrecognized resource/notification/service params show warnings in step logs with "did you mean?" hints, and failed commands list available environment variable names to help diagnose missing params ([#116](https://github.com/PikoCI/pikoci/issues/116))
 

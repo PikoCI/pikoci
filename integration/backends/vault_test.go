@@ -151,7 +151,7 @@ func TestSecretsVaultE2E(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		w := worker.New(svc, logger.With("component", "worker"), "test-worker", "test", 1)
+		w := worker.New(svc, logger.With("component", "worker"), "test-worker", "test", 1, nil, false)
 		w.Run(ctx)
 	}()
 

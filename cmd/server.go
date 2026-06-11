@@ -245,7 +245,7 @@ var serverCmd = &cobra.Command{
 			logger.Info("Starting Worker ...")
 			var werr error
 			embeddedName := "embedded-" + randomstring.HumanFriendlyEnglishString(8)
-			workers, wg, werr = runWorker(ctx, svc, cfg.Concurrency, cfg.LogLevel, embeddedName)
+			workers, wg, werr = runWorker(ctx, svc, cfg.Concurrency, cfg.LogLevel, embeddedName, nil, false)
 			if werr != nil {
 				return fmt.Errorf("worker failed to start: %w", werr)
 			}

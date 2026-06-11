@@ -1028,14 +1028,16 @@ func (cl *Client) WorkerHeartbeat(ctx context.Context, w wkr.Worker) error {
 	var resp thttp.WorkerHeartbeatResponse
 
 	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/workers/heartbeat", cl.url), thttp.WorkerHeartbeatRequest{
-		Name:        w.Name,
-		Hostname:    w.Hostname,
-		OS:          w.OS,
-		Arch:        w.Arch,
-		GoVersion:   w.GoVersion,
-		Version:     w.Version,
-		Concurrency: w.Concurrency,
-		StartedAt:   w.StartedAt.Format(time.RFC3339),
+		Name:          w.Name,
+		Hostname:      w.Hostname,
+		OS:            w.OS,
+		Arch:          w.Arch,
+		GoVersion:     w.GoVersion,
+		Version:       w.Version,
+		Concurrency:   w.Concurrency,
+		Tags:          w.Tags,
+		ExclusiveTags: w.ExclusiveTags,
+		StartedAt:     w.StartedAt.Format(time.RFC3339),
 	}, &resp)
 	if err != nil {
 		return fmt.Errorf("failed to make request: %w", err)

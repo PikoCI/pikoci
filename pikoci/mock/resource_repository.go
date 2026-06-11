@@ -12,6 +12,7 @@ package mock
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	resource "github.com/pikoci/pikoci/pikoci/resource"
 	gomock "go.uber.org/mock/gomock"
@@ -39,6 +40,21 @@ func NewResourceRepository(ctrl *gomock.Controller) *ResourceRepository {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *ResourceRepository) EXPECT() *ResourceRepositoryMockRecorder {
 	return m.recorder
+}
+
+// ClaimResourceCheck mocks base method.
+func (m *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCan string, prevNextCheck, newLastCheck, newNextCheck time.Time) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClaimResourceCheck", ctx, tc, pn, rCan, prevNextCheck, newLastCheck, newNextCheck)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClaimResourceCheck indicates an expected call of ClaimResourceCheck.
+func (mr *ResourceRepositoryMockRecorder) ClaimResourceCheck(ctx, tc, pn, rCan, prevNextCheck, newLastCheck, newNextCheck any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimResourceCheck", reflect.TypeOf((*ResourceRepository)(nil).ClaimResourceCheck), ctx, tc, pn, rCan, prevNextCheck, newLastCheck, newNextCheck)
 }
 
 // Create mocks base method.

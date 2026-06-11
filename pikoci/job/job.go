@@ -44,6 +44,7 @@ type Job struct {
 	Name         string     `json:"name" hcl:"name,label"`
 	Concurrency  int        `json:"concurrency,omitempty"`
 	SerialGroups []string      `json:"serial_groups,omitempty"`
+	Tags         []string      `json:"tags,omitempty"`
 	Paused       bool          `json:"paused"`
 	Timeout      time.Duration `json:"timeout,omitempty"`
 	Plan         []PlanStep    `json:"plan"`

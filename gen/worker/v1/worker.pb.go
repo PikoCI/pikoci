@@ -256,6 +256,8 @@ type RegisterRequest struct {
 	WorkerId      string                 `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
 	WorkerToken   string                 `protobuf:"bytes,2,opt,name=worker_token,json=workerToken,proto3" json:"worker_token,omitempty"`
 	MaxJobs       int32                  `protobuf:"varint,3,opt,name=max_jobs,json=maxJobs,proto3" json:"max_jobs,omitempty"`
+	Tags          []string               `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
+	ExclusiveTags bool                   `protobuf:"varint,5,opt,name=exclusive_tags,json=exclusiveTags,proto3" json:"exclusive_tags,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -309,6 +311,20 @@ func (x *RegisterRequest) GetMaxJobs() int32 {
 		return x.MaxJobs
 	}
 	return 0
+}
+
+func (x *RegisterRequest) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *RegisterRequest) GetExclusiveTags() bool {
+	if x != nil {
+		return x.ExclusiveTags
+	}
+	return false
 }
 
 type RegisterResponse struct {
@@ -910,11 +926,13 @@ const file_proto_worker_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"cancel_job\x18\x02 \x01(\v2\x1b.pikoci.worker.v1.CancelJobH\x00R\tcancelJob\x12,\n" +
 	"\x04ping\x18\x03 \x01(\v2\x16.pikoci.worker.v1.PingH\x00R\x04pingB\t\n" +
-	"\apayload\"l\n" +
+	"\apayload\"\xa7\x01\n" +
 	"\x0fRegisterRequest\x12\x1b\n" +
 	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12!\n" +
 	"\fworker_token\x18\x02 \x01(\tR\vworkerToken\x12\x19\n" +
-	"\bmax_jobs\x18\x03 \x01(\x05R\amaxJobs\"H\n" +
+	"\bmax_jobs\x18\x03 \x01(\x05R\amaxJobs\x12\x12\n" +
+	"\x04tags\x18\x04 \x03(\tR\x04tags\x12%\n" +
+	"\x0eexclusive_tags\x18\x05 \x01(\bR\rexclusiveTags\"H\n" +
 	"\x10RegisterResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"i\n" +

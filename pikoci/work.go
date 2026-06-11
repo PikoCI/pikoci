@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pikoci/pikoci/pikoci/scheduler"
+	"github.com/pikoci/pikoci/pikoci/wkr"
 	"github.com/pikoci/pikoci/pikoci/workitem"
 )
 
@@ -13,7 +14,7 @@ import (
 // pending builds, then checking for due resource checks. It returns nil if
 // no work is available. For job builds, it calls StartPendingBuild to claim
 // the build atomically, respecting concurrency and serial group limits.
-func (q *PikoCI) NextWork(ctx context.Context) (*workitem.Item, error) {
+func (q *PikoCI) NextWork(ctx context.Context, wc workitem.WorkerContext) (*workitem.Item, error) {
 	// Phase 1: Look for pending job builds.
 	pps, err := q.Pipelines.FilterAll(ctx)
 	if err != nil {
@@ -23,6 +24,9 @@ func (q *PikoCI) NextWork(ctx context.Context) (*workitem.Item, error) {
 	for _, pwt := range pps {
 		for _, j := range pwt.Jobs {
 			if j.Paused {
+				continue
+			}
+			if !wkr.TagsMatch(j.Tags, wc.Tags, wc.ExclusiveTags) {
 				continue
 			}
 
@@ -66,6 +70,15 @@ func (q *PikoCI) NextWork(ctx context.Context) (*workitem.Item, error) {
 		}
 	}
 
+	// Build resource tag lookup from pipeline definitions for Phase 2 filtering.
+	resourceTags := make(map[string][]string) // key: "teamCanonical/pipelineCanonical/resourceCanonical"
+	for _, pwt := range pps {
+		for _, r := range pwt.Resources {
+			key := pwt.Team.Canonical + "/" + pwt.Canonical + "/" + r.Canonical
+			resourceTags[key] = r.Tags
+		}
+	}
+
 	// Phase 2: Look for due resource checks.
 	due, err := q.Resources.FilterDueResources(ctx)
 	if err != nil {
@@ -73,8 +86,11 @@ func (q *PikoCI) NextWork(ctx context.Context) (*workitem.Item, error) {
 	}
 
 	for _, rwp := range due {
+		rKey := rwp.TeamCanonical + "/" + rwp.PipelineCanonical + "/" + rwp.Canonical
+		if !wkr.TagsMatch(resourceTags[rKey], wc.Tags, wc.ExclusiveTags) {
+			continue
+		}
 		now := time.Now()
-		rwp.Resource.LastCheck = now
 
 		spec := rwp.CheckInterval
 		if spec == "" {
@@ -86,12 +102,23 @@ func (q *PikoCI) NextWork(ctx context.Context) (*workitem.Item, error) {
 				"pipeline", rwp.PipelineCanonical, "resource", rwp.Canonical, "error", err)
 			continue
 		}
-		rwp.Resource.NextCheck = nextCheck
 
-		err = q.Resources.Update(ctx, rwp.TeamCanonical, rwp.PipelineCanonical, rwp.Canonical, rwp.Resource)
+		// Use optimistic locking: only succeed if last_check hasn't changed
+		// since we read the resource. This prevents two workers from both
+		// claiming the same resource check.
+		// Use 'now' as the bound (same as FilterDueResources uses) rather than the
+		// read-back NextCheck value, which may have a different internal representation
+		// after round-tripping through the database driver.
+		claimed, err := q.Resources.ClaimResourceCheck(ctx,
+			rwp.TeamCanonical, rwp.PipelineCanonical, rwp.Canonical,
+			now, now, nextCheck)
 		if err != nil {
-			q.logger.Error("NextWork: failed to update resource",
+			q.logger.Error("NextWork: failed to claim resource check",
 				"pipeline", rwp.PipelineCanonical, "resource", rwp.Canonical, "error", err)
+			continue
+		}
+		if !claimed {
+			// Another worker already claimed this check.
 			continue
 		}
 
@@ -111,8 +138,8 @@ func (q *PikoCI) NextWork(ctx context.Context) (*workitem.Item, error) {
 // PollNextWork blocks until work is available or a 30-second timeout expires.
 // It checks for immediately available work first, then waits for a notification
 // from the WorkNotifier before checking again.
-func (q *PikoCI) PollNextWork(ctx context.Context) (*workitem.Item, error) {
-	w, err := q.NextWork(ctx)
+func (q *PikoCI) PollNextWork(ctx context.Context, wc workitem.WorkerContext) (*workitem.Item, error) {
+	w, err := q.NextWork(ctx, wc)
 	if err != nil || w != nil {
 		return w, err
 	}
@@ -122,9 +149,9 @@ func (q *PikoCI) PollNextWork(ctx context.Context) (*workitem.Item, error) {
 
 	select {
 	case <-ch:
-		return q.NextWork(ctx)
+		return q.NextWork(ctx, wc)
 	case <-time.After(30 * time.Second):
-		return q.NextWork(ctx)
+		return q.NextWork(ctx, wc)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}

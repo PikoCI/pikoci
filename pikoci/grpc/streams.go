@@ -11,20 +11,24 @@ import (
 
 // WorkerStream represents a single connected worker's gRPC stream.
 type WorkerStream struct {
-	WorkerID string
-	MaxJobs  int32
-	Send     chan *workerv1.ServerMessage
-	Done     chan struct{}
+	WorkerID      string
+	MaxJobs       int32
+	Tags          []string
+	ExclusiveTags bool
+	Send          chan *workerv1.ServerMessage
+	Done          chan struct{}
 
 	mu            sync.Mutex
 	runningBuilds map[string]struct{} // buildID → present
 }
 
 // NewWorkerStream creates a WorkerStream for the given worker.
-func NewWorkerStream(workerID string, maxJobs int32) *WorkerStream {
+func NewWorkerStream(workerID string, maxJobs int32, tags []string, exclusiveTags bool) *WorkerStream {
 	return &WorkerStream{
 		WorkerID:      workerID,
 		MaxJobs:       maxJobs,
+		Tags:          tags,
+		ExclusiveTags: exclusiveTags,
 		Send:          make(chan *workerv1.ServerMessage, 16),
 		Done:          make(chan struct{}),
 		runningBuilds: make(map[string]struct{}),

@@ -16,6 +16,8 @@ type Resource struct {
 	Params        *Params `json:"params,omitempty" hcl:"params,block"`
 	CheckInterval string  `json:"check_interval" hcl:"check_interval,optional"`
 
+	Tags []string `json:"tags,omitempty" hcl:"tags,optional"`
+
 	Cache *bool `json:"cache,omitempty" hcl:"cache,optional"`
 
 	PinnedVersionID *uint32 `json:"pinned_version_id,omitempty"`

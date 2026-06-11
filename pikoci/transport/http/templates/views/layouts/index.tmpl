@@ -781,6 +781,7 @@
           <tr>
             <th>Name</th>
             <th>Status</th>
+            <th>Tags</th>
             <th>Platform</th>
             <th>Version</th>
             <th>Uptime</th>
@@ -800,6 +801,18 @@
           <span class="piko-badge piko-badge-succeeded">healthy</span>
         <% } else { %>
           <span class="piko-badge piko-badge-started">stale</span>
+        <% } %>
+      </td>
+      <td>
+        <% if (tags && tags.length > 0) { %>
+          <% _.each(tags, function(tag) { %>
+            <span class="piko-badge piko-badge-pending"><%- tag %></span>
+          <% }); %>
+          <% if (exclusive_tags) { %>
+            <span class="piko-badge piko-badge-started">exclusive</span>
+          <% } %>
+        <% } else { %>
+          -
         <% } %>
       </td>
       <td><%- os %>/<%- arch %> (<%- go_version %>)</td>

@@ -9,7 +9,7 @@ import (
 )
 
 func TestWorkerStream_BuildTracking(t *testing.T) {
-	ws := NewWorkerStream("w1", 2)
+	ws := NewWorkerStream("w1", 2, nil, false)
 
 	assert.True(t, ws.HasCapacity())
 	assert.Equal(t, 0, ws.RunningCount())
@@ -33,7 +33,7 @@ func TestWorkerStream_BuildTracking(t *testing.T) {
 func TestWorkerStreamManager_RegisterUnregister(t *testing.T) {
 	m := NewWorkerStreamManager()
 
-	ws := NewWorkerStream("w1", 2)
+	ws := NewWorkerStream("w1", 2, nil, false)
 	m.Register(ws)
 	assert.Equal(t, 1, m.ConnectedCount())
 	assert.Equal(t, ws, m.Get("w1"))
@@ -46,10 +46,10 @@ func TestWorkerStreamManager_RegisterUnregister(t *testing.T) {
 func TestWorkerStreamManager_RegisterReplacesOld(t *testing.T) {
 	m := NewWorkerStreamManager()
 
-	old := NewWorkerStream("w1", 2)
+	old := NewWorkerStream("w1", 2, nil, false)
 	m.Register(old)
 
-	newWs := NewWorkerStream("w1", 3)
+	newWs := NewWorkerStream("w1", 3, nil, false)
 	m.Register(newWs)
 
 	// Old stream's Done should be closed
@@ -71,7 +71,7 @@ func TestWorkerStreamManager_SendToWorker(t *testing.T) {
 	err := m.SendToWorker("w1", &workerv1.ServerMessage{})
 	require.Error(t, err)
 
-	ws := NewWorkerStream("w1", 2)
+	ws := NewWorkerStream("w1", 2, nil, false)
 	m.Register(ws)
 
 	msg := &workerv1.ServerMessage{
@@ -91,13 +91,13 @@ func TestWorkerStreamManager_FindIdleWorker(t *testing.T) {
 
 	assert.Nil(t, m.FindIdleWorker())
 
-	ws1 := NewWorkerStream("w1", 1)
+	ws1 := NewWorkerStream("w1", 1, nil, false)
 	ws1.AddBuild("b1") // at capacity
 	m.Register(ws1)
 
 	assert.Nil(t, m.FindIdleWorker())
 
-	ws2 := NewWorkerStream("w2", 2)
+	ws2 := NewWorkerStream("w2", 2, nil, false)
 	m.Register(ws2)
 
 	idle := m.FindIdleWorker()
@@ -109,11 +109,11 @@ func TestWorkerStreamManager_WorkerForBuild(t *testing.T) {
 
 	assert.Nil(t, m.WorkerForBuild("b1"))
 
-	ws1 := NewWorkerStream("w1", 2)
+	ws1 := NewWorkerStream("w1", 2, nil, false)
 	ws1.AddBuild("b1")
 	m.Register(ws1)
 
-	ws2 := NewWorkerStream("w2", 2)
+	ws2 := NewWorkerStream("w2", 2, nil, false)
 	ws2.AddBuild("b2")
 	m.Register(ws2)
 

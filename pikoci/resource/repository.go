@@ -1,6 +1,9 @@
 package resource
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 //go:generate go tool mockgen -destination=../mock/resource_repository.go -mock_names=Repository=ResourceRepository -package mock github.com/pikoci/pikoci/pikoci/resource Repository
 
@@ -18,6 +21,10 @@ type Repository interface {
 	Filter(ctx context.Context, tc, pn string) ([]*Resource, error)
 	// FilterDueResources returns all resources whose next check time has passed, across all pipelines.
 	FilterDueResources(ctx context.Context) ([]*ResourceWithPipeline, error)
+	// ClaimResourceCheck atomically updates a due resource's LastCheck and NextCheck,
+	// returning true if this caller won the claim. Uses optimistic locking on next_check
+	// to prevent two workers from processing the same check.
+	ClaimResourceCheck(ctx context.Context, tc, pn, rCan string, prevNextCheck time.Time, newLastCheck, newNextCheck time.Time) (bool, error)
 	// PinVersion pins a resource to a specific version, preventing the scheduler from using newer versions.
 	PinVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error
 	// UnpinVersion removes the version pin from a resource, allowing the scheduler to use newer versions.

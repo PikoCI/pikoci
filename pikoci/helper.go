@@ -24,6 +24,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/service"
 	"github.com/pikoci/pikoci/pikoci/source"
 	"github.com/pikoci/pikoci/pikoci/utils"
+	"github.com/pikoci/pikoci/pikoci/wkr"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/function"
 	"github.com/zclconf/go-cty/cty/function/stdlib"
@@ -73,6 +74,7 @@ type hclPutStep struct {
 // hclJob is the intermediate HCL-decoded job with separate get/task/put/notify arrays.
 type hclJob struct {
 	Name         string           `hcl:"name,label"`
+	Tags         []string         `hcl:"tags,optional"`
 	Concurrency  int              `hcl:"concurrency,optional"`
 	SerialGroups []string         `hcl:"serial_groups,optional"`
 	Timeout      string           `hcl:"timeout,optional"`
@@ -1328,6 +1330,9 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 				return nil, fmt.Errorf("job %q: invalid serial_group name %q (must be lowercase alphanumeric with hyphens)", hj.Name, sg)
 			}
 		}
+		if err := wkr.ValidateTags(hj.Tags); err != nil {
+			return nil, fmt.Errorf("job %q: %w", hj.Name, err)
+		}
 		var jobTimeout time.Duration
 		if hj.Timeout != "" {
 			jobTimeout, err = time.ParseDuration(hj.Timeout)
@@ -1338,6 +1343,7 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 		jh := jobHooksMap[hj.Name]
 		j := job.Job{
 			Name:         hj.Name,
+			Tags:         hj.Tags,
 			Concurrency:  hj.Concurrency,
 			SerialGroups: hj.SerialGroups,
 			Timeout:      jobTimeout,
@@ -1356,6 +1362,9 @@ func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]i
 
 	for i, r := range pp.Resources {
 		pp.Resources[i].Canonical = utils.ResourceCanonical(r.Type, r.Name)
+		if err := wkr.ValidateTags(r.Tags); err != nil {
+			return nil, fmt.Errorf("resource %q: %w", r.Name, err)
+		}
 	}
 	return &pp, nil
 }
