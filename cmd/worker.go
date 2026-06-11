@@ -13,11 +13,14 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/transport/http/client"
 	"github.com/pikoci/pikoci/worker"
 	"github.com/pikoci/pikoci/worker/config"
 	"github.com/xyproto/randomstring"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // workerViper is the viper instance used for worker command flag and env var binding.
@@ -51,10 +54,24 @@ var workerCmd = &cobra.Command{
 			return fmt.Errorf("required flag \"worker-token\" not set")
 		}
 		workerToken := cfg.WorkerToken
+		// HTTP client is still used for data queries (GetPipeline, UpdateJobBuild, etc.)
 		c, err := client.New(cfg.PikoCIURL, workerToken)
 		if err != nil {
 			return fmt.Errorf("failed to initialize client with url %q: %w", cfg.PikoCIURL, err)
 		}
+
+		// Resolve gRPC target from the PikoCI URL
+		grpcTarget := resolveGRPCTarget(cfg.PikoCIURL)
+		logger.Info("connecting to gRPC server", "target", grpcTarget)
+
+		grpcConn, err := grpc.NewClient(grpcTarget,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create gRPC connection: %w", err)
+		}
+		defer grpcConn.Close()
+		grpcClient := workerv1.NewWorkerServiceClient(grpcConn)
 
 		drainTimeout, err := time.ParseDuration(cfg.DrainTimeout)
 		if err != nil {
@@ -66,7 +83,7 @@ var workerCmd = &cobra.Command{
 			name = randomstring.HumanFriendlyEnglishString(16)
 		}
 
-		workers, wg, err := runWorker(ctx, c, cfg.Concurrency, cfg.LogLevel, name)
+		workers, wg, err := runGRPCWorker(ctx, c, grpcClient, workerToken, grpcTarget, cfg.Concurrency, cfg.LogLevel, name)
 		if err != nil {
 			return fmt.Errorf("failed to start worker: %w", err)
 		}
@@ -156,4 +173,45 @@ func runWorker(ctx context.Context, s pikoci.Service, c int, llvl string, name s
 		}()
 	}
 	return workers, &wg, nil
+}
+
+// runGRPCWorker creates workers configured for gRPC streaming.
+func runGRPCWorker(ctx context.Context, s pikoci.Service, grpcClient workerv1.WorkerServiceClient, workerToken, grpcAddr string, c int, llvl string, name string) ([]*worker.Worker, *sync.WaitGroup, error) {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: parseSlogLevel(llvl)}))
+	logger = logger.With("service", "worker")
+
+	var workers []*worker.Worker
+	var wg sync.WaitGroup
+	for i := range c {
+		wg.Add(1)
+		workerName := name
+		if c > 1 {
+			workerName = fmt.Sprintf("%s-%d", name, i+1)
+		}
+		nlogger := logger.With("num", i+1, "name", workerName)
+		nlogger.Info(fmt.Sprintf("Starting gRPC Worker %d", i+1))
+		w := worker.NewGRPC(s, grpcClient, nlogger, workerName, Version, c, workerToken, grpcAddr)
+		workers = append(workers, w)
+
+		go func() {
+			defer wg.Done()
+			err := w.Run(ctx)
+			if err != nil {
+				logger.Error("failed to Run worker", "error", err)
+			}
+		}()
+	}
+	return workers, &wg, nil
+}
+
+// resolveGRPCTarget extracts the host:port from a URL for use as a gRPC target.
+func resolveGRPCTarget(pikociURL string) string {
+	target := pikociURL
+	target = strings.TrimPrefix(target, "http://")
+	target = strings.TrimPrefix(target, "https://")
+	// Remove any trailing path
+	if idx := strings.Index(target, "/"); idx != -1 {
+		target = target[:idx]
+	}
+	return target
 }

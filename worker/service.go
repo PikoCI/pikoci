@@ -110,7 +110,7 @@ func resourceCacheEnabled(rt restype.ResourceType, r resource.Resource) bool {
 
 // New creates a new Worker with the given PikoCI service and logger. The
 // returned Worker is ready to be started with Run, which uses HTTP long-poll
-// to receive work items.
+// to receive work items (embedded mode).
 func New(s pikoci.Service, l *slog.Logger, name, version string, concurrency int) *Worker {
 	return &Worker{
 		pikoci:      s,
@@ -119,6 +119,21 @@ func New(s pikoci.Service, l *slog.Logger, name, version string, concurrency int
 		StartedAt:   time.Now(),
 		Concurrency: concurrency,
 		Version:     version,
+	}
+}
+
+// NewGRPC creates a Worker configured for gRPC streaming mode.
+func NewGRPC(s pikoci.Service, gc workerv1.WorkerServiceClient, l *slog.Logger, name, version string, concurrency int, workerToken, grpcAddr string) *Worker {
+	return &Worker{
+		pikoci:      s,
+		grpcClient:  gc,
+		logger:      l,
+		Name:        name,
+		StartedAt:   time.Now(),
+		Concurrency: concurrency,
+		Version:     version,
+		GRPCAddr:    grpcAddr,
+		WorkerToken: workerToken,
 	}
 }
 
