@@ -190,6 +190,7 @@ python3 -m venv "$REPO_ROOT/.venv" 2>/dev/null || true
 echo "==> Uploading docs to $SSH_HOST..."
 ssh "$SSH_HOST" 'mkdir -p /var/www/docs.pikoci.com'
 rsync -a --delete "$REPO_ROOT/site/" "$SSH_HOST":/var/www/docs.pikoci.com/
+ssh "$SSH_HOST" 'chown -R pikoci:pikoci /var/www/docs.pikoci.com /var/www/pikoci.com 2>/dev/null || true'
 
 # --- Install required packages ---
 
