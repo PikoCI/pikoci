@@ -13,7 +13,6 @@ import (
 	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
 	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/workitem"
-	"github.com/pikoci/pikoci/pikoci/wkr"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -23,7 +22,6 @@ import (
 // NextWork is an internal method not exposed to HTTP clients).
 type WorkDispatcher interface {
 	NextWork(ctx context.Context) (*workitem.Item, error)
-	WorkerHeartbeat(ctx context.Context, w wkr.Worker) error
 }
 
 // Server implements the WorkerService gRPC server.
@@ -186,6 +184,9 @@ func (s *Server) Execute(stream workerv1.WorkerService_ExecuteServer) error {
 
 // dispatchLoop listens for work notifications and dispatches jobs to the worker.
 func (s *Server) dispatchLoop(ctx context.Context, ws *WorkerStream) {
+	s.logger.Debug("dispatch loop started", "worker_id", ws.WorkerID,
+		"capacity", ws.HasCapacity(), "running", ws.RunningCount(), "max_jobs", ws.MaxJobs)
+
 	// Try to dispatch immediately on connect
 	s.tryDispatch(ctx, ws)
 
@@ -200,9 +201,13 @@ func (s *Server) dispatchLoop(ctx context.Context, ws *WorkerStream) {
 			return
 		case <-ch:
 			cleanup()
+			s.logger.Debug("dispatch loop woken by notifier", "worker_id", ws.WorkerID,
+				"capacity", ws.HasCapacity(), "running", ws.RunningCount())
 			s.tryDispatch(ctx, ws)
 		case <-time.After(30 * time.Second):
 			cleanup()
+			s.logger.Debug("dispatch loop periodic check", "worker_id", ws.WorkerID,
+				"capacity", ws.HasCapacity(), "running", ws.RunningCount())
 			s.tryDispatch(ctx, ws)
 		}
 	}
@@ -240,8 +245,10 @@ func (s *Server) sendWorkItem(ws *WorkerStream, item *workitem.Item) {
 
 	buildID := job.BuildId
 	if item.Type == "check" {
-		// For resource checks, use a synthetic ID for tracking
+		// For resource checks, use a synthetic ID for tracking.
+		// Set it on the proto Job so the worker sends it back in JobResult.
 		buildID = fmt.Sprintf("check-%s-%s", item.Body.PipelineCanonical, item.Body.ResourceCanonical)
+		job.BuildId = buildID
 	}
 	ws.AddBuild(buildID)
 
@@ -287,14 +294,11 @@ func (s *Server) handleWorkerMessage(ctx context.Context, ws *WorkerStream, msg 
 }
 
 // handleHeartbeat processes a heartbeat from a worker.
-// MaxJobs is set once from Register; heartbeats only report running count.
+// The worker sends full heartbeat data (hostname, OS, etc.) via HTTP every 30s.
+// The gRPC heartbeat is just for keepalive tracking on the stream level.
 func (s *Server) handleHeartbeat(ctx context.Context, ws *WorkerStream, hb *workerv1.Heartbeat) {
-	// Forward heartbeat to the existing WorkerHeartbeat service
-	if err := s.svc.WorkerHeartbeat(ctx, wkr.Worker{
-		Name: ws.WorkerID,
-	}); err != nil {
-		s.logger.Error("heartbeat update failed", "worker_id", ws.WorkerID, "error", err)
-	}
+	s.logger.Debug("heartbeat received via gRPC",
+		"worker_id", ws.WorkerID, "running_jobs", hb.RunningJobs)
 }
 
 // handleJobResult processes a completed job result from a worker.

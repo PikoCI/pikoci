@@ -12,7 +12,6 @@ import (
 	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
 	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/workitem"
-	"github.com/pikoci/pikoci/pikoci/wkr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -552,8 +551,4 @@ func (f *fakeDispatcher) NextWork(ctx context.Context) (*workitem.Item, error) {
 		return f.nextWorkFn(ctx)
 	}
 	return nil, nil
-}
-
-func (f *fakeDispatcher) WorkerHeartbeat(ctx context.Context, w wkr.Worker) error {
-	return nil
 }
