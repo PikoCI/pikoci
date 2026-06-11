@@ -29,15 +29,16 @@ func createResourceVersion(s pikoci.Service) http.HandlerFunc {
 			req CreateResourceVersionRequest
 			ctx = r.Context()
 		)
-		vars := mux.Vars(r)
-		req.TeamCanonical = vars["team_canonical"]
-		req.PipelineCanonical = vars["pipeline_canonical"]
-		req.ResourceCanonical = vars["resource_canonical"]
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			encodeResponse(CreateResourceVersionResponse{Err: err.Error()}, w)
 			return
 		}
+		// URL vars take precedence over JSON body fields
+		vars := mux.Vars(r)
+		req.TeamCanonical = vars["team_canonical"]
+		req.PipelineCanonical = vars["pipeline_canonical"]
+		req.ResourceCanonical = vars["resource_canonical"]
 		ver, err := s.CreateResourceVersion(ctx, req.TeamCanonical, req.PipelineCanonical, req.ResourceCanonical, req.Version)
 		var errs string
 		if err != nil {
@@ -163,15 +164,15 @@ func updatePipelineResource(s pikoci.Service) http.HandlerFunc {
 			req UpdatePipelineResourceRequest
 			ctx = r.Context()
 		)
-		vars := mux.Vars(r)
-		req.TeamCanonical = vars["team_canonical"]
-		req.PipelineCanonical = vars["pipeline_canonical"]
-		req.ResourceCanonical = vars["resource_canonical"]
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			encodeResponse(UpdatePipelineResourceResponse{Err: err.Error()}, w)
 			return
 		}
+		vars := mux.Vars(r)
+		req.TeamCanonical = vars["team_canonical"]
+		req.PipelineCanonical = vars["pipeline_canonical"]
+		req.ResourceCanonical = vars["resource_canonical"]
 		err = s.UpdatePipelineResource(ctx, req.TeamCanonical, req.PipelineCanonical, req.ResourceCanonical, req.Resource)
 		var errs string
 		if err != nil {
