@@ -253,6 +253,12 @@ type PikoCI struct {
 	// JWTSecret is the signing key used for JWT token generation and validation.
 	JWTSecret []byte
 
+	// GRPCServer is set by the server command to enable cancellation routing
+	// via gRPC streams. It is nil when no gRPC server is running.
+	GRPCServer interface {
+		CancelBuild(buildID string, reason string) error
+	}
+
 	scheduler *scheduler.Scheduler
 	logger    *slog.Logger
 }

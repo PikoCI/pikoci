@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,10 +20,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/soheilhy/cmux"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/config"
+	pikogrpc "github.com/pikoci/pikoci/pikoci/grpc"
 	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
@@ -31,6 +35,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
 	"github.com/pikoci/pikoci/worker"
+	"google.golang.org/grpc"
 
 	"github.com/adrg/xdg"
 )
@@ -182,16 +187,51 @@ var serverCmd = &cobra.Command{
 		mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 		mux.Handle("/", instrumentedHandler)
 
+		// Create gRPC server for worker streaming
+		streamMgr := pikogrpc.NewWorkerStreamManager()
+		grpcServer := pikogrpc.NewServer(svc, wn, streamMgr, jwtSecret, logger.With("component", "gRPC"))
+		grpcSrv := grpc.NewServer()
+		workerv1.RegisterWorkerServiceServer(grpcSrv, grpcServer)
+
+		// Store gRPC server on the service for cancellation routing
+		svc.GRPCServer = grpcServer
+
 		svr := &http.Server{
-			Addr:    fmt.Sprintf(":%d", cfg.Port),
 			Handler: handlers.CombinedLoggingHandler(os.Stdout, mux),
 		}
 
 		errs := make(chan error, 1)
 
+		// Use cmux to multiplex gRPC and HTTP on the same port
+		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Port))
+		if err != nil {
+			return fmt.Errorf("failed to listen on port %d: %w", cfg.Port, err)
+		}
+		m := cmux.New(lis)
+		grpcLis := m.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
+		httpLis := m.Match(cmux.Any())
+
+		go func() {
+			logger.Info("starting gRPC transport", "port", cfg.Port)
+			if err := grpcSrv.Serve(grpcLis); err != nil {
+				errs <- fmt.Errorf("gRPC server error: %w", err)
+			}
+		}()
 		go func() {
 			logger.Info("starting HTTP transport", "port", cfg.Port)
-			errs <- svr.ListenAndServe()
+			if err := svr.Serve(httpLis); err != nil && err != http.ErrServerClosed {
+				errs <- fmt.Errorf("HTTP server error: %w", err)
+			}
+		}()
+		go func() {
+			if err := m.Serve(); err != nil {
+				// cmux.ErrListenerClosed is expected on shutdown
+				select {
+				case <-ctx.Done():
+				default:
+					errs <- fmt.Errorf("cmux error: %w", err)
+				}
+			}
 		}()
 
 		if !cfg.RunWorker {
@@ -272,16 +312,19 @@ var serverCmd = &cobra.Command{
 
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer shutdownCancel()
+			grpcSrv.GracefulStop()
 			svr.Shutdown(shutdownCtx)
 
 		case sig := <-stop:
 			logger.Info("received signal, shutting down immediately", "signal", sig)
 			cancel()
+			grpcSrv.Stop()
 			svr.Close()
 
 		case err := <-errs:
 			logger.Error("component failed", "error", err)
 			cancel()
+			grpcSrv.Stop()
 			svr.Close()
 		}
 
