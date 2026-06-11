@@ -240,6 +240,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/trigger").Name(TriggerPipelineJob.String()).Handler(triggerPipelineJob(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}").Name(GetPipelineJob.String()).Handler(getPipelineJob(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds").Name(CreateJobBuild.String()).Handler(createJobBuild(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds").Name(ListJobBuilds.String()).Handler(listJobBuilds(s))
 	api.Methods(http.MethodPut).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_number}").Name(UpdateJobBuild.String()).Handler(updateJobBuild(s))
 	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_number}").Name(DeleteJobBuild.String()).Handler(deleteJobBuild(s))

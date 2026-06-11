@@ -23,6 +23,30 @@ type CreateJobBuildResponse struct {
 
 func (r CreateJobBuildResponse) Error() string { return r.Err }
 
+func createJobBuild(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var (
+			req CreateJobBuildRequest
+			ctx = r.Context()
+		)
+		err := json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			encodeResponse(CreateJobBuildResponse{Err: err.Error()}, w)
+			return
+		}
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		jn := vars["job_name"]
+		b, err := s.CreateJobBuild(ctx, tc, pc, jn, req.Build)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(CreateJobBuildResponse{Build: b, Err: errs}, w)
+	}
+}
+
 type StartPendingBuildRequest struct {
 	BuildID uint32 `json:"build_id"`
 }
