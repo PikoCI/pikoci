@@ -48,7 +48,7 @@ set -euo pipefail
 #                                  Docker Compose variable interpolation in
 #                                  docker-compose.yml (avoids bcrypt $ warnings)
 #   9. Installs Docker on the server if not already present
-#  10. Runs docker compose up -d for supporting services (NATS must start first)
+#  10. Runs docker compose up -d for supporting services
 #  11. Reloads systemd and restarts PikoCI server + worker services
 #
 # SERVER LAYOUT:
@@ -58,7 +58,7 @@ set -euo pipefail
 #   /etc/pikoci/pikoci.env             — env vars for PikoCI (secrets)
 #   /var/lib/pikoci/                   — PikoCI data (SQLite DB, XDG data)
 #   /opt/pikoci/                       — Docker Compose stack
-#   /opt/pikoci/docker-compose.yml     — Caddy, Prometheus, Grafana, Node Exporter, NATS
+#   /opt/pikoci/docker-compose.yml     — Caddy, Prometheus, Grafana, Node Exporter
 #   /opt/pikoci/Caddyfile              — reverse proxy config
 #   /opt/pikoci/prometheus.yml         — Prometheus scrape targets
 #   /opt/pikoci/pikoci.env             — env vars for Docker Compose containers

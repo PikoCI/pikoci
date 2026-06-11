@@ -40,21 +40,6 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
 
-  nats:
-    image: nats:2
-    restart: unless-stopped
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-    command: ["--http_port", "8222"]
-
-  nats-exporter:
-    image: natsio/prometheus-nats-exporter:latest
-    restart: unless-stopped
-    command: ["-varz", "-connz", "-subz", "http://nats:8222"]
-    depends_on:
-      - nats
-
   node-exporter:
     image: prom/node-exporter:latest
     restart: unless-stopped

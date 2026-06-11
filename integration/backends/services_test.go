@@ -15,14 +15,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
-	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
+	"github.com/pikoci/pikoci/pikoci/notifier"
+	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
 	"github.com/pikoci/pikoci/worker"
-	"gocloud.dev/pubsub"
-	"gocloud.dev/pubsub/mempubsub"
 )
 
 func TestServicesE2E(t *testing.T) {
@@ -41,14 +40,6 @@ func TestServicesE2E(t *testing.T) {
 	err = migrate.Migrate(db, mysql.Mem)
 	require.NoError(t, err)
 
-	jobTopic, err := pubsub.OpenTopic(ctx, fmt.Sprintf("%s://services-test-jobs", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer jobTopic.Shutdown(ctx)
-
-	checkTopic, err := pubsub.OpenTopic(ctx, fmt.Sprintf("%s://services-test-checks", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer checkTopic.Shutdown(ctx)
-
 	ur := mysql.NewUserRepository(db)
 	tr := mysql.NewTeamRepository(db)
 	ppr := mysql.NewPipelineRepository(db)
@@ -62,7 +53,7 @@ func TestServicesE2E(t *testing.T) {
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 
 	jwtSecret := []byte("test-secret")
-	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, notifier.New(), logger)
 	svc.StartScheduler(ctx)
 
 	_, _ = svc.CreateUser(ctx, user.User{
@@ -71,19 +62,11 @@ func TestServicesE2E(t *testing.T) {
 		Password: "$2a$14$rwQk8Qvc2rij7qhFO4P1W.OiSF6AkgVU1RCrLaY2wawJcpkPEKwbm",
 	}, true)
 
-	jobSub, err := pubsub.OpenSubscription(ctx, fmt.Sprintf("%s://services-test-jobs", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer jobSub.Shutdown(ctx)
-
-	checkSub, err := pubsub.OpenSubscription(ctx, fmt.Sprintf("%s://services-test-checks", mempubsub.Scheme))
-	require.NoError(t, err)
-	defer checkSub.Shutdown(ctx)
-
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		w := worker.New(svc, jobTopic, jobSub, checkSub, logger.With("component", "worker"), "test-worker", "jobs,checks", "test", 1)
+		w := worker.New(svc, logger.With("component", "worker"), "test-worker", "test", 1)
 		w.Run(ctx)
 	}()
 

@@ -23,7 +23,6 @@ Simplest possible pipeline. A cron resource triggers a job that runs `echo` ever
 # Run standalone (without Docker)
 pikoci server \
   --db-system mem \
-  --pubsub-system mem \
   --jwt-secret my-secret \
   --run-worker \
   --pipeline-name hello-world \
@@ -39,7 +38,6 @@ Requires Docker to be available (the Docker runner executes jobs inside containe
 ```bash
 pikoci server \
   --db-system mem \
-  --pubsub-system mem \
   --jwt-secret my-secret \
   --run-worker \
   --pipeline-name go-project \

@@ -184,18 +184,6 @@ job "test-backends" {
     port     = "5432"
     password = "postgres123"
   }
-  service "nats" {
-    version = "2.12.0"
-    port    = "4222"
-  }
-  service "rabbitmq" {
-    version = "3"
-    port    = "5672"
-  }
-  service "kafka" {
-    version = "latest"
-    port    = "9092"
-  }
   service "vault" {
     version    = "latest"
     port       = "8200"
@@ -504,18 +492,6 @@ service_type "mariadb" {
 
 service_type "postgresql" {
   source = "pikoci://postgresql"
-}
-
-service_type "nats" {
-  source = "pikoci://nats"
-}
-
-service_type "rabbitmq" {
-  source = "pikoci://rabbitmq"
-}
-
-service_type "kafka" {
-  source = "pikoci://kafka"
 }
 
 service_type "vault" {

@@ -68,7 +68,7 @@ service_type "postgres" {
 
 Two URL formats are supported:
 
-- **`pikoci://<name>`** resolves to the PikoCI registry (no built-in services are shipped yet, but this is reserved for future additions).
+- **`pikoci://<name>`** resolves to a built-in service definition shipped with PikoCI (see [Built-in services](#built-in-services) below).
 - **`https://...`** or **`http://...`** fetches HCL from any URL.
 
 When `source` is set, you must not define inline `start`, `stop`, or `ready_check` blocks. PikoCI will error if both are present.
@@ -161,6 +161,58 @@ docker rm -f $NAME 2>/dev/null || true
 ```
 
 **Trade-off:** With stable names, only one instance of the service can run per pipeline/job combination at a time. If two builds of the same job run in parallel, the second one will kill the first's container. For most integration test use cases this is acceptable. If you need parallel isolation, append `$BUILD_NUMBER` to the name and accept the orphan risk.
+
+## Built-in services
+
+PikoCI ships with built-in service definitions that you can reference via the `pikoci://` source scheme. These use Docker containers with orphan prevention and ready checks already configured.
+
+| Service        | Source                    | Params                           |
+|----------------|---------------------------|----------------------------------|
+| MariaDB        | `pikoci://mariadb`        | `version`, `port`, `root_password` |
+| PostgreSQL     | `pikoci://postgresql`     | `version`, `port`, `password`    |
+| Redis          | `pikoci://redis`          | `version`, `port`                |
+| Vault          | `pikoci://vault`          | `version`, `port`, `root_token`  |
+| NATS           | `pikoci://nats`           | `version`, `port`                |
+| RabbitMQ       | `pikoci://rabbitmq`       | `version`, `port`                |
+| Kafka          | `pikoci://kafka`          | `version`, `port`                |
+
+### Usage
+
+Declare the service type at the top level, then reference it in jobs:
+
+```hcl
+service_type "mariadb" {
+  source = "pikoci://mariadb"
+}
+
+service_type "postgresql" {
+  source = "pikoci://postgresql"
+}
+
+job "test" {
+  service "mariadb" {
+    version       = "11.4.2"
+    port          = "3306"
+    root_password = "root123"
+  }
+
+  service "postgresql" {
+    version  = "17"
+    port     = "5432"
+    password = "postgres123"
+  }
+
+  get "cron" "timer" { trigger = true }
+  task "run-tests" {
+    run "exec" {
+      path = "make"
+      args = ["test"]
+    }
+  }
+}
+```
+
+All parameters are optional and have sensible defaults. The built-in services use Docker and follow the [orphan prevention](#orphan-prevention) pattern with stable container names.
 
 ## Examples
 

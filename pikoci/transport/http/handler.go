@@ -267,6 +267,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/triggers/{trigger_name}").Name(ListTriggersAfter.String()).Handler(listTriggersAfter(s))
 
 	api.Methods(http.MethodPost).Path("/workers/heartbeat").Name(WorkerHeartbeat.String()).Handler(workerHeartbeat(s))
+
 	api.Methods(http.MethodGet).Path("/workers").Name(ListWorkers.String()).Handler(listWorkers(s))
 	api.Methods(http.MethodGet).Path("/workers/health").Name(WorkersHealth.String()).Handler(workersHealth(s))
 	api.Methods(http.MethodDelete).Path("/workers/{worker_name}").Name(DeleteWorker.String()).Handler(deleteWorker(s))

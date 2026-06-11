@@ -1,0 +1,92 @@
+syntax = "proto3";
+package pikoci.worker.v1;
+option go_package = "github.com/pikoci/pikoci/gen/worker/v1;workerv1";
+
+service WorkerService {
+  rpc Register(RegisterRequest) returns (RegisterResponse) {}
+  rpc Execute(stream WorkerMessage) returns (stream ServerMessage) {}
+}
+
+// Worker → Server
+message WorkerMessage {
+  oneof payload {
+    Heartbeat heartbeat = 1;
+    JobAccepted job_accepted = 2;
+    LogChunk log_chunk = 3;
+    StepResult step_result = 4;
+    JobResult job_result = 5;
+  }
+}
+
+// Server → Worker
+message ServerMessage {
+  oneof payload {
+    Job job = 1;
+    CancelJob cancel_job = 2;
+    Ping ping = 3;
+  }
+}
+
+message RegisterRequest {
+  string worker_id = 1;
+  string worker_token = 2;
+  int32 max_jobs = 3;
+}
+message RegisterResponse {
+  bool accepted = 1;
+  string message = 2;
+}
+
+message Heartbeat {
+  string worker_id = 1;
+  int64 timestamp = 2;
+  int32 running_jobs = 3;
+}
+
+message Job {
+  string build_id = 1;
+  string build_number = 2;
+  string pipeline_name = 3;
+  string job_name = 4;
+  string team = 5;
+  uint32 version_id = 6;
+  string resource_canonical = 7;
+  string retry_build_number = 8;
+  uint32 retry_build_id = 9;
+  string type = 10;  // "job" or "check"
+}
+
+message JobAccepted {
+  string build_id = 1;
+  int64 started_at = 2;
+}
+
+message LogChunk {
+  string build_id = 1;
+  string step_name = 2;
+  bytes data = 3;
+  int64 timestamp = 4;
+}
+
+message StepResult {
+  string build_id = 1;
+  string step_name = 2;
+  string status = 3;
+  int64 finished_at = 4;
+}
+
+message JobResult {
+  string build_id = 1;
+  string status = 2;       // succeeded, failed, cancelled, errored
+  int64 finished_at = 3;
+  string error = 4;
+}
+
+message CancelJob {
+  string build_id = 1;
+  string reason = 2;
+}
+
+message Ping {
+  int64 timestamp = 1;
+}

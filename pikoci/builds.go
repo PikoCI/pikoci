@@ -2,7 +2,6 @@ package pikoci
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -10,10 +9,8 @@ import (
 	"time"
 
 	"github.com/pikoci/pikoci/pikoci/build"
-	"github.com/pikoci/pikoci/pikoci/queue"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/utils"
-	"gocloud.dev/pubsub"
 )
 
 var (
@@ -56,6 +53,8 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 	if err != nil {
 		return nil, err
 	}
+
+	q.Notifier.Notify()
 
 	return &b, nil
 }
@@ -141,6 +140,15 @@ func (q *PikoCI) CancelJobBuild(ctx context.Context, tc, pc, jn string, buildNum
 		return err
 	}
 
+	// If the build was running, push cancellation to the worker via gRPC stream.
+	if wasRunning && q.GRPCServer != nil {
+		buildID := fmt.Sprintf("%d", b.ID)
+		if err := q.GRPCServer.CancelBuild(buildID, "user cancelled"); err != nil {
+			q.logger.Debug("gRPC cancel routing failed (worker may be embedded or disconnected)",
+				"build_id", buildID, "error", err)
+		}
+	}
+
 	// Notify the next pending build so it can start (whether we cancelled
 	// a running or a pending build, a concurrency slot may have opened).
 	q.notifyNextPendingBuild(ctx, tc, pc, jn)
@@ -172,6 +180,10 @@ func (q *PikoCI) UpdateJobBuild(ctx context.Context, tc, pc, jn string, buildNum
 	if err = q.Builds.Update(ctx, tc, pc, jn, buildNumber, b); err != nil {
 		return fmt.Errorf("failed to Update Build: %w", err)
 	}
+
+	// When a build completes, a concurrency slot may have opened.
+	// Notify polling workers so pending builds can start.
+	q.Notifier.Notify()
 
 	return nil
 }
@@ -226,44 +238,13 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 		parentBN = buildNumber[:idx]
 	}
 
-	// Always resolve versions from the original (parent) build so retries
-	// of retries still get the correct versions even if the intermediate
-	// retry failed before completing its get steps.
-	retryBuildID := b.ID
-	if parentBN != buildNumber {
-		parentBuild, err := q.Builds.Find(ctx, tc, pc, jn, parentBN)
-		if err != nil {
-			return fmt.Errorf("failed to find parent build %q: %w", parentBN, err)
-		}
-		retryBuildID = parentBuild.ID
-	}
-
 	// Create a pending retry build first
-	nb, err := q.CreateRetryJobBuild(ctx, tc, pc, jn, parentBN, build.Build{Status: build.Pending})
+	_, err = q.CreateRetryJobBuild(ctx, tc, pc, jn, parentBN, build.Build{Status: build.Pending})
 	if err != nil {
 		return fmt.Errorf("failed to create pending retry build: %w", err)
 	}
 
-	m := queue.Body{
-		TeamCanonical:     tc,
-		PipelineCanonical: pc,
-		JobName:           jn,
-		BuildID:           nb.ID,
-		RetryBuildNumber:  parentBN,
-		RetryBuildID:      retryBuildID,
-	}
-
-	mb, err := json.Marshal(m)
-	if err != nil {
-		return fmt.Errorf("failed to marshal Message Body: %w", err)
-	}
-
-	err = q.JobTopic.Send(ctx, &pubsub.Message{
-		Body: mb,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to enqueue retry for Build %q: %w", buildNumber, err)
-	}
+	q.Notifier.Notify()
 
 	return nil
 }
@@ -387,21 +368,7 @@ func (q *PikoCI) notifyNextPendingBuild(ctx context.Context, tc, pc, jn string) 
 // sendPendingBuildNotification finds the oldest pending build for a single job
 // and sends a message to the job topic.
 func (q *PikoCI) sendPendingBuildNotification(ctx context.Context, tc, pc, jn string) {
-	pending, err := q.Builds.FindOldestPending(ctx, tc, pc, jn)
-	if err != nil || pending == nil {
-		return
-	}
-	msg := queue.Body{
-		TeamCanonical:     tc,
-		PipelineCanonical: pc,
-		JobName:           jn,
-		BuildID:           pending.ID,
-	}
-	mb, err := json.Marshal(msg)
-	if err != nil {
-		return
-	}
-	q.JobTopic.Send(ctx, &pubsub.Message{Body: mb})
+	q.Notifier.Notify()
 }
 
 // NotifySerialGroupPendingBuilds finds all jobs sharing serial groups with the
@@ -432,42 +399,6 @@ func (q *PikoCI) NotifySerialGroupPendingBuilds(ctx context.Context, tc, pc, jn 
 // on the DB to determine which build to run (worker/service.go:238-266).
 // Duplicate messages simply result in redundant DB lookups with no side effects.
 func (q *PikoCI) ReEnqueuePendingBuilds(ctx context.Context) error {
-	pps, err := q.Pipelines.FilterAll(ctx)
-	if err != nil {
-		return fmt.Errorf("filtering all pipelines: %w", err)
-	}
-
-	var count int
-	for _, pwt := range pps {
-		tc := pwt.Team.Canonical
-		pc := pwt.Canonical
-		for _, j := range pwt.Jobs {
-			pending, err := q.Builds.FindOldestPending(ctx, tc, pc, j.Name)
-			if err != nil {
-				return fmt.Errorf("finding oldest pending build for %s/%s/%s: %w", tc, pc, j.Name, err)
-			}
-			if pending == nil {
-				continue
-			}
-			msg := queue.Body{
-				TeamCanonical:     tc,
-				PipelineCanonical: pc,
-				JobName:           j.Name,
-				BuildID:           pending.ID,
-			}
-			mb, err := json.Marshal(msg)
-			if err != nil {
-				return fmt.Errorf("marshalling queue body: %w", err)
-			}
-			if err := q.JobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
-				return fmt.Errorf("sending queue message for %s/%s/%s: %w", tc, pc, j.Name, err)
-			}
-			count++
-		}
-	}
-
-	if q.logger != nil && count > 0 {
-		q.logger.Info("re-enqueued pending builds on startup", "count", count)
-	}
+	q.Notifier.Notify()
 	return nil
 }

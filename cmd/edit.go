@@ -78,7 +78,7 @@ var editCmd = &cobra.Command{
 
 		ctx := cmd.Context()
 		jwtSecret := []byte("local-edit-secret")
-		svc := pikoci.New(ctx, nil, nil, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, logger)
+		svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, nil, logger)
 
 		handler := tshttp.LocalEditorHandler(svc, filePath, logger)
 

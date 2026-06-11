@@ -1,46 +1,40 @@
 // Package scheduler implements the background polling loop that triggers
-// resource checks and downstream job builds. The scheduler periodically queries
-// the database for resources whose next check time has passed and for jobs
-// whose input constraints are satisfied, then publishes messages to the
-// appropriate pub/sub topics for the worker to consume.
+// downstream job builds when input constraints are satisfied, and notifies
+// workers when resources become due for checking.
 package scheduler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
-	"github.com/pikoci/pikoci/pikoci/queue"
 	"github.com/pikoci/pikoci/pikoci/resource"
-	"gocloud.dev/pubsub"
 )
 
-// Scheduler polls the database for resources due for a check and sends messages to the topic.
+// Scheduler polls the database for due resources and ready downstream jobs.
 type Scheduler struct {
-	resources  resource.Repository
-	pipelines  pipeline.Repository
-	builds     build.Repository
-	jobTopic   queue.Topic
-	checkTopic queue.Topic
-	logger     *slog.Logger
-	interval   time.Duration
+	resources resource.Repository
+	pipelines pipeline.Repository
+	builds    build.Repository
+	notifier  *notifier.WorkNotifier
+	logger    *slog.Logger
+	interval  time.Duration
 }
 
 // New creates a new Scheduler.
-func New(resources resource.Repository, pipelines pipeline.Repository, builds build.Repository, jobTopic, checkTopic queue.Topic, logger *slog.Logger) *Scheduler {
+func New(resources resource.Repository, pipelines pipeline.Repository, builds build.Repository, wn *notifier.WorkNotifier, logger *slog.Logger) *Scheduler {
 	return &Scheduler{
-		resources:  resources,
-		pipelines:  pipelines,
-		builds:     builds,
-		jobTopic:   jobTopic,
-		checkTopic: checkTopic,
-		logger:     logger,
-		interval:   10 * time.Second,
+		resources: resources,
+		pipelines: pipelines,
+		builds:    builds,
+		notifier:  wn,
+		logger:    logger,
+		interval:  10 * time.Second,
 	}
 }
 
@@ -72,45 +66,9 @@ func (s *Scheduler) tickResources(ctx context.Context) {
 		return
 	}
 
-	for _, rwp := range due {
-		s.logger.Info("Checking resource ...", "Pipeline", rwp.PipelineCanonical, "Resource", rwp.Canonical)
-
-		m := queue.Body{
-			TeamCanonical:     rwp.TeamCanonical,
-			PipelineCanonical: rwp.PipelineCanonical,
-			ResourceCanonical: rwp.Canonical,
-		}
-		mb, err := json.Marshal(m)
-		if err != nil {
-			s.logger.Error("failed to marshal Message Body", "error", err)
-			continue
-		}
-		err = s.checkTopic.Send(ctx, &pubsub.Message{
-			Body: mb,
-		})
-		if err != nil {
-			s.logger.Error("failed to send Topic", "error", err)
-			continue
-		}
-
-		now := time.Now()
-		rwp.Resource.LastCheck = now
-
-		spec := rwp.CheckInterval
-		if spec == "" {
-			spec = "@every 1m"
-		}
-		nextCheck, err := ComputeNextCheck(spec, now)
-		if err != nil {
-			s.logger.Error("failed to compute next check", "error", err)
-			continue
-		}
-		rwp.Resource.NextCheck = nextCheck
-
-		err = s.resources.Update(ctx, rwp.TeamCanonical, rwp.PipelineCanonical, rwp.Canonical, rwp.Resource)
-		if err != nil {
-			s.logger.Error("failed to update resource", "error", err)
-		}
+	if len(due) > 0 {
+		s.logger.Info("Found due resources", "count", len(due))
+		s.notifier.Notify()
 	}
 }
 
@@ -189,8 +147,8 @@ func (s *Scheduler) evaluateJob(ctx context.Context, pwt *pipeline.WithTeam, j *
 	}
 
 	// If there's already a pending build for this job, skip — don't create
-	// another one. This prevents queue pollution from the scheduler
-	// re-triggering the same unconsumed version every tick.
+	// another one. This prevents the scheduler from re-triggering the same
+	// unconsumed version every tick.
 	pending, err := s.builds.FindOldestPending(ctx, pwt.Team.Canonical, pwt.Canonical, j.Name)
 	if err != nil {
 		s.logger.Error("failed to check for pending builds",
@@ -201,14 +159,14 @@ func (s *Scheduler) evaluateJob(ctx context.Context, pwt *pipeline.WithTeam, j *
 		return
 	}
 
-	// Use the version from the first candidate for the queue message.
+	// Use the version from the first candidate.
 	versionID := candidates[0].versionID
 
 	s.logger.Info("Triggering downstream job",
 		"pipeline", pwt.Canonical, "job", j.Name, "version_id", versionID,
 		"candidates", fmt.Sprintf("%+v", candidates))
 
-	// Create a pending build first
+	// Create a pending build
 	bb := build.Build{
 		Status:    build.Pending,
 		VersionID: versionID,
@@ -223,22 +181,7 @@ func (s *Scheduler) evaluateJob(ctx context.Context, pwt *pipeline.WithTeam, j *
 	s.logger.Info("created pending build for downstream job",
 		"pipeline", pwt.Canonical, "job", j.Name, "build_id", id, "build_number", buildNumber)
 
-	m := queue.Body{
-		TeamCanonical:     pwt.Team.Canonical,
-		PipelineCanonical: pwt.Canonical,
-		JobName:           j.Name,
-		BuildID:           id,
-		VersionID:         versionID,
-	}
-	mb, err := json.Marshal(m)
-	if err != nil {
-		s.logger.Error("failed to marshal downstream trigger body", "error", err)
-		return
-	}
-	if err := s.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
-		s.logger.Error("failed to send downstream trigger message",
-			"job", j.Name, "error", err)
-	}
+	s.notifier.Notify()
 }
 
 // resolvePassedJobNames expands for_each group names in a passed list to all

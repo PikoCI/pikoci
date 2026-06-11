@@ -2,7 +2,6 @@ package pikoci_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,11 +9,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
-	"github.com/pikoci/pikoci/pikoci/pipeline"
-	"github.com/pikoci/pikoci/pikoci/queue"
-	"github.com/pikoci/pikoci/pikoci/team"
 	"go.uber.org/mock/gomock"
-	"gocloud.dev/pubsub"
 )
 
 func TestCreateJobBuild(t *testing.T) {
@@ -157,12 +152,6 @@ func TestRetryJobBuild_BaseBuild(t *testing.T) {
 	// RetryJobBuild now creates a pending build first
 	s.Builds.EXPECT().CreateRetry(ctx, "main", "my-pipeline", "my-job", "3", gomock.Any()).
 		Return(uint32(10), "3.1", nil)
-	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
-		assert.Contains(t, string(msg.Body), `"retry_build_number":"3"`)
-		assert.Contains(t, string(msg.Body), `"retry_build_id":5`)
-		assert.Contains(t, string(msg.Body), `"build_id":10`)
-		return nil
-	})
 
 	err := s.S.RetryJobBuild(ctx, "main", "my-pipeline", "my-job", "3")
 	require.NoError(t, err)
@@ -173,21 +162,12 @@ func TestRetryJobBuild_RetryOfRetry(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	// Retrying "3.1" should extract parent "3" and look up that build's ID
+	// Retrying "3.1" should extract parent "3"
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3.1").
 		Return(&build.Build{ID: 7, BuildNumber: "3.1", Status: build.Failed}, nil)
-	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3").
-		Return(&build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}, nil)
-	// RetryJobBuild now creates a pending build first
+	// RetryJobBuild creates a pending build using parent build number
 	s.Builds.EXPECT().CreateRetry(ctx, "main", "my-pipeline", "my-job", "3", gomock.Any()).
 		Return(uint32(12), "3.2", nil)
-	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
-		assert.Contains(t, string(msg.Body), `"retry_build_number":"3"`)
-		// Should use parent build ID (5), not the retry build ID (7)
-		assert.Contains(t, string(msg.Body), `"retry_build_id":5`)
-		assert.Contains(t, string(msg.Body), `"build_id":12`)
-		return nil
-	})
 
 	err := s.S.RetryJobBuild(ctx, "main", "my-pipeline", "my-job", "3.1")
 	require.NoError(t, err)
@@ -295,9 +275,6 @@ func TestCancelJobBuild_Pending(t *testing.T) {
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "1").
 		Return(&build.Build{ID: 1, BuildNumber: "1", Status: build.Pending}, nil)
 	s.Builds.EXPECT().Update(ctx, "main", "my-pipeline", "my-job", "1", gomock.Any()).Return(nil)
-	// Should also notify next pending build
-	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "my-job").
-		Return(nil, nil)
 	// NotifySerialGroupPendingBuilds looks up the job
 	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
 		Return(&job.Job{Name: "my-job"}, nil)
@@ -314,9 +291,6 @@ func TestCancelJobBuild_Running_NotifiesNextPending(t *testing.T) {
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "1").
 		Return(&build.Build{ID: 1, BuildNumber: "1", Status: build.Started}, nil)
 	s.Builds.EXPECT().Update(ctx, "main", "my-pipeline", "my-job", "1", gomock.Any()).Return(nil)
-	// Should check for next pending build
-	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "my-job").
-		Return(nil, nil)
 	// NotifySerialGroupPendingBuilds looks up the job
 	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
 		Return(&job.Job{Name: "my-job"}, nil)
@@ -330,34 +304,7 @@ func TestReEnqueuePendingBuilds(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	pps := []*pipeline.WithTeam{
-		{
-			Pipeline: pipeline.Pipeline{
-				Canonical: "my-pipeline",
-				Jobs: []job.Job{
-					{Name: "job1"},
-					{Name: "job2"},
-				},
-			},
-			Team: team.Team{Canonical: "main"},
-		},
-	}
-	s.Pipelines.EXPECT().FilterAll(ctx).Return(pps, nil)
-	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "job1").
-		Return(&build.Build{ID: 42, Status: build.Pending}, nil)
-	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "job2").
-		Return(nil, nil)
-	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, "main", body.TeamCanonical)
-		assert.Equal(t, "my-pipeline", body.PipelineCanonical)
-		assert.Equal(t, "job1", body.JobName)
-		assert.Equal(t, uint32(42), body.BuildID)
-		return nil
-	})
-
+	// ReEnqueuePendingBuilds now just calls Notify() — no DB queries needed
 	err := s.P.ReEnqueuePendingBuilds(ctx)
 	require.NoError(t, err)
 }
@@ -367,19 +314,7 @@ func TestReEnqueuePendingBuilds_NoPending(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	pps := []*pipeline.WithTeam{
-		{
-			Pipeline: pipeline.Pipeline{
-				Canonical: "my-pipeline",
-				Jobs:      []job.Job{{Name: "job1"}},
-			},
-			Team: team.Team{Canonical: "main"},
-		},
-	}
-	s.Pipelines.EXPECT().FilterAll(ctx).Return(pps, nil)
-	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "job1").
-		Return(nil, nil)
-
+	// ReEnqueuePendingBuilds now just calls Notify() — no DB queries needed
 	err := s.P.ReEnqueuePendingBuilds(ctx)
 	require.NoError(t, err)
 }
@@ -439,8 +374,7 @@ func TestReEnqueuePendingBuilds_NoPipelines(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	s.Pipelines.EXPECT().FilterAll(ctx).Return(nil, nil)
-
+	// ReEnqueuePendingBuilds now just calls Notify() — no DB queries needed
 	err := s.P.ReEnqueuePendingBuilds(ctx)
 	require.NoError(t, err)
 }
@@ -450,24 +384,10 @@ func TestCancelJobBuild_Running_NotifiesNextPending_WithPendingBuild(t *testing.
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	// Cancel a running build and there IS a next pending build to notify
+	// Cancel a running build, Notify() is called instead of querying DB
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "1").
 		Return(&build.Build{ID: 1, BuildNumber: "1", Status: build.Started}, nil)
 	s.Builds.EXPECT().Update(ctx, "main", "my-pipeline", "my-job", "1", gomock.Any()).Return(nil)
-	// notifyNextPendingBuild finds a pending build
-	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "my-job").
-		Return(&build.Build{ID: 5, Status: build.Pending}, nil)
-	// It should send a message to the topic
-	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, "main", body.TeamCanonical)
-		assert.Equal(t, "my-pipeline", body.PipelineCanonical)
-		assert.Equal(t, "my-job", body.JobName)
-		assert.Equal(t, uint32(5), body.BuildID)
-		return nil
-	})
 	// NotifySerialGroupPendingBuilds looks up the job
 	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
 		Return(&job.Job{Name: "my-job"}, nil)
@@ -719,17 +639,7 @@ func TestNotifySerialGroupPendingBuilds(t *testing.T) {
 			{Name: "deploy-staging"},
 			{Name: "deploy-prod"},
 		}, nil)
-	// Should find pending build for deploy-prod (skip deploy-staging since it's the caller)
-	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "deploy-prod").
-		Return(&build.Build{ID: 42, Status: build.Pending}, nil)
-	s.Topic.EXPECT().Send(ctx, gomock.Any()).DoAndReturn(func(_ context.Context, msg *pubsub.Message) error {
-		var body queue.Body
-		err := json.Unmarshal(msg.Body, &body)
-		require.NoError(t, err)
-		assert.Equal(t, "deploy-prod", body.JobName)
-		assert.Equal(t, uint32(42), body.BuildID)
-		return nil
-	})
+	// sendPendingBuildNotification now just calls Notify() — no DB queries or topic sends
 
 	s.P.NotifySerialGroupPendingBuilds(ctx, "main", "my-pipeline", "deploy-staging")
 }

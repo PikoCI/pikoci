@@ -4,29 +4,31 @@ By default, PikoCI runs an embedded worker inside the server process. For produc
 
 ## Architecture
 
-PikoCI uses two separate queues: one for **jobs** and one for **resource checks**. This prevents long-running jobs (e.g. Docker builds) from blocking resource check processing.
+Standalone workers connect to the server using gRPC bidirectional streaming. The server pushes jobs to workers as they become available, and workers stream results back in real time. Data queries (GetPipeline, UpdateJobBuild, etc.) use standard HTTP. Both gRPC and HTTP are multiplexed on the same port via cmux.
 
 ```
                     ┌─────────┐
                     │  Server  │  --run-worker=false
                     └────┬────┘
-                    ┌────┴────┐
-              ┌─────┤  Queues ├─────┐
-              │     └─────────┘     │
-         jobs │                     │ checks
-              │                     │
-         ┌────┴───┐           ┌────┴───┐
-         │Worker 1│           │Worker 2│
-         │(all)   │           │(checks)│
-         └────────┘           └────────┘
+                         │ gRPC streaming (same port)
+              ┌──────────┼──────────┐
+              │          │          │
+         ┌────┴───┐  ┌───┴────┐  ┌─┴──────┐
+         │Worker 1│  │Worker 2│  │Worker 3│
+         └────────┘  └────────┘  └────────┘
 ```
 
-The server publishes jobs and resource checks to separate queues. Workers subscribe, execute the work, and report results back via the PikoCI API.
+**Key benefits of gRPC streaming:**
+- **Instant cancellation** — server pushes `CancelJob` to the worker (no polling delay)
+- **Built-in keepalive** — heartbeats flow over the stream
+- **Server-push dispatch** — no wasted polling cycles
+- **Typed contracts** — protobuf schema (`proto/worker/v1/worker.proto`)
+
+The embedded worker (when `--run-worker=true`) calls the service directly in-process — no gRPC or HTTP involved.
 
 ## Requirements
 
-- A non-memory queue backend (`nats`, `rabbit`, or `kafka`). The `mem` backend only works within a single process.
-- Workers must be able to reach the server URL and the queue backend.
+- Workers must be able to reach the server URL.
 - Workers need a worker token for authentication. Generate one with `pikoci worker-token --jwt-secret <secret>` or copy it from the server startup logs.
 
 ## Server setup
@@ -42,7 +44,6 @@ pikoci server \
   --db-user pikoci \
   --db-password secret \
   --db-name pikoci \
-  --pubsub-system nats \
   --run-worker=false
 # Server logs: Worker token for standalone workers token=eyJhbG...
 ```
@@ -59,7 +60,6 @@ pikoci worker-token --jwt-secret my-secret
 ```bash
 pikoci worker \
   --pikoci-url http://server:8080 \
-  --pubsub-system nats \
   --worker-token eyJhbG... \
   --concurrency 4
 ```
@@ -69,8 +69,6 @@ pikoci worker \
 | Flag | Alias | Default | Required | Description |
 |------|-------|---------|----------|-------------|
 | `--pikoci-url` | `-u` | `localhost:8080` | no | PikoCI server URL |
-| `--pubsub-system` | | `mem` | no | Queue backend (must match server) |
-| `--queues` | | `jobs,checks` | no | Which queues to listen on: `jobs`, `checks`, or `jobs,checks` |
 | `--concurrency` | | `1` | no | Number of parallel job goroutines |
 | `--drain-timeout` | | `10m` | no | Max time to wait for in-flight jobs during graceful shutdown (`SIGQUIT`) |
 | `--log-level` | | `info` | no | Log level: `debug`, `info`, `warn`, `error` |
@@ -83,7 +81,6 @@ Worker flags can be set via environment variables:
 
 ```bash
 export PIKOCI_URL=http://server:8080
-export PUBSUB_SYSTEM=nats
 export WORKER_TOKEN=eyJhbG...
 export CONCURRENCY=4
 ```
@@ -100,24 +97,44 @@ Worker names must be unique across all running workers. If two workers use the s
 
 When `--concurrency` is greater than 1, each goroutine within the process automatically gets a `-N` suffix (e.g. `build-machine-1-1`, `build-machine-1-2`).
 
-## Scaling
+## Reverse proxy configuration
 
-Run multiple worker instances to increase throughput. Each worker independently subscribes to the queues:
+Since gRPC and HTTP share the same port, your reverse proxy needs to handle HTTP/2 for gRPC. Most proxies support this automatically.
 
-```bash
-# Machine A — handles both jobs and checks (default)
-pikoci worker --pikoci-url http://server:8080 --pubsub-system nats --worker-token eyJhbG... --concurrency 2
-
-# Machine B — dedicated job runner
-pikoci worker --pikoci-url http://server:8080 --pubsub-system nats --worker-token eyJhbG... --concurrency 4 --queues jobs
-
-# Machine C — dedicated check worker (never blocked by long jobs)
-pikoci worker --pikoci-url http://server:8080 --pubsub-system nats --worker-token eyJhbG... --queues checks
+**Caddy** (works out of the box — Caddy handles HTTP/2 automatically):
+```
+ci.example.com {
+    reverse_proxy localhost:8080
+}
 ```
 
-## Dedicated check workers
+**nginx** (requires HTTP/2 backend support):
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name ci.example.com;
 
-When jobs take minutes (e.g. Docker builds), a single worker processing both queues will block resource checks until the job finishes. Use `--queues checks` to run a dedicated check worker that detects new versions promptly, regardless of job load.
+    location / {
+        grpc_pass grpc://localhost:8080;
+        proxy_pass http://localhost:8080;
+    }
+}
+```
+
+## Scaling
+
+Run multiple worker instances to increase throughput. Each worker connects via gRPC and receives jobs as they become available:
+
+```bash
+# Machine A
+pikoci worker --pikoci-url http://server:8080 --worker-token eyJhbG... --concurrency 2
+
+# Machine B
+pikoci worker --pikoci-url http://server:8080 --worker-token eyJhbG... --concurrency 4
+
+# Machine C
+pikoci worker --pikoci-url http://server:8080 --worker-token eyJhbG...
+```
 
 ## Monitoring workers
 
@@ -128,7 +145,6 @@ Workers send periodic heartbeats to the server. The server tracks each worker's 
 Admin users can view all registered workers at **`#workers`** in the web UI. Each worker shows:
 
 - **Status**: `healthy` (heartbeat received within the last 90 seconds) or `stale` (no heartbeat for over 90 seconds)
-- **Queues**: which queues the worker listens on (`jobs`, `checks`, or both)
 - **Platform**: OS, architecture, and Go version
 - **Version**: the PikoCI binary version
 - **Uptime**: how long the worker has been running

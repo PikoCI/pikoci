@@ -20,7 +20,6 @@ type Worker struct {
 	GoVersion   string    `json:"go_version"`
 	Version     string    `json:"version"`
 	Concurrency int       `json:"concurrency"`
-	Queues      string    `json:"queues"`
 	StartedAt   time.Time `json:"started_at"`
 	LastPingAt  time.Time `json:"last_ping_at"`
 	Status      Status    `json:"status"`

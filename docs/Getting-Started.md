@@ -35,7 +35,6 @@ The fastest way to start. Pass a pipeline config at launch and it's ready immedi
 ```bash
 ./pikoci server \
   --db-system mem \
-  --pubsub-system mem \
   --jwt-secret my-secret \
   --run-worker \
   --pipeline-name my-pipeline \

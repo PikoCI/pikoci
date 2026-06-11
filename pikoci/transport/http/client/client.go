@@ -1035,7 +1035,6 @@ func (cl *Client) WorkerHeartbeat(ctx context.Context, w wkr.Worker) error {
 		GoVersion:   w.GoVersion,
 		Version:     w.Version,
 		Concurrency: w.Concurrency,
-		Queues:      w.Queues,
 		StartedAt:   w.StartedAt.Format(time.RFC3339),
 	}, &resp)
 	if err != nil {
@@ -1096,3 +1095,4 @@ func (cl *Client) DeleteWorker(ctx context.Context, name string) error {
 
 	return nil
 }
+

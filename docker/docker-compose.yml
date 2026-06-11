@@ -18,23 +18,8 @@ services:
     networks:
       - pikoci
 
-  nats:
-    image: nats:2.12.0
-    networks:
-      - pikoci
-
   postgresql:
     image: postgres:17
-    networks:
-      - pikoci
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    networks:
-      - pikoci
-
-  kafka:
-    image: apache/kafka:latest
     networks:
       - pikoci
 

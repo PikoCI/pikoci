@@ -22,9 +22,7 @@ pikoci server [flags]
 | `--run-migrations` | | `true` | no | Run database migrations on startup |
 | `--run-worker` | | `true` | no | Run an embedded worker |
 | `--concurrency` | | `1` | no | Number of worker goroutines |
-| `--queues` | | `jobs,checks` | no | Which queues the embedded worker listens on: `jobs`, `checks`, or `jobs,checks` |
 | `--drain-timeout` | | `10m` | no | Max time to wait for in-flight jobs during graceful shutdown (`SIGQUIT`) |
-| `--pubsub-system` | | `mem` | no | Queue backend: `mem`, `nats`, `rabbit`, `kafka` |
 | `--log-level` | | `info` | no | Log level: `debug`, `info`, `warn`, `error` |
 | `--config` | `-c` | | no | Path to a config file |
 | `--team-canonical` | | `main` | no | Team to use for `--pipeline-*` flags |
@@ -46,7 +44,6 @@ Examples:
 export PORT=9090
 export JWT_SECRET=my-secret
 export DB_SYSTEM=sqlite
-export PUBSUB_SYSTEM=nats
 ```
 
 ## Default user
@@ -74,7 +71,7 @@ The `--users` flag is safe to pass on every restart. It will set the password fo
 ### In-memory (development)
 
 ```bash
-pikoci server --jwt-secret dev-secret --db-system mem --pubsub-system mem
+pikoci server --jwt-secret dev-secret --db-system mem
 ```
 
 ### SQLite (single node)
@@ -83,7 +80,7 @@ pikoci server --jwt-secret dev-secret --db-system mem --pubsub-system mem
 pikoci server --jwt-secret prod-secret --db-system sqlite --db-name pikoci.db
 ```
 
-### PostgreSQL + NATS (production)
+### PostgreSQL (production)
 
 ```bash
 pikoci server \
@@ -94,7 +91,6 @@ pikoci server \
   --db-user pikoci \
   --db-password secret \
   --db-name pikoci \
-  --pubsub-system nats \
   --run-worker=false
 ```
 
@@ -147,4 +143,4 @@ kill -QUIT $(pidof pikoci)
 kill -TERM $(pidof pikoci)
 ```
 
-See also: [Database Backends](Database.md) · [Queue Backends](Queue.md) · [Running Workers Separately](Workers.md)
+See also: [Database Backends](Database.md) · [Running Workers Separately](Workers.md)

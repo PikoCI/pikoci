@@ -144,4 +144,5 @@ const (
 	WorkersHealth
 	// DeleteWorker is the route for deleting a worker by name.
 	DeleteWorker
+
 )

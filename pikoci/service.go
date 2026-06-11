@@ -11,7 +11,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
-	"github.com/pikoci/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
@@ -208,17 +208,16 @@ type Service interface {
 	WorkersHealth(ctx context.Context) (bool, error)
 	// DeleteWorker removes a worker by name.
 	DeleteWorker(ctx context.Context, name string) error
+
 }
 
 // PikoCI is the primary implementation of the Service interface. It coordinates
-// between repository backends for persistence, message queues for async job and
+// between repository backends for persistence, a work notifier for async job and
 // resource check dispatching, and a background scheduler for periodic resource
 // checks.
 type PikoCI struct {
-	// JobTopic is the message queue topic used to dispatch job build executions.
-	JobTopic queue.Topic
-	// CheckTopic is the message queue topic used to dispatch resource checks.
-	CheckTopic queue.Topic
+	// Notifier broadcasts work availability to waiting workers.
+	Notifier *notifier.WorkNotifier
 	// Users is the repository for user persistence.
 	Users user.Repository
 	// Teams is the repository for team persistence.
@@ -249,6 +248,12 @@ type PikoCI struct {
 	// JWTSecret is the signing key used for JWT token generation and validation.
 	JWTSecret []byte
 
+	// GRPCServer is set by the server command to enable cancellation routing
+	// via gRPC streams. It is nil when no gRPC server is running.
+	GRPCServer interface {
+		CancelBuild(buildID string, reason string) error
+	}
+
 	scheduler *scheduler.Scheduler
 	logger    *slog.Logger
 }
@@ -256,11 +261,10 @@ type PikoCI struct {
 // New creates a new PikoCI service instance with all required dependencies. It
 // initializes the internal scheduler for periodic resource checks and returns
 // the configured service ready for use.
-func New(ctx context.Context, jobTopic, checkTopic queue.Topic, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, wr wkr.Repository, suow unitwork.StartUnitOfWork, js []byte, l *slog.Logger) *PikoCI {
+func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, wr wkr.Repository, suow unitwork.StartUnitOfWork, js []byte, wn *notifier.WorkNotifier, l *slog.Logger) *PikoCI {
 	return &PikoCI{
 		Ctx:           ctx,
-		JobTopic:      jobTopic,
-		CheckTopic:    checkTopic,
+		Notifier:      wn,
 		Users:         ur,
 		Teams:         tr,
 		Pipelines:     pr,
@@ -275,7 +279,7 @@ func New(ctx context.Context, jobTopic, checkTopic queue.Topic, ur user.Reposito
 		StartUoW:      suow,
 		JWTSecret:     js,
 		logger:        l,
-		scheduler:     scheduler.New(rr, pr, br, jobTopic, checkTopic, l),
+		scheduler:     scheduler.New(rr, pr, br, wn, l),
 	}
 }
 

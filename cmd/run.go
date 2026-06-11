@@ -9,11 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/cycloidio/sqlr"
 	"github.com/spf13/cobra"
 	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/lopezator/migrator"
@@ -21,9 +20,6 @@ import (
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/worker"
-	"gocloud.dev/pubsub"
-
-	_ "gocloud.dev/pubsub/mempubsub"
 )
 
 // ExitError wraps an exit code so cobra's RunE can propagate it without
@@ -173,32 +169,9 @@ func runLocal(ctx context.Context, logger *slog.Logger, pipelineConfig, jobName 
 
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 
-	// Create pubsub with unique topic names to avoid conflicts
-	runID := uuid.New().String()
-	jobTopicName := fmt.Sprintf("mem://pikoci-run-jobs-%s", runID)
-	checkTopicName := fmt.Sprintf("mem://pikoci-run-checks-%s", runID)
-
-	jobTopic, err := pubsub.OpenTopic(ctx, jobTopicName)
-	if err != nil {
-		return 0, fmt.Errorf("failed to open job topic: %w", err)
-	}
-	defer jobTopic.Shutdown(ctx)
-
-	checkTopic, err := pubsub.OpenTopic(ctx, checkTopicName)
-	if err != nil {
-		return 0, fmt.Errorf("failed to open check topic: %w", err)
-	}
-	defer checkTopic.Shutdown(ctx)
-
-	subscription, err := pubsub.OpenSubscription(ctx, jobTopicName)
-	if err != nil {
-		return 0, fmt.Errorf("failed to open subscription: %w", err)
-	}
-	defer subscription.Shutdown(ctx)
-
 	// Create service (do NOT start scheduler)
 	jwtSecret := []byte("local-run-secret")
-	svc := pikoci.New(ctx, jobTopic, checkTopic, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, jwtSecret, notifier.New(), logger)
 
 	// Create pipeline
 	pp, err := svc.CreatePipeline(ctx, mainTeamCanonical, "local", hclBytes, vars)
@@ -243,7 +216,7 @@ func runLocal(ctx context.Context, logger *slog.Logger, pipelineConfig, jobName 
 
 	// Create worker with overrides
 	workerLogger := logger.With("service", "worker")
-	w := worker.New(svc, jobTopic, subscription, nil, workerLogger, "local-run", "", "", 1)
+	w := worker.New(svc, workerLogger, "local-run", "", 1)
 	w.ResourceOverrides = workerResourceOverrides
 	w.LocalMode = true
 

@@ -13,11 +13,6 @@ import (
 	"github.com/cycloidio/sqlr"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
-
-	_ "gocloud.dev/pubsub/kafkapubsub"
-	_ "gocloud.dev/pubsub/mempubsub"
-	_ "gocloud.dev/pubsub/natspubsub"
-	_ "gocloud.dev/pubsub/rabbitpubsub"
 )
 
 func envOr(key, def string) string {
@@ -29,11 +24,6 @@ func envOr(key, def string) string {
 
 func dbSystems() []string {
 	v := envOr("PIKOCI_TEST_DB_SYSTEMS", "mem")
-	return strings.Split(v, ",")
-}
-
-func pubsubSystems() []string {
-	v := envOr("PIKOCI_TEST_PUBSUB_SYSTEMS", "mem")
 	return strings.Split(v, ",")
 }
 

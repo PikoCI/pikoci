@@ -1,16 +1,16 @@
 // Package worker implements the background job execution engine for PikoCI.
-// It receives messages from pub/sub subscriptions for job builds and resource
-// checks, then executes the corresponding pipeline steps using the configured
-// runners and resource types.
+// It polls for work items (job builds and resource checks) via the server API
+// and executes the corresponding pipeline steps using the configured runners
+// and resource types.
 package worker
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,40 +25,45 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/agnivade/levenshtein"
 	"github.com/google/uuid"
+	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
-	"github.com/pikoci/pikoci/pikoci/queue"
+	"github.com/pikoci/pikoci/pikoci/workitem"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
 	"github.com/pikoci/pikoci/pikoci/service"
 	"github.com/pikoci/pikoci/pikoci/utils"
 	"github.com/pikoci/pikoci/pikoci/wkr"
-	"gocloud.dev/pubsub"
 	"gopkg.in/yaml.v3"
 )
 
 // Service is the interface for running the worker event loop. Implementations
-// listen for incoming messages and process them until the context is cancelled.
+// poll for work items and process them until the context is cancelled.
 type Service interface {
-	// Run starts the worker loop, consuming messages from the queue identified
-	// by q and publishing to the topic identified by t.
+	// Run starts the worker loop, polling for work items and processing them.
 	Run(ctx context.Context, q, t string) error
 }
 
-// Worker processes job and resource-check messages received from pub/sub
-// subscriptions. It manages build lifecycle, executes pipeline steps, and
-// supports graceful draining.
-type Worker struct {
-	jobTopic          queue.Topic
-	pikoci            pikoci.Service
-	jobSubscription   queue.Subscription
-	checkSubscription queue.Subscription
+// WorkPoller is implemented by *pikoci.PikoCI and provides PollNextWork
+// for the embedded worker's poll loop. It is not part of the Service interface
+// because standalone workers use gRPC streaming instead.
+type WorkPoller interface {
+	PollNextWork(ctx context.Context) (*workitem.Item, error)
+}
 
-	draining    atomic.Bool
-	drainCancel context.CancelFunc
+// Worker processes job builds and resource checks received via HTTP long
+// polling or gRPC streaming. It manages build lifecycle, executes pipeline
+// steps, and supports graceful draining.
+type Worker struct {
+	pikoci            pikoci.Service
+	workPoller        WorkPoller
+
+	draining      atomic.Bool
+	drainCancelMu sync.Mutex
+	drainCancel   context.CancelFunc
 	logger      *slog.Logger
 
 	// apiCtx is the parent server context used for DB operations.
@@ -77,9 +82,26 @@ type Worker struct {
 	// Heartbeat info
 	Name        string
 	StartedAt   time.Time
-	Queues      string
 	Concurrency int
 	Version     string
+
+	// GRPCAddr is the address of the gRPC server. When set, the worker uses
+	// gRPC streaming instead of HTTP long polling. When empty (embedded worker),
+	// it uses pollLoop.
+	GRPCAddr string
+	// WorkerToken is the JWT token used for gRPC registration.
+	WorkerToken string
+
+	// grpcClient is the gRPC client for the WorkerService.
+	grpcClient workerv1.WorkerServiceClient
+	// grpcStream is the active Execute stream (nil when not connected).
+	// Protected by grpcStreamMu.
+	grpcStreamMu sync.Mutex
+	grpcStream   workerv1.WorkerService_ExecuteClient
+
+	// jobCancels tracks active job cancel functions for gRPC cancellation.
+	jobCancelsMu sync.Mutex
+	jobCancels   map[string]context.CancelFunc
 }
 
 func (w *Worker) cacheDir(teamCanonical, pipelineCanonical, resourceCanonical string) (string, error) {
@@ -97,21 +119,37 @@ func resourceCacheEnabled(rt restype.ResourceType, r resource.Resource) bool {
 	return rt.Cache
 }
 
-// New creates a new Worker with the given PikoCI service, job topic, job and
-// check subscriptions, and logger. The returned Worker is ready to be started
-// with Run.
-func New(s pikoci.Service, jobTopic queue.Topic, jobSub, checkSub queue.Subscription, l *slog.Logger, name, queues, version string, concurrency int) *Worker {
+// New creates a new Worker with the given PikoCI service and logger. The
+// returned Worker is ready to be started with Run, which uses HTTP long-poll
+// to receive work items (embedded mode). The service must implement WorkPoller
+// (satisfied by *pikoci.PikoCI) for the embedded poll loop.
+func New(s pikoci.Service, l *slog.Logger, name, version string, concurrency int) *Worker {
+	w := &Worker{
+		pikoci:      s,
+		logger:      l,
+		Name:        name,
+		StartedAt:   time.Now(),
+		Concurrency: concurrency,
+		Version:     version,
+	}
+	if wp, ok := s.(WorkPoller); ok {
+		w.workPoller = wp
+	}
+	return w
+}
+
+// NewGRPC creates a Worker configured for gRPC streaming mode.
+func NewGRPC(s pikoci.Service, gc workerv1.WorkerServiceClient, l *slog.Logger, name, version string, concurrency int, workerToken, grpcAddr string) *Worker {
 	return &Worker{
-		pikoci:            s,
-		jobTopic:          jobTopic,
-		jobSubscription:   jobSub,
-		checkSubscription: checkSub,
-		logger:            l,
-		Name:              name,
-		StartedAt:         time.Now(),
-		Queues:            queues,
-		Concurrency:       concurrency,
-		Version:           version,
+		pikoci:      s,
+		grpcClient:  gc,
+		logger:      l,
+		Name:        name,
+		StartedAt:   time.Now(),
+		Concurrency: concurrency,
+		Version:     version,
+		GRPCAddr:    grpcAddr,
+		WorkerToken: workerToken,
 	}
 }
 
@@ -119,8 +157,11 @@ func New(s pikoci.Service, jobTopic queue.Topic, jobSub, checkSub queue.Subscrip
 // continue to completion, but the receive loops are cancelled immediately.
 func (w *Worker) Drain() {
 	w.draining.Store(true)
-	if w.drainCancel != nil {
-		w.drainCancel()
+	w.drainCancelMu.Lock()
+	cancel := w.drainCancel
+	w.drainCancelMu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 }
 
@@ -148,7 +189,6 @@ func (w *Worker) sendHeartbeat(ctx context.Context) {
 		GoVersion:   runtime.Version(),
 		Version:     w.Version,
 		Concurrency: w.Concurrency,
-		Queues:      w.Queues,
 		StartedAt:   w.StartedAt,
 	}
 	if err := w.pikoci.WorkerHeartbeat(ctx, hw); err != nil {
@@ -200,8 +240,8 @@ func applyRunnerOverride(pp *pipeline.Pipeline, typeCmd *utils.RunnerCommand, ov
 	return ru, rc, ok
 }
 
-// Run starts the worker event loop. It launches goroutines that receive
-// messages from the job and check subscriptions and process them concurrently.
+// Run starts the worker event loop. When GRPCAddr is set, it connects via
+// gRPC bidirectional streaming. Otherwise it uses HTTP long polling (embedded worker).
 // Run blocks until the context is cancelled or an unrecoverable error occurs.
 func (w *Worker) Run(ctx context.Context) error {
 	w.logger.Info("Worker waiting for messages...")
@@ -210,84 +250,52 @@ func (w *Worker) Run(ctx context.Context) error {
 	// job-level cancellation but respect server shutdown.
 	w.apiCtx = ctx
 
-	// Start heartbeat loop
-	go w.heartbeatLoop(ctx)
-
 	// receiveCtx is cancelled on Drain() to unblock Receive() calls
 	// immediately while still allowing in-flight jobs to finish.
 	receiveCtx, receiveCancel := context.WithCancel(ctx)
+	w.drainCancelMu.Lock()
 	w.drainCancel = receiveCancel
+	w.drainCancelMu.Unlock()
 	defer receiveCancel()
 
-	var wg sync.WaitGroup
-	errs := make(chan error, 2)
-
-	if w.jobSubscription != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := w.receiveLoop(receiveCtx, ctx, w.jobSubscription, "job"); err != nil {
-				errs <- err
-			}
-		}()
+	if w.GRPCAddr != "" {
+		w.jobCancels = make(map[string]context.CancelFunc)
+		return w.grpcLoop(receiveCtx)
 	}
 
-	if w.checkSubscription != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := w.receiveLoop(receiveCtx, ctx, w.checkSubscription, "check"); err != nil {
-				errs <- err
-			}
-		}()
-	}
-
-	done := make(chan struct{})
-	go func() { wg.Wait(); close(done) }()
-
-	select {
-	case err := <-errs:
-		return err
-	case <-done:
-		return nil
-	}
+	// Embedded worker: use HTTP long polling + heartbeat loop
+	go w.heartbeatLoop(ctx)
+	return w.pollLoop(receiveCtx)
 }
 
-func (w *Worker) receiveLoop(receiveCtx, processCtx context.Context, sub queue.Subscription, kind string) error {
+// pollLoop uses HTTP long polling to receive work items. It handles both
+// job builds and resource checks through a single loop.
+func (w *Worker) pollLoop(ctx context.Context) error {
 	for {
 		if w.draining.Load() {
-			w.logger.Info("Worker draining, stopping message receive", "queue", kind)
 			return nil
 		}
-		msg, err := sub.Receive(receiveCtx)
+		item, err := w.workPoller.PollNextWork(ctx)
 		if err != nil {
 			if w.draining.Load() {
-				w.logger.Info("Worker draining, stopping message receive", "queue", kind)
 				return nil
 			}
-			return fmt.Errorf("failed to receive %s message: %w", kind, err)
-		}
-
-		w.logger.Info("received message", "queue", kind, "body", string(msg.Body))
-
-		var m queue.Body
-		if err := json.Unmarshal(msg.Body, &m); err != nil {
-			w.logger.Error("failed unmarshal message body", "queue", kind, "error", err)
-			msg.Ack()
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			w.logger.Error("poll error", "error", err)
+			jitter := time.Duration(rand.Intn(5000)) * time.Millisecond
+			time.Sleep(jitter)
 			continue
 		}
-
-		// Ack immediately to prevent re-delivery while the job runs.
-		// Jobs can take minutes (e.g. docker builds), which exceeds
-		// the pubsub ack deadline and causes duplicate triggers.
-		msg.Ack()
-
+		if item == nil {
+			continue
+		}
 		cwd, err := w.createWorkDir()
 		if err != nil {
 			return err
 		}
-
-		w.processMessage(processCtx, m, cwd)
+		w.processMessage(ctx, item.Body, cwd)
 		os.RemoveAll(cwd)
 	}
 }
@@ -306,7 +314,7 @@ func (w *Worker) createWorkDir() (string, error) {
 	return filepath.Dir(cwd), nil
 }
 
-func (w *Worker) processMessage(ctx context.Context, m queue.Body, cwd string) {
+func (w *Worker) processMessage(ctx context.Context, m workitem.Body, cwd string) {
 	pp, err := w.pikoci.GetPipeline(ctx, m.TeamCanonical, m.PipelineCanonical)
 	if err != nil {
 		w.logger.Error("failed GetPipeline", "error", err)
@@ -345,37 +353,7 @@ func (w *Worker) processMessage(ctx context.Context, m queue.Body, cwd string) {
 // processJob handles executing a job: transitions a pending build to started,
 // runs the plan steps, and runs hooks. Downstream job triggering is handled
 // by the scheduler.
-func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *pipeline.Pipeline) {
-	// Resolve the oldest pending build from the DB rather than trusting the
-	// message's BuildID. Queue messages are treated as wake-up signals — the
-	// DB is the source of truth for ordering. This ensures strict FIFO even
-	// when pub/sub backends deliver messages out of order.
-	if !w.LocalMode {
-		oldest, err := w.pikoci.FindOldestPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName)
-		if err != nil {
-			w.logger.Error("failed to find oldest pending build",
-				"pipeline", m.PipelineCanonical, "job", m.JobName, "error", err)
-			return
-		}
-		if oldest == nil {
-			w.logger.Info("no pending builds, skipping",
-				"pipeline", m.PipelineCanonical, "job", m.JobName, "msg_build_id", m.BuildID)
-			return
-		}
-		if oldest.ID != m.BuildID {
-			w.logger.Info("reordering: oldest pending build differs from message",
-				"pipeline", m.PipelineCanonical, "job", m.JobName,
-				"msg_build_id", m.BuildID, "oldest_build_id", oldest.ID)
-		}
-		m.BuildID = oldest.ID
-		if oldest.VersionID != 0 {
-			m.VersionID = oldest.VersionID
-		}
-		if oldest.ResourceCanonical != "" {
-			m.ResourceCanonical = oldest.ResourceCanonical
-		}
-	}
-
+func (w *Worker) processJob(ctx context.Context, m workitem.Body, cwd string, pp *pipeline.Pipeline) {
 	if m.BuildID == 0 {
 		w.logger.Error("missing build_id in message",
 			"pipeline", m.PipelineCanonical, "job", m.JobName)
@@ -386,24 +364,30 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 		"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID,
 		"version_id", m.VersionID, "resource", m.ResourceCanonical)
 
-	nb, err := w.pikoci.StartPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID)
-	if err != nil {
-		if errors.Is(err, pikoci.ErrBuildNotPending) {
-			w.logger.Info("build no longer pending, skipping", "build_id", m.BuildID)
+	var nb *build.Build
+
+	if m.BuildNumber != "" {
+		// Build was already started by NextWork (poll-based flow).
+		// Retrieve the started build directly.
+		var err error
+		nb, err = w.pikoci.GetJobBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildNumber)
+		if err != nil {
+			w.logger.Error("failed to get already-started build",
+				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_number", m.BuildNumber, "error", err)
 			return
 		}
-		if errors.Is(err, pikoci.ErrConcurrencyLimit) || errors.Is(err, pikoci.ErrJobPaused) || errors.Is(err, pikoci.ErrSerialGroupLimit) {
-			w.logger.Info("concurrency/serial group limit or job paused, re-queuing",
-				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID)
-		} else {
-			w.logger.Error("failed to start pending build, re-queuing",
+	} else if w.LocalMode {
+		// Local mode: start the build here.
+		var err error
+		nb, err = w.pikoci.StartPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, m.BuildID)
+		if err != nil {
+			w.logger.Error("failed to start pending build",
 				"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID, "error", err)
+			return
 		}
-		mb, _ := json.Marshal(m)
-		if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
-			w.logger.Error("failed to re-queue", "error", err)
-		}
-		time.Sleep(2 * time.Second)
+	} else {
+		w.logger.Error("build_number not set and not in local mode",
+			"pipeline", m.PipelineCanonical, "job", m.JobName, "build_id", m.BuildID)
 		return
 	}
 
@@ -436,8 +420,11 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 	jobCtx, jobCancel := context.WithCancel(ctx)
 	defer jobCancel()
 
-	// Poll for cancellation in background
-	go w.pollForCancellation(ctx, jobCtx, jobCancel, m, b.BuildNumber)
+	// Poll for cancellation in background (only for non-gRPC mode;
+	// gRPC workers receive CancelJob messages over the stream).
+	if w.GRPCAddr == "" {
+		go w.pollForCancellation(ctx, jobCtx, jobCancel, m, b.BuildNumber)
+	}
 
 	j, err := w.pikoci.GetPipelineJob(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName)
 	if err != nil {
@@ -535,29 +522,12 @@ func (w *Worker) processJob(ctx context.Context, m queue.Body, cwd string, pp *p
 	w.runAutoNotifications(ctx, m, &b, cwd, pp, resolved)
 }
 
-func (w *Worker) notifyNextPendingBuild(ctx context.Context, m queue.Body) {
-	// Always notify pending builds for jobs sharing serial groups,
-	// even if this job has no pending builds of its own.
+func (w *Worker) notifyNextPendingBuild(ctx context.Context, m workitem.Body) {
+	// Notify serial-group peers and the same job's pending builds.
+	// The server-side NotifySerialGroupPendingBuilds and
+	// sendPendingBuildNotification both call Notifier.Notify(),
+	// which wakes up any polling workers.
 	w.pikoci.NotifySerialGroupPendingBuilds(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName)
-
-	pending, err := w.pikoci.FindOldestPendingBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName)
-	if err != nil {
-		w.logger.Warn("failed to find next pending build", "error", err)
-		return
-	}
-	if pending == nil {
-		return
-	}
-	msg := queue.Body{
-		TeamCanonical:     m.TeamCanonical,
-		PipelineCanonical: m.PipelineCanonical,
-		JobName:           m.JobName,
-		BuildID:           pending.ID,
-	}
-	mb, _ := json.Marshal(msg)
-	if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
-		w.logger.Warn("failed to notify next pending build", "build_id", pending.ID, "error", err)
-	}
 }
 
 // checkPassedConstraints verifies that all jobs in the "passed" list have a
@@ -565,7 +535,7 @@ func (w *Worker) notifyNextPendingBuild(ctx context.Context, m queue.Body) {
 // contains resourceCanonical → resolvedVersionID for each get step with Passed.
 // If no common version exists, the build is deleted and (false, nil) is returned.
 // For for_each jobs, group names in "passed" are expanded to all instance names.
-func (w *Worker) checkPassedConstraints(ctx context.Context, m queue.Body, b *build.Build, j *job.Job, pp *pipeline.Pipeline) (bool, map[string]uint32) {
+func (w *Worker) checkPassedConstraints(ctx context.Context, m workitem.Body, b *build.Build, j *job.Job, pp *pipeline.Pipeline) (bool, map[string]uint32) {
 	resolvedVersions := make(map[string]uint32)
 	for _, ps := range j.Plan {
 		if ps.Type != job.StepTypeGet || ps.Get == nil {
@@ -668,7 +638,7 @@ func resolvePassedJobNames(passed []string, pp *pipeline.Pipeline) []string {
 // version available to pull. If any get step has no version, the build is
 // deleted and false is returned (same behavior as checkPassedConstraints).
 // This prevents hooks from running when no work can be done.
-func (w *Worker) checkVersionAvailability(ctx context.Context, m queue.Body, b *build.Build, j *job.Job, pp *pipeline.Pipeline) bool {
+func (w *Worker) checkVersionAvailability(ctx context.Context, m workitem.Body, b *build.Build, j *job.Job, pp *pipeline.Pipeline) bool {
 	for _, ps := range j.Plan {
 		if ps.Type != job.StepTypeGet || ps.Get == nil {
 			continue
@@ -702,7 +672,7 @@ func (w *Worker) checkVersionAvailability(ctx context.Context, m queue.Body, b *
 // Services are started when their position in the plan is reached and stopped
 // unconditionally after the plan completes (or fails).
 // Returns true if the job failed during plan execution.
-func (w *Worker) runPlan(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, j *job.Job, resolvedVersions map[string]uint32) (bool, map[string]string, map[string]string) {
+func (w *Worker) runPlan(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, j *job.Job, resolvedVersions map[string]uint32) (bool, map[string]string, map[string]string) {
 	// Track all started services so we can stop them at the end.
 	var allStartedServices []job.ServiceStep
 	defer func() {
@@ -774,7 +744,7 @@ func (w *Worker) runPlan(ctx context.Context, m queue.Body, b *build.Build, cwd 
 
 // runGetStep runs a single get step (resource pull).
 // Returns true if the step failed.
-func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, g job.GetStep, ps job.PlanStep, resolvedVersions map[string]uint32, exportedVars map[string]string, resolved ...map[string]string) bool {
+func (w *Worker) runGetStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, g job.GetStep, ps job.PlanStep, resolvedVersions map[string]uint32, exportedVars map[string]string, resolved ...map[string]string) bool {
 	var secretResolved map[string]string
 	if len(resolved) > 0 {
 		secretResolved = resolved[0]
@@ -934,7 +904,7 @@ func (w *Worker) runGetStep(ctx context.Context, m queue.Body, b *build.Build, c
 // instead of a symlink because symlinks break with Docker volume mounts (the
 // container can't resolve host-side symlink targets).
 // Returns true if the step failed.
-func (w *Worker) runGetStepLocal(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, g job.GetStep, ps job.PlanStep, localPath string) bool {
+func (w *Worker) runGetStepLocal(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, g job.GetStep, ps job.PlanStep, localPath string) bool {
 	absPath, err := filepath.Abs(localPath)
 	if err != nil {
 		b.Steps = append(b.Steps, build.Step{Type: "get", Name: g.Name, Logs: fmt.Sprintf("failed to resolve path %q: %s", localPath, err), Status: build.Failed})
@@ -984,7 +954,7 @@ func (w *Worker) runGetStepLocal(ctx context.Context, m queue.Body, b *build.Bui
 
 // runTaskStep runs a single task step.
 // Returns true if the step failed.
-func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, t job.TaskStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
+func (w *Worker) runTaskStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, t job.TaskStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
 	var secretResolved map[string]string
 	if len(resolved) > 0 {
 		secretResolved = resolved[0]
@@ -1123,7 +1093,7 @@ func (w *Worker) runTaskStep(ctx context.Context, m queue.Body, b *build.Build, 
 
 // runPutStep runs a single put step (resource push).
 // Returns true if the step failed.
-func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, p job.PutStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
+func (w *Worker) runPutStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, p job.PutStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
 	if w.LocalMode {
 		rCan := utils.ResourceCanonical(p.Type, p.Name)
 		logMsg := fmt.Sprintf("skipping put step (local execution): %s", rCan)
@@ -1274,7 +1244,7 @@ func (w *Worker) runPutStep(ctx context.Context, m queue.Body, b *build.Build, c
 // implicitGetAfterPut parses the version JSON from the push script output,
 // creates the resource version in the DB, records it as fetched by this build
 // (so that "passed" constraints are satisfied), and triggers downstream jobs.
-func (w *Worker) implicitGetAfterPut(ctx context.Context, m queue.Body, b *build.Build, pp *pipeline.Pipeline, p job.PutStep, rCan string, r resource.Resource, out string, stepIdx int) {
+func (w *Worker) implicitGetAfterPut(ctx context.Context, m workitem.Body, b *build.Build, pp *pipeline.Pipeline, p job.PutStep, rCan string, r resource.Resource, out string, stepIdx int) {
 	sout := strings.Split(strings.Trim(out, "\n"), "\n")
 	rawVers := sout[len(sout)-1]
 	if rawVers == "" {
@@ -1323,7 +1293,7 @@ func (w *Worker) implicitGetAfterPut(ctx context.Context, m queue.Body, b *build
 
 // runNotifyStep runs a single notify step (fire-and-forget notification).
 // Returns true if the step failed.
-func (w *Worker) runNotifyStep(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, n job.NotifyStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
+func (w *Worker) runNotifyStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, n job.NotifyStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
 	if w.LocalMode {
 		nCan := utils.NotificationCanonical(n.Type, n.Name)
 		logMsg := fmt.Sprintf("skipping notify step (local execution): %s", nCan)
@@ -1474,7 +1444,7 @@ func (w *Worker) runNotifyStep(ctx context.Context, m queue.Body, b *build.Build
 
 // runAutoNotifications fires automatic notifications based on the build status
 // and the notification's on/jobs/exclude configuration.
-func (w *Worker) runAutoNotifications(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, resolved map[string]string) {
+func (w *Worker) runAutoNotifications(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, resolved map[string]string) {
 	if len(pp.Notifications) == 0 {
 		return
 	}
@@ -1552,7 +1522,7 @@ func (w *Worker) runAutoNotifications(ctx context.Context, m queue.Body, b *buil
 // Returns (nil, 0, nil) if an error occurred (error is already handled via failBuild).
 // The second return value is the version ID actually used.
 // The third return value contains warnings about unrecognized params.
-func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Build, rt restype.ResourceType, r resource.Resource, g job.GetStep, resolvedVersionID uint32) (map[string]string, uint32, []string) {
+func (w *Worker) buildPullParams(ctx context.Context, m workitem.Body, b *build.Build, rt restype.ResourceType, r resource.Resource, g job.GetStep, resolvedVersionID uint32) (map[string]string, uint32, []string) {
 	var params map[string]string
 	if rt.Pull != nil && rt.Pull.Params != nil {
 		params = make(map[string]string)
@@ -1612,7 +1582,7 @@ func (w *Worker) buildPullParams(ctx context.Context, m queue.Body, b *build.Bui
 
 // runHooks runs a list of hooks (on_success, on_failure, on_cancel, ensure) and appends
 // the results as build steps.
-func (w *Worker) runHooks(ctx context.Context, m queue.Body, b *build.Build, steps *[]build.Step, cwd string, pp *pipeline.Pipeline, stepName string, hooks []job.HookStep, hookType string, resolved map[string]string, exportedVars map[string]string, buildStatus ...string) {
+func (w *Worker) runHooks(ctx context.Context, m workitem.Body, b *build.Build, steps *[]build.Step, cwd string, pp *pipeline.Pipeline, stepName string, hooks []job.HookStep, hookType string, resolved map[string]string, exportedVars map[string]string, buildStatus ...string) {
 	for i, h := range hooks {
 		// Compute step name early so we can use it for the running step
 		name := hookType
@@ -1698,7 +1668,7 @@ func (w *Worker) runHooks(ctx context.Context, m queue.Body, b *build.Build, ste
 }
 
 // processResourceCheck handles periodic resource version checks.
-func (w *Worker) processResourceCheck(ctx context.Context, m queue.Body, cwd string, pp *pipeline.Pipeline) {
+func (w *Worker) processResourceCheck(ctx context.Context, m workitem.Body, cwd string, pp *pipeline.Pipeline) {
 	r, ok := pp.Resource(m.ResourceCanonical)
 	if !ok {
 		w.logger.Error("resource not found in pipeline", "resource", m.ResourceCanonical)
@@ -1825,7 +1795,7 @@ func (w *Worker) processResourceCheck(ctx context.Context, m queue.Body, cwd str
 	}
 }
 
-func (w *Worker) processResourceCheckTrigger(ctx context.Context, m queue.Body, pp *pipeline.Pipeline, r resource.Resource) {
+func (w *Worker) processResourceCheckTrigger(ctx context.Context, m workitem.Body, pp *pipeline.Pipeline, r resource.Resource) {
 	w.logger.Info("running trigger resource check", "resource", r.Canonical)
 
 	// Get latest resource version to find the last trigger_id
@@ -1878,7 +1848,7 @@ func (w *Worker) processResourceCheckTrigger(ctx context.Context, m queue.Body, 
 	}
 }
 
-func (w *Worker) runPutStepTrigger(ctx context.Context, m queue.Body, b *build.Build, pp *pipeline.Pipeline, p job.PutStep, ps job.PlanStep) bool {
+func (w *Worker) runPutStepTrigger(ctx context.Context, m workitem.Body, b *build.Build, pp *pipeline.Pipeline, p job.PutStep, ps job.PlanStep) bool {
 	rCan := utils.ResourceCanonical(p.Type, p.Name)
 
 	// Collect put params as version data
@@ -1918,7 +1888,7 @@ func (w *Worker) runPutStepTrigger(ctx context.Context, m queue.Body, b *build.B
 
 // triggerResourceJobs triggers jobs that depend on a resource via "get" with trigger=true.
 // If the resource is pinned to a specific version, only that version triggers builds.
-func (w *Worker) triggerResourceJobs(ctx context.Context, m queue.Body, pp *pipeline.Pipeline, r resource.Resource, cv *resource.Version) {
+func (w *Worker) triggerResourceJobs(ctx context.Context, m workitem.Body, pp *pipeline.Pipeline, r resource.Resource, cv *resource.Version) {
 	// Check if the resource is pinned to a different version
 	if r.PinnedVersionID != nil && cv.ID != *r.PinnedVersionID {
 		w.logger.Info("resource is pinned, skipping job triggers",
@@ -1938,7 +1908,8 @@ func (w *Worker) triggerResourceJobs(ctx context.Context, m queue.Body, pp *pipe
 			// If Passed is not 0 it means is waiting for another job
 			// and this trigger is only for resources
 			if g.Name == r.Name && g.Type == r.Type && g.Trigger && len(g.Passed) == 0 {
-				// Create a pending build first
+				// Create a pending build. The server-side CreateJobBuild
+				// calls Notifier.Notify() to wake polling workers.
 				nb, err := w.pikoci.CreateJobBuild(ctx, m.TeamCanonical, pp.Canonical, j.Name, build.Build{
 					Status:            build.Pending,
 					VersionID:         cv.ID,
@@ -1948,31 +1919,15 @@ func (w *Worker) triggerResourceJobs(ctx context.Context, m queue.Body, pp *pipe
 					w.logger.Error("failed to create pending build for trigger", "job", j.Name, "error", err)
 					continue
 				}
-				qb := queue.Body{
-					TeamCanonical:     m.TeamCanonical,
-					PipelineCanonical: pp.Canonical,
-					JobName:           j.Name,
-					BuildID:           nb.ID,
-					ResourceCanonical: r.Canonical,
-					VersionID:         cv.ID,
-				}
-				mb, err := json.Marshal(qb)
-				if err != nil {
-					w.logger.Error("failed to marshal trigger body", "error", err)
-					continue
-				}
-				w.logger.Info("sending trigger message",
+				w.logger.Info("created trigger build",
 					"pipeline", pp.Canonical, "job", j.Name, "resource", r.Canonical,
 					"version_id", cv.ID, "step", g.Name, "build_id", nb.ID)
-				if err := w.jobTopic.Send(ctx, &pubsub.Message{Body: mb}); err != nil {
-					w.logger.Error("failed to send trigger message", "job", j.Name, "error", err)
-				}
 			}
 		}
 	}
 }
 
-func (w *Worker) pollForCancellation(apiCtx, jobCtx context.Context, cancel context.CancelFunc, m queue.Body, buildNumber string) {
+func (w *Worker) pollForCancellation(apiCtx, jobCtx context.Context, cancel context.CancelFunc, m workitem.Body, buildNumber string) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -1997,7 +1952,7 @@ func (w *Worker) pollForCancellation(apiCtx, jobCtx context.Context, cancel cont
 // updateBuild persists the current build state to the DB.
 // It uses apiCtx (the parent server context) so that DB writes survive
 // job-level cancellation but are still cancelled on server shutdown.
-func (w *Worker) updateBuild(_ context.Context, m queue.Body, b build.Build) error {
+func (w *Worker) updateBuild(_ context.Context, m workitem.Body, b build.Build) error {
 	dbCtx := w.dbContext()
 	err := w.pikoci.UpdateJobBuild(dbCtx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b)
 	if err != nil {
@@ -2006,7 +1961,7 @@ func (w *Worker) updateBuild(_ context.Context, m queue.Body, b build.Build) err
 	return err
 }
 
-func (w *Worker) failBuild(_ context.Context, m queue.Body, b build.Build, err error) {
+func (w *Worker) failBuild(_ context.Context, m workitem.Body, b build.Build, err error) {
 	b.Status = build.Failed
 	if err != nil {
 		b.Error = err.Error()
@@ -2028,7 +1983,7 @@ func (w *Worker) dbContext() context.Context {
 	return context.Background()
 }
 
-func (w *Worker) deleteBuild(ctx context.Context, m queue.Body, b build.Build) {
+func (w *Worker) deleteBuild(ctx context.Context, m workitem.Body, b build.Build) {
 	if err := w.pikoci.DeleteJobBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber); err != nil {
 		w.logger.Error("failed delete build", "pipeline", m.PipelineCanonical, "job", m.JobName, "error", err)
 	}
@@ -2323,7 +2278,7 @@ func (w *Worker) fetchSecrets(ctx context.Context, cwd string, pp *pipeline.Pipe
 }
 
 // startServices starts all service steps and returns the successfully started service steps.
-func (w *Worker) startServices(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, serviceSteps []job.ServiceStep) []job.ServiceStep {
+func (w *Worker) startServices(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, serviceSteps []job.ServiceStep) []job.ServiceStep {
 	var started []job.ServiceStep
 	for _, ss := range serviceSteps {
 		svc, ok := pp.Service(ss.Name)
@@ -2381,7 +2336,7 @@ func (w *Worker) startServices(ctx context.Context, m queue.Body, b *build.Build
 }
 
 // buildMetadataParams returns the standard build metadata environment variables.
-func buildMetadataParams(b *build.Build, m queue.Body) map[string]string {
+func buildMetadataParams(b *build.Build, m workitem.Body) map[string]string {
 	return map[string]string{
 		"BUILD_NUMBER":        b.BuildNumber,
 		"BUILD_JOB_NAME":      m.JobName,
@@ -2573,7 +2528,7 @@ func parseOutputFile(path string, logger *slog.Logger) map[string]string {
 
 // serviceParams builds the environment parameters for a service command,
 // merging the command's own params with build info and per-job overrides.
-func (w *Worker) serviceParams(b *build.Build, m queue.Body, cmdParams map[string]string, overrides map[string]string, allowedParams []string, svcName string) (map[string]string, []string) {
+func (w *Worker) serviceParams(b *build.Build, m workitem.Body, cmdParams map[string]string, overrides map[string]string, allowedParams []string, svcName string) (map[string]string, []string) {
 	params := make(map[string]string)
 	for k, v := range cmdParams {
 		params[k] = v
@@ -2590,7 +2545,7 @@ func (w *Worker) serviceParams(b *build.Build, m queue.Body, cmdParams map[strin
 
 // waitForServices runs ready_check for all started services that have one.
 // Returns false if any ready_check times out.
-func (w *Worker) waitForServices(ctx context.Context, m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, startedServices []job.ServiceStep) bool {
+func (w *Worker) waitForServices(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, startedServices []job.ServiceStep) bool {
 	type readyResult struct {
 		name string
 		out  string
@@ -2741,7 +2696,7 @@ func (w *Worker) waitForServices(ctx context.Context, m queue.Body, b *build.Bui
 
 // stopServices stops all started services unconditionally.
 // Uses a fresh context to ensure cleanup runs even if the parent context is cancelled.
-func (w *Worker) stopServices(m queue.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, startedServices []job.ServiceStep) {
+func (w *Worker) stopServices(m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, startedServices []job.ServiceStep) {
 	stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -2907,4 +2862,42 @@ func isDuplicateKeyError(err error) bool {
 	return strings.Contains(s, "UNIQUE constraint failed") || // SQLite
 		strings.Contains(s, "Duplicate entry") || // MySQL
 		strings.Contains(s, "duplicate key value") // PostgreSQL
+}
+
+// trackJob records a cancel function for a running job (used by gRPC mode).
+func (w *Worker) trackJob(buildID string, cancel context.CancelFunc) {
+	w.jobCancelsMu.Lock()
+	if w.jobCancels != nil {
+		w.jobCancels[buildID] = cancel
+	}
+	w.jobCancelsMu.Unlock()
+}
+
+// untrackJob removes a job's cancel function.
+func (w *Worker) untrackJob(buildID string) {
+	w.jobCancelsMu.Lock()
+	if w.jobCancels != nil {
+		delete(w.jobCancels, buildID)
+	}
+	w.jobCancelsMu.Unlock()
+}
+
+// cancelJob cancels a running job by its build ID.
+func (w *Worker) cancelJob(buildID string) {
+	w.jobCancelsMu.Lock()
+	cancel, ok := w.jobCancels[buildID]
+	w.jobCancelsMu.Unlock()
+	if ok {
+		cancel()
+	}
+}
+
+// activeJobCount returns the number of currently running jobs.
+func (w *Worker) activeJobCount() int {
+	w.jobCancelsMu.Lock()
+	defer w.jobCancelsMu.Unlock()
+	if w.jobCancels == nil {
+		return 0
+	}
+	return len(w.jobCancels)
 }
