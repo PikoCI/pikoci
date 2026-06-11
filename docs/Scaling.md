@@ -75,8 +75,9 @@ Good for: teams that want history, projects that need to survive restarts.
 
 ## Phase 3 — Distributed workers
 
-Add more workers without changing the server. Workers use HTTP long polling
-and only need network access to the server, no external queue service required.
+Add more workers without changing the server. Workers connect via gRPC
+streaming and only need network access to the server. No external queue
+service required.
 
 **Step 1 — Restart the server without a built-in worker:**
 
@@ -105,9 +106,10 @@ pikoci worker \
   --worker-token <token>
 ```
 
-Add as many workers as you need. Workers poll the server for jobs
-independently. Workers can be on different machines, in different networks,
-or behind NAT — they only need outbound HTTP access to the server.
+Add as many workers as you need. Workers connect to the server via gRPC
+streaming and receive jobs as they become available. Workers can be on
+different machines, in different networks, or behind NAT — they only need
+outbound access to the server port.
 
 **What this gives you:**
 - Multiple workers running jobs in parallel
@@ -182,8 +184,8 @@ Good for: production deployments, teams that need HA, large-scale CI.
 |-------|----------|---------|----------|
 | 1 | Memory | Built-in | Development, trying things out |
 | 2 | SQLite | Built-in | Small teams, persistence needed |
-| 3 | SQLite | Distributed (HTTP) | Multiple workers, any machine |
-| 4 | PostgreSQL | Distributed (HTTP) | Production, high availability |
+| 3 | SQLite | Distributed (gRPC) | Multiple workers, any machine |
+| 4 | PostgreSQL | Distributed (gRPC) | Production, high availability |
 
 The pipeline config never changes between phases.
 Add infrastructure when you need it — not before.

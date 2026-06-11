@@ -2,6 +2,8 @@
 	header Access-Control-Allow-Origin https://{$PIKOCI_WWW_DOMAIN}
 	header Access-Control-Allow-Methods "GET, OPTIONS"
 	header Access-Control-Allow-Headers "Content-Type, Authorization"
+	# Both HTTP API and gRPC worker streaming are multiplexed on port 8080 via cmux.
+	# Caddy handles HTTP/2 (including gRPC) automatically.
 	reverse_proxy host.docker.internal:8080
 }
 

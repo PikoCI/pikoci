@@ -4,13 +4,13 @@ By default, PikoCI runs an embedded worker inside the server process. For produc
 
 ## Architecture
 
-Workers use HTTP long polling to request work from the server. Each worker calls `GET /work/next` and the server holds the connection open until a job or resource check is available, then responds with the work item. The worker executes it and reports results back via the PikoCI API.
+Standalone workers connect to the server using gRPC bidirectional streaming. The server pushes jobs to workers as they become available, and workers stream results back in real time. Data queries (GetPipeline, UpdateJobBuild, etc.) use standard HTTP. Both gRPC and HTTP are multiplexed on the same port via cmux.
 
 ```
                     ┌─────────┐
                     │  Server  │  --run-worker=false
                     └────┬────┘
-                         │ HTTP long poll
+                         │ gRPC streaming (same port)
               ┌──────────┼──────────┐
               │          │          │
          ┌────┴───┐  ┌───┴────┐  ┌─┴──────┐
@@ -18,7 +18,13 @@ Workers use HTTP long polling to request work from the server. Each worker calls
          └────────┘  └────────┘  └────────┘
 ```
 
-Workers connect to the server over HTTP, execute work, and report results back via the PikoCI API. No external queue service is required.
+**Key benefits of gRPC streaming:**
+- **Instant cancellation** — server pushes `CancelJob` to the worker (no polling delay)
+- **Built-in keepalive** — heartbeats flow over the stream
+- **Server-push dispatch** — no wasted polling cycles
+- **Typed contracts** — protobuf schema (`proto/worker/v1/worker.proto`)
+
+The embedded worker (when `--run-worker=true`) calls the service directly in-process — no gRPC or HTTP involved.
 
 ## Requirements
 
@@ -91,9 +97,33 @@ Worker names must be unique across all running workers. If two workers use the s
 
 When `--concurrency` is greater than 1, each goroutine within the process automatically gets a `-N` suffix (e.g. `build-machine-1-1`, `build-machine-1-2`).
 
+## Reverse proxy configuration
+
+Since gRPC and HTTP share the same port, your reverse proxy needs to handle HTTP/2 for gRPC. Most proxies support this automatically.
+
+**Caddy** (works out of the box — Caddy handles HTTP/2 automatically):
+```
+ci.example.com {
+    reverse_proxy localhost:8080
+}
+```
+
+**nginx** (requires HTTP/2 backend support):
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name ci.example.com;
+
+    location / {
+        grpc_pass grpc://localhost:8080;
+        proxy_pass http://localhost:8080;
+    }
+}
+```
+
 ## Scaling
 
-Run multiple worker instances to increase throughput. Each worker independently polls the server for work:
+Run multiple worker instances to increase throughput. Each worker connects via gRPC and receives jobs as they become available:
 
 ```bash
 # Machine A
