@@ -25,6 +25,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/agnivade/levenshtein"
 	"github.com/google/uuid"
+	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
@@ -74,6 +75,22 @@ type Worker struct {
 	StartedAt   time.Time
 	Concurrency int
 	Version     string
+
+	// GRPCAddr is the address of the gRPC server. When set, the worker uses
+	// gRPC streaming instead of HTTP long polling. When empty (embedded worker),
+	// it uses pollLoop.
+	GRPCAddr string
+	// WorkerToken is the JWT token used for gRPC registration.
+	WorkerToken string
+
+	// grpcClient is the gRPC client for the WorkerService.
+	grpcClient workerv1.WorkerServiceClient
+	// grpcStream is the active Execute stream (nil when not connected).
+	grpcStream workerv1.WorkerService_ExecuteClient
+
+	// jobCancels tracks active job cancel functions for gRPC cancellation.
+	jobCancelsMu sync.Mutex
+	jobCancels   map[string]context.CancelFunc
 }
 
 func (w *Worker) cacheDir(teamCanonical, pipelineCanonical, resourceCanonical string) (string, error) {
@@ -189,8 +206,8 @@ func applyRunnerOverride(pp *pipeline.Pipeline, typeCmd *utils.RunnerCommand, ov
 	return ru, rc, ok
 }
 
-// Run starts the worker event loop. It launches a poll loop that receives
-// work items via HTTP long polling and processes them sequentially.
+// Run starts the worker event loop. When GRPCAddr is set, it connects via
+// gRPC bidirectional streaming. Otherwise it uses HTTP long polling (embedded worker).
 // Run blocks until the context is cancelled or an unrecoverable error occurs.
 func (w *Worker) Run(ctx context.Context) error {
 	w.logger.Info("Worker waiting for messages...")
@@ -199,15 +216,19 @@ func (w *Worker) Run(ctx context.Context) error {
 	// job-level cancellation but respect server shutdown.
 	w.apiCtx = ctx
 
-	// Start heartbeat loop
-	go w.heartbeatLoop(ctx)
-
 	// receiveCtx is cancelled on Drain() to unblock Receive() calls
 	// immediately while still allowing in-flight jobs to finish.
 	receiveCtx, receiveCancel := context.WithCancel(ctx)
 	w.drainCancel = receiveCancel
 	defer receiveCancel()
 
+	if w.GRPCAddr != "" {
+		w.jobCancels = make(map[string]context.CancelFunc)
+		return w.grpcLoop(receiveCtx)
+	}
+
+	// Embedded worker: use HTTP long polling + heartbeat loop
+	go w.heartbeatLoop(ctx)
 	return w.pollLoop(receiveCtx)
 }
 
@@ -363,8 +384,11 @@ func (w *Worker) processJob(ctx context.Context, m workitem.Body, cwd string, pp
 	jobCtx, jobCancel := context.WithCancel(ctx)
 	defer jobCancel()
 
-	// Poll for cancellation in background
-	go w.pollForCancellation(ctx, jobCtx, jobCancel, m, b.BuildNumber)
+	// Poll for cancellation in background (only for non-gRPC mode;
+	// gRPC workers receive CancelJob messages over the stream).
+	if w.GRPCAddr == "" {
+		go w.pollForCancellation(ctx, jobCtx, jobCancel, m, b.BuildNumber)
+	}
 
 	j, err := w.pikoci.GetPipelineJob(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName)
 	if err != nil {
@@ -2802,4 +2826,42 @@ func isDuplicateKeyError(err error) bool {
 	return strings.Contains(s, "UNIQUE constraint failed") || // SQLite
 		strings.Contains(s, "Duplicate entry") || // MySQL
 		strings.Contains(s, "duplicate key value") // PostgreSQL
+}
+
+// trackJob records a cancel function for a running job (used by gRPC mode).
+func (w *Worker) trackJob(buildID string, cancel context.CancelFunc) {
+	w.jobCancelsMu.Lock()
+	if w.jobCancels != nil {
+		w.jobCancels[buildID] = cancel
+	}
+	w.jobCancelsMu.Unlock()
+}
+
+// untrackJob removes a job's cancel function.
+func (w *Worker) untrackJob(buildID string) {
+	w.jobCancelsMu.Lock()
+	if w.jobCancels != nil {
+		delete(w.jobCancels, buildID)
+	}
+	w.jobCancelsMu.Unlock()
+}
+
+// cancelJob cancels a running job by its build ID.
+func (w *Worker) cancelJob(buildID string) {
+	w.jobCancelsMu.Lock()
+	cancel, ok := w.jobCancels[buildID]
+	w.jobCancelsMu.Unlock()
+	if ok {
+		cancel()
+	}
+}
+
+// activeJobCount returns the number of currently running jobs.
+func (w *Worker) activeJobCount() int {
+	w.jobCancelsMu.Lock()
+	defer w.jobCancelsMu.Unlock()
+	if w.jobCancels == nil {
+		return 0
+	}
+	return len(w.jobCancels)
 }
