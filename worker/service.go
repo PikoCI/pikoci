@@ -51,7 +51,7 @@ type Service interface {
 // for the embedded worker's poll loop. It is not part of the Service interface
 // because standalone workers use gRPC streaming instead.
 type WorkPoller interface {
-	PollNextWork(ctx context.Context) (*workitem.Item, error)
+	PollNextWork(ctx context.Context, wc workitem.WorkerContext) (*workitem.Item, error)
 }
 
 // Worker processes job builds and resource checks received via HTTP long
@@ -80,10 +80,12 @@ type Worker struct {
 	LocalMode bool
 
 	// Heartbeat info
-	Name        string
-	StartedAt   time.Time
-	Concurrency int
-	Version     string
+	Name          string
+	Tags          []string
+	ExclusiveTags bool
+	StartedAt     time.Time
+	Concurrency   int
+	Version       string
 
 	// GRPCAddr is the address of the gRPC server. When set, the worker uses
 	// gRPC streaming instead of HTTP long polling. When empty (embedded worker),
@@ -123,14 +125,16 @@ func resourceCacheEnabled(rt restype.ResourceType, r resource.Resource) bool {
 // returned Worker is ready to be started with Run, which uses HTTP long-poll
 // to receive work items (embedded mode). The service must implement WorkPoller
 // (satisfied by *pikoci.PikoCI) for the embedded poll loop.
-func New(s pikoci.Service, l *slog.Logger, name, version string, concurrency int) *Worker {
+func New(s pikoci.Service, l *slog.Logger, name, version string, concurrency int, tags []string, exclusiveTags bool) *Worker {
 	w := &Worker{
-		pikoci:      s,
-		logger:      l,
-		Name:        name,
-		StartedAt:   time.Now(),
-		Concurrency: concurrency,
-		Version:     version,
+		pikoci:        s,
+		logger:        l,
+		Name:          name,
+		Tags:          tags,
+		ExclusiveTags: exclusiveTags,
+		StartedAt:     time.Now(),
+		Concurrency:   concurrency,
+		Version:       version,
 	}
 	if wp, ok := s.(WorkPoller); ok {
 		w.workPoller = wp
@@ -139,17 +143,19 @@ func New(s pikoci.Service, l *slog.Logger, name, version string, concurrency int
 }
 
 // NewGRPC creates a Worker configured for gRPC streaming mode.
-func NewGRPC(s pikoci.Service, gc workerv1.WorkerServiceClient, l *slog.Logger, name, version string, concurrency int, workerToken, grpcAddr string) *Worker {
+func NewGRPC(s pikoci.Service, gc workerv1.WorkerServiceClient, l *slog.Logger, name, version string, concurrency int, workerToken, grpcAddr string, tags []string, exclusiveTags bool) *Worker {
 	return &Worker{
-		pikoci:      s,
-		grpcClient:  gc,
-		logger:      l,
-		Name:        name,
-		StartedAt:   time.Now(),
-		Concurrency: concurrency,
-		Version:     version,
-		GRPCAddr:    grpcAddr,
-		WorkerToken: workerToken,
+		pikoci:        s,
+		grpcClient:    gc,
+		logger:        l,
+		Name:          name,
+		Tags:          tags,
+		ExclusiveTags: exclusiveTags,
+		StartedAt:     time.Now(),
+		Concurrency:   concurrency,
+		Version:       version,
+		GRPCAddr:      grpcAddr,
+		WorkerToken:   workerToken,
 	}
 }
 
@@ -182,14 +188,16 @@ func (w *Worker) heartbeatLoop(ctx context.Context) {
 func (w *Worker) sendHeartbeat(ctx context.Context) {
 	hostname, _ := os.Hostname()
 	hw := wkr.Worker{
-		Name:        w.Name,
-		Hostname:    hostname,
-		OS:          runtime.GOOS,
-		Arch:        runtime.GOARCH,
-		GoVersion:   runtime.Version(),
-		Version:     w.Version,
-		Concurrency: w.Concurrency,
-		StartedAt:   w.StartedAt,
+		Name:          w.Name,
+		Hostname:      hostname,
+		OS:            runtime.GOOS,
+		Arch:          runtime.GOARCH,
+		GoVersion:     runtime.Version(),
+		Version:       w.Version,
+		Concurrency:   w.Concurrency,
+		Tags:          w.Tags,
+		ExclusiveTags: w.ExclusiveTags,
+		StartedAt:     w.StartedAt,
 	}
 	if err := w.pikoci.WorkerHeartbeat(ctx, hw); err != nil {
 		w.logger.Error("failed to send heartbeat", "error", err)
@@ -275,7 +283,10 @@ func (w *Worker) pollLoop(ctx context.Context) error {
 		if w.draining.Load() {
 			return nil
 		}
-		item, err := w.workPoller.PollNextWork(ctx)
+		item, err := w.workPoller.PollNextWork(ctx, workitem.WorkerContext{
+			Tags:          w.Tags,
+			ExclusiveTags: w.ExclusiveTags,
+		})
 		if err != nil {
 			if w.draining.Load() {
 				return nil
@@ -1908,13 +1919,24 @@ func (w *Worker) triggerResourceJobs(ctx context.Context, m workitem.Body, pp *p
 			// If Passed is not 0 it means is waiting for another job
 			// and this trigger is only for resources
 			if g.Name == r.Name && g.Type == r.Type && g.Trigger && len(g.Passed) == 0 {
-				// Create a pending build. The server-side CreateJobBuild
-				// calls Notifier.Notify() to wake polling workers.
-				nb, err := w.pikoci.CreateJobBuild(ctx, m.TeamCanonical, pp.Canonical, j.Name, build.Build{
-					Status:            build.Pending,
-					VersionID:         cv.ID,
-					ResourceCanonical: r.Canonical,
-				})
+				// Create a pending build. Retry up to 3 times on transient
+				// errors (e.g. SQLite database-locked) to avoid permanently
+				// losing trigger builds.
+				var nb *build.Build
+				var err error
+				for attempt := range 3 {
+					nb, err = w.pikoci.CreateJobBuild(ctx, m.TeamCanonical, pp.Canonical, j.Name, build.Build{
+						Status:            build.Pending,
+						VersionID:         cv.ID,
+						ResourceCanonical: r.Canonical,
+					})
+					if err == nil {
+						break
+					}
+					if attempt < 2 {
+						time.Sleep(50 * time.Millisecond)
+					}
+				}
 				if err != nil {
 					w.logger.Error("failed to create pending build for trigger", "job", j.Name, "error", err)
 					continue

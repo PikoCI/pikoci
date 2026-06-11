@@ -77,7 +77,7 @@ func TestConcurrentBuildCreation(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			w := worker.New(svc, logger.With("worker", i+1), fmt.Sprintf("test-worker-%d", i+1), "test", 3)
+			w := worker.New(svc, logger.With("worker", i+1), fmt.Sprintf("test-worker-%d", i+1), "test", 3, nil, false)
 			w.Run(ctx)
 		}()
 	}

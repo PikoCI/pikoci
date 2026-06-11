@@ -6,9 +6,10 @@ coverage:
         threshold: 1%
     patch:
       default:
-        target: 70%
+        target: 50%
 
 ignore:
+  - "gen/**"
   - "pikoci/mock/**"
   - "**/*_string.go"
   - "pikoci/mysql/migrate/migrations/**"

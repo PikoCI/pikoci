@@ -92,7 +92,7 @@ func runWorker(ctx context.Context, s pikoci.Service, c int, llvl string) error 
 		wg.Add(1)
 		nlogger := logger.With("num", i+1)
 		nlogger.Info(fmt.Sprintf("Starting Worker %d", i+1))
-		w := worker.New(s, nlogger, fmt.Sprintf("test-worker-%d", i+1), "test", c)
+		w := worker.New(s, nlogger, fmt.Sprintf("test-worker-%d", i+1), "test", c, nil, false)
 
 		go func() {
 			err := w.Run(ctx)

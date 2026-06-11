@@ -25,6 +25,7 @@ func NewJobRepository(db sqlr.Querier) *JobRepository {
 type dbJob struct {
 	ID           sql.NullInt64
 	Name         sql.NullString
+	Tags         sql.NullString
 	Plan         sql.NullString
 	OnSuccess    sql.NullString
 	OnFailure    sql.NullString
@@ -45,6 +46,7 @@ func newDBJob(p job.Job) dbJob {
 	e, _ := json.Marshal(p.Ensure)
 	dbj := dbJob{
 		Name:         toNullString(p.Name),
+		Tags:         sql.NullString{String: strings.Join(p.Tags, ","), Valid: true},
 		Plan:         toNullString(string(pl)),
 		OnSuccess:    toNullString(string(s)),
 		OnFailure:    toNullString(string(f)),
@@ -62,9 +64,14 @@ func newDBJob(p job.Job) dbJob {
 }
 
 func (dbp *dbJob) toDomainEntity() *job.Job {
+	var tags []string
+	if dbp.Tags.String != "" {
+		tags = strings.Split(dbp.Tags.String, ",")
+	}
 	j := &job.Job{
 		ID:           uint32(dbp.ID.Int64),
 		Name:         dbp.Name.String,
+		Tags:         tags,
 		Concurrency:  int(dbp.Concurrency.Int64),
 		Paused:       dbp.Paused.Bool,
 		ForEachGroup: dbp.ForEachGroup.String,
@@ -86,8 +93,8 @@ func (dbp *dbJob) toDomainEntity() *job.Job {
 func (r *JobRepository) Create(ctx context.Context, tc, pn string, j job.Job) (uint32, error) {
 	dbj := newDBJob(j)
 	res, err := r.querier.ExecContext(ctx, `
-		INSERT INTO jobs(name, plan, on_success, on_failure, on_cancel, ensure, concurrency, paused, timeout, for_each_group, for_each_key, pipeline_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+		INSERT INTO jobs(name, tags, plan, on_success, on_failure, on_cancel, ensure, concurrency, paused, timeout, for_each_group, for_each_key, pipeline_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 			-- pipeline_id
 			(
 				SELECT p.id
@@ -95,7 +102,7 @@ func (r *JobRepository) Create(ctx context.Context, tc, pn string, j job.Job) (u
 				JOIN teams AS t
 					ON p.team_id = t.id
 				WHERE t.canonical = ? AND p.canonical = ?
-			))`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, dbj.Timeout, dbj.ForEachGroup, dbj.ForEachKey, tc, pn)
+			))`, dbj.Name, dbj.Tags, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, dbj.Timeout, dbj.ForEachGroup, dbj.ForEachKey, tc, pn)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -116,7 +123,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 	dbj := newDBJob(j)
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE jobs AS j
-		SET name = ?, plan = ?, on_success = ?, on_failure = ?, on_cancel = ?, ensure = ?, concurrency = ?, paused = ?, timeout = ?, for_each_group = ?, for_each_key = ?
+		SET name = ?, tags = ?, plan = ?, on_success = ?, on_failure = ?, on_cancel = ?, ensure = ?, concurrency = ?, paused = ?, timeout = ?, for_each_group = ?, for_each_key = ?
 		FROM (
 			SELECT j.id
 			FROM jobs AS j
@@ -127,7 +134,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 		) AS jj
 		WHERE jj.id = j.id
-	`, dbj.Name, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, dbj.Timeout, dbj.ForEachGroup, dbj.ForEachKey, tc, pn, jn)
+	`, dbj.Name, dbj.Tags, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, dbj.Timeout, dbj.ForEachGroup, dbj.ForEachKey, tc, pn, jn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -158,7 +165,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 
 func (r *JobRepository) Find(ctx context.Context, tc, pn, jn string) (*job.Job, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key
+		SELECT j.id, j.name, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key
 		FROM jobs AS j
 		JOIN pipelines AS p
 			ON j.pipeline_id = p.id
@@ -183,7 +190,7 @@ func (r *JobRepository) Find(ctx context.Context, tc, pn, jn string) (*job.Job, 
 
 func (r *JobRepository) Filter(ctx context.Context, tc, pn string) ([]*job.Job, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key
+		SELECT j.id, j.name, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key
 		FROM jobs AS j
 		JOIN pipelines AS p
 			ON j.pipeline_id = p.id
@@ -312,6 +319,7 @@ func scanJob(s sqlr.Scanner) (*job.Job, error) {
 	err := s.Scan(
 		&j.ID,
 		&j.Name,
+		&j.Tags,
 		&j.Plan,
 		&j.OnSuccess,
 		&j.OnFailure,
@@ -384,7 +392,7 @@ func (r *JobRepository) loadSerialGroups(ctx context.Context, jobID uint32) ([]s
 
 func (r *JobRepository) FilterByForEachGroup(ctx context.Context, tc, pn, group string) ([]*job.Job, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key
+		SELECT j.id, j.name, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key
 		FROM jobs AS j
 		JOIN pipelines AS p
 			ON j.pipeline_id = p.id
@@ -424,7 +432,7 @@ func (r *JobRepository) FindJobsBySerialGroups(ctx context.Context, tc, pn strin
 		args = append(args, sg)
 	}
 	query := fmt.Sprintf(`
-		SELECT DISTINCT j.id, j.name, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key
+		SELECT DISTINCT j.id, j.name, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key
 		FROM jobs AS j
 		JOIN pipelines AS p ON j.pipeline_id = p.id
 		JOIN teams AS t ON p.team_id = t.id

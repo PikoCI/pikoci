@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cycloidio/sqlr"
@@ -23,11 +24,12 @@ func NewWorkerRepository(db sqlr.Querier, system string) *WorkerRepository {
 }
 
 func (r *WorkerRepository) Upsert(ctx context.Context, w wkr.Worker) error {
+	tagsStr := strings.Join(w.Tags, ",")
 	var q string
 	switch r.system {
 	case MySQL:
-		q = `INSERT INTO workers (name, hostname, os, arch, go_version, version, concurrency, started_at, last_ping_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		q = `INSERT INTO workers (name, hostname, os, arch, go_version, version, concurrency, tags, exclusive_tags, started_at, last_ping_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE
 				hostname = VALUES(hostname),
 				os = VALUES(os),
@@ -35,12 +37,14 @@ func (r *WorkerRepository) Upsert(ctx context.Context, w wkr.Worker) error {
 				go_version = VALUES(go_version),
 				version = VALUES(version),
 				concurrency = VALUES(concurrency),
+				tags = VALUES(tags),
+				exclusive_tags = VALUES(exclusive_tags),
 				started_at = VALUES(started_at),
 				last_ping_at = VALUES(last_ping_at)`
 	default:
 		// SQLite, mem, PostgreSQL
-		q = `INSERT INTO workers (name, hostname, os, arch, go_version, version, concurrency, started_at, last_ping_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		q = `INSERT INTO workers (name, hostname, os, arch, go_version, version, concurrency, tags, exclusive_tags, started_at, last_ping_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(name) DO UPDATE SET
 				hostname = excluded.hostname,
 				os = excluded.os,
@@ -48,13 +52,15 @@ func (r *WorkerRepository) Upsert(ctx context.Context, w wkr.Worker) error {
 				go_version = excluded.go_version,
 				version = excluded.version,
 				concurrency = excluded.concurrency,
+				tags = excluded.tags,
+				exclusive_tags = excluded.exclusive_tags,
 				started_at = excluded.started_at,
 				last_ping_at = excluded.last_ping_at`
 	}
 
 	_, err := r.querier.ExecContext(ctx, q,
 		w.Name, w.Hostname, w.OS, w.Arch, w.GoVersion, w.Version,
-		w.Concurrency, w.StartedAt, w.LastPingAt,
+		w.Concurrency, tagsStr, w.ExclusiveTags, w.StartedAt, w.LastPingAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to upsert worker: %w", err)
@@ -64,7 +70,7 @@ func (r *WorkerRepository) Upsert(ctx context.Context, w wkr.Worker) error {
 
 func (r *WorkerRepository) Filter(ctx context.Context) ([]*wkr.Worker, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT id, name, hostname, os, arch, go_version, version, concurrency, started_at, last_ping_at
+		SELECT id, name, hostname, os, arch, go_version, version, concurrency, tags, exclusive_tags, started_at, last_ping_at
 		FROM workers
 		ORDER BY name ASC
 	`)
@@ -77,31 +83,39 @@ func (r *WorkerRepository) Filter(ctx context.Context) ([]*wkr.Worker, error) {
 	now := time.Now()
 	for rows.Next() {
 		var (
-			id          sql.NullInt64
-			name        sql.NullString
-			hostname    sql.NullString
-			os          sql.NullString
-			arch        sql.NullString
-			goVersion   sql.NullString
-			version     sql.NullString
-			concurrency sql.NullInt64
-			startedAt   sql.NullTime
-			lastPingAt  sql.NullTime
+			id            sql.NullInt64
+			name          sql.NullString
+			hostname      sql.NullString
+			os            sql.NullString
+			arch          sql.NullString
+			goVersion     sql.NullString
+			version       sql.NullString
+			concurrency   sql.NullInt64
+			tagsStr       sql.NullString
+			exclusiveTags sql.NullBool
+			startedAt     sql.NullTime
+			lastPingAt    sql.NullTime
 		)
-		if err := rows.Scan(&id, &name, &hostname, &os, &arch, &goVersion, &version, &concurrency, &startedAt, &lastPingAt); err != nil {
+		if err := rows.Scan(&id, &name, &hostname, &os, &arch, &goVersion, &version, &concurrency, &tagsStr, &exclusiveTags, &startedAt, &lastPingAt); err != nil {
 			return nil, fmt.Errorf("failed to scan worker: %w", err)
 		}
+		var tags []string
+		if tagsStr.String != "" {
+			tags = strings.Split(tagsStr.String, ",")
+		}
 		w := &wkr.Worker{
-			ID:          uint32(id.Int64),
-			Name:        name.String,
-			Hostname:    hostname.String,
-			OS:          os.String,
-			Arch:        arch.String,
-			GoVersion:   goVersion.String,
-			Version:     version.String,
-			Concurrency: int(concurrency.Int64),
-			StartedAt:   startedAt.Time,
-			LastPingAt:  lastPingAt.Time,
+			ID:            uint32(id.Int64),
+			Name:          name.String,
+			Hostname:      hostname.String,
+			OS:            os.String,
+			Arch:          arch.String,
+			GoVersion:     goVersion.String,
+			Version:       version.String,
+			Concurrency:   int(concurrency.Int64),
+			Tags:          tags,
+			ExclusiveTags: exclusiveTags.Bool,
+			StartedAt:     startedAt.Time,
+			LastPingAt:    lastPingAt.Time,
 		}
 		w.ComputeStatus(now)
 		workers = append(workers, w)

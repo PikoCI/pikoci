@@ -3789,7 +3789,7 @@ func TestRunGetStepLocal_MissingPath(t *testing.T) {
 // blockingPoller is a test helper that blocks PollNextWork until ctx is cancelled.
 type blockingPoller struct{}
 
-func (bp *blockingPoller) PollNextWork(ctx context.Context) (*workitem.Item, error) {
+func (bp *blockingPoller) PollNextWork(ctx context.Context, _ workitem.WorkerContext) (*workitem.Item, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
@@ -7182,6 +7182,6 @@ func TestNew(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := mock.NewService(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	w := New(svc, logger, "test-worker", "test", 1)
+	w := New(svc, logger, "test-worker", "test", 1, nil, false)
 	assert.NotNil(t, w)
 }

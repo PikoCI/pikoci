@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cycloidio/sqlr"
@@ -34,6 +35,7 @@ type dbResource struct {
 	LastCheck     sql.NullTime
 	NextCheck     sql.NullTime
 	WebhookToken    sql.NullString
+	Tags            sql.NullString
 	Cache           sql.NullBool
 	PinnedVersionID sql.NullInt64
 }
@@ -55,6 +57,7 @@ func newDBResource(r resource.Resource) dbResource {
 		LastCheck:     toNullTime(r.LastCheck),
 		NextCheck:     toNullTime(r.NextCheck),
 		WebhookToken:  toNullString(r.WebhookToken),
+		Tags:          sql.NullString{String: strings.Join(r.Tags, ","), Valid: true},
 	}
 	if r.Cache != nil {
 		dbr.Cache = sql.NullBool{Bool: *r.Cache, Valid: true}
@@ -63,10 +66,15 @@ func newDBResource(r resource.Resource) dbResource {
 }
 
 func (dbr *dbResource) toDomainEntity() *resource.Resource {
+	var tags []string
+	if dbr.Tags.String != "" {
+		tags = strings.Split(dbr.Tags.String, ",")
+	}
 	r := &resource.Resource{
 		ID:            uint32(dbr.ID.Int64),
 		Name:          dbr.Name.String,
 		Type:          dbr.Type.String,
+		Tags:          tags,
 		Canonical:     dbr.Canonical.String,
 		Logs:          dbr.Logs.String,
 		CheckInterval: dbr.CheckInterval.String,
@@ -109,8 +117,8 @@ func (dbrv *dbResourceVersion) toDomainEntity() *resource.Version {
 func (r *ResourceRepository) Create(ctx context.Context, tc, pn string, rs resource.Resource) (uint32, error) {
 	dbrs := newDBResource(rs)
 	res, err := r.querier.ExecContext(ctx, `
-		INSERT INTO resources(name, `+"`type`"+`, canonical, params, check_interval, last_check, next_check, webhook_token, cache, pipeline_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+		INSERT INTO resources(name, `+"`type`"+`, canonical, params, check_interval, last_check, next_check, webhook_token, tags, cache, pipeline_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 			-- pipeline_id
 			(
 				SELECT p.id
@@ -118,7 +126,7 @@ func (r *ResourceRepository) Create(ctx context.Context, tc, pn string, rs resou
 				JOIN teams AS t
 					ON p.team_id = t.id
 				WHERE t.canonical = ? AND p.canonical = ?
-			))`, dbrs.Name, dbrs.Type, dbrs.Canonical, dbrs.Params, dbrs.CheckInterval, dbrs.LastCheck, dbrs.NextCheck, dbrs.WebhookToken, dbrs.Cache, tc, pn)
+			))`, dbrs.Name, dbrs.Type, dbrs.Canonical, dbrs.Params, dbrs.CheckInterval, dbrs.LastCheck, dbrs.NextCheck, dbrs.WebhookToken, dbrs.Tags, dbrs.Cache, tc, pn)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -135,7 +143,7 @@ func (r *ResourceRepository) Update(ctx context.Context, tc, pn, rCan string, rs
 	dbrs := newDBResource(rs)
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE resources AS r
-		SET name = ?, type = ?, canonical = ?, params = ?, check_interval = ?, logs = ?, last_check = ?, next_check = ?, webhook_token = ?, cache = ?
+		SET name = ?, type = ?, canonical = ?, params = ?, check_interval = ?, logs = ?, last_check = ?, next_check = ?, webhook_token = ?, tags = ?, cache = ?
 		FROM (
 			SELECT r.id
 			FROM resources AS r
@@ -146,7 +154,7 @@ func (r *ResourceRepository) Update(ctx context.Context, tc, pn, rCan string, rs
 			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
 		) AS rr
 		WHERE rr.id = r.id
-	`, dbrs.Name, dbrs.Type, dbrs.Canonical, dbrs.Params, dbrs.CheckInterval, dbrs.Logs, dbrs.LastCheck, dbrs.NextCheck, dbrs.WebhookToken, dbrs.Cache, tc, pn, rCan)
+	`, dbrs.Name, dbrs.Type, dbrs.Canonical, dbrs.Params, dbrs.CheckInterval, dbrs.Logs, dbrs.LastCheck, dbrs.NextCheck, dbrs.WebhookToken, dbrs.Tags, dbrs.Cache, tc, pn, rCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -161,7 +169,7 @@ func (r *ResourceRepository) Update(ctx context.Context, tc, pn, rCan string, rs
 
 func (r *ResourceRepository) Find(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.cache, r.pinned_version_id
+		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.tags, r.cache, r.pinned_version_id
 		FROM resources AS r
 		JOIN pipelines AS p
 			ON r.pipeline_id = p.id
@@ -181,7 +189,7 @@ func (r *ResourceRepository) Find(ctx context.Context, tc, pn, rCan string) (*re
 func (r *ResourceRepository) FindByWebhookToken(ctx context.Context, token string) (*resource.Resource, string, string, error) {
 	var tc, pn sql.NullString
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.cache, r.pinned_version_id,
+		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.tags, r.cache, r.pinned_version_id,
 			t.canonical, p.canonical
 		FROM resources AS r
 		JOIN pipelines AS p
@@ -220,7 +228,7 @@ func (r *ResourceRepository) FindByWebhookToken(ctx context.Context, token strin
 
 func (r *ResourceRepository) Filter(ctx context.Context, tc, pn string) ([]*resource.Resource, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.cache, r.pinned_version_id
+		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.tags, r.cache, r.pinned_version_id
 		FROM resources AS r
 		JOIN pipelines AS p
 			ON r.pipeline_id = p.id
@@ -242,7 +250,7 @@ func (r *ResourceRepository) Filter(ctx context.Context, tc, pn string) ([]*reso
 
 func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resource.ResourceWithPipeline, error) {
 	q := `
-		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.cache, r.pinned_version_id,
+		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.tags, r.cache, r.pinned_version_id,
 			t.canonical, p.canonical
 		FROM resources AS r
 		JOIN pipelines AS p
@@ -279,6 +287,7 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 			&dbr.LastCheck,
 			&dbr.NextCheck,
 			&dbr.WebhookToken,
+			&dbr.Tags,
 			&dbr.Cache,
 			&dbr.PinnedVersionID,
 			&tc,
@@ -297,6 +306,30 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 		return nil, fmt.Errorf("failed to iterate due resources: %w", err)
 	}
 	return results, nil
+}
+
+func (r *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCan string, prevNextCheck time.Time, newLastCheck, newNextCheck time.Time) (bool, error) {
+	// Use next_check <= prevNextCheck instead of exact equality to avoid
+	// timestamp precision issues across database backends (SQLite stores
+	// timestamps as strings with second precision).
+	res, err := r.querier.ExecContext(ctx, `
+		UPDATE resources AS r
+		SET last_check = ?, next_check = ?
+		FROM (
+			SELECT r.id
+			FROM resources AS r
+			JOIN pipelines AS p ON r.pipeline_id = p.id
+			JOIN teams AS t ON p.team_id = t.id
+			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
+				AND r.next_check IS NOT NULL AND r.next_check <= ?
+		) AS rr
+		WHERE rr.id = r.id
+	`, newLastCheck, newNextCheck, tc, pn, rCan, prevNextCheck)
+	if err != nil {
+		return false, fmt.Errorf("failed to claim resource check: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }
 
 func (r *ResourceRepository) CreateVersion(ctx context.Context, tc, pn, rCan string, rv resource.Version) (uint32, error) {
@@ -465,6 +498,7 @@ func scanResource(s sqlr.Scanner) (*resource.Resource, error) {
 		&r.LastCheck,
 		&r.NextCheck,
 		&r.WebhookToken,
+		&r.Tags,
 		&r.Cache,
 		&r.PinnedVersionID,
 	)

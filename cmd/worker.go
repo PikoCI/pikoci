@@ -16,6 +16,7 @@ import (
 	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/transport/http/client"
+	"github.com/pikoci/pikoci/pikoci/wkr"
 	"github.com/pikoci/pikoci/worker"
 	"github.com/pikoci/pikoci/worker/config"
 	"github.com/xyproto/randomstring"
@@ -83,7 +84,23 @@ var workerCmd = &cobra.Command{
 			name = randomstring.HumanFriendlyEnglishString(16)
 		}
 
-		workers, wg, err := runGRPCWorker(ctx, c, grpcClient, workerToken, grpcTarget, cfg.Concurrency, cfg.LogLevel, name)
+		var tags []string
+		if cfg.Tags != "" {
+			for _, t := range strings.Split(cfg.Tags, ",") {
+				t = strings.TrimSpace(t)
+				if t != "" {
+					tags = append(tags, t)
+				}
+			}
+		}
+		if err := wkr.ValidateTags(tags); err != nil {
+			return fmt.Errorf("invalid worker tags: %w", err)
+		}
+		if cfg.ExclusiveTags && len(tags) == 0 {
+			return fmt.Errorf("--exclusive-tags requires at least one --tags value")
+		}
+
+		workers, wg, err := runGRPCWorker(ctx, c, grpcClient, workerToken, grpcTarget, cfg.Concurrency, cfg.LogLevel, name, tags, cfg.ExclusiveTags)
 		if err != nil {
 			return fmt.Errorf("failed to start worker: %w", err)
 		}
@@ -136,6 +153,8 @@ func init() {
 	workerCmd.Flags().StringP("config", "c", "", "Path to the config file")
 	workerCmd.Flags().StringP("pikoci-url", "u", "localhost:8080", "URL to the PikoCI server")
 	workerCmd.Flags().String("name", "", "Worker name (auto-generated if empty)")
+	workerCmd.Flags().String("tags", "", "Comma-separated worker tags for job/resource routing (e.g. gpu,vpn)")
+	workerCmd.Flags().Bool("exclusive-tags", false, "When set, worker only handles work matching its tags (skips untagged jobs/resources)")
 	workerCmd.Flags().Int("concurrency", 1, "Number of workers to start in one instance")
 	workerCmd.Flags().String("drain-timeout", "10m", "Maximum time to wait for in-flight jobs to finish during graceful shutdown (SIGQUIT)")
 	workerCmd.Flags().String("log-level", "info", "Sets the log level ('debug', 'info', 'warn', 'error')")
@@ -147,7 +166,7 @@ func init() {
 	workerViper.AutomaticEnv()
 }
 
-func runWorker(ctx context.Context, s pikoci.Service, c int, llvl string, name string) ([]*worker.Worker, *sync.WaitGroup, error) {
+func runWorker(ctx context.Context, s pikoci.Service, c int, llvl string, name string, tags []string, exclusiveTags bool) ([]*worker.Worker, *sync.WaitGroup, error) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: parseSlogLevel(llvl)}))
 	logger = logger.With("service", "worker")
 
@@ -161,7 +180,7 @@ func runWorker(ctx context.Context, s pikoci.Service, c int, llvl string, name s
 		}
 		nlogger := logger.With("num", i+1, "name", workerName)
 		nlogger.Info(fmt.Sprintf("Starting Worker %d", i+1))
-		w := worker.New(s, nlogger, workerName, Version, c)
+		w := worker.New(s, nlogger, workerName, Version, c, tags, exclusiveTags)
 		workers = append(workers, w)
 
 		go func() {
@@ -176,7 +195,7 @@ func runWorker(ctx context.Context, s pikoci.Service, c int, llvl string, name s
 }
 
 // runGRPCWorker creates workers configured for gRPC streaming.
-func runGRPCWorker(ctx context.Context, s pikoci.Service, grpcClient workerv1.WorkerServiceClient, workerToken, grpcAddr string, c int, llvl string, name string) ([]*worker.Worker, *sync.WaitGroup, error) {
+func runGRPCWorker(ctx context.Context, s pikoci.Service, grpcClient workerv1.WorkerServiceClient, workerToken, grpcAddr string, c int, llvl string, name string, tags []string, exclusiveTags bool) ([]*worker.Worker, *sync.WaitGroup, error) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: parseSlogLevel(llvl)}))
 	logger = logger.With("service", "worker")
 
@@ -190,7 +209,7 @@ func runGRPCWorker(ctx context.Context, s pikoci.Service, grpcClient workerv1.Wo
 		}
 		nlogger := logger.With("num", i+1, "name", workerName)
 		nlogger.Info(fmt.Sprintf("Starting gRPC Worker %d", i+1))
-		w := worker.NewGRPC(s, grpcClient, nlogger, workerName, Version, c, workerToken, grpcAddr)
+		w := worker.NewGRPC(s, grpcClient, nlogger, workerName, Version, c, workerToken, grpcAddr, tags, exclusiveTags)
 		workers = append(workers, w)
 
 		go func() {

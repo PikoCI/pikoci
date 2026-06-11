@@ -31,6 +31,8 @@ message RegisterRequest {
   string worker_id = 1;
   string worker_token = 2;
   int32 max_jobs = 3;
+  repeated string tags = 4;
+  bool exclusive_tags = 5;
 }
 message RegisterResponse {
   bool accepted = 1;
