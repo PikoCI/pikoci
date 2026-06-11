@@ -140,6 +140,15 @@ func (q *PikoCI) CancelJobBuild(ctx context.Context, tc, pc, jn string, buildNum
 		return err
 	}
 
+	// If the build was running, push cancellation to the worker via gRPC stream.
+	if wasRunning && q.GRPCServer != nil {
+		buildID := fmt.Sprintf("%d", b.ID)
+		if err := q.GRPCServer.CancelBuild(buildID, "user cancelled"); err != nil {
+			q.logger.Debug("gRPC cancel routing failed (worker may be embedded or disconnected)",
+				"build_id", buildID, "error", err)
+		}
+	}
+
 	// Notify the next pending build so it can start (whether we cancelled
 	// a running or a pending build, a concurrency slot may have opened).
 	q.notifyNextPendingBuild(ctx, tc, pc, jn)
