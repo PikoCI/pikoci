@@ -61,8 +61,9 @@ type Worker struct {
 	pikoci            pikoci.Service
 	workPoller        WorkPoller
 
-	draining    atomic.Bool
-	drainCancel context.CancelFunc
+	draining      atomic.Bool
+	drainCancelMu sync.Mutex
+	drainCancel   context.CancelFunc
 	logger      *slog.Logger
 
 	// apiCtx is the parent server context used for DB operations.
@@ -94,7 +95,9 @@ type Worker struct {
 	// grpcClient is the gRPC client for the WorkerService.
 	grpcClient workerv1.WorkerServiceClient
 	// grpcStream is the active Execute stream (nil when not connected).
-	grpcStream workerv1.WorkerService_ExecuteClient
+	// Protected by grpcStreamMu.
+	grpcStreamMu sync.Mutex
+	grpcStream   workerv1.WorkerService_ExecuteClient
 
 	// jobCancels tracks active job cancel functions for gRPC cancellation.
 	jobCancelsMu sync.Mutex
@@ -154,8 +157,11 @@ func NewGRPC(s pikoci.Service, gc workerv1.WorkerServiceClient, l *slog.Logger, 
 // continue to completion, but the receive loops are cancelled immediately.
 func (w *Worker) Drain() {
 	w.draining.Store(true)
-	if w.drainCancel != nil {
-		w.drainCancel()
+	w.drainCancelMu.Lock()
+	cancel := w.drainCancel
+	w.drainCancelMu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 }
 
@@ -247,7 +253,9 @@ func (w *Worker) Run(ctx context.Context) error {
 	// receiveCtx is cancelled on Drain() to unblock Receive() calls
 	// immediately while still allowing in-flight jobs to finish.
 	receiveCtx, receiveCancel := context.WithCancel(ctx)
+	w.drainCancelMu.Lock()
 	w.drainCancel = receiveCancel
+	w.drainCancelMu.Unlock()
 	defer receiveCancel()
 
 	if w.GRPCAddr != "" {

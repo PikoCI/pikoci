@@ -64,21 +64,29 @@ func (w *Worker) grpcSession(ctx context.Context) error {
 		return fmt.Errorf("execute stream failed: %w", err)
 	}
 
-	// Send initial heartbeat to identify ourselves
+	// Send initial heartbeat to identify ourselves (RunningJobs is 0 on connect)
 	if err := stream.Send(&workerv1.WorkerMessage{
 		Payload: &workerv1.WorkerMessage_Heartbeat{
 			Heartbeat: &workerv1.Heartbeat{
 				WorkerId:    w.Name,
 				Timestamp:   time.Now().Unix(),
-				RunningJobs: int32(w.Concurrency),
+				RunningJobs: 0,
 			},
 		},
 	}); err != nil {
 		return fmt.Errorf("failed to send initial heartbeat: %w", err)
 	}
 
-	// Track active job cancellation functions
+	// Store stream atomically for use by job handlers
+	w.grpcStreamMu.Lock()
 	w.grpcStream = stream
+	w.grpcStreamMu.Unlock()
+
+	defer func() {
+		w.grpcStreamMu.Lock()
+		w.grpcStream = nil
+		w.grpcStreamMu.Unlock()
+	}()
 
 	// Start heartbeat sender
 	go w.grpcHeartbeatLoop(ctx, stream)
@@ -95,7 +103,7 @@ func (w *Worker) grpcSession(ctx context.Context) error {
 
 		switch p := msg.Payload.(type) {
 		case *workerv1.ServerMessage_Job:
-			go w.handleGRPCJob(ctx, p.Job)
+			go w.handleGRPCJob(ctx, p.Job, stream)
 		case *workerv1.ServerMessage_CancelJob:
 			w.handleGRPCCancel(p.CancelJob)
 		case *workerv1.ServerMessage_Ping:
@@ -114,10 +122,13 @@ func (w *Worker) grpcSession(ctx context.Context) error {
 }
 
 // handleGRPCJob processes a job received via gRPC stream.
-func (w *Worker) handleGRPCJob(ctx context.Context, job *workerv1.Job) {
+func (w *Worker) handleGRPCJob(ctx context.Context, job *workerv1.Job, stream workerv1.WorkerService_ExecuteClient) {
 	if w.draining.Load() {
-		// Send back a result indicating we can't accept
-		w.sendJobResult(job.BuildId, "errored", "worker is draining")
+		w.sendOnStream(stream, &workerv1.WorkerMessage{
+			Payload: &workerv1.WorkerMessage_JobResult{
+				JobResult: &workerv1.JobResult{BuildId: job.BuildId, Status: "errored", Error: "worker is draining"},
+			},
+		})
 		return
 	}
 
@@ -132,7 +143,11 @@ func (w *Worker) handleGRPCJob(ctx context.Context, job *workerv1.Job) {
 	}()
 
 	// Send acceptance
-	w.sendJobAccepted(job.BuildId)
+	w.sendOnStream(stream, &workerv1.WorkerMessage{
+		Payload: &workerv1.WorkerMessage_JobAccepted{
+			JobAccepted: &workerv1.JobAccepted{BuildId: job.BuildId, StartedAt: time.Now().Unix()},
+		},
+	})
 
 	item := workitem.Body{
 		TeamCanonical:     job.Team,
@@ -149,7 +164,11 @@ func (w *Worker) handleGRPCJob(ctx context.Context, job *workerv1.Job) {
 	cwd, err := w.createWorkDir()
 	if err != nil {
 		w.logger.Error("failed to create work dir", "error", err)
-		w.sendJobResult(job.BuildId, "errored", err.Error())
+		w.sendOnStream(stream, &workerv1.WorkerMessage{
+			Payload: &workerv1.WorkerMessage_JobResult{
+				JobResult: &workerv1.JobResult{BuildId: job.BuildId, Status: "errored", Error: err.Error(), FinishedAt: time.Now().Unix()},
+			},
+		})
 		return
 	}
 	defer os.RemoveAll(cwd)
@@ -157,9 +176,12 @@ func (w *Worker) handleGRPCJob(ctx context.Context, job *workerv1.Job) {
 	w.processMessage(jobCtx, item, cwd)
 
 	// The build status is determined by processMessage internally,
-	// which calls updateBuild/failBuild. We just send a generic
-	// completion notification back over the stream.
-	w.sendJobResult(job.BuildId, "completed", "")
+	// which calls updateBuild/failBuild. Send completion notification.
+	w.sendOnStream(stream, &workerv1.WorkerMessage{
+		Payload: &workerv1.WorkerMessage_JobResult{
+			JobResult: &workerv1.JobResult{BuildId: job.BuildId, Status: "completed", FinishedAt: time.Now().Unix()},
+		},
+	})
 }
 
 // handleGRPCCancel processes a cancellation message from the server.
@@ -194,34 +216,12 @@ func (w *Worker) grpcHeartbeatLoop(ctx context.Context, stream workerv1.WorkerSe
 	}
 }
 
-// sendJobAccepted sends a JobAccepted message over the gRPC stream.
-func (w *Worker) sendJobAccepted(buildID string) {
-	if w.grpcStream == nil {
+// sendOnStream sends a message on the given gRPC stream, logging errors.
+func (w *Worker) sendOnStream(stream workerv1.WorkerService_ExecuteClient, msg *workerv1.WorkerMessage) {
+	if stream == nil {
 		return
 	}
-	w.grpcStream.Send(&workerv1.WorkerMessage{
-		Payload: &workerv1.WorkerMessage_JobAccepted{
-			JobAccepted: &workerv1.JobAccepted{
-				BuildId:   buildID,
-				StartedAt: time.Now().Unix(),
-			},
-		},
-	})
-}
-
-// sendJobResult sends a JobResult message over the gRPC stream.
-func (w *Worker) sendJobResult(buildID, status, errMsg string) {
-	if w.grpcStream == nil {
-		return
+	if err := stream.Send(msg); err != nil {
+		w.logger.Error("failed to send gRPC message", "error", err)
 	}
-	w.grpcStream.Send(&workerv1.WorkerMessage{
-		Payload: &workerv1.WorkerMessage_JobResult{
-			JobResult: &workerv1.JobResult{
-				BuildId:    buildID,
-				Status:     status,
-				FinishedAt: time.Now().Unix(),
-				Error:      errMsg,
-			},
-		},
-	})
 }

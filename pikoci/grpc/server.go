@@ -6,11 +6,11 @@ import (
 	"io"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
-	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/workitem"
 	"github.com/pikoci/pikoci/pikoci/wkr"
@@ -35,16 +35,22 @@ type Server struct {
 	streams   *WorkerStreamManager
 	jwtSecret []byte
 	logger    *slog.Logger
+
+	// registeredMaxJobs stores max_jobs from Register calls, keyed by worker ID.
+	// Used by Execute to set the correct MaxJobs on the stream.
+	registeredMu      sync.Mutex
+	registeredMaxJobs map[string]int32
 }
 
 // NewServer creates a new gRPC WorkerService server.
 func NewServer(svc WorkDispatcher, n *notifier.WorkNotifier, sm *WorkerStreamManager, jwtSecret []byte, l *slog.Logger) *Server {
 	return &Server{
-		svc:       svc,
-		notifier:  n,
-		streams:   sm,
-		jwtSecret: jwtSecret,
-		logger:    l,
+		svc:               svc,
+		notifier:          n,
+		streams:           sm,
+		jwtSecret:         jwtSecret,
+		logger:            l,
+		registeredMaxJobs: make(map[string]int32),
 	}
 }
 
@@ -53,7 +59,8 @@ func (s *Server) Streams() *WorkerStreamManager {
 	return s.streams
 }
 
-// Register validates a worker's JWT token and confirms the connection.
+// Register validates a worker's JWT token and stores the worker's max_jobs
+// capacity for use when the Execute stream opens.
 func (s *Server) Register(ctx context.Context, req *workerv1.RegisterRequest) (*workerv1.RegisterResponse, error) {
 	if err := s.validateWorkerToken(req.WorkerToken); err != nil {
 		return &workerv1.RegisterResponse{
@@ -63,6 +70,10 @@ func (s *Server) Register(ctx context.Context, req *workerv1.RegisterRequest) (*
 	}
 
 	s.logger.Info("worker registered via gRPC", "worker_id", req.WorkerId, "max_jobs", req.MaxJobs)
+
+	s.registeredMu.Lock()
+	s.registeredMaxJobs[req.WorkerId] = req.MaxJobs
+	s.registeredMu.Unlock()
 
 	return &workerv1.RegisterResponse{
 		Accepted: true,
@@ -88,11 +99,17 @@ func (s *Server) Execute(stream workerv1.WorkerService_ExecuteServer) error {
 		return status.Errorf(codes.InvalidArgument, "worker_id is required in initial heartbeat")
 	}
 
-	ws := NewWorkerStream(workerID, hb.RunningJobs)
-	// Use a reasonable default if RunningJobs is 0 (worker reports capacity via heartbeat)
-	if ws.MaxJobs == 0 {
-		ws.MaxJobs = 1
+	// Look up max_jobs from the Register call
+	s.registeredMu.Lock()
+	maxJobs, ok := s.registeredMaxJobs[workerID]
+	if ok {
+		delete(s.registeredMaxJobs, workerID)
 	}
+	s.registeredMu.Unlock()
+	if maxJobs <= 0 {
+		maxJobs = 1
+	}
+	ws := NewWorkerStream(workerID, maxJobs)
 	s.streams.Register(ws)
 	defer s.streams.Unregister(workerID)
 
@@ -168,22 +185,19 @@ func (s *Server) dispatchLoop(ctx context.Context, ws *WorkerStream) {
 	}
 }
 
-// tryDispatch attempts to find work and send it to the worker if it has capacity.
+// tryDispatch attempts to find work and send it to the worker, filling capacity.
 func (s *Server) tryDispatch(ctx context.Context, ws *WorkerStream) {
-	if !ws.HasCapacity() {
-		return
+	for ws.HasCapacity() {
+		item, err := s.svc.NextWork(ctx)
+		if err != nil {
+			s.logger.Error("NextWork failed in dispatch", "worker_id", ws.WorkerID, "error", err)
+			return
+		}
+		if item == nil {
+			return
+		}
+		s.sendWorkItem(ws, item)
 	}
-
-	item, err := s.svc.NextWork(ctx)
-	if err != nil {
-		s.logger.Error("NextWork failed in dispatch", "worker_id", ws.WorkerID, "error", err)
-		return
-	}
-	if item == nil {
-		return
-	}
-
-	s.sendWorkItem(ws, item)
 }
 
 // sendWorkItem converts a workitem.Item to a protobuf Job and sends it.
@@ -250,11 +264,8 @@ func (s *Server) handleWorkerMessage(ctx context.Context, ws *WorkerStream, msg 
 }
 
 // handleHeartbeat processes a heartbeat from a worker.
+// MaxJobs is set once from Register; heartbeats only report running count.
 func (s *Server) handleHeartbeat(ctx context.Context, ws *WorkerStream, hb *workerv1.Heartbeat) {
-	ws.mu.Lock()
-	ws.MaxJobs = hb.RunningJobs // Update capacity info
-	ws.mu.Unlock()
-
 	// Forward heartbeat to the existing WorkerHeartbeat service
 	if err := s.svc.WorkerHeartbeat(ctx, wkr.Worker{
 		Name: ws.WorkerID,
@@ -316,16 +327,3 @@ func (s *Server) validateWorkerToken(tokenStr string) error {
 	return nil
 }
 
-// workItemToBuildStatus converts a proto status string to a build.Status.
-func workItemToBuildStatus(s string) build.Status {
-	switch s {
-	case "succeeded":
-		return build.Succeeded
-	case "failed":
-		return build.Failed
-	case "cancelled":
-		return build.Cancelled
-	default:
-		return build.Failed
-	}
-}
