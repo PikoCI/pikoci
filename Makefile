@@ -50,6 +50,10 @@ worker: ## Starts a worker
 db-cli: ## Locally connects to the DB
 	@docker-compose -f docker/docker-compose.yml -f docker/develop.yml exec mariadb mariadb -uroot -proot123
 
+.PHONY: proto
+proto: ## Generates protobuf Go code
+	@protoc --go_out=. --go_opt=module=github.com/pikoci/pikoci --go-grpc_out=. --go-grpc_opt=module=github.com/pikoci/pikoci proto/worker/v1/worker.proto
+
 .PHONY: gen
 gen: ## Runs go generate
 	@go generate ./...
