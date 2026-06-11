@@ -99,13 +99,17 @@ func (s *Server) Execute(stream workerv1.WorkerService_ExecuteServer) error {
 		return status.Errorf(codes.InvalidArgument, "worker_id is required in initial heartbeat")
 	}
 
-	// Look up max_jobs from the Register call
+	// Look up max_jobs from the Register call — rejects workers that
+	// haven't called Register (which validates the JWT token).
 	s.registeredMu.Lock()
 	maxJobs, ok := s.registeredMaxJobs[workerID]
 	if ok {
 		delete(s.registeredMaxJobs, workerID)
 	}
 	s.registeredMu.Unlock()
+	if !ok {
+		return status.Errorf(codes.Unauthenticated, "worker %q has not called Register", workerID)
+	}
 	if maxJobs <= 0 {
 		maxJobs = 1
 	}
