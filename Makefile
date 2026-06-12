@@ -123,4 +123,5 @@ COMMIT := $(shell git rev-parse --short HEAD)
 LDFLAGS := -X github.com/pikoci/pikoci/cmd.Version=$(VERSION) -X github.com/pikoci/pikoci/cmd.Commit=$(COMMIT)
 
 $(PLATFORMS):
-	GOOS=$(os) GOARCH=$(arch) go build -ldflags "$(LDFLAGS)" -o ./builds/'$(os)-$(arch)' .
+	$(eval SUFFIX := $(if $(filter windows,$(os)),.exe,))
+	GOOS=$(os) GOARCH=$(arch) go build -ldflags "$(LDFLAGS)" -o ./builds/pikoci-$(os)-$(arch)$(SUFFIX) .

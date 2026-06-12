@@ -372,49 +372,175 @@ job "build-release" {
   }
 }
 
-job "gh-release" {
+job "publish-release" {
   get "git" "pikoci_tag" {
     trigger = true
     passed  = ["build-release"]
   }
-  task "build-and-upload" {
+
+  task "install-tools" {
     run "docker" {
       image = var.go_image
       cmd   = <<-EOT
+        # Install gh CLI if not cached
+        if [ ! -f /pikoci-tools/gh ]; then
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+            -o /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+            > /etc/apt/sources.list.d/github-cli.list
+          apt-get update -qq && apt-get install -qq -y gh
+          cp /usr/bin/gh /pikoci-tools/
+        fi
+
+        # Install nfpm if not cached
+        if [ ! -f /pikoci-tools/nfpm ]; then
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+          cp $(go env GOPATH)/bin/nfpm /pikoci-tools/
+        fi
+      EOT
+      args = [
+        "-v", "pikoci-tools:/pikoci-tools",
+        "-v", "pikoci-go-mod:/go/pkg/mod",
+      ]
+    }
+  }
+
+  in_parallel {
+    limit = 2
+
+    task "build-linux-amd64" {
+      run "docker" {
+        image = var.go_image
+        cmd   = <<-EOT
+          cd ${var.git_name}
+          make linux/amd64
+        EOT
+        args = [
+          "-v", "pikoci-go-mod:/go/pkg/mod",
+          "-v", "pikoci-build:/root/.cache/go-build",
+        ]
+      }
+    }
+
+    task "build-linux-arm64" {
+      run "docker" {
+        image = var.go_image
+        cmd   = <<-EOT
+          cd ${var.git_name}
+          make linux/arm64
+        EOT
+        args = [
+          "-v", "pikoci-go-mod:/go/pkg/mod",
+          "-v", "pikoci-build:/root/.cache/go-build",
+        ]
+      }
+    }
+
+    task "build-darwin-amd64" {
+      run "docker" {
+        image = var.go_image
+        cmd   = <<-EOT
+          cd ${var.git_name}
+          make darwin/amd64
+        EOT
+        args = [
+          "-v", "pikoci-go-mod:/go/pkg/mod",
+          "-v", "pikoci-build:/root/.cache/go-build",
+        ]
+      }
+    }
+
+    task "build-darwin-arm64" {
+      run "docker" {
+        image = var.go_image
+        cmd   = <<-EOT
+          cd ${var.git_name}
+          make darwin/arm64
+        EOT
+        args = [
+          "-v", "pikoci-go-mod:/go/pkg/mod",
+          "-v", "pikoci-build:/root/.cache/go-build",
+        ]
+      }
+    }
+
+    task "build-windows-amd64" {
+      run "docker" {
+        image = var.go_image
+        cmd   = <<-EOT
+          cd ${var.git_name}
+          make windows/amd64
+        EOT
+        args = [
+          "-v", "pikoci-go-mod:/go/pkg/mod",
+          "-v", "pikoci-build:/root/.cache/go-build",
+        ]
+      }
+    }
+  }
+
+  task "package-deb-rpm" {
+    run "docker" {
+      image = var.go_image
+      cmd   = <<-EOT
+        export PATH=/pikoci-tools:$PATH
         cd ${var.git_name}
-        TAG=$(git describe --tags --exact-match)
-
-        # Build all platforms
-        make release
-
-        # Install gh CLI
-        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
-        apt-get update -qq && apt-get install -qq -y gh
-
-        # Extract changelog for this version
+        TAG=$GET_PIKOCI_TAG_REF
         VERSION=$${TAG#v}
+
+        # Package for each Linux architecture
+        for ARCH in amd64 arm64; do
+          cp builds/pikoci-linux-$ARCH ./pikoci
+          GOARCH=$ARCH VERSION=$VERSION nfpm pkg --packager deb --target builds/pikoci_$${VERSION}_$${ARCH}.deb
+          GOARCH=$ARCH VERSION=$VERSION nfpm pkg --packager rpm --target builds/pikoci-$${VERSION}.$${ARCH}.rpm
+          rm ./pikoci
+        done
+      EOT
+      args = [
+        "-v", "pikoci-tools:/pikoci-tools",
+      ]
+    }
+  }
+
+  task "create-release" {
+    run "docker" {
+      image = var.go_image
+      cmd   = <<-EOT
+        export PATH=/pikoci-tools:$PATH
+        cd ${var.git_name}
+        TAG=$GET_PIKOCI_TAG_REF
+        VERSION=$${TAG#v}
+
+        # Generate SHA256SUMS
+        cd builds
+        sha256sum pikoci-linux-* pikoci-darwin-* pikoci-windows-* *.deb *.rpm > SHA256SUMS
+        cd ..
+
+        # Extract changelog
         BODY=$(sed -n "/^## \[$VERSION\]/,/^## \[/{/^## \[$VERSION\]/d;/^## \[/d;p;}" CHANGELOG.md)
 
-        # Create release with changelog body and upload binaries
+        # Create release and upload all artifacts
         GH_TOKEN="${var.github_token}" gh release create $TAG \
           --title "$TAG" \
           --notes "$BODY" \
           --repo PikoCI/pikoci \
-          builds/linux-amd64 builds/linux-arm64 builds/darwin-amd64 builds/darwin-arm64 builds/windows-amd64
+          builds/pikoci-* \
+          builds/*.deb \
+          builds/*.rpm \
+          builds/SHA256SUMS
 
-        # Export changelog for notify steps (newlines as \n for single-line format)
+        # Export changelog for Discord notification
         echo "CHANGELOG=$(echo "$BODY" | sed ':a;N;$$!ba;s/\n/\\n/g')" >> "$$PIKOCI_OUTPUT"
       EOT
       args = [
-        "-v", "pikoci-go-mod:/go/pkg/mod",
-        "-v", "pikoci-build:/root/.cache/go-build",
+        "-v", "pikoci-tools:/pikoci-tools",
       ]
     }
   }
+
   on_success {
     notify "discord" "announcements" {
-      message = "🚀 **PikoCI $GET_PIKOCI_TAG_REF** has been released!\n\n$TASK_BUILD_AND_UPLOAD_CHANGELOG\n\n🔗 https://github.com/PikoCI/pikoci/releases/tag/$GET_PIKOCI_TAG_REF"
+      message = "🚀 **PikoCI $GET_PIKOCI_TAG_REF** has been released!\n\n$TASK_CREATE_RELEASE_CHANGELOG\n\n🔗 https://github.com/PikoCI/pikoci/releases/tag/$GET_PIKOCI_TAG_REF"
     }
   }
 }

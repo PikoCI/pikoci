@@ -1,0 +1,14 @@
+name: pikoci
+arch: "${GOARCH}"
+platform: linux
+version: "v${VERSION}"
+maintainer: "PikoCI <hello@pikoci.com>"
+description: "The CI/CD that grows with you. One binary, any database, runs anywhere."
+vendor: "PikoCI"
+homepage: "https://pikoci.com"
+license: "Apache-2.0"
+contents:
+  - src: ./pikoci
+    dst: /usr/local/bin/pikoci
+    file_info:
+      mode: 0755

@@ -6,12 +6,24 @@ Download the latest release for your platform:
 
 ```bash
 # Linux (amd64)
-curl -L https://github.com/PikoCI/pikoci/releases/latest/download/linux-amd64 -o pikoci
+curl -L https://github.com/PikoCI/pikoci/releases/latest/download/pikoci-linux-amd64 -o pikoci
 chmod +x pikoci
 
 # macOS (amd64)
-curl -L https://github.com/PikoCI/pikoci/releases/latest/download/darwin-amd64 -o pikoci
+curl -L https://github.com/PikoCI/pikoci/releases/latest/download/pikoci-darwin-amd64 -o pikoci
 chmod +x pikoci
+```
+
+Or install via package manager (Linux):
+
+```bash
+# Debian/Ubuntu
+curl -LO https://github.com/PikoCI/pikoci/releases/latest/download/pikoci_VERSION_amd64.deb
+sudo dpkg -i pikoci_VERSION_amd64.deb
+
+# RHEL/Fedora
+curl -LO https://github.com/PikoCI/pikoci/releases/latest/download/pikoci-VERSION.amd64.rpm
+sudo rpm -i pikoci-VERSION.amd64.rpm
 ```
 
 Or pull the Docker image:

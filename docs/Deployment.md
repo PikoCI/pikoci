@@ -34,8 +34,16 @@ GOOS=linux GOARCH=amd64 go build -o pikoci .
 scp pikoci root@your-server:/usr/local/bin/pikoci
 
 # Or download a release
-curl -L https://github.com/PikoCI/pikoci/releases/latest/download/linux-amd64 -o /usr/local/bin/pikoci
+curl -L https://github.com/PikoCI/pikoci/releases/latest/download/pikoci-linux-amd64 -o /usr/local/bin/pikoci
 chmod +x /usr/local/bin/pikoci
+
+# Or install via .deb (Debian/Ubuntu)
+curl -LO https://github.com/PikoCI/pikoci/releases/latest/download/pikoci_VERSION_amd64.deb
+sudo dpkg -i pikoci_VERSION_amd64.deb
+
+# Or install via .rpm (RHEL/Fedora)
+curl -LO https://github.com/PikoCI/pikoci/releases/latest/download/pikoci-VERSION.amd64.rpm
+sudo rpm -i pikoci-VERSION.amd64.rpm
 ```
 
 Alternatively, use the Docker image:
