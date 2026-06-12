@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Pipeline updates no longer unpause paused jobs. The `paused` state is now exclusively managed by the dedicated pause/unpause actions, preventing HCL-parsed zero values from overwriting runtime state ([#495](https://github.com/PikoCI/pikoci/issues/495))
 - New jobs with `trigger = true` no longer replay the entire version backlog. Jobs now record a `baseline_version_id` at creation time, and the scheduler only considers versions newer than that baseline ([#492](https://github.com/PikoCI/pikoci/issues/492))
 
 ### Added

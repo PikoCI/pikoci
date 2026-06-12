@@ -482,3 +482,38 @@ func TestDeletePipeline_CascadesSerialGroups(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, count, "serial groups should be cascade-deleted when pipeline is deleted")
 }
+
+func TestJobUpdate_PreservesPausedState(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Create a pipeline with a job
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'pause-test', 'pause-test')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	_, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'my-job')`, ppID)
+	require.NoError(t, err)
+
+	jr := mysql.NewJobRepository(db)
+
+	// Pause the job
+	err = jr.SetPaused(ctx, "main", "pause-test", "my-job", true)
+	require.NoError(t, err)
+
+	// Verify it's paused
+	j, err := jr.Find(ctx, "main", "pause-test", "my-job")
+	require.NoError(t, err)
+	assert.True(t, j.Paused, "job should be paused after SetPaused(true)")
+
+	// Update the job with Paused=false (simulating pipeline update from HCL)
+	err = jr.Update(ctx, "main", "pause-test", "my-job", job.Job{
+		Name: "my-job",
+	})
+	require.NoError(t, err)
+
+	// Verify the job is still paused
+	j, err = jr.Find(ctx, "main", "pause-test", "my-job")
+	require.NoError(t, err)
+	assert.True(t, j.Paused, "job should remain paused after Update()")
+}
