@@ -359,7 +359,7 @@ func (r *BuildRepository) InsertGetVersion(ctx context.Context, tc, pn, jn strin
 // jobs succeeded with but the downstream job has no build for yet (regardless
 // of build status). Any existing build (pending, started, succeeded, failed,
 // cancelled) for the version on the downstream job prevents re-triggering.
-func (r *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn string, upstreamJobs []string, downstreamJob string, stepName string, upstreamCount int) (uint32, bool, error) {
+func (r *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn string, upstreamJobs []string, downstreamJob string, stepName string, upstreamCount int, baselineVersionID *uint32) (uint32, bool, error) {
 	// Build the IN clause placeholders
 	placeholders := make([]string, len(upstreamJobs))
 	args := make([]interface{}, 0, len(upstreamJobs)+5)
@@ -374,6 +374,11 @@ func (r *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn
 	// HAVING count
 	args = append(args, upstreamCount)
 
+	baselineClause := ""
+	if baselineVersionID != nil {
+		baselineClause = fmt.Sprintf("AND bgv.version_id > %d", *baselineVersionID)
+	}
+
 	query := `
 		SELECT bgv.version_id
 		FROM build_get_versions bgv
@@ -384,6 +389,7 @@ func (r *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn
 		WHERE t.canonical = ? AND p.canonical = ? AND b.status = 'succeeded'
 		  AND j.name IN (` + strings.Join(placeholders, ", ") + `)
 		  AND bgv.step_name = ?
+		  ` + baselineClause + `
 		  AND NOT EXISTS (
 			  SELECT 1 FROM builds b2
 			  JOIN jobs j2 ON b2.job_id = j2.id

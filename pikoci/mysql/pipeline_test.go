@@ -391,6 +391,73 @@ func TestPipelineFilterAll_IncludesForEachFields(t *testing.T) {
 	assert.Equal(t, "", jobMap["regular"].ForEachGroup)
 }
 
+func TestFilterAll_IncludesBaselineVersionID(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'bl-all', 'bl-all')`)
+	require.NoError(t, err)
+
+	// Create a resource version so MAX(resource_versions.id) is non-null
+	res, err := db.ExecContext(ctx, `INSERT INTO resources (pipeline_id, name, canonical, type) VALUES (
+		(SELECT id FROM pipelines WHERE canonical = 'bl-all'), 'timer', 'cron.timer', 'cron')`)
+	require.NoError(t, err)
+	resID, _ := res.LastInsertId()
+	res, err = db.ExecContext(ctx, `INSERT INTO resource_versions (resource_id, version) VALUES (?, '{"v":"1"}')`, resID)
+	require.NoError(t, err)
+	expectedBaseline, _ := res.LastInsertId()
+
+	// Create job via repository — baseline_version_id should be set
+	jr := mysql.NewJobRepository(db)
+	_, err = jr.Create(ctx, "main", "bl-all", job.Job{Name: "deploy"})
+	require.NoError(t, err)
+
+	pr := mysql.NewPipelineRepository(db)
+	pps, err := pr.FilterAll(ctx)
+	require.NoError(t, err)
+
+	var found *pipeline.WithTeam
+	for _, pwt := range pps {
+		if pwt.Canonical == "bl-all" {
+			found = pwt
+			break
+		}
+	}
+	require.NotNil(t, found)
+	require.Len(t, found.Jobs, 1)
+	require.NotNil(t, found.Jobs[0].BaselineVersionID,
+		"FilterAll must load baseline_version_id for the scheduler")
+	assert.Equal(t, uint32(expectedBaseline), *found.Jobs[0].BaselineVersionID)
+}
+
+func TestFind_IncludesBaselineVersionID(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'bl-find', 'bl-find')`)
+	require.NoError(t, err)
+
+	res, err := db.ExecContext(ctx, `INSERT INTO resources (pipeline_id, name, canonical, type) VALUES (
+		(SELECT id FROM pipelines WHERE canonical = 'bl-find'), 'timer', 'cron.timer', 'cron')`)
+	require.NoError(t, err)
+	resID, _ := res.LastInsertId()
+	res, err = db.ExecContext(ctx, `INSERT INTO resource_versions (resource_id, version) VALUES (?, '{"v":"1"}')`, resID)
+	require.NoError(t, err)
+	expectedBaseline, _ := res.LastInsertId()
+
+	jr := mysql.NewJobRepository(db)
+	_, err = jr.Create(ctx, "main", "bl-find", job.Job{Name: "deploy"})
+	require.NoError(t, err)
+
+	pr := mysql.NewPipelineRepository(db)
+	pp, err := pr.Find(ctx, "main", "bl-find")
+	require.NoError(t, err)
+	require.Len(t, pp.Jobs, 1)
+	require.NotNil(t, pp.Jobs[0].BaselineVersionID,
+		"Find must load baseline_version_id for the scheduler")
+	assert.Equal(t, uint32(expectedBaseline), *pp.Jobs[0].BaselineVersionID)
+}
+
 func TestDeletePipeline_CascadesSerialGroups(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

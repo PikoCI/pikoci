@@ -54,6 +54,8 @@ type Job struct {
 	ForEachGroup string `json:"for_each_group,omitempty"`
 	ForEachKey   string `json:"for_each_key,omitempty"`
 
+	BaselineVersionID *uint32 `json:"baseline_version_id,omitempty"`
+
 	OnSuccess []HookStep `json:"on_success,omitempty"`
 	OnFailure []HookStep `json:"on_failure,omitempty"`
 	OnCancel  []HookStep `json:"on_cancel,omitempty"`

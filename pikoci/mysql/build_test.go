@@ -2,11 +2,13 @@ package mysql_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 )
 
@@ -203,7 +205,7 @@ func TestFindReadyDownstreamVersion_BasicCase(t *testing.T) {
 	br := mysql.NewBuildRepository(db, mysql.Mem)
 
 	vID, ready, err := br.FindReadyDownstreamVersion(ctx, "main", "bgv-basic",
-		[]string{"lint", "test"}, "deploy", "repo", 2)
+		[]string{"lint", "test"}, "deploy", "repo", 2, nil)
 	require.NoError(t, err)
 	assert.True(t, ready)
 	assert.Equal(t, uint32(10), vID)
@@ -238,7 +240,7 @@ func TestFindReadyDownstreamVersion_NotAllUpstreamsReady(t *testing.T) {
 	br := mysql.NewBuildRepository(db, mysql.Mem)
 
 	_, ready, err := br.FindReadyDownstreamVersion(ctx, "main", "bgv-partial",
-		[]string{"lint", "test"}, "deploy", "repo", 2)
+		[]string{"lint", "test"}, "deploy", "repo", 2, nil)
 	require.NoError(t, err)
 	assert.False(t, ready)
 }
@@ -276,7 +278,7 @@ func TestFindReadyDownstreamVersion_AlreadyBuiltByDownstream(t *testing.T) {
 	br := mysql.NewBuildRepository(db, mysql.Mem)
 
 	_, ready, err := br.FindReadyDownstreamVersion(ctx, "main", "bgv-already",
-		[]string{"lint"}, "deploy", "repo", 1)
+		[]string{"lint"}, "deploy", "repo", 1, nil)
 	require.NoError(t, err)
 	assert.False(t, ready)
 }
@@ -306,7 +308,7 @@ func TestFindReadyDownstreamVersion_FailedUpstreamIgnored(t *testing.T) {
 	br := mysql.NewBuildRepository(db, mysql.Mem)
 
 	_, ready, err := br.FindReadyDownstreamVersion(ctx, "main", "bgv-failed",
-		[]string{"lint"}, "deploy", "repo", 1)
+		[]string{"lint"}, "deploy", "repo", 1, nil)
 	require.NoError(t, err)
 	assert.False(t, ready)
 }
@@ -347,7 +349,7 @@ func TestFindReadyDownstreamVersion_MismatchedVersions(t *testing.T) {
 
 	// Should NOT be ready — lint has v10, test has v12, no common version
 	_, ready, err := br.FindReadyDownstreamVersion(ctx, "main", "bgv-mismatch",
-		[]string{"lint", "test"}, "deploy", "repo", 2)
+		[]string{"lint", "test"}, "deploy", "repo", 2, nil)
 	require.NoError(t, err)
 	assert.False(t, ready)
 }
@@ -384,10 +386,277 @@ func TestFindReadyDownstreamVersion_PicksHighestVersion(t *testing.T) {
 	br := mysql.NewBuildRepository(db, mysql.Mem)
 
 	vID, ready, err := br.FindReadyDownstreamVersion(ctx, "main", "bgv-highest",
-		[]string{"lint"}, "deploy", "repo", 1)
+		[]string{"lint"}, "deploy", "repo", 1, nil)
 	require.NoError(t, err)
 	assert.True(t, ready)
 	assert.Equal(t, uint32(10), vID)
+}
+
+func TestFindReadyDownstreamVersion_BaselineFiltersOldVersions(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'bgv-baseline', 'bgv-baseline')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'lint')`, ppID)
+	require.NoError(t, err)
+	lintJobID, _ := res.LastInsertId()
+
+	_, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'deploy')`, ppID)
+	require.NoError(t, err)
+
+	// Lint succeeded with version 5 (before baseline)
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'succeeded', '1')`, lintJobID)
+	require.NoError(t, err)
+	b1, _ := res.LastInsertId()
+	_, err = db.ExecContext(ctx, `INSERT INTO build_get_versions (build_id, step_name, version_id) VALUES (?, 'repo', 5)`, b1)
+	require.NoError(t, err)
+
+	// Lint succeeded with version 10 (after baseline)
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'succeeded', '2')`, lintJobID)
+	require.NoError(t, err)
+	b2, _ := res.LastInsertId()
+	_, err = db.ExecContext(ctx, `INSERT INTO build_get_versions (build_id, step_name, version_id) VALUES (?, 'repo', 10)`, b2)
+	require.NoError(t, err)
+
+	br := mysql.NewBuildRepository(db, mysql.Mem)
+
+	// With baseline=7, only version 10 should be considered (>7), not version 5
+	baseline := uint32(7)
+	vID, ready, err := br.FindReadyDownstreamVersion(ctx, "main", "bgv-baseline",
+		[]string{"lint"}, "deploy", "repo", 1, &baseline)
+	require.NoError(t, err)
+	assert.True(t, ready)
+	assert.Equal(t, uint32(10), vID)
+
+	// With baseline=10, no versions should match (nothing > 10)
+	baseline2 := uint32(10)
+	_, ready, err = br.FindReadyDownstreamVersion(ctx, "main", "bgv-baseline",
+		[]string{"lint"}, "deploy", "repo", 1, &baseline2)
+	require.NoError(t, err)
+	assert.False(t, ready)
+
+	// With nil baseline, both versions are candidates — picks highest (10)
+	vID, ready, err = br.FindReadyDownstreamVersion(ctx, "main", "bgv-baseline",
+		[]string{"lint"}, "deploy", "repo", 1, nil)
+	require.NoError(t, err)
+	assert.True(t, ready)
+	assert.Equal(t, uint32(10), vID)
+}
+
+func TestFindReadyDownstreamVersion_RenamedJobSkipsOldVersions(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Setup: pipeline with upstream "gen" and downstream "deploy-staging"
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'bgv-rename', 'bgv-rename')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	// Create a resource so resource_versions has entries
+	res, err = db.ExecContext(ctx, `INSERT INTO resources (pipeline_id, name, canonical, type) VALUES (?, 'output', 'artifact.output', 'artifact')`, ppID)
+	require.NoError(t, err)
+	resourceID, _ := res.LastInsertId()
+
+	// Insert old resource versions — capture actual IDs
+	versionIDs := make([]int64, 3)
+	for i := 0; i < 3; i++ {
+		res, err = db.ExecContext(ctx, `INSERT INTO resource_versions (resource_id, version) VALUES (?, ?)`,
+			resourceID, fmt.Sprintf(`{"v":"%d"}`, i+1))
+		require.NoError(t, err)
+		versionIDs[i], _ = res.LastInsertId()
+	}
+
+	// Create upstream "gen" job with old succeeded builds
+	res, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'gen')`, ppID)
+	require.NoError(t, err)
+	genJobID, _ := res.LastInsertId()
+
+	// gen succeeded with each version
+	for i := 0; i < 3; i++ {
+		res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'succeeded', ?)`, genJobID, i+1)
+		require.NoError(t, err)
+		buildID, _ := res.LastInsertId()
+		_, err = db.ExecContext(ctx, `INSERT INTO build_get_versions (build_id, step_name, version_id) VALUES (?, 'output', ?)`, buildID, versionIDs[i])
+		require.NoError(t, err)
+	}
+
+	// Simulate renaming: create a new job using JobRepository.Create
+	// which should set baseline_version_id = MAX(resource_versions.id)
+	jr := mysql.NewJobRepository(db)
+	jobID, err := jr.Create(ctx, "main", "bgv-rename", job.Job{Name: "deploy-staging-v2"})
+	require.NoError(t, err)
+
+	// Verify baseline was set to the last version ID
+	newJob, err := jr.Find(ctx, "main", "bgv-rename", "deploy-staging-v2")
+	require.NoError(t, err)
+	require.NotNil(t, newJob.BaselineVersionID, "baseline_version_id should be set on new job")
+	assert.Equal(t, uint32(versionIDs[2]), *newJob.BaselineVersionID)
+
+	br := mysql.NewBuildRepository(db, mysql.Mem)
+
+	// With the baseline, all old versions should be filtered out
+	_, ready, err := br.FindReadyDownstreamVersion(ctx, "main", "bgv-rename",
+		[]string{"gen"}, "deploy-staging-v2", "output", 1, newJob.BaselineVersionID)
+	require.NoError(t, err)
+	assert.False(t, ready, "old versions should be filtered by baseline")
+
+	// Without baseline (nil), latest version would be returned
+	vID, ready, err := br.FindReadyDownstreamVersion(ctx, "main", "bgv-rename",
+		[]string{"gen"}, "deploy-staging-v2", "output", 1, nil)
+	require.NoError(t, err)
+	assert.True(t, ready, "without baseline, old versions should be visible")
+	assert.Equal(t, uint32(versionIDs[2]), vID)
+
+	// Now add a NEW version after the baseline
+	res, err = db.ExecContext(ctx, `INSERT INTO resource_versions (resource_id, version) VALUES (?, '{"v":"4"}')`, resourceID)
+	require.NoError(t, err)
+	newVersionID, _ := res.LastInsertId()
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'succeeded', '4')`, genJobID)
+	require.NoError(t, err)
+	b4ID, _ := res.LastInsertId()
+	_, err = db.ExecContext(ctx, `INSERT INTO build_get_versions (build_id, step_name, version_id) VALUES (?, 'output', ?)`, b4ID, newVersionID)
+	require.NoError(t, err)
+
+	// With the baseline, only the new version should be returned
+	vID, ready, err = br.FindReadyDownstreamVersion(ctx, "main", "bgv-rename",
+		[]string{"gen"}, "deploy-staging-v2", "output", 1, newJob.BaselineVersionID)
+	require.NoError(t, err)
+	assert.True(t, ready, "version after baseline should be visible")
+	assert.Equal(t, uint32(newVersionID), vID)
+
+	_ = jobID
+}
+
+// TestFindReadyDownstreamVersion_CronPipelineRenameScenario mirrors the cron.hcl pipeline:
+// gen (GET cron + PUT artifact) → deploy-staging (GET artifact, passed=["gen"])
+// and also a monitor job (GET cron, passed=["gen"]).
+// When deploy-staging or monitor is renamed, old versions must not replay.
+func TestFindReadyDownstreamVersion_CronPipelineRenameScenario(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Setup pipeline
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'cron-rename', 'cron-rename')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	// Create cron resource + versions (simulating cron ticks)
+	res, err = db.ExecContext(ctx, `INSERT INTO resources (pipeline_id, name, canonical, type) VALUES (?, 'my_cron', 'cron.my_cron', 'cron')`, ppID)
+	require.NoError(t, err)
+	cronResID, _ := res.LastInsertId()
+
+	// Cron ticks create resource versions — capture actual IDs
+	cronVersionIDs := make([]int64, 3)
+	for i := 0; i < 3; i++ {
+		res, err = db.ExecContext(ctx, `INSERT INTO resource_versions (resource_id, version) VALUES (?, ?)`,
+			cronResID, fmt.Sprintf(`{"date":"tick-%d"}`, i+1))
+		require.NoError(t, err)
+		cronVersionIDs[i], _ = res.LastInsertId()
+	}
+
+	// Create artifact resource + versions (created by gen's PUT step)
+	res, err = db.ExecContext(ctx, `INSERT INTO resources (pipeline_id, name, canonical, type) VALUES (?, 'cron_output', 'artifact.cron_output', 'artifact')`, ppID)
+	require.NoError(t, err)
+	artifactResID, _ := res.LastInsertId()
+
+	artifactVersionIDs := make([]int64, 3)
+	for i := 0; i < 3; i++ {
+		res, err = db.ExecContext(ctx, `INSERT INTO resource_versions (resource_id, version) VALUES (?, ?)`,
+			artifactResID, fmt.Sprintf(`{"v":"%d"}`, i+1))
+		require.NoError(t, err)
+		artifactVersionIDs[i], _ = res.LastInsertId()
+	}
+
+	// Create upstream "gen" job
+	res, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'gen')`, ppID)
+	require.NoError(t, err)
+	genJobID, _ := res.LastInsertId()
+
+	// Gen succeeded 3 times. Each build has:
+	// - GET cron (step_name="my_cron", version_id = cron version)
+	// - PUT artifact (step_name="cron_output", version_id = artifact version)
+	for i := 0; i < 3; i++ {
+		res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'succeeded', ?)`, genJobID, fmt.Sprintf("%d", i+1))
+		require.NoError(t, err)
+		buildID, _ := res.LastInsertId()
+		_, err = db.ExecContext(ctx, `INSERT INTO build_get_versions (build_id, step_name, version_id) VALUES (?, 'my_cron', ?)`, buildID, cronVersionIDs[i])
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, `INSERT INTO build_get_versions (build_id, step_name, version_id) VALUES (?, 'cron_output', ?)`, buildID, artifactVersionIDs[i])
+		require.NoError(t, err)
+	}
+
+	// Create the original deploy-staging (will be "renamed")
+	_, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'deploy-staging')`, ppID)
+	require.NoError(t, err)
+
+	br := mysql.NewBuildRepository(db, mysql.Mem)
+	jr := mysql.NewJobRepository(db)
+
+	// --- Test 1: Rename deploy-staging → deploy-staging-v2 (linked via artifact) ---
+	newJobID, err := jr.Create(ctx, "main", "cron-rename", job.Job{Name: "deploy-staging-v2"})
+	require.NoError(t, err)
+	require.NotZero(t, newJobID)
+
+	newJob, err := jr.Find(ctx, "main", "cron-rename", "deploy-staging-v2")
+	require.NoError(t, err)
+	require.NotNil(t, newJob.BaselineVersionID)
+	// Baseline should be the last artifact version (the highest resource_versions.id)
+	assert.Equal(t, uint32(artifactVersionIDs[2]), *newJob.BaselineVersionID, "baseline should be MAX(resource_versions.id)")
+
+	// With baseline, all existing artifact versions should be filtered
+	_, ready, err := br.FindReadyDownstreamVersion(ctx, "main", "cron-rename",
+		[]string{"gen"}, "deploy-staging-v2", "cron_output", 1, newJob.BaselineVersionID)
+	require.NoError(t, err)
+	assert.False(t, ready, "artifact versions should be filtered by baseline")
+
+	// --- Test 2: Add a monitor job linked to gen via cron (not artifact) ---
+	monitorJobID, err := jr.Create(ctx, "main", "cron-rename", job.Job{Name: "monitor"})
+	require.NoError(t, err)
+	require.NotZero(t, monitorJobID)
+
+	monitorJob, err := jr.Find(ctx, "main", "cron-rename", "monitor")
+	require.NoError(t, err)
+	require.NotNil(t, monitorJob.BaselineVersionID)
+
+	// With baseline, all existing cron versions should be filtered
+	_, ready, err = br.FindReadyDownstreamVersion(ctx, "main", "cron-rename",
+		[]string{"gen"}, "monitor", "my_cron", 1, monitorJob.BaselineVersionID)
+	require.NoError(t, err)
+	assert.False(t, ready, "cron versions should be filtered by baseline")
+
+	// --- Test 3: New cron tick + gen run AFTER baseline → should trigger both ---
+	res, err = db.ExecContext(ctx, `INSERT INTO resource_versions (resource_id, version) VALUES (?, '{"date":"tick-4"}')`, cronResID)
+	require.NoError(t, err)
+	newCronVersionID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO resource_versions (resource_id, version) VALUES (?, '{"v":"4"}')`, artifactResID)
+	require.NoError(t, err)
+	newArtifactVersionID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'succeeded', '4')`, genJobID)
+	require.NoError(t, err)
+	b4ID, _ := res.LastInsertId()
+	_, err = db.ExecContext(ctx, `INSERT INTO build_get_versions (build_id, step_name, version_id) VALUES (?, 'my_cron', ?)`, b4ID, newCronVersionID)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO build_get_versions (build_id, step_name, version_id) VALUES (?, 'cron_output', ?)`, b4ID, newArtifactVersionID)
+	require.NoError(t, err)
+
+	// deploy-staging-v2 via artifact: new version > baseline → should trigger
+	vID, ready, err := br.FindReadyDownstreamVersion(ctx, "main", "cron-rename",
+		[]string{"gen"}, "deploy-staging-v2", "cron_output", 1, newJob.BaselineVersionID)
+	require.NoError(t, err)
+	assert.True(t, ready, "new artifact version after baseline should trigger")
+	assert.Equal(t, uint32(newArtifactVersionID), vID)
+
+	// monitor via cron: new version > baseline → should trigger
+	vID, ready, err = br.FindReadyDownstreamVersion(ctx, "main", "cron-rename",
+		[]string{"gen"}, "monitor", "my_cron", 1, monitorJob.BaselineVersionID)
+	require.NoError(t, err)
+	assert.True(t, ready, "new cron version after baseline should trigger")
+	assert.Equal(t, uint32(newCronVersionID), vID)
 }
 
 func TestCountRunningInSerialGroups(t *testing.T) {

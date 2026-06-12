@@ -194,9 +194,9 @@ func (mr *BuildRepositoryMockRecorder) FindOldestPending(ctx, tc, pn, jn any) *g
 }
 
 // FindReadyDownstreamVersion mocks base method.
-func (m *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn string, upstreamJobs []string, downstreamJob, stepName string, upstreamCount int) (uint32, bool, error) {
+func (m *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn string, upstreamJobs []string, downstreamJob, stepName string, upstreamCount int, baselineVersionID *uint32) (uint32, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FindReadyDownstreamVersion", ctx, tc, pn, upstreamJobs, downstreamJob, stepName, upstreamCount)
+	ret := m.ctrl.Call(m, "FindReadyDownstreamVersion", ctx, tc, pn, upstreamJobs, downstreamJob, stepName, upstreamCount, baselineVersionID)
 	ret0, _ := ret[0].(uint32)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
@@ -204,9 +204,9 @@ func (m *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn
 }
 
 // FindReadyDownstreamVersion indicates an expected call of FindReadyDownstreamVersion.
-func (mr *BuildRepositoryMockRecorder) FindReadyDownstreamVersion(ctx, tc, pn, upstreamJobs, downstreamJob, stepName, upstreamCount any) *gomock.Call {
+func (mr *BuildRepositoryMockRecorder) FindReadyDownstreamVersion(ctx, tc, pn, upstreamJobs, downstreamJob, stepName, upstreamCount, baselineVersionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindReadyDownstreamVersion", reflect.TypeOf((*BuildRepository)(nil).FindReadyDownstreamVersion), ctx, tc, pn, upstreamJobs, downstreamJob, stepName, upstreamCount)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindReadyDownstreamVersion", reflect.TypeOf((*BuildRepository)(nil).FindReadyDownstreamVersion), ctx, tc, pn, upstreamJobs, downstreamJob, stepName, upstreamCount, baselineVersionID)
 }
 
 // InsertGetVersion mocks base method.
