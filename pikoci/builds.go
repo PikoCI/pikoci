@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pikoci/pikoci/pikoci/build"
+	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/utils"
 )
@@ -400,5 +401,175 @@ func (q *PikoCI) NotifySerialGroupPendingBuilds(ctx context.Context, tc, pc, jn 
 // Duplicate messages simply result in redundant DB lookups with no side effects.
 func (q *PikoCI) ReEnqueuePendingBuilds(ctx context.Context) error {
 	q.Notifier.Notify()
+	return nil
+}
+
+// resolvePassedJobNames expands for_each group names in a passed list to all
+// instance names. If a name matches a for_each group, it is replaced by all
+// instance names in that group. Non-group names are kept as-is.
+func resolvePassedJobNames(passed []string, jobs []job.Job) []string {
+	groupInstances := make(map[string][]string)
+	for _, j := range jobs {
+		if j.ForEachGroup != "" {
+			groupInstances[j.ForEachGroup] = append(groupInstances[j.ForEachGroup], j.Name)
+		}
+	}
+
+	var expanded []string
+	for _, name := range passed {
+		if instances, ok := groupInstances[name]; ok {
+			expanded = append(expanded, instances...)
+		} else {
+			expanded = append(expanded, name)
+		}
+	}
+	return expanded
+}
+
+// jobReferencedInPassed checks whether completedJobName is referenced in a
+// passed list, either directly or as a for_each instance of a group name.
+func jobReferencedInPassed(completedJobName string, passed []string, allJobs []job.Job) bool {
+	for _, p := range passed {
+		if p == completedJobName {
+			return true
+		}
+	}
+	for _, pj := range allJobs {
+		if pj.Name == completedJobName && pj.ForEachGroup != "" {
+			for _, p := range passed {
+				if p == pj.ForEachGroup {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// EvaluateDownstreamJobs checks all jobs in the pipeline that have passed
+// constraints referencing completedJobName. For each that is ready (all
+// upstream jobs succeeded with a common version), it creates a pending build.
+func (q *PikoCI) EvaluateDownstreamJobs(ctx context.Context, tc, pn, completedJobName string) error {
+	pp, err := q.Pipelines.Find(ctx, tc, pn)
+	if err != nil {
+		return fmt.Errorf("failed to find pipeline %q: %w", pn, err)
+	}
+
+	for _, j := range pp.Jobs {
+		if j.Paused {
+			continue
+		}
+		if err := q.evaluateJobDownstream(ctx, tc, pn, completedJobName, &j, pp.Jobs); err != nil {
+			q.logger.Error("failed to evaluate downstream job",
+				"pipeline", pn, "job", j.Name, "completed", completedJobName, "error", err)
+		}
+	}
+	return nil
+}
+
+func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJobName string, j *job.Job, allJobs []job.Job) error {
+	// Pre-check: does this job have ANY get step with passed+trigger that
+	// references completedJobName? If not, skip entirely.
+	relevant := false
+	for _, ps := range j.FlatPlanSteps() {
+		if ps.Type != job.StepTypeGet || ps.Get == nil {
+			continue
+		}
+		g := ps.Get
+		if len(g.Passed) == 0 || !g.Trigger {
+			continue
+		}
+		if jobReferencedInPassed(completedJobName, g.Passed, allJobs) {
+			relevant = true
+			break
+		}
+	}
+	if !relevant {
+		return nil
+	}
+
+	// Job is relevant. Now evaluate ALL get steps with passed+trigger —
+	// ALL must be ready for the job to trigger (same as original evaluateJob).
+	type candidate struct {
+		stepName  string
+		versionID uint32
+	}
+	var candidates []candidate
+
+	for _, ps := range j.FlatPlanSteps() {
+		if ps.Type != job.StepTypeGet || ps.Get == nil {
+			continue
+		}
+		g := ps.Get
+		if len(g.Passed) == 0 || !g.Trigger {
+			continue
+		}
+
+		expandedPassed := resolvePassedJobNames(g.Passed, allJobs)
+
+		versionID, ready, err := q.Builds.FindReadyDownstreamVersion(
+			ctx, tc, pn,
+			expandedPassed, j.Name, g.Name, len(expandedPassed),
+			j.BaselineVersionID,
+		)
+		if err != nil {
+			return fmt.Errorf("FindReadyDownstreamVersion: %w", err)
+		}
+		if !ready {
+			return nil
+		}
+
+		rCan := g.ResourceCanonical()
+		res, err := q.Resources.Find(ctx, tc, pn, rCan)
+		if err != nil {
+			return fmt.Errorf("resource pin check for %q: %w", rCan, err)
+		}
+		if res.PinnedVersionID != nil && versionID != *res.PinnedVersionID {
+			return nil
+		}
+
+		candidates = append(candidates, candidate{g.Name, versionID})
+	}
+
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	versionID := candidates[0].versionID
+
+	// Atomic check-and-create to prevent duplicate pending builds
+	// from concurrent callers (multiple workers or worker + scheduler).
+	var triggered bool
+	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
+		pending, err := uow.Builds().FindOldestPending(ctx, tc, pn, j.Name)
+		if err != nil {
+			return fmt.Errorf("FindOldestPending: %w", err)
+		}
+		if pending != nil {
+			return nil
+		}
+
+		id, buildNumber, err := uow.Builds().Create(ctx, tc, pn, j.Name, build.Build{
+			Status:    build.Pending,
+			VersionID: versionID,
+		})
+		if err != nil {
+			return fmt.Errorf("create pending build: %w", err)
+		}
+
+		q.logger.Info("triggered downstream job",
+			"pipeline", pn, "job", j.Name, "version_id", versionID,
+			"build_id", id, "build_number", buildNumber,
+			"completed_job", completedJobName)
+
+		triggered = true
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if triggered {
+		q.Notifier.Notify()
+	}
 	return nil
 }

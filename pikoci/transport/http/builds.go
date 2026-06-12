@@ -116,6 +116,21 @@ func notifySerialGroupPendingBuilds(s pikoci.Service) http.HandlerFunc {
 	}
 }
 
+func evaluateDownstreamJobs(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var ctx = r.Context()
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		jn := vars["job_name"]
+		if err := s.EvaluateDownstreamJobs(ctx, tc, pc, jn); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 type UpdateJobBuildRequest struct {
 	TeamCanonical     string      `json:"team_canonical"`
 	PipelineCanonical string      `json:"pipeline_canonical"`

@@ -55,6 +55,9 @@ func newTestWorker(ctrl *gomock.Controller) (*Worker, *mock.Service) {
 			return &build.Build{ID: createBuildCounter, BuildNumber: fmt.Sprintf("%d", createBuildCounter)}, nil
 		}).AnyTimes()
 
+	// EvaluateDownstreamJobs is called after a build succeeds; allow it globally.
+	svc.EXPECT().EvaluateDownstreamJobs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
 	w := &Worker{
 		pikoci: svc,
 		logger: logger,
@@ -260,6 +263,7 @@ func TestInsertBuildGetVersion_CalledWithCorrectArgs(t *testing.T) {
 	// Don't use newTestWorker — we need precise control over InsertBuildGetVersion.
 	svc := mock.NewService(ctrl)
 	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	svc.EXPECT().EvaluateDownstreamJobs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	svc.EXPECT().GetJobBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, _, _ string, bn string) (*build.Build, error) {

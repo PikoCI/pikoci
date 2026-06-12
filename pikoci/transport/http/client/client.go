@@ -829,6 +829,12 @@ func (cl *Client) NotifySerialGroupPendingBuilds(ctx context.Context, tc, pn, jn
 	_ = cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/notify-serial-groups", cl.url, tc, pn, jn), nil, nil)
 }
 
+// EvaluateDownstreamJobs asks the server to evaluate downstream jobs with
+// passed constraints after a build succeeds.
+func (cl *Client) EvaluateDownstreamJobs(ctx context.Context, tc, pn, completedJobName string) error {
+	return cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/evaluate-downstream", cl.url, tc, pn, completedJobName), nil, nil)
+}
+
 // ListJobBuilds always fetches all builds (limit=0) for CLI backward compat.
 // The before/after/limit params satisfy the Service interface but are not sent.
 func (cl *Client) ListJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error) {

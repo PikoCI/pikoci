@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/mock"
 	"github.com/pikoci/pikoci/pikoci/notifier"
@@ -17,14 +16,13 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func newTestScheduler(ctrl *gomock.Controller) (*Scheduler, *mock.ResourceRepository, *mock.PipelineRepository, *mock.BuildRepository) {
+func newTestScheduler(ctrl *gomock.Controller) (*Scheduler, *mock.ResourceRepository, *mock.PipelineRepository) {
 	rr := mock.NewResourceRepository(ctrl)
 	pr := mock.NewPipelineRepository(ctrl)
-	br := mock.NewBuildRepository(ctrl)
 	wn := notifier.New()
 	logger := slog.Default()
-	s := New(rr, pr, br, wn, logger)
-	return s, rr, pr, br
+	s := New(rr, pr, wn, logger)
+	return s, rr, pr
 }
 
 // expectEmptyTickJobs sets up expectations for tickJobs when no pipelines exist.
@@ -34,7 +32,9 @@ func expectEmptyTickJobs(pr *mock.PipelineRepository) {
 
 func TestTickResources_NoDueResources(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, _ := newTestScheduler(ctrl)
+	s, rr, pr := newTestScheduler(ctrl)
+	eval := &mockEvaluator{}
+	s.SetEvaluator(eval)
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
 	expectEmptyTickJobs(pr)
@@ -44,7 +44,9 @@ func TestTickResources_NoDueResources(t *testing.T) {
 
 func TestTickResources_ProcessesDueResources(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, _ := newTestScheduler(ctrl)
+	s, rr, pr := newTestScheduler(ctrl)
+	eval := &mockEvaluator{}
+	s.SetEvaluator(eval)
 
 	due := []*resource.ResourceWithPipeline{
 		{
@@ -66,7 +68,9 @@ func TestTickResources_ProcessesDueResources(t *testing.T) {
 
 func TestTickResources_MultipleDueResources(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, _ := newTestScheduler(ctrl)
+	s, rr, pr := newTestScheduler(ctrl)
+	eval := &mockEvaluator{}
+	s.SetEvaluator(eval)
 
 	due := []*resource.ResourceWithPipeline{
 		{
@@ -89,7 +93,9 @@ func TestTickResources_MultipleDueResources(t *testing.T) {
 
 func TestTickResources_DefaultCheckInterval(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, _ := newTestScheduler(ctrl)
+	s, rr, pr := newTestScheduler(ctrl)
+	eval := &mockEvaluator{}
+	s.SetEvaluator(eval)
 
 	due := []*resource.ResourceWithPipeline{
 		{
@@ -107,7 +113,9 @@ func TestTickResources_DefaultCheckInterval(t *testing.T) {
 
 func TestStart_StopsOnContextCancel(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, _ := newTestScheduler(ctrl)
+	s, rr, pr := newTestScheduler(ctrl)
+	eval := &mockEvaluator{}
+	s.SetEvaluator(eval)
 	s.interval = 50 * time.Millisecond
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil).AnyTimes()
@@ -121,468 +129,64 @@ func TestStart_StopsOnContextCancel(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 }
 
+// --- mockEvaluator ---
+
+type mockEvaluator struct {
+	calls []evaluateCall
+}
+
+type evaluateCall struct {
+	tc, pn, completedJobName string
+}
+
+func (m *mockEvaluator) EvaluateDownstreamJobs(_ context.Context, tc, pn, completedJobName string) error {
+	m.calls = append(m.calls, evaluateCall{tc, pn, completedJobName})
+	return nil
+}
+
 // --- tickJobs tests ---
 
-func TestTickJobs_TriggersWhenCommonVersionExists(t *testing.T) {
+func TestTickJobs_CallsEvaluatorForEachJob(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, br := newTestScheduler(ctrl)
+	s, rr, pr := newTestScheduler(ctrl)
+	eval := &mockEvaluator{}
+	s.SetEvaluator(eval)
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
-
-	pps := []*pipeline.WithTeam{
-		{
-			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline", Canonical: "my-pipeline",
-				Jobs: []job.Job{
-					{Name: "lint"},
-					{Name: "test-mock"},
-					{
-						Name: "test-backends",
-						Plan: []job.PlanStep{
-							{
-								Type: job.StepTypeGet,
-								Get: &job.GetStep{
-									Type:    "git",
-									Name:    "repo",
-									Passed:  []string{"lint", "test-mock"},
-									Trigger: true,
-								},
-							},
-						},
-					},
-				},
-			},
-			Team: team.Team{Canonical: "main"},
-		},
-	}
+	pps := []*pipeline.WithTeam{{
+		Pipeline: pipeline.Pipeline{Canonical: "pp1", Jobs: []job.Job{{Name: "lint"}, {Name: "test"}}},
+		Team:     team.Team{Canonical: "main"},
+	}}
 	pr.EXPECT().FilterAll(gomock.Any()).Return(pps, nil)
-
-	br.EXPECT().FindReadyDownstreamVersion(
-		gomock.Any(), "main", "my-pipeline",
-		[]string{"lint", "test-mock"}, "test-backends", "repo", 2, (*uint32)(nil),
-	).Return(uint32(42), true, nil)
-
-	// Pin check — resource is not pinned
-	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
-		Return(&resource.Resource{}, nil)
-
-	// Check for existing pending build (none)
-	br.EXPECT().FindOldestPending(gomock.Any(), "main", "my-pipeline", "test-backends").
-		Return(nil, nil)
-
-	// Create a pending build
-	br.EXPECT().Create(gomock.Any(), "main", "my-pipeline", "test-backends", gomock.Any()).
-		Return(uint32(100), "1", nil)
-
 	s.tick(context.Background())
+
+	assert.Equal(t, 2, len(eval.calls))
+	assert.Equal(t, evaluateCall{"main", "pp1", "lint"}, eval.calls[0])
+	assert.Equal(t, evaluateCall{"main", "pp1", "test"}, eval.calls[1])
 }
 
-func TestTickJobs_SkipsWhenNoCommonVersion(t *testing.T) {
+func TestTickJobs_SkipsPausedJobs(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, br := newTestScheduler(ctrl)
+	s, rr, pr := newTestScheduler(ctrl)
+	eval := &mockEvaluator{}
+	s.SetEvaluator(eval)
 
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
-
-	pps := []*pipeline.WithTeam{
-		{
-			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline", Canonical: "my-pipeline",
-				Jobs: []job.Job{
-					{
-						Name: "downstream",
-						Plan: []job.PlanStep{
-							{
-								Type: job.StepTypeGet,
-								Get: &job.GetStep{
-									Type:    "git",
-									Name:    "repo",
-									Passed:  []string{"upstream"},
-									Trigger: true,
-								},
-							},
-						},
-					},
-				},
-			},
-			Team: team.Team{Canonical: "main"},
-		},
-	}
+	pps := []*pipeline.WithTeam{{
+		Pipeline: pipeline.Pipeline{Canonical: "pp1", Jobs: []job.Job{{Name: "active"}, {Name: "paused-job", Paused: true}}},
+		Team:     team.Team{Canonical: "main"},
+	}}
 	pr.EXPECT().FilterAll(gomock.Any()).Return(pps, nil)
-
-	br.EXPECT().FindReadyDownstreamVersion(
-		gomock.Any(), "main", "my-pipeline",
-		[]string{"upstream"}, "downstream", "repo", 1, (*uint32)(nil),
-	).Return(uint32(0), false, nil)
-
 	s.tick(context.Background())
+
+	assert.Equal(t, 1, len(eval.calls))
+	assert.Equal(t, "active", eval.calls[0].completedJobName)
 }
 
-func TestTickJobs_SkipsWhenPendingBuildExists(t *testing.T) {
+func TestTickJobs_NilEvaluator(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	s, rr, pr, br := newTestScheduler(ctrl)
-
+	s, rr, _ := newTestScheduler(ctrl)
 	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
-
-	pps := []*pipeline.WithTeam{
-		{
-			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline", Canonical: "my-pipeline",
-				Jobs: []job.Job{
-					{
-						Name: "deploy",
-						Plan: []job.PlanStep{
-							{
-								Type: job.StepTypeGet,
-								Get: &job.GetStep{
-									Type:    "git",
-									Name:    "repo",
-									Passed:  []string{"lint"},
-									Trigger: true,
-								},
-							},
-						},
-					},
-				},
-			},
-			Team: team.Team{Canonical: "main"},
-		},
-	}
-	pr.EXPECT().FilterAll(gomock.Any()).Return(pps, nil)
-
-	br.EXPECT().FindReadyDownstreamVersion(
-		gomock.Any(), "main", "my-pipeline",
-		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
-	).Return(uint32(42), true, nil)
-
-	// Pin check — resource is not pinned
-	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
-		Return(&resource.Resource{}, nil)
-
-	// A pending build already exists — should skip creating another
-	br.EXPECT().FindOldestPending(gomock.Any(), "main", "my-pipeline", "deploy").
-		Return(&build.Build{ID: 99, BuildNumber: "1", Status: build.Pending}, nil)
-
-	s.tick(context.Background())
-}
-
-func TestTickJobs_SkipsWhenTriggerFalse(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	s, rr, pr, _ := newTestScheduler(ctrl)
-
-	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
-
-	pps := []*pipeline.WithTeam{
-		{
-			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline", Canonical: "my-pipeline",
-				Jobs: []job.Job{
-					{
-						Name: "downstream",
-						Plan: []job.PlanStep{
-							{
-								Type: job.StepTypeGet,
-								Get: &job.GetStep{
-									Type:    "git",
-									Name:    "repo",
-									Passed:  []string{"upstream"},
-									Trigger: false,
-								},
-							},
-						},
-					},
-				},
-			},
-			Team: team.Team{Canonical: "main"},
-		},
-	}
-	pr.EXPECT().FilterAll(gomock.Any()).Return(pps, nil)
-
-	s.tick(context.Background())
-}
-
-func TestTickJobs_SkipsJobsWithoutPassedConstraints(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	s, rr, pr, _ := newTestScheduler(ctrl)
-
-	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
-
-	pps := []*pipeline.WithTeam{
-		{
-			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline", Canonical: "my-pipeline",
-				Jobs: []job.Job{
-					{
-						Name: "simple-job",
-						Plan: []job.PlanStep{
-							{
-								Type: job.StepTypeGet,
-								Get: &job.GetStep{
-									Type:    "git",
-									Name:    "repo",
-									Trigger: true,
-								},
-							},
-						},
-					},
-				},
-			},
-			Team: team.Team{Canonical: "main"},
-		},
-	}
-	pr.EXPECT().FilterAll(gomock.Any()).Return(pps, nil)
-
-	s.tick(context.Background())
-}
-
-func TestTickJobs_MultipleGetSteps_AllMustBeReady(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	s, rr, pr, br := newTestScheduler(ctrl)
-
-	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
-
-	pps := []*pipeline.WithTeam{
-		{
-			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline", Canonical: "my-pipeline",
-				Jobs: []job.Job{
-					{
-						Name: "deploy",
-						Plan: []job.PlanStep{
-							{
-								Type: job.StepTypeGet,
-								Get: &job.GetStep{
-									Type:    "git",
-									Name:    "repo",
-									Passed:  []string{"lint"},
-									Trigger: true,
-								},
-							},
-							{
-								Type: job.StepTypeGet,
-								Get: &job.GetStep{
-									Type:    "docker",
-									Name:    "image",
-									Passed:  []string{"build"},
-									Trigger: true,
-								},
-							},
-						},
-					},
-				},
-			},
-			Team: team.Team{Canonical: "main"},
-		},
-	}
-	pr.EXPECT().FilterAll(gomock.Any()).Return(pps, nil)
-
-	// First get step IS ready
-	br.EXPECT().FindReadyDownstreamVersion(
-		gomock.Any(), "main", "my-pipeline",
-		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
-	).Return(uint32(42), true, nil)
-
-	// Pin check — resource is not pinned
-	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
-		Return(&resource.Resource{}, nil)
-
-	// Second get step is NOT ready
-	br.EXPECT().FindReadyDownstreamVersion(
-		gomock.Any(), "main", "my-pipeline",
-		[]string{"build"}, "deploy", "image", 1, (*uint32)(nil),
-	).Return(uint32(0), false, nil)
-
-	s.tick(context.Background())
-}
-
-func TestTickJobs_MultipleGetSteps_BothReady_TriggersOnce(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	s, rr, pr, br := newTestScheduler(ctrl)
-
-	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
-
-	pps := []*pipeline.WithTeam{
-		{
-			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline", Canonical: "my-pipeline",
-				Jobs: []job.Job{
-					{
-						Name: "deploy",
-						Plan: []job.PlanStep{
-							{
-								Type: job.StepTypeGet,
-								Get: &job.GetStep{
-									Type:    "git",
-									Name:    "repo",
-									Passed:  []string{"lint"},
-									Trigger: true,
-								},
-							},
-							{
-								Type: job.StepTypeGet,
-								Get: &job.GetStep{
-									Type:    "docker",
-									Name:    "image",
-									Passed:  []string{"build"},
-									Trigger: true,
-								},
-							},
-						},
-					},
-				},
-			},
-			Team: team.Team{Canonical: "main"},
-		},
-	}
-	pr.EXPECT().FilterAll(gomock.Any()).Return(pps, nil)
-
-	br.EXPECT().FindReadyDownstreamVersion(
-		gomock.Any(), "main", "my-pipeline",
-		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
-	).Return(uint32(42), true, nil)
-
-	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
-		Return(&resource.Resource{}, nil)
-
-	br.EXPECT().FindReadyDownstreamVersion(
-		gomock.Any(), "main", "my-pipeline",
-		[]string{"build"}, "deploy", "image", 1, (*uint32)(nil),
-	).Return(uint32(99), true, nil)
-
-	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "docker.image").
-		Return(&resource.Resource{}, nil)
-
-	br.EXPECT().FindOldestPending(gomock.Any(), "main", "my-pipeline", "deploy").
-		Return(nil, nil)
-
-	br.EXPECT().Create(gomock.Any(), "main", "my-pipeline", "deploy", gomock.Any()).
-		Return(uint32(100), "1", nil)
-
-	s.tick(context.Background())
-}
-
-func TestTickJobs_SkipsWhenResourcePinnedToDifferentVersion(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	s, rr, pr, br := newTestScheduler(ctrl)
-
-	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
-
-	pps := []*pipeline.WithTeam{
-		{
-			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline", Canonical: "my-pipeline",
-				Jobs: []job.Job{
-					{
-						Name: "deploy",
-						Plan: []job.PlanStep{
-							{
-								Type: job.StepTypeGet,
-								Get: &job.GetStep{
-									Type:    "git",
-									Name:    "repo",
-									Passed:  []string{"lint"},
-									Trigger: true,
-								},
-							},
-						},
-					},
-				},
-			},
-			Team: team.Team{Canonical: "main"},
-		},
-	}
-	pr.EXPECT().FilterAll(gomock.Any()).Return(pps, nil)
-
-	br.EXPECT().FindReadyDownstreamVersion(
-		gomock.Any(), "main", "my-pipeline",
-		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
-	).Return(uint32(42), true, nil)
-
-	pinnedVersion := uint32(99)
-	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
-		Return(&resource.Resource{PinnedVersionID: &pinnedVersion}, nil)
-
-	s.tick(context.Background())
-}
-
-func TestTickJobs_SkipsWhenPinCheckFails(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	s, rr, pr, br := newTestScheduler(ctrl)
-
-	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
-
-	pps := []*pipeline.WithTeam{
-		{
-			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline", Canonical: "my-pipeline",
-				Jobs: []job.Job{
-					{
-						Name: "deploy",
-						Plan: []job.PlanStep{
-							{
-								Type: job.StepTypeGet,
-								Get: &job.GetStep{
-									Type:    "git",
-									Name:    "repo",
-									Passed:  []string{"lint"},
-									Trigger: true,
-								},
-							},
-						},
-					},
-				},
-			},
-			Team: team.Team{Canonical: "main"},
-		},
-	}
-	pr.EXPECT().FilterAll(gomock.Any()).Return(pps, nil)
-
-	br.EXPECT().FindReadyDownstreamVersion(
-		gomock.Any(), "main", "my-pipeline",
-		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
-	).Return(uint32(42), true, nil)
-
-	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
-		Return(nil, assert.AnError)
-
-	s.tick(context.Background())
-}
-
-func TestTickJobs_FindReadyError_SkipsJob(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	s, rr, pr, br := newTestScheduler(ctrl)
-
-	rr.EXPECT().FilterDueResources(gomock.Any()).Return(nil, nil)
-
-	pps := []*pipeline.WithTeam{
-		{
-			Pipeline: pipeline.Pipeline{
-				Name: "my-pipeline", Canonical: "my-pipeline",
-				Jobs: []job.Job{
-					{
-						Name: "downstream",
-						Plan: []job.PlanStep{
-							{
-								Type: job.StepTypeGet,
-								Get: &job.GetStep{
-									Type:    "git",
-									Name:    "repo",
-									Passed:  []string{"upstream"},
-									Trigger: true,
-								},
-							},
-						},
-					},
-				},
-			},
-			Team: team.Team{Canonical: "main"},
-		},
-	}
-	pr.EXPECT().FilterAll(gomock.Any()).Return(pps, nil)
-
-	br.EXPECT().FindReadyDownstreamVersion(
-		gomock.Any(), "main", "my-pipeline",
-		[]string{"upstream"}, "downstream", "repo", 1, (*uint32)(nil),
-	).Return(uint32(0), false, assert.AnError)
-
+	// FilterAll should NOT be called — no expectation
 	s.tick(context.Background())
 }

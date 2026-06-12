@@ -92,6 +92,8 @@ const (
 	FindOldestPendingBuild
 	// NotifySerialGroupPendingBuilds is the route for notifying pending builds in serial groups.
 	NotifySerialGroupPendingBuilds
+	// EvaluateDownstreamJobs is the route for evaluating downstream jobs after a build succeeds.
+	EvaluateDownstreamJobs
 
 	// GetPipelineResource is the route for retrieving a single pipeline resource.
 	GetPipelineResource

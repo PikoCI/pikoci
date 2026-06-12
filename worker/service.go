@@ -513,6 +513,11 @@ func (w *Worker) processJob(ctx context.Context, m workitem.Body, cwd string, pp
 		if err := w.updateBuild(ctx, m, b); err != nil {
 			return
 		}
+		// Trigger downstream jobs with passed constraints immediately
+		if err := w.pikoci.EvaluateDownstreamJobs(ctx, m.TeamCanonical, m.PipelineCanonical, j.Name); err != nil {
+			w.logger.Error("failed to evaluate downstream jobs",
+				"pipeline", m.PipelineCanonical, "job", j.Name, "error", err)
+		}
 		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnSuccess, "on_success", resolved, exportedVars, "succeeded")
 	} else {
 		// Ensure local b reflects the Failed status set by failBuild (which

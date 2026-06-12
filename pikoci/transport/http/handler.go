@@ -250,6 +250,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/start-pending").Name(StartPendingBuild.String()).Handler(startPendingBuild(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/oldest-pending").Name(FindOldestPendingBuild.String()).Handler(findOldestPendingBuild(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/notify-serial-groups").Name(NotifySerialGroupPendingBuilds.String()).Handler(notifySerialGroupPendingBuilds(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/evaluate-downstream").Name(EvaluateDownstreamJobs.String()).Handler(evaluateDownstreamJobs(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/retry-builds").Name(CreateRetryJobBuild.String()).Handler(createRetryJobBuild(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds-get-versions/{build_id}").Name(FindBuildGetVersions.String()).Handler(findBuildGetVersions(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_id}/get-versions").Name(InsertBuildGetVersion.String()).Handler(insertBuildGetVersion(s))
