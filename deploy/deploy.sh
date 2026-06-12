@@ -219,6 +219,49 @@ if ! ssh "$SSH_HOST" 'command -v docker &>/dev/null'; then
     ssh "$SSH_HOST" 'curl -fsSL https://get.docker.com | sh'
 fi
 
+# --- Configure log rotation ---
+
+echo "==> Configuring log rotation..."
+ssh "$SSH_HOST" 'mkdir -p /etc/systemd/journald.conf.d && cat > /etc/systemd/journald.conf.d/retention.conf << JEOF
+[Journal]
+MaxRetentionSec=1day
+SystemMaxUse=200M
+JEOF
+systemctl restart systemd-journald'
+
+# Docker log rotation (only if not already configured)
+ssh "$SSH_HOST" 'if [ ! -f /etc/docker/daemon.json ]; then
+    cat > /etc/docker/daemon.json << DEOF
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+DEOF
+    systemctl restart docker
+fi'
+
+# --- Disk cleanup cron ---
+
+echo "==> Installing disk cleanup cron..."
+ssh "$SSH_HOST" 'cat > /opt/pikoci/disk-cleanup.sh << "DCEOF"
+#!/bin/bash
+THRESHOLD=80
+USAGE=$(df / --output=pcent | tail -1 | tr -d " %")
+if [ "$USAGE" -ge "$THRESHOLD" ]; then
+    logger -t disk-cleanup "Disk at ${USAGE}%, running cleanup (threshold: ${THRESHOLD}%)"
+    docker volume prune -f > /dev/null 2>&1
+    journalctl --vacuum-time=1d > /dev/null 2>&1
+    logger -t disk-cleanup "Cleanup done, now at $(df / --output=pcent | tail -1 | tr -d " %")%"
+fi
+DCEOF
+chmod +x /opt/pikoci/disk-cleanup.sh'
+
+# Run daily at 3am, only install if not already present
+ssh "$SSH_HOST" 'crontab -l 2>/dev/null | grep -q disk-cleanup || (crontab -l 2>/dev/null; echo "0 3 * * * /opt/pikoci/disk-cleanup.sh") | crontab -'
+
 # --- Restart services ---
 
 echo "==> Updating Docker Compose services..."
