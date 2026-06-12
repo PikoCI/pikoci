@@ -159,7 +159,7 @@ func TestTickJobs_TriggersWhenCommonVersionExists(t *testing.T) {
 
 	br.EXPECT().FindReadyDownstreamVersion(
 		gomock.Any(), "main", "my-pipeline",
-		[]string{"lint", "test-mock"}, "test-backends", "repo", 2,
+		[]string{"lint", "test-mock"}, "test-backends", "repo", 2, (*uint32)(nil),
 	).Return(uint32(42), true, nil)
 
 	// Pin check — resource is not pinned
@@ -211,7 +211,7 @@ func TestTickJobs_SkipsWhenNoCommonVersion(t *testing.T) {
 
 	br.EXPECT().FindReadyDownstreamVersion(
 		gomock.Any(), "main", "my-pipeline",
-		[]string{"upstream"}, "downstream", "repo", 1,
+		[]string{"upstream"}, "downstream", "repo", 1, (*uint32)(nil),
 	).Return(uint32(0), false, nil)
 
 	s.tick(context.Background())
@@ -251,7 +251,7 @@ func TestTickJobs_SkipsWhenPendingBuildExists(t *testing.T) {
 
 	br.EXPECT().FindReadyDownstreamVersion(
 		gomock.Any(), "main", "my-pipeline",
-		[]string{"lint"}, "deploy", "repo", 1,
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
 	).Return(uint32(42), true, nil)
 
 	// Pin check — resource is not pinned
@@ -378,7 +378,7 @@ func TestTickJobs_MultipleGetSteps_AllMustBeReady(t *testing.T) {
 	// First get step IS ready
 	br.EXPECT().FindReadyDownstreamVersion(
 		gomock.Any(), "main", "my-pipeline",
-		[]string{"lint"}, "deploy", "repo", 1,
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
 	).Return(uint32(42), true, nil)
 
 	// Pin check — resource is not pinned
@@ -388,7 +388,7 @@ func TestTickJobs_MultipleGetSteps_AllMustBeReady(t *testing.T) {
 	// Second get step is NOT ready
 	br.EXPECT().FindReadyDownstreamVersion(
 		gomock.Any(), "main", "my-pipeline",
-		[]string{"build"}, "deploy", "image", 1,
+		[]string{"build"}, "deploy", "image", 1, (*uint32)(nil),
 	).Return(uint32(0), false, nil)
 
 	s.tick(context.Background())
@@ -437,7 +437,7 @@ func TestTickJobs_MultipleGetSteps_BothReady_TriggersOnce(t *testing.T) {
 
 	br.EXPECT().FindReadyDownstreamVersion(
 		gomock.Any(), "main", "my-pipeline",
-		[]string{"lint"}, "deploy", "repo", 1,
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
 	).Return(uint32(42), true, nil)
 
 	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
@@ -445,7 +445,7 @@ func TestTickJobs_MultipleGetSteps_BothReady_TriggersOnce(t *testing.T) {
 
 	br.EXPECT().FindReadyDownstreamVersion(
 		gomock.Any(), "main", "my-pipeline",
-		[]string{"build"}, "deploy", "image", 1,
+		[]string{"build"}, "deploy", "image", 1, (*uint32)(nil),
 	).Return(uint32(99), true, nil)
 
 	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "docker.image").
@@ -494,7 +494,7 @@ func TestTickJobs_SkipsWhenResourcePinnedToDifferentVersion(t *testing.T) {
 
 	br.EXPECT().FindReadyDownstreamVersion(
 		gomock.Any(), "main", "my-pipeline",
-		[]string{"lint"}, "deploy", "repo", 1,
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
 	).Return(uint32(42), true, nil)
 
 	pinnedVersion := uint32(99)
@@ -538,7 +538,7 @@ func TestTickJobs_SkipsWhenPinCheckFails(t *testing.T) {
 
 	br.EXPECT().FindReadyDownstreamVersion(
 		gomock.Any(), "main", "my-pipeline",
-		[]string{"lint"}, "deploy", "repo", 1,
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
 	).Return(uint32(42), true, nil)
 
 	rr.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
@@ -581,7 +581,7 @@ func TestTickJobs_FindReadyError_SkipsJob(t *testing.T) {
 
 	br.EXPECT().FindReadyDownstreamVersion(
 		gomock.Any(), "main", "my-pipeline",
-		[]string{"upstream"}, "downstream", "repo", 1,
+		[]string{"upstream"}, "downstream", "repo", 1, (*uint32)(nil),
 	).Return(uint32(0), false, assert.AnError)
 
 	s.tick(context.Background())

@@ -117,6 +117,7 @@ func (s *Scheduler) evaluateJob(ctx context.Context, pwt *pipeline.WithTeam, j *
 		versionID, ready, err := s.builds.FindReadyDownstreamVersion(
 			ctx, pwt.Team.Canonical, pwt.Canonical,
 			expandedPassed, j.Name, g.Name, len(expandedPassed),
+			j.BaselineVersionID,
 		)
 		if err != nil {
 			s.logger.Error("failed to find ready downstream version",

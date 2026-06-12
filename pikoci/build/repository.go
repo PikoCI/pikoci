@@ -26,7 +26,7 @@ type Repository interface {
 	// FindGetVersions returns a map of step names to version IDs for all get steps in a build.
 	FindGetVersions(ctx context.Context, buildID uint32) (map[string]uint32, error)
 	// FindReadyDownstreamVersion finds a version that has passed through all upstream jobs and is ready for the downstream job.
-	FindReadyDownstreamVersion(ctx context.Context, tc, pn string, upstreamJobs []string, downstreamJob string, stepName string, upstreamCount int) (uint32, bool, error)
+	FindReadyDownstreamVersion(ctx context.Context, tc, pn string, upstreamJobs []string, downstreamJob string, stepName string, upstreamCount int, baselineVersionID *uint32) (uint32, bool, error)
 	// LastBuildAtByPipeline returns the most recent build timestamp for each pipeline in a team.
 	LastBuildAtByPipeline(ctx context.Context, tc string) (map[uint32]time.Time, error)
 	// CountRunning returns the number of currently running builds for a given job.

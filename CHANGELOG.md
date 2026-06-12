@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- New jobs with `trigger = true` no longer replay the entire version backlog. Jobs now record a `baseline_version_id` at creation time, and the scheduler only considers versions newer than that baseline ([#492](https://github.com/PikoCI/pikoci/issues/492))
+
 ### Added
 
 - Release pipeline with .deb/.rpm packages: binaries are now named `pikoci-<os>-<arch>` (with `.exe` for Windows), Linux packages (.deb and .rpm) are generated via nfpm for amd64/arm64, and a SHA256SUMS file is included in GitHub Releases. The release job is split into discrete tasks (install-tools, build-binaries, package-deb-rpm, create-release) with tool caching ([#346](https://github.com/PikoCI/pikoci/issues/346))
