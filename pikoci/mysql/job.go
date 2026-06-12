@@ -131,7 +131,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 	dbj := newDBJob(j)
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE jobs AS j
-		SET name = ?, tags = ?, plan = ?, on_success = ?, on_failure = ?, on_cancel = ?, ensure = ?, concurrency = ?, paused = ?, timeout = ?, for_each_group = ?, for_each_key = ?
+		SET name = ?, tags = ?, plan = ?, on_success = ?, on_failure = ?, on_cancel = ?, ensure = ?, concurrency = ?, timeout = ?, for_each_group = ?, for_each_key = ?
 		FROM (
 			SELECT j.id
 			FROM jobs AS j
@@ -142,7 +142,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 		) AS jj
 		WHERE jj.id = j.id
-	`, dbj.Name, dbj.Tags, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, dbj.Timeout, dbj.ForEachGroup, dbj.ForEachKey, tc, pn, jn)
+	`, dbj.Name, dbj.Tags, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Timeout, dbj.ForEachGroup, dbj.ForEachKey, tc, pn, jn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
