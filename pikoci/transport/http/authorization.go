@@ -55,6 +55,7 @@ var (
 		StartPendingBuild:              admin,
 		FindOldestPendingBuild:         admin,
 		NotifySerialGroupPendingBuilds: admin,
+		EvaluateDownstreamJobs:         admin,
 		InsertBuildGetVersion:          admin,
 		FindBuildGetVersions:   admin,
 

@@ -162,6 +162,11 @@ type Service interface {
 	// given job and enqueues their oldest pending builds for execution.
 	NotifySerialGroupPendingBuilds(ctx context.Context, tc, pn, jn string)
 
+	// EvaluateDownstreamJobs checks all jobs in the pipeline that have passed
+	// constraints referencing completedJobName. For each that is ready (all
+	// upstream jobs succeeded with a common version), it creates a pending build.
+	EvaluateDownstreamJobs(ctx context.Context, tc, pn, completedJobName string) error
+
 	// GetPipelineResource retrieves a resource by its canonical name within a pipeline.
 	GetPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error)
 	// UpdatePipelineResource updates a resource's metadata within a pipeline.
@@ -262,7 +267,11 @@ type PikoCI struct {
 // initializes the internal scheduler for periodic resource checks and returns
 // the configured service ready for use.
 func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, wr wkr.Repository, suow unitwork.StartUnitOfWork, js []byte, wn *notifier.WorkNotifier, l *slog.Logger) *PikoCI {
-	return &PikoCI{
+	if l == nil {
+		l = slog.Default()
+	}
+	sched := scheduler.New(rr, pr, wn, l)
+	p := &PikoCI{
 		Ctx:           ctx,
 		Notifier:      wn,
 		Users:         ur,
@@ -279,8 +288,10 @@ func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipelin
 		StartUoW:      suow,
 		JWTSecret:     js,
 		logger:        l,
-		scheduler:     scheduler.New(rr, pr, br, wn, l),
+		scheduler:     sched,
 	}
+	sched.SetEvaluator(p)
+	return p
 }
 
 // StartScheduler starts the background scheduler that polls for due resources.

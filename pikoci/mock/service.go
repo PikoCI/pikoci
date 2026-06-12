@@ -295,6 +295,20 @@ func (mr *ServiceMockRecorder) DeleteWorker(ctx, name any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorker", reflect.TypeOf((*Service)(nil).DeleteWorker), ctx, name)
 }
 
+// EvaluateDownstreamJobs mocks base method.
+func (m *Service) EvaluateDownstreamJobs(ctx context.Context, tc, pn, completedJobName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EvaluateDownstreamJobs", ctx, tc, pn, completedJobName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// EvaluateDownstreamJobs indicates an expected call of EvaluateDownstreamJobs.
+func (mr *ServiceMockRecorder) EvaluateDownstreamJobs(ctx, tc, pn, completedJobName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvaluateDownstreamJobs", reflect.TypeOf((*Service)(nil).EvaluateDownstreamJobs), ctx, tc, pn, completedJobName)
+}
+
 // FindBuildGetVersions mocks base method.
 func (m *Service) FindBuildGetVersions(ctx context.Context, tc, pn, jn string, buildID uint32) (map[string]uint32, error) {
 	m.ctrl.T.Helper()

@@ -9,6 +9,8 @@ import (
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/resource"
 	"go.uber.org/mock/gomock"
 )
 
@@ -669,4 +671,300 @@ func TestCreateRetryJobBuild_InvalidCanonical(t *testing.T) {
 
 	_, err = s.S.CreateRetryJobBuild(ctx, "main", "my-pipeline", "INVALID", "3", build.Build{})
 	require.Error(t, err)
+}
+
+// --- EvaluateDownstreamJobs tests ---
+
+// makePipelineLintDeploy returns a pipeline with "lint" and "deploy" jobs.
+// "deploy" has a get step on git.repo with passed=["lint"] and trigger=true.
+func makePipelineLintDeploy() *pipeline.Pipeline {
+	return &pipeline.Pipeline{
+		Name: "my-pipeline",
+		Jobs: []job.Job{
+			{Name: "lint"},
+			{
+				Name: "deploy",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get: &job.GetStep{
+							Type:    "git",
+							Name:    "repo",
+							Passed:  []string{"lint"},
+							Trigger: true,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestEvaluateDownstreamJobs_TriggersWhenReady(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	pp := makePipelineLintDeploy()
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+
+	// FindReadyDownstreamVersion returns ready (version 42)
+	s.Builds.EXPECT().FindReadyDownstreamVersion(
+		ctx, "main", "my-pipeline",
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
+	).Return(uint32(42), true, nil)
+
+	// Resources.Find returns resource with no pinned version
+	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").
+		Return(&resource.Resource{Type: "git", Name: "repo"}, nil)
+
+	// FindOldestPending returns nil (no pending build)
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "deploy").
+		Return(nil, nil)
+
+	// Create is called to create a new pending build
+	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "deploy", gomock.Any()).
+		Return(uint32(10), "1", nil)
+
+	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")
+	require.NoError(t, err)
+}
+
+func TestEvaluateDownstreamJobs_SkipsWhenNotReady(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	pp := makePipelineLintDeploy()
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+
+	// FindReadyDownstreamVersion returns not ready
+	s.Builds.EXPECT().FindReadyDownstreamVersion(
+		ctx, "main", "my-pipeline",
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
+	).Return(uint32(0), false, nil)
+
+	// Create must NOT be called — no expectation set; gomock will fail if it is
+
+	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")
+	require.NoError(t, err)
+}
+
+func TestEvaluateDownstreamJobs_SkipsWhenPendingExists(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	pp := makePipelineLintDeploy()
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+
+	s.Builds.EXPECT().FindReadyDownstreamVersion(
+		ctx, "main", "my-pipeline",
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
+	).Return(uint32(42), true, nil)
+
+	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").
+		Return(&resource.Resource{Type: "git", Name: "repo"}, nil)
+
+	// FindOldestPending returns an existing pending build
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "deploy").
+		Return(&build.Build{ID: 5, BuildNumber: "1", Status: build.Pending}, nil)
+
+	// Create must NOT be called
+
+	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")
+	require.NoError(t, err)
+}
+
+func TestEvaluateDownstreamJobs_SkipsWhenResourcePinned(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	pp := makePipelineLintDeploy()
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+
+	// FindReadyDownstreamVersion returns version 42
+	s.Builds.EXPECT().FindReadyDownstreamVersion(
+		ctx, "main", "my-pipeline",
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
+	).Return(uint32(42), true, nil)
+
+	// Resource has PinnedVersionID=99 which differs from 42
+	pinnedID := uint32(99)
+	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").
+		Return(&resource.Resource{Type: "git", Name: "repo", PinnedVersionID: &pinnedID}, nil)
+
+	// Create must NOT be called — resource pin mismatch
+
+	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")
+	require.NoError(t, err)
+}
+
+func TestEvaluateDownstreamJobs_OnlyEvaluatesRelevantJobs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// Pipeline: lint, test, deploy (passed: ["lint"]), release (passed: ["test"])
+	// Only deploy references "lint" so only deploy should be evaluated.
+	pp := &pipeline.Pipeline{
+		Name: "my-pipeline",
+		Jobs: []job.Job{
+			{Name: "lint"},
+			{Name: "test"},
+			{
+				Name: "deploy",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get: &job.GetStep{
+							Type:    "git",
+							Name:    "repo",
+							Passed:  []string{"lint"},
+							Trigger: true,
+						},
+					},
+				},
+			},
+			{
+				Name: "release",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get: &job.GetStep{
+							Type:    "git",
+							Name:    "repo",
+							Passed:  []string{"test"},
+							Trigger: true,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+
+	// Only deploy should be evaluated — FindReadyDownstreamVersion called for deploy only
+	s.Builds.EXPECT().FindReadyDownstreamVersion(
+		ctx, "main", "my-pipeline",
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
+	).Return(uint32(0), false, nil)
+
+	// release must NOT be evaluated (no expectation set for it)
+
+	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")
+	require.NoError(t, err)
+}
+
+func TestEvaluateDownstreamJobs_MultiInputAllMustBeReady(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// deploy has two get steps:
+	//   repo (passed: ["lint"], trigger: true)
+	//   image (passed: ["build-image"], trigger: true)
+	// Call with completedJobName="lint". First step ready, second not ready.
+	// Create must NOT be called because ALL steps must be ready.
+	pp := &pipeline.Pipeline{
+		Name: "my-pipeline",
+		Jobs: []job.Job{
+			{Name: "lint"},
+			{Name: "build-image"},
+			{
+				Name: "deploy",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get: &job.GetStep{
+							Type:    "git",
+							Name:    "repo",
+							Passed:  []string{"lint"},
+							Trigger: true,
+						},
+					},
+					{
+						Type: job.StepTypeGet,
+						Get: &job.GetStep{
+							Type:    "docker",
+							Name:    "image",
+							Passed:  []string{"build-image"},
+							Trigger: true,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+
+	// First step (repo) is ready
+	s.Builds.EXPECT().FindReadyDownstreamVersion(
+		ctx, "main", "my-pipeline",
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
+	).Return(uint32(42), true, nil)
+
+	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").
+		Return(&resource.Resource{Type: "git", Name: "repo"}, nil)
+
+	// Second step (image) is NOT ready
+	s.Builds.EXPECT().FindReadyDownstreamVersion(
+		ctx, "main", "my-pipeline",
+		[]string{"build-image"}, "deploy", "image", 1, (*uint32)(nil),
+	).Return(uint32(0), false, nil)
+
+	// Create must NOT be called — second step not ready
+
+	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")
+	require.NoError(t, err)
+}
+
+func TestEvaluateDownstreamJobs_ForEachGroupExpansion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.Background()
+
+	// "lint-go" and "lint-js" are for_each instances of group "lint".
+	// "deploy" has passed: ["lint"] which should match both instances.
+	// Completing "lint-go" should trigger evaluation of "deploy".
+	pp := &pipeline.Pipeline{
+		Canonical: "my-pipeline",
+		Jobs: []job.Job{
+			{Name: "lint-go", ForEachGroup: "lint"},
+			{Name: "lint-js", ForEachGroup: "lint"},
+			{
+				Name: "deploy",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get: &job.GetStep{
+							Type:    "git",
+							Name:    "repo",
+							Passed:  []string{"lint"},
+							Trigger: true,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s.Pipelines.EXPECT().Find(gomock.Any(), "main", "my-pipeline").Return(pp, nil)
+	// Passed ["lint"] expands to ["lint-go", "lint-js"] via resolvePassedJobNames
+	s.Builds.EXPECT().FindReadyDownstreamVersion(
+		gomock.Any(), "main", "my-pipeline",
+		[]string{"lint-go", "lint-js"}, "deploy", "repo", 2, (*uint32)(nil),
+	).Return(uint32(42), true, nil)
+	s.Resources.EXPECT().Find(gomock.Any(), "main", "my-pipeline", "git.repo").
+		Return(&resource.Resource{}, nil)
+	s.Builds.EXPECT().FindOldestPending(gomock.Any(), "main", "my-pipeline", "deploy").
+		Return(nil, nil)
+	s.Builds.EXPECT().Create(gomock.Any(), "main", "my-pipeline", "deploy", gomock.Any()).
+		Return(uint32(1), "1", nil)
+
+	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint-go")
+	require.NoError(t, err)
 }
