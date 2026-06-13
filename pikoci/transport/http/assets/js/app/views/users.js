@@ -1,7 +1,7 @@
 'use strict';
 
 import { session, userSessionKey } from '../collections.js';
-import { withLoading } from '../namespace.js';
+import { clickLink, withLoading } from '../namespace.js';
 
 export var UsersListView = Backbone.View.extend({
   template: _.template($('#users-list-view').html()),
@@ -11,7 +11,7 @@ export var UsersListView = Backbone.View.extend({
     this.collection.fetch();
   },
   events: {
-    'click a': 'clickLink',
+    'click a': clickLink,
   },
   render: function() {
     this.$el.html(this.template());
@@ -25,28 +25,17 @@ export var UsersListView = Backbone.View.extend({
     var view = new UsersRowView({model: m});
     this.$('#users-table-body').append(view.render().el);
   },
-  clickLink: function(event) {
-    event.preventDefault();
-    var target = event.target.closest('a');
-    var url = new URL(target.href);
-    window.app.router.navigate(url.pathname, { trigger: true });
-  },
 });
 
 var UsersRowView = Backbone.View.extend({
   template: _.template($('#users-row-view').html()),
   tagName: "tr",
   events: {
-    'click a': 'clickLink',
+    'click a': clickLink,
   },
   render: function() {
     this.$el.html(this.template(this.model.toJSON()));
     return this;
-  },
-  clickLink: function(event) {
-    event.preventDefault();
-    var url = new URL(event.target.href);
-    window.app.router.navigate(url.pathname, { trigger: true });
   },
 });
 

@@ -2,7 +2,7 @@
 
 import { session, teams, Users } from '../collections.js';
 import { Team } from '../models.js';
-import { addSessionFunctions, withLoading } from '../namespace.js';
+import { addSessionFunctions, clickLink, withLoading } from '../namespace.js';
 
 export var TeamsView = Backbone.View.extend({
   template: _.template($('#teams-view').html()),
@@ -13,7 +13,7 @@ export var TeamsView = Backbone.View.extend({
     teams.fetch();
   },
   events: {
-    'click #team-new': 'clickLink',
+    'click #team-new': clickLink,
   },
   addTeam: function(t) {
     var view = new TeamRowView({model: t});
@@ -28,11 +28,6 @@ export var TeamsView = Backbone.View.extend({
     });
     return this;
   },
-  clickLink: function(event) {
-    event.preventDefault();
-    var url = new URL(event.target.href);
-    window.app.router.navigate(url.pathname, { trigger: true });
-  },
 });
 
 var TeamRowView = Backbone.View.extend({
@@ -40,19 +35,14 @@ var TeamRowView = Backbone.View.extend({
   tagName: "div",
   className: "piko-team-row",
   events: {
-    'click': 'clickLink',
-    'click #pipelines':   'clickLink',
-    'click #manage':      'clickLink',
+    'click': clickLink,
+    'click #pipelines':   clickLink,
+    'click #manage':      clickLink,
     'click #delete':      'clickDelete',
   },
   render: function () {
     this.$el.html(this.template(addSessionFunctions(this.model.toJSON())));
     return this;
-  },
-  clickLink: function(event) {
-    event.preventDefault();
-    var url = new URL(event.target.href);
-    window.app.router.navigate(url.pathname, { trigger: true });
   },
   clickDelete: function(event) {
     event.preventDefault();
@@ -101,7 +91,7 @@ export var TeamShowView = Backbone.View.extend({
   events: {
     'submit form': 'clickUpdate',
     'click #new-member': 'clickNewMember',
-    'click a.btn-primary': 'clickLink',
+    'click a.btn-primary': clickLink,
   },
   render: function () {
     this.$el.html(this.template(addSessionFunctions(this.model.toJSON())));
@@ -121,11 +111,6 @@ export var TeamShowView = Backbone.View.extend({
   renderMember: function(m) {
     var view = new TeamShowMemberRowView({team: this.model, model: m});
     this.$el.find('tbody').append(view.render().el);
-  },
-  clickLink: function(event) {
-    event.preventDefault();
-    var url = new URL(event.currentTarget.href);
-    window.app.router.navigate(url.pathname, { trigger: true });
   },
   clickUpdate: function(event){
     event.preventDefault();

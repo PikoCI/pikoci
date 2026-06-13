@@ -1,7 +1,7 @@
 'use strict';
 
 import { session, apiNotice } from '../collections.js';
-import { syncThemeSwitch } from '../namespace.js';
+import { clickLink, syncThemeSwitch } from '../namespace.js';
 
 export var MainView = Backbone.View.extend({
   template: _.template($('#main-view').html()),
@@ -138,7 +138,7 @@ export var BreadcrumbView = Backbone.View.extend({
   tagName: "nav",
   template: _.template($('#breadcrumb-view').html()),
   events: {
-    'click a': 'clickLink',
+    'click a': clickLink,
   },
   initialize: function(opts) {
     opts = opts||{};
@@ -157,10 +157,5 @@ export var BreadcrumbView = Backbone.View.extend({
       showPipelines: this.showPipelines,
     }));
     return this;
-  },
-  clickLink: function(event) {
-    event.preventDefault();
-    var url = new URL(event.target.href);
-    window.app.router.navigate(url.pathname, { trigger: true });
   },
 });

@@ -114,6 +114,14 @@ export function withLoading(btn, ajaxFn) {
   return xhr;
 }
 
+export function clickLink(event) {
+  event.preventDefault();
+  var target = event.target.closest('a');
+  if (!target) return;
+  var url = new URL(target.href);
+  window.app.router.navigate(url.pathname, { trigger: true });
+}
+
 export var addSessionFunctions = function(data) {
   return _.extend(window.app.session.data(), data);
 };

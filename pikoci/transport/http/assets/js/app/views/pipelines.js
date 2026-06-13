@@ -2,7 +2,7 @@
 
 import { session } from '../collections.js';
 import { PipelineImage } from '../models.js';
-import { addSessionFunctions, fetchInterval, pikoTimeAgo, withLoading } from '../namespace.js';
+import { addSessionFunctions, clickLink, fetchInterval, pikoTimeAgo, withLoading } from '../namespace.js';
 import { PipelineGraphView, PikoGraphZoom } from './editor.js';
 
 export var PipelinesView = Backbone.View.extend({
@@ -14,7 +14,7 @@ export var PipelinesView = Backbone.View.extend({
     this.collection.fetch();
   },
   events: {
-    'click #pipelines-new': 'clickLink',
+    'click #pipelines-new': clickLink,
     'click #live-status-toggle': 'toggleLive',
   },
   addPipeline: function(pp) {
@@ -61,11 +61,6 @@ export var PipelinesView = Backbone.View.extend({
     }
     this.cardViews = [];
     Backbone.View.prototype.remove.call(this);
-  },
-  clickLink: function(event) {
-    event.preventDefault();
-    var url = new URL(event.target.href);
-    window.app.router.navigate(url.pathname, { trigger: true });
   },
 });
 
