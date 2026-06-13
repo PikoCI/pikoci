@@ -39,8 +39,9 @@ nav:
   - CLI Reference: CLI.md
   - Server Configuration: Server.md
   - Database Backends: Database.md
-  - Queue Backends: Queue.md
   - Public Pipelines: Public-Pipelines.md
+  - Pause / Unpause: Pause.md
+  - Resource Pinning: Resource-Pinning.md
   - Scaling: Scaling.md
   - Running Workers Separately: Workers.md
   - Deployment: Deployment.md
