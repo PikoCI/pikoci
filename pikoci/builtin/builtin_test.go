@@ -3,9 +3,13 @@ package builtin_test
 import (
 	"testing"
 
+	"github.com/hashicorp/hcl/v2/hclsimple"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/pikoci/pikoci/pikoci/builtin"
+	"github.com/pikoci/pikoci/pikoci/notiftype"
+	"github.com/pikoci/pikoci/pikoci/restype"
+	"github.com/pikoci/pikoci/pikoci/sectype"
 )
 
 func TestResourceTypes(t *testing.T) {
@@ -161,6 +165,68 @@ func TestNotificationTypeHCL(t *testing.T) {
 	data, ok = builtin.NotificationTypeHCL("nonexistent")
 	assert.False(t, ok)
 	assert.Nil(t, data)
+}
+
+func TestRunnerBlockParsedOnDomainTypes(t *testing.T) {
+	t.Run("resource_type", func(t *testing.T) {
+		hcl := []byte(`
+resource_type "test" {
+  check "exec" {
+    path = "/bin/true"
+  }
+  runner "docker" {}
+}
+`)
+		var wrapper struct {
+			ResourceTypes []restype.ResourceType `hcl:"resource_type,block"`
+		}
+		err := hclsimple.Decode("test.hcl", hcl, nil, &wrapper)
+		require.NoError(t, err)
+		require.Len(t, wrapper.ResourceTypes, 1)
+		rt := wrapper.ResourceTypes[0]
+		require.NotNil(t, rt.Runner)
+		assert.Equal(t, "docker", rt.Runner.Runner)
+	})
+
+	t.Run("secret_type", func(t *testing.T) {
+		hcl := []byte(`
+secret_type "test" {
+  get "exec" {
+    path = "/bin/true"
+  }
+  runner "docker" {}
+}
+`)
+		var wrapper struct {
+			SecretTypes []sectype.SecretType `hcl:"secret_type,block"`
+		}
+		err := hclsimple.Decode("test.hcl", hcl, nil, &wrapper)
+		require.NoError(t, err)
+		require.Len(t, wrapper.SecretTypes, 1)
+		st := wrapper.SecretTypes[0]
+		require.NotNil(t, st.Runner)
+		assert.Equal(t, "docker", st.Runner.Runner)
+	})
+
+	t.Run("notification_type", func(t *testing.T) {
+		hcl := []byte(`
+notification_type "test" {
+  notify "exec" {
+    path = "/bin/true"
+  }
+  runner "docker" {}
+}
+`)
+		var wrapper struct {
+			NotificationTypes []notiftype.NotificationType `hcl:"notification_type,block"`
+		}
+		err := hclsimple.Decode("test.hcl", hcl, nil, &wrapper)
+		require.NoError(t, err)
+		require.Len(t, wrapper.NotificationTypes, 1)
+		nt := wrapper.NotificationTypes[0]
+		require.NotNil(t, nt.Runner)
+		assert.Equal(t, "docker", nt.Runner.Runner)
+	})
 }
 
 func TestServiceHCL(t *testing.T) {

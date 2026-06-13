@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Persist `runner` override for `notification_type`, `resource_type`, and `secret_type`. The field was parsed from HCL but never saved to the database, silently dropping runner override configuration on reload ([#506](https://github.com/PikoCI/pikoci/issues/506))
+- Add missing `hcl:"runner,block"` tag to `Runner` field on `ResourceType`, `SecretType`, `NotificationType`, and `Service` domain types. Built-in HCL definitions decoded directly into these types would silently ignore `runner {}` blocks ([#507](https://github.com/PikoCI/pikoci/issues/507))
 - Pipeline updates no longer unpause paused jobs. The `paused` state is now exclusively managed by the dedicated pause/unpause actions, preventing HCL-parsed zero values from overwriting runtime state ([#495](https://github.com/PikoCI/pikoci/issues/495))
 - New jobs with `trigger = true` no longer replay the entire version backlog. Jobs now record a `baseline_version_id` at creation time, and the scheduler only considers versions newer than that baseline ([#492](https://github.com/PikoCI/pikoci/issues/492))
 

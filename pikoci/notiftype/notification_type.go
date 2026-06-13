@@ -15,5 +15,5 @@ type NotificationType struct {
 	Notify *utils.RunnerCommand `json:"notify,omitempty" hcl:"notify,block"`
 	Params []string             `json:"params" hcl:"params,optional"`
 
-	Runner *utils.RunnerOverride `json:"runner,omitempty"`
+	Runner *utils.RunnerOverride `json:"runner,omitempty" hcl:"runner,block"`
 }
