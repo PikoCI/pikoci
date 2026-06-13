@@ -914,11 +914,11 @@ func blockLabel(block *hclsyntax.Block) string {
 	return "<unnamed>"
 }
 
-// readPipeline parses raw HCL pipeline configuration bytes into a Pipeline
+// ReadPipeline parses raw HCL pipeline configuration bytes into a Pipeline
 // struct. It handles variable resolution (string, number, bool, and secret
 // types), source resolution for resource types, runners, secret types, and
 // services, and extracts ordered job plans from the HCL AST.
-func (q *PikoCI) readPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error) {
+func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error) {
 	funcs := hclFunctions()
 	ectx := pipeline.TypeEvalContext()
 	ectx.Functions = funcs
