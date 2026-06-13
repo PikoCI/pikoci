@@ -66,7 +66,7 @@ Inside `check`, `pull`, and `push` commands, PikoCI exposes:
 | `$BUILD_PIPELINE_NAME` | Name of the current pipeline              |
 | `$BUILD_TEAM_NAME`   | Canonical name of the team                   |
 | `$BUILD_STATUS`      | Build status: `succeeded` or `failed` (hooks only) |
-| `$CACHE_DIR`         | Persistent cache directory (check/pull only, when [caching](#caching) is enabled) |
+| `$CACHE_DIR`         | Persistent cache directory (when [caching](#caching) is enabled) |
 | `$path`, `$args`     | Runner `run` block values (for the exec runner) |
 
 ## Sourcing from URL
@@ -138,6 +138,7 @@ resource "git" "my_repo" {
 | `params`         | yes      | Key/value pairs matching the resource type's `params` |
 | `check_interval` | no       | Schedule for automatic checks (cron syntax or `@every <duration>`) |
 | `cache`          | no       | Override the resource type's cache setting (`true`/`false`) |
+| `tags`           | no       | List of tags to route resource checks to matching workers (see [Workers](Workers.md#tags)) |
 
 ### Webhook triggers
 
@@ -181,7 +182,7 @@ resource "git" "small-repo" {
 
 ### How it works
 
-When caching is enabled, PikoCI creates a persistent directory for each resource instance and passes it as the `$CACHE_DIR` environment variable to **check** and **pull** scripts (not push). The directory is namespaced per team, pipeline, and resource:
+When caching is enabled, PikoCI creates a persistent directory for each resource instance and passes it as the `$CACHE_DIR` environment variable to **check**, **pull**, and **push** scripts. The directory is namespaced per team, pipeline, and resource:
 
 ```
 ~/.cache/pikoci/cache/{team}/{pipeline}/{resource_canonical}/
@@ -343,7 +344,7 @@ resource "git" "my-repo" {
 | `name`     | yes      | Directory name to clone into                     |
 | `branch`   | no       | Branch to track (defaults to HEAD)               |
 | `token`    | no       | API/HTTPS auth token for private repos           |
-| `pr`       | no       | Set to `"true"` to check for open pull requests instead of commits (requires `token`) |
+| `pr`       | no       | Set to `true` to check for open pull requests instead of commits (requires `token`) |
 | `tag`      | no       | Set to `true` to check for tags instead of commits (requires `token`) |
 | `provider` | no       | Git hosting provider: `github`, `gitlab`, `gitea`, or `forgejo`. Auto-detected from URL for `github.com` and `gitlab.com`. Required for self-hosted instances when using tag or PR mode. |
 

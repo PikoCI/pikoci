@@ -17,7 +17,7 @@ variable "repo_name" {
 
 | Field     | Required | Description                            |
 |-----------|----------|----------------------------------------|
-| `type`    | yes      | Variable type (`string`)               |
+| `type`    | yes      | Variable type (`string`, `number`, or `bool`) |
 | `default` | no       | Default value if not provided          |
 | `secret`  | no       | Secret block for lazy resolution       |
 
@@ -36,6 +36,9 @@ Pass the file when creating or updating a pipeline:
 ```bash
 # Via CLI
 pikoci client pipelines create -n my-pipeline -c pipeline.hcl -v vars.json
+
+# Or override individual variables
+pikoci client pipelines create -n my-pipeline -c pipeline.hcl --var repo_name=pikoci
 
 # At server startup
 pikoci server --pipeline-name my-pipeline --pipeline-config pipeline.hcl --vars vars.json
@@ -86,7 +89,7 @@ The `secret` block label is the name of a `secret_type` defined in the pipeline.
 
 | Field  | Required | Description                                       |
 |--------|----------|---------------------------------------------------|
-| `path` | yes      | Path to fetch from the secret backend              |
+| `path` | no       | Path to fetch from the secret backend              |
 | `key`  | yes      | Key to extract from the JSON response              |
 
 ### How it works

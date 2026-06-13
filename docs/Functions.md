@@ -106,6 +106,7 @@ HCL functions are available in pipeline definitions for string manipulation, col
 | `setintersection` | Elements common to all sets              | `setintersection(toset(["a","b"]), toset(["b","c"]))` -> `["b"]` |
 | `setunion`        | All elements from all sets               | `setunion(toset(["a"]), toset(["b"]))` -> `["a","b"]` |
 | `setsubtract`     | Elements in first set but not second     | `setsubtract(toset(["a","b"]), toset(["b"]))` -> `["a"]` |
+| `setsymmetricdifference` | Elements in either set but not both | `setsymmetricdifference(toset(["a","b"]), toset(["b","c"]))` -> `["a","c"]` |
 
 ## Type conversion functions
 

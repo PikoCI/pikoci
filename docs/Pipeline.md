@@ -57,6 +57,9 @@ resource_type "git" {
 | `params` | no       | List of parameter names                             |
 | `runner` | no       | Override runner for all commands (see [Runners](Runners.md#type-level-runner-overrides)) |
 | `cache`  | no       | Enable persistent cache for check/pull (see [Resource Types](Resource-Types.md#caching)) |
+| `check`  | no       | Runner command block for version checking |
+| `pull`   | no       | Runner command block for fetching a version |
+| `push`   | no       | Runner command block for pushing a version |
 
 When `source` is set, inline commands are not needed. The source is resolved once when the pipeline is created or updated — if the remote definition changes, you must re-set the pipeline to pick up the new version. This applies to all block types that support `source` (`resource_type`, `runner_type`, `secret_type`, `service_type`).
 
@@ -159,6 +162,9 @@ runner_type "docker" {
 |----------|----------|------------------------------------------------|
 | `name`   | yes      | Label on the block                             |
 | `source` | no       | URL to fetch definition (e.g. `pikoci://docker`) |
+| `run`    | yes*     | Runner command block defining how tasks are executed |
+
+\* Not required when `source` is set.
 
 When `source` is set, inline `run` block is not needed.
 
@@ -181,6 +187,7 @@ secret_type "vault" {
 | `params` | no       | List of parameter names the get command accepts      |
 | `runner` | no       | Override runner for all commands (see [Runners](Runners.md#type-level-runner-overrides)) |
 | other    | no       | Config attributes passed as `param_<key>` env vars to the get command |
+| `get`    | no       | Runner command block that fetches secrets |
 
 When `source` is set, inline `get` block is not needed. Use secret-backed variables to consume secrets:
 
@@ -236,7 +243,7 @@ service_type "postgres" {
 | `source`      | no       | URL to fetch definition (mutually exclusive with inline commands) |
 | `params`      | no       | List of parameter names for per-job customization                |
 | `start`       | yes*     | Runner command to start the service                              |
-| `ready_check` | no       | Runner command polled until exit 0 or timeout                    |
+| `ready_check` | no       | Runner command polled until exit 0 or timeout (accepts `interval` default `"1s"` and `timeout` default `"60s"`) |
 | `stop`        | yes*     | Runner command to stop the service (always runs)                 |
 | `runner`      | no       | Override runner for all commands (see [Runners](Runners.md#type-level-runner-overrides)) |
 
@@ -251,6 +258,26 @@ Jobs contain a plan of steps executed in order. Each step is one of `get`, `task
 The optional `concurrency` attribute limits how many builds of the job can run simultaneously. When the limit is reached, new builds are re-queued and wait until a slot frees up. The default value `0` means unlimited.
 
 The optional `timeout` attribute limits the total wall-clock time for a build's plan steps. When the timeout is reached, the build fails with a "job timed out" error and `on_cancel`/`ensure` hooks still run. If not set, the job runs with no time limit.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | yes | Label on the block |
+| `concurrency` | no | Max concurrent builds (default `0` = unlimited) |
+| `timeout` | no | Max wall-clock time for the build (Go duration string) |
+| `tags` | no | Route to workers with matching tags |
+| `serial_groups` | no | Cross-job mutual exclusion groups |
+| `for_each` | no | Generate job instances from a set or map |
+| `matrix` | no | Generate job instances from cartesian product (mutually exclusive with `for_each`) |
+| `get` | no | Step block — fetches a resource version |
+| `task` | no | Step block — runs a command via a runner |
+| `put` | no | Step block — pushes to a resource |
+| `notify` | no | Step block — sends a fire-and-forget notification |
+| `service` | no | Step block — references a service type for the job |
+| `in_parallel` | no | Step block — runs multiple steps concurrently |
+| `on_success` | no | Hook — runs after all steps succeed |
+| `on_failure` | no | Hook — runs after a step fails |
+| `on_cancel` | no | Hook — runs when the build is cancelled |
+| `ensure` | no | Hook — always runs regardless of outcome |
 
 #### Tags
 
@@ -527,7 +554,10 @@ get "git" "my_repo" {
 | `passed`   | no       | List of job names that must have run with this version first |
 | `timeout`  | no       | Maximum duration for the step (e.g. `"2m"`, `"30s"`) |
 | `attempts` | no       | Maximum number of times to try the step (default `1`, no retry) |
-| `secrets`  | no       | Map of secret_type name to path (e.g. `{"vault" = "secret/data/db"}`) |
+| `on_success` | no     | Hook — runs after the step succeeds |
+| `on_failure` | no     | Hook — runs after the step fails |
+| `on_cancel`  | no     | Hook — runs when the build is cancelled |
+| `ensure`     | no     | Hook — always runs regardless of outcome |
 
 #### Exported version metadata
 
@@ -573,7 +603,11 @@ task "test" {
 | `attempts` | no       | Maximum number of times to try the step (default `1`, no retry) |
 | `inputs`   | no       | List of paths that must exist before the task runs |
 | `outputs`  | no       | List of paths that must exist after the task finishes |
-| `secrets`  | no       | Map of secret_type name to path (e.g. `{"vault" = "secret/data/db"}`) |
+| `run`        | yes      | Runner command block |
+| `on_success` | no       | Hook — runs after the step succeeds |
+| `on_failure` | no       | Hook — runs after the step fails |
+| `on_cancel`  | no       | Hook — runs when the build is cancelled |
+| `ensure`     | no       | Hook — always runs regardless of outcome |
 
 Example with inputs and outputs:
 
@@ -640,7 +674,11 @@ put "git" "my_repo" {
 | `name`     | yes      | Label, resource name                           |
 | `timeout`  | no       | Maximum duration for the step (e.g. `"5m"`, `"30s"`) |
 | `attempts` | no       | Maximum number of times to try the step (default `1`, no retry) |
-| `secrets`  | no       | Map of secret_type name to path (e.g. `{"vault" = "secret/data/db"}`) |
+| `params`     | no       | Block with key/value pairs passed to the resource type |
+| `on_success` | no       | Hook — runs after the step succeeds |
+| `on_failure` | no       | Hook — runs after the step fails |
+| `on_cancel`  | no       | Hook — runs when the build is cancelled |
+| `ensure`     | no       | Hook — always runs regardless of outcome |
 
 ### notify
 
@@ -711,6 +749,16 @@ job "build" {
 |-------------|----------|------------------------------------------------------|
 | `limit`     | no       | Max concurrent steps. `0` or omitted = no limit.     |
 | `fail_fast` | no       | Cancel remaining steps on first failure. Default: `false`. |
+| `get`         | no       | Step block — fetches a resource version |
+| `task`        | no       | Step block — runs a command via a runner |
+| `put`         | no       | Step block — pushes to a resource |
+| `notify`      | no       | Step block — sends a fire-and-forget notification |
+| `timeout`     | no       | Wall-clock time limit for the entire group |
+| `attempts`    | no       | Retry the entire block on failure |
+| `on_success`  | no       | Hook — runs after the group succeeds |
+| `on_failure`  | no       | Hook — runs after the group fails |
+| `on_cancel`   | no       | Hook — runs when the build is cancelled |
+| `ensure`      | no       | Hook — always runs regardless of outcome |
 
 **Allowed inner step types:** `get`, `task`, `put`, `notify`. Services are not allowed inside `in_parallel`.
 
@@ -892,6 +940,16 @@ resource "artifact" "build-output" {
   }
 }
 ```
+
+## Build Logs & Security
+
+PikoCI is designed to keep sensitive information out of build logs:
+
+- **Command lines are never shown.** The command path and arguments are not printed in build output — only the process's stdout and stderr are captured and displayed.
+- **Secret values are redacted from API responses.** When secrets are injected as environment variables, their values are not visible in pipeline configuration returned by the API.
+- **Public pipeline responses are sanitized.** Sensitive fields (secrets, variable values) are stripped from public API responses. See [Public Pipelines](Public-Pipelines.md) for details.
+- **Echoing secrets is the user's responsibility.** If a step explicitly prints a secret value (e.g. `echo $SECRET`), that output will appear in the build logs.
+- **Debug-level server logs may include commands.** When the server is started with debug logging, command details may appear in server-side logs, but these are never exposed to users through the UI or API.
 
 ## Full example
 
