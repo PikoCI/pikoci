@@ -3,6 +3,7 @@ package pikoci
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsimple"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/pikoci/pikoci/pikoci/builtin"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/notification"
 	"github.com/pikoci/pikoci/pikoci/notiftype"
@@ -1422,7 +1424,146 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 			return nil, fmt.Errorf("resource %q: %w", r.Name, err)
 		}
 	}
+
+	if err := validatePipelineReferences(&pp); err != nil {
+		return nil, err
+	}
+
 	return &pp, nil
+}
+
+// validatePipelineReferences checks that all cross-entity references in the
+// pipeline are valid. It collects all errors so users see every problem at once.
+func validatePipelineReferences(pp *pipeline.Pipeline) error {
+	var errs []error
+
+	// Build lookup maps
+	jobNames := make(map[string]bool, len(pp.Jobs))
+	forEachGroups := make(map[string]bool)
+	for _, j := range pp.Jobs {
+		jobNames[j.Name] = true
+		if j.ForEachGroup != "" {
+			forEachGroups[j.ForEachGroup] = true
+		}
+	}
+
+	// A. Resource type references
+	for _, r := range pp.Resources {
+		if _, ok := pp.ResourceType(r.Type); !ok {
+			errs = append(errs, fmt.Errorf("resource %q references unknown resource_type %q", r.Canonical, r.Type))
+		}
+	}
+
+	// B. Notification type references
+	for _, n := range pp.Notifications {
+		if _, ok := pp.NotificationType(n.Type); !ok {
+			errs = append(errs, fmt.Errorf("notification %q references unknown notification_type %q", n.Canonical, n.Type))
+		}
+	}
+
+	// C. Secret type references (variable secrets)
+	for varName, sv := range pp.SecretVars {
+		if _, ok := pp.SecretType(sv.Type); !ok {
+			if _, ok := builtin.SecretTypes()[sv.Type]; !ok {
+				errs = append(errs, fmt.Errorf("variable %q secret references unknown secret_type %q", varName, sv.Type))
+			}
+		}
+	}
+
+	// D. Notification jobs/exclude references
+	for _, n := range pp.Notifications {
+		for _, jn := range n.Jobs {
+			if !jobNames[jn] && !forEachGroups[jn] {
+				errs = append(errs, fmt.Errorf("notification %q references unknown job %q in jobs", n.Canonical, jn))
+			}
+		}
+		for _, jn := range n.Exclude {
+			if !jobNames[jn] && !forEachGroups[jn] {
+				errs = append(errs, fmt.Errorf("notification %q references unknown job %q in exclude", n.Canonical, jn))
+			}
+		}
+	}
+
+	// E. Job step references
+	for _, j := range pp.Jobs {
+		for _, g := range j.GetSteps() {
+			rCan := g.ResourceCanonical()
+			if _, ok := pp.Resource(rCan); !ok {
+				errs = append(errs, fmt.Errorf("job %q get step references unknown resource %q", j.Name, rCan))
+			}
+			for _, pn := range g.Passed {
+				if !jobNames[pn] && !forEachGroups[pn] {
+					errs = append(errs, fmt.Errorf("job %q get step %q has unknown job %q in passed", j.Name, rCan, pn))
+				}
+			}
+		}
+
+		for _, p := range j.AllPutSteps() {
+			rCan := p.ResourceCanonical()
+			if _, ok := pp.Resource(rCan); !ok {
+				errs = append(errs, fmt.Errorf("job %q put step references unknown resource %q", j.Name, rCan))
+			}
+		}
+
+		for _, ps := range j.FlatPlanSteps() {
+			if ps.Type == job.StepTypeTask && ps.Task != nil {
+				if _, ok := pp.Runner(ps.Task.Run.Runner); !ok {
+					errs = append(errs, fmt.Errorf("job %q task %q references unknown runner %q", j.Name, ps.Task.Name, ps.Task.Run.Runner))
+				}
+			}
+			if ps.Type == job.StepTypeNotify && ps.Notify != nil {
+				nCan := ps.Notify.NotificationCanonical()
+				if _, ok := pp.Notification(nCan); !ok {
+					errs = append(errs, fmt.Errorf("job %q notify step references unknown notification %q", j.Name, nCan))
+				}
+			}
+		}
+
+		// F. Hook references
+		// Hook references (runner and notify only; put steps in hooks are
+		// already covered by AllPutSteps above).
+		for _, h := range collectAllHookSteps(&j) {
+			switch h.Type {
+			case job.StepTypeRunner:
+				if h.Runner != nil {
+					if _, ok := pp.Runner(h.Runner.Runner); !ok {
+						errs = append(errs, fmt.Errorf("job %q hook references unknown runner %q", j.Name, h.Runner.Runner))
+					}
+				}
+			case job.StepTypeNotify:
+				if h.Notify != nil {
+					nCan := h.Notify.NotificationCanonical()
+					if _, ok := pp.Notification(nCan); !ok {
+						errs = append(errs, fmt.Errorf("job %q hook notify step references unknown notification %q", j.Name, nCan))
+					}
+				}
+			}
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+// collectAllHookSteps gathers all hook steps from a job's lifecycle hooks
+// (on_success, on_failure, on_cancel, ensure) at both job and step level.
+func collectAllHookSteps(j *job.Job) []job.HookStep {
+	var steps []job.HookStep
+	collect := func(hooks []job.HookStep) {
+		steps = append(steps, hooks...)
+	}
+	// Job-level hooks
+	collect(j.OnSuccess)
+	collect(j.OnFailure)
+	collect(j.OnCancel)
+	collect(j.Ensure)
+	// Step-level hooks
+	for _, ps := range j.FlatPlanSteps() {
+		collect(ps.OnSuccess)
+		collect(ps.OnFailure)
+		collect(ps.OnCancel)
+		collect(ps.Ensure)
+	}
+	return steps
 }
 
 // jobBlockPair associates a decoded hclJob with its AST block and eval context.

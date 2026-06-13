@@ -475,6 +475,12 @@ export var PipelineGraphView = Backbone.View.extend({
           });
         }
         if (that.onSVGReady) that.onSVGReady(svg);
+      }).catch(function(err) {
+        that.$el.html(that.template());
+        that.$el.find("#pipeline-graph").html(
+          '<div class="piko-graph-error">' +
+          $('<span>').text(err.message || String(err)).html() + '</div>'
+        );
       });
     }
     return this;
