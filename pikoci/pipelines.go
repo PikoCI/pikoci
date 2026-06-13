@@ -39,7 +39,7 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pn)
 	}
 
-	pp, err := q.readPipeline(ctx, rpp, vars)
+	pp, err := ReadPipeline(ctx, rpp, vars)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Pipeline config: %w", err)
 	}
@@ -164,7 +164,7 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pCan string, rpp []byte
 		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pCan)
 	}
 
-	pp, err := q.readPipeline(ctx, rpp, vars)
+	pp, err := ReadPipeline(ctx, rpp, vars)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Pipeline config: %w", err)
 	}
@@ -1051,7 +1051,7 @@ func (q *PikoCI) CreatePipelineImage(ctx context.Context, tc string, pipeline []
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
 	}
 
-	pp, err := q.readPipeline(ctx, pipeline, vars)
+	pp, err := ReadPipeline(ctx, pipeline, vars)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Pipeline: %w", err)
 	}
