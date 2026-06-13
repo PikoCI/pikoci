@@ -554,7 +554,6 @@ get "git" "my_repo" {
 | `passed`   | no       | List of job names that must have run with this version first |
 | `timeout`  | no       | Maximum duration for the step (e.g. `"2m"`, `"30s"`) |
 | `attempts` | no       | Maximum number of times to try the step (default `1`, no retry) |
-| `secrets`  | no       | Map of secret_type name to path (e.g. `{"vault" = "secret/data/db"}`) |
 | `on_success` | no     | Hook — runs after the step succeeds |
 | `on_failure` | no     | Hook — runs after the step fails |
 | `on_cancel`  | no     | Hook — runs when the build is cancelled |
@@ -604,7 +603,6 @@ task "test" {
 | `attempts` | no       | Maximum number of times to try the step (default `1`, no retry) |
 | `inputs`   | no       | List of paths that must exist before the task runs |
 | `outputs`  | no       | List of paths that must exist after the task finishes |
-| `secrets`  | no       | Map of secret_type name to path (e.g. `{"vault" = "secret/data/db"}`) |
 | `run`        | yes      | Runner command block |
 | `on_success` | no       | Hook — runs after the step succeeds |
 | `on_failure` | no       | Hook — runs after the step fails |
@@ -676,7 +674,6 @@ put "git" "my_repo" {
 | `name`     | yes      | Label, resource name                           |
 | `timeout`  | no       | Maximum duration for the step (e.g. `"5m"`, `"30s"`) |
 | `attempts` | no       | Maximum number of times to try the step (default `1`, no retry) |
-| `secrets`  | no       | Map of secret_type name to path (e.g. `{"vault" = "secret/data/db"}`) |
 | `params`     | no       | Block with key/value pairs passed to the resource type |
 | `on_success` | no       | Hook — runs after the step succeeds |
 | `on_failure` | no       | Hook — runs after the step fails |

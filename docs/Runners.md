@@ -13,8 +13,9 @@ runner_type "docker" {
       "-v", "$WORKDIR:/workdir",
       "-w", "/workdir",
       "$env",
+      "$args",
       "$image",
-      "$cmd",
+      "/bin/sh", "-ec", "command -v git >/dev/null && git config --global --add safe.directory '*'; $cmd",
     ]
   }
 }
@@ -232,7 +233,7 @@ task "test" {
 | `cmd`   | yes      | Shell command to execute inside the container |
 | `args`  | no       | Extra docker flags (env, volumes, etc.)  |
 
-The docker runner mounts `$WORKDIR` as `/workdir` inside the container and runs the command with `/bin/sh -ec`.
+The docker runner mounts `$WORKDIR` as `/workdir` inside the container and runs the command with `/bin/sh -ec`. It also automatically configures `git config --global --add safe.directory '*'` if git is available, so cloned repositories work correctly inside containers.
 
 ### Extra docker flags
 

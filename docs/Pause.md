@@ -35,8 +35,4 @@ POST /teams/{tc}/pipelines/{pc}/jobs/{jn}/unpause
 
 ## CLI
 
-```bash
-# Pause/unpause a pipeline
-pikoci client pipelines pause -u <url> --team-canonical <tc> -n <name>
-pikoci client pipelines unpause -u <url> --team-canonical <tc> -n <name>
-```
+CLI commands for pause/unpause are not yet implemented. Use the API endpoints above directly, or the UI buttons.
