@@ -964,6 +964,157 @@ func TestGitPush(t *testing.T) {
 	assert.Equal(t, pushSHA, remoteSHA)
 }
 
+// --- Fs resource type: check ---
+
+func TestFsCheck_File_EmitsVersionOnChange(t *testing.T) {
+	rts := builtin.ResourceTypes()
+	rt := rts["fs"]
+
+	// Create a temp file
+	tmpFile := filepath.Join(t.TempDir(), "test.txt")
+	require.NoError(t, os.WriteFile(tmpFile, []byte("hello"), 0644))
+
+	// First check: no previous version → should emit a version
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_path": tmpFile,
+	})
+	require.NoError(t, err, "fs check (file, first) failed: %s", out)
+
+	var versions []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 1)
+	assert.Equal(t, tmpFile, versions[0]["path"])
+	assert.NotEmpty(t, versions[0]["hash"])
+	assert.NotEmpty(t, versions[0]["modified"])
+	assert.NotEmpty(t, versions[0]["size"])
+
+	oldHash := versions[0]["hash"].(string)
+
+	// Same hash → no new version
+	out, err = runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_path":   tmpFile,
+		"version_hash": oldHash,
+	})
+	require.NoError(t, err, "fs check (file, same hash) failed: %s", out)
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 0)
+
+	// Modify file → new version
+	require.NoError(t, os.WriteFile(tmpFile, []byte("world"), 0644))
+	out, err = runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_path":   tmpFile,
+		"version_hash": oldHash,
+	})
+	require.NoError(t, err, "fs check (file, changed) failed: %s", out)
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 1)
+	assert.NotEqual(t, oldHash, versions[0]["hash"])
+}
+
+func TestFsCheck_Directory_EmitsVersionOnChange(t *testing.T) {
+	rts := builtin.ResourceTypes()
+	rt := rts["fs"]
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "a.txt"), []byte("aaa"), 0644))
+
+	// First check
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_path": tmpDir,
+	})
+	require.NoError(t, err, "fs check (dir, first) failed: %s", out)
+
+	var versions []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 1)
+	assert.Equal(t, tmpDir, versions[0]["path"])
+	assert.NotEmpty(t, versions[0]["hash"])
+	_, hasModified := versions[0]["modified"]
+	assert.False(t, hasModified, "directory version should not have modified field")
+
+	oldHash := versions[0]["hash"].(string)
+
+	// Same content → no new version
+	out, err = runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_path":   tmpDir,
+		"version_hash": oldHash,
+	})
+	require.NoError(t, err, "fs check (dir, same) failed: %s", out)
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 0)
+
+	// Add a file → new version
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "b.txt"), []byte("bbb"), 0644))
+	out, err = runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_path":   tmpDir,
+		"version_hash": oldHash,
+	})
+	require.NoError(t, err, "fs check (dir, changed) failed: %s", out)
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 1)
+	assert.NotEqual(t, oldHash, versions[0]["hash"])
+}
+
+func TestFsCheck_PathNotFound(t *testing.T) {
+	rts := builtin.ResourceTypes()
+	rt := rts["fs"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_path": "/nonexistent/path/that/does/not/exist",
+	})
+	require.NoError(t, err, "fs check (not found) failed: %s", out)
+
+	var versions []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &versions))
+	assert.Len(t, versions, 0)
+}
+
+// --- Fs resource type: pull ---
+
+func TestFsPull_File_CopiesToWorkdir(t *testing.T) {
+	rts := builtin.ResourceTypes()
+	rt := rts["fs"]
+
+	tmpFile := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(tmpFile, []byte("key: value"), 0644))
+
+	workDir := t.TempDir()
+	out, err := runScript(t, rt.Pull, workDir, map[string]string{
+		"param_path": tmpFile,
+		"WORKDIR":    workDir,
+	})
+	require.NoError(t, err, "fs pull (file) failed: %s", out)
+
+	data, err := os.ReadFile(filepath.Join(workDir, "config.yaml"))
+	require.NoError(t, err)
+	assert.Equal(t, "key: value", string(data))
+}
+
+func TestFsPull_Directory_CopiesToWorkdir(t *testing.T) {
+	rts := builtin.ResourceTypes()
+	rt := rts["fs"]
+
+	srcDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "a.txt"), []byte("aaa"), 0644))
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "sub"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "sub", "b.txt"), []byte("bbb"), 0644))
+
+	workDir := t.TempDir()
+	out, err := runScript(t, rt.Pull, workDir, map[string]string{
+		"param_path": srcDir,
+		"WORKDIR":    workDir,
+	})
+	require.NoError(t, err, "fs pull (dir) failed: %s", out)
+
+	data, err := os.ReadFile(filepath.Join(workDir, "a.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "aaa", string(data))
+
+	data, err = os.ReadFile(filepath.Join(workDir, "sub", "b.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "bbb", string(data))
+}
+
 // --- Trigger resource type ---
 
 func TestTrigger_NoScripts(t *testing.T) {

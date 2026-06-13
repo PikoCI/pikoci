@@ -248,6 +248,80 @@ The minimum `check_interval` is 10 seconds. Intervals shorter than 10s will be r
 
 Manual triggers (via the UI or API) and webhook triggers reset the check timer, so the next automatic check happens one full interval after the trigger.
 
+## Built-in: fs
+
+The `fs` resource type watches local files or directories for changes. A new version is emitted whenever the content hash changes.
+
+```hcl
+resource "fs" "config" {
+  check_interval = "@every 30s"
+  params {
+    path = "/etc/myapp/config.yaml"
+  }
+}
+```
+
+### Params
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `path` | yes | Absolute path to a file or directory to watch |
+
+### Check behavior
+
+- **File**: computes SHA256 hash. If the hash differs from the previous version, emits a new version with `path`, `hash`, `modified` (Unix timestamp), and `size` (bytes).
+- **Directory**: computes a SHA256 hash of all file contents in the tree (`find | sort | xargs sha256sum | sha256sum`). If the hash differs, emits a new version with `path` and `hash`.
+- If the path does not exist, returns no versions (empty array).
+
+### Pull behavior
+
+Copies the file or directory into the job's working directory. For a file, the file is copied directly. For a directory, all contents are copied recursively.
+
+### Version fields
+
+| Field | File | Directory | Description |
+|-------|------|-----------|-------------|
+| `path` | yes | yes | Watched path |
+| `hash` | yes | yes | SHA256 content hash |
+| `modified` | yes | no | File modification time (Unix timestamp) |
+| `size` | yes | no | File size in bytes |
+
+### Examples
+
+Watch a single config file:
+
+```hcl
+resource "fs" "config" {
+  check_interval = "@every 1m"
+  params {
+    path = "/etc/myapp/config.yaml"
+  }
+}
+
+job "reload" {
+  get "fs" "config" {
+    trigger = true
+  }
+
+  task "restart" {
+    run "shell" {
+      cmd = "systemctl restart myapp"
+    }
+  }
+}
+```
+
+Watch a directory for any changes:
+
+```hcl
+resource "fs" "templates" {
+  check_interval = "@every 5m"
+  params {
+    path = "/var/lib/myapp/templates"
+  }
+}
+```
+
 ## Built-in: git
 
 The `git` resource type is built in with API-aware check support for GitHub, GitLab, and Gitea/Forgejo. You do not need to define it, just use it directly:
