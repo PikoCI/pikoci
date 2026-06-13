@@ -47,6 +47,16 @@ func TestResourceTypes(t *testing.T) {
 		assert.Contains(t, rt.Params, "base_dir")
 	})
 
+	t.Run("fs", func(t *testing.T) {
+		rt, ok := rts["fs"]
+		require.True(t, ok)
+		assert.Equal(t, "fs", rt.Name)
+		assert.Equal(t, "exec", rt.Check.Runner)
+		assert.Equal(t, "exec", rt.Pull.Runner)
+		assert.False(t, rt.Cache)
+		assert.Contains(t, rt.Params, "path")
+	})
+
 	t.Run("trigger", func(t *testing.T) {
 		rt, ok := rts["trigger"]
 		require.True(t, ok)

@@ -19,7 +19,7 @@ import (
 // embedded. They are resolved via the pikoci:// source scheme, which falls
 // back to the GitHub raw URL when not found in the embedded FS.
 
-//go:embed resource_types/artifact.hcl resource_types/cron.hcl resource_types/git.hcl resource_types/trigger.hcl
+//go:embed resource_types/artifact.hcl resource_types/cron.hcl resource_types/fs.hcl resource_types/git.hcl resource_types/trigger.hcl
 var resourceTypeFS embed.FS
 
 //go:embed runners/*.hcl
