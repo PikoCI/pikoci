@@ -27,19 +27,25 @@ type dbSecretType struct {
 	Params sql.NullString
 	Config sql.NullString
 	Get    sql.NullString
+	Runner sql.NullString
 }
 
 func newDBSecretType(st sectype.SecretType) dbSecretType {
 	p, _ := json.Marshal(st.Params)
 	c, _ := json.Marshal(st.Config)
 	g, _ := json.Marshal(st.Get)
-	return dbSecretType{
+	dbst := dbSecretType{
 		Name:   toNullString(st.Name),
 		Source: toNullString(st.Source),
 		Params: toNullString(string(p)),
 		Config: toNullString(string(c)),
 		Get:    toNullString(string(g)),
 	}
+	if st.Runner != nil {
+		r, _ := json.Marshal(st.Runner)
+		dbst.Runner = toNullString(string(r))
+	}
+	return dbst
 }
 
 func (dbst *dbSecretType) toDomainEntity() *sectype.SecretType {
@@ -52,6 +58,9 @@ func (dbst *dbSecretType) toDomainEntity() *sectype.SecretType {
 	_ = json.Unmarshal([]byte(dbst.Params.String), &st.Params)
 	_ = json.Unmarshal([]byte(dbst.Config.String), &st.Config)
 	_ = json.Unmarshal([]byte(dbst.Get.String), &st.Get)
+	if dbst.Runner.Valid {
+		_ = json.Unmarshal([]byte(dbst.Runner.String), &st.Runner)
+	}
 
 	return st
 }
@@ -59,8 +68,8 @@ func (dbst *dbSecretType) toDomainEntity() *sectype.SecretType {
 func (r *SecretTypeRepository) Create(ctx context.Context, tc, pn string, st sectype.SecretType) (uint32, error) {
 	dbst := newDBSecretType(st)
 	res, err := r.querier.ExecContext(ctx, `
-		INSERT INTO secret_types(name, source, get, params, config, pipeline_id)
-		VALUES (?, ?, ?, ?, ?,
+		INSERT INTO secret_types(name, source, get, params, config, runner, pipeline_id)
+		VALUES (?, ?, ?, ?, ?, ?,
 			-- pipeline_id
 			(
 				SELECT p.id
@@ -68,7 +77,7 @@ func (r *SecretTypeRepository) Create(ctx context.Context, tc, pn string, st sec
 				JOIN teams AS t
 					ON p.team_id = t.id
 				WHERE t.canonical = ? AND p.canonical = ?
-			))`, dbst.Name, dbst.Source, dbst.Get, dbst.Params, dbst.Config, tc, pn)
+			))`, dbst.Name, dbst.Source, dbst.Get, dbst.Params, dbst.Config, dbst.Runner, tc, pn)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -85,7 +94,7 @@ func (r *SecretTypeRepository) Update(ctx context.Context, tc, pn, stn string, s
 	dbst := newDBSecretType(st)
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE secret_types
-		SET name = ?, source = ?, get = ?, params = ?, config = ?
+		SET name = ?, source = ?, get = ?, params = ?, config = ?, runner = ?
 		WHERE id = (
 			SELECT st.id
 			FROM (SELECT * FROM secret_types) AS st
@@ -95,7 +104,7 @@ func (r *SecretTypeRepository) Update(ctx context.Context, tc, pn, stn string, s
 				ON p.team_id = t.id
 			WHERE t.canonical = ? AND p.canonical = ? AND st.name = ?
 		)
-	`, dbst.Name, dbst.Source, dbst.Get, dbst.Params, dbst.Config, tc, pn, stn)
+	`, dbst.Name, dbst.Source, dbst.Get, dbst.Params, dbst.Config, dbst.Runner, tc, pn, stn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -110,7 +119,7 @@ func (r *SecretTypeRepository) Update(ctx context.Context, tc, pn, stn string, s
 
 func (r *SecretTypeRepository) Find(ctx context.Context, tc, pn, stn string) (*sectype.SecretType, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT st.id, st.name, st.source, st.get, st.params, st.config
+		SELECT st.id, st.name, st.source, st.get, st.params, st.config, st.runner
 		FROM secret_types AS st
 		JOIN pipelines AS p
 			ON st.pipeline_id = p.id
@@ -129,7 +138,7 @@ func (r *SecretTypeRepository) Find(ctx context.Context, tc, pn, stn string) (*s
 
 func (r *SecretTypeRepository) Filter(ctx context.Context, tc, pn string) ([]*sectype.SecretType, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT st.id, st.name, st.source, st.get, st.params, st.config
+		SELECT st.id, st.name, st.source, st.get, st.params, st.config, st.runner
 		FROM secret_types AS st
 		JOIN pipelines AS p
 			ON st.pipeline_id = p.id
@@ -185,6 +194,7 @@ func scanSecretType(s sqlr.Scanner) (*sectype.SecretType, error) {
 		&st.Get,
 		&st.Params,
 		&st.Config,
+		&st.Runner,
 	)
 
 	if err != nil {
