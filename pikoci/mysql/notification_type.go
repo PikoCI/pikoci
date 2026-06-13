@@ -26,17 +26,23 @@ type dbNotificationType struct {
 	Source sql.NullString
 	Notify sql.NullString
 	Params sql.NullString
+	Runner sql.NullString
 }
 
 func newDBNotificationType(nt notiftype.NotificationType) dbNotificationType {
 	p, _ := json.Marshal(nt.Params)
 	n, _ := json.Marshal(nt.Notify)
-	return dbNotificationType{
+	dbnt := dbNotificationType{
 		Name:   toNullString(nt.Name),
 		Source: toNullString(nt.Source),
 		Notify: toNullString(string(n)),
 		Params: toNullString(string(p)),
 	}
+	if nt.Runner != nil {
+		r, _ := json.Marshal(nt.Runner)
+		dbnt.Runner = toNullString(string(r))
+	}
+	return dbnt
 }
 
 func (dbnt *dbNotificationType) toDomainEntity() *notiftype.NotificationType {
@@ -48,6 +54,9 @@ func (dbnt *dbNotificationType) toDomainEntity() *notiftype.NotificationType {
 
 	_ = json.Unmarshal([]byte(dbnt.Params.String), &nt.Params)
 	_ = json.Unmarshal([]byte(dbnt.Notify.String), &nt.Notify)
+	if dbnt.Runner.Valid {
+		_ = json.Unmarshal([]byte(dbnt.Runner.String), &nt.Runner)
+	}
 
 	return nt
 }
@@ -55,15 +64,15 @@ func (dbnt *dbNotificationType) toDomainEntity() *notiftype.NotificationType {
 func (r *NotificationTypeRepository) Create(ctx context.Context, tc, pn string, nt notiftype.NotificationType) (uint32, error) {
 	dbnt := newDBNotificationType(nt)
 	res, err := r.querier.ExecContext(ctx, `
-		INSERT INTO notification_types(name, source, notify, params, pipeline_id)
-		VALUES (?, ?, ?, ?,
+		INSERT INTO notification_types(name, source, notify, params, runner, pipeline_id)
+		VALUES (?, ?, ?, ?, ?,
 			(
 				SELECT p.id
 				FROM pipelines AS p
 				JOIN teams AS t
 					ON p.team_id = t.id
 				WHERE t.canonical = ? AND p.canonical = ?
-			))`, dbnt.Name, dbnt.Source, dbnt.Notify, dbnt.Params, tc, pn)
+			))`, dbnt.Name, dbnt.Source, dbnt.Notify, dbnt.Params, dbnt.Runner, tc, pn)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -80,7 +89,7 @@ func (r *NotificationTypeRepository) Update(ctx context.Context, tc, pn, tn stri
 	dbnt := newDBNotificationType(nt)
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE notification_types AS nt
-		SET name = ?, source = ?, notify = ?, params = ?
+		SET name = ?, source = ?, notify = ?, params = ?, runner = ?
 		FROM (
 			SELECT nt.id
 			FROM notification_types AS nt
@@ -91,7 +100,7 @@ func (r *NotificationTypeRepository) Update(ctx context.Context, tc, pn, tn stri
 			WHERE t.canonical = ? AND p.canonical = ? AND nt.name = ?
 		) AS ntt
 		WHERE ntt.id = nt.id
-	`, dbnt.Name, dbnt.Source, dbnt.Notify, dbnt.Params, tc, pn, tn)
+	`, dbnt.Name, dbnt.Source, dbnt.Notify, dbnt.Params, dbnt.Runner, tc, pn, tn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -106,7 +115,7 @@ func (r *NotificationTypeRepository) Update(ctx context.Context, tc, pn, tn stri
 
 func (r *NotificationTypeRepository) Find(ctx context.Context, tc, pn, tn string) (*notiftype.NotificationType, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT nt.id, nt.name, nt.source, nt.notify, nt.params
+		SELECT nt.id, nt.name, nt.source, nt.notify, nt.params, nt.runner
 		FROM notification_types AS nt
 		JOIN pipelines AS p
 			ON nt.pipeline_id = p.id
@@ -125,7 +134,7 @@ func (r *NotificationTypeRepository) Find(ctx context.Context, tc, pn, tn string
 
 func (r *NotificationTypeRepository) Filter(ctx context.Context, tc, pn string) ([]*notiftype.NotificationType, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT nt.id, nt.name, nt.source, nt.notify, nt.params
+		SELECT nt.id, nt.name, nt.source, nt.notify, nt.params, nt.runner
 		FROM notification_types AS nt
 		JOIN pipelines AS p
 			ON nt.pipeline_id = p.id
@@ -180,6 +189,7 @@ func scanNotificationType(s sqlr.Scanner) (*notiftype.NotificationType, error) {
 		&nt.Source,
 		&nt.Notify,
 		&nt.Params,
+		&nt.Runner,
 	)
 
 	if err != nil {
