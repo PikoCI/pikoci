@@ -16,5 +16,5 @@ type SecretType struct {
 	Config map[string]string   `json:"config,omitempty"`
 	Get    utils.RunnerCommand `json:"get" hcl:"get,block"`
 
-	Runner *utils.RunnerOverride `json:"runner,omitempty"`
+	Runner *utils.RunnerOverride `json:"runner,omitempty" hcl:"runner,block"`
 }

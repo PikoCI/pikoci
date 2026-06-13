@@ -18,6 +18,6 @@ type ResourceType struct {
 	Pull  *utils.RunnerCommand `json:"pull,omitempty" hcl:"pull,block"`
 	Push  *utils.RunnerCommand `json:"push,omitempty" hcl:"push,block"`
 
-	Runner *utils.RunnerOverride `json:"runner,omitempty"`
+	Runner *utils.RunnerOverride `json:"runner,omitempty" hcl:"runner,block"`
 	Cache  bool                  `json:"cache" hcl:"cache,optional"`
 }
