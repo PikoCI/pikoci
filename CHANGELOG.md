@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactored
+
+- Consolidate duplicated `clickLink` method from seven Backbone views into a single shared helper in `namespace.js`. Uses `event.target.closest('a')` for safe anchor resolution and adds a null guard for clicks on non-anchor areas ([#447](https://github.com/PikoCI/pikoci/issues/447))
+
 ### Fixed
 
 - Persist `runner` override for `notification_type`, `resource_type`, and `secret_type`. The field was parsed from HCL but never saved to the database, silently dropping runner override configuration on reload ([#506](https://github.com/PikoCI/pikoci/issues/506))
