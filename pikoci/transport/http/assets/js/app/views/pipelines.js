@@ -148,7 +148,16 @@ export var PipelineShowView = Backbone.View.extend({
   template: _.template($('#pipeline-show-view').html()),
   initialize: function(options) {
     this.image = options.image;
-    this.image.fetch();
+    this.image.fetch({
+      error: function(model, xhr) {
+        try {
+          var resp = JSON.parse(xhr.responseText);
+          if (resp && resp.error) {
+            window.app.apiNotice.set({error: "Pipeline graph: " + resp.error});
+          }
+        } catch(e) {}
+      }
+    });
 
     var that = this;
     this.intervalID = window.setInterval(function() {
