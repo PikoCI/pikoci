@@ -1706,10 +1706,11 @@ func (w *Worker) runAutoNotifications(ctx context.Context, m workitem.Body, b *b
 			continue
 		}
 
-		// Check job scope
+		// Check job scope (expand for_each group names to instance names)
 		if len(n.Jobs) > 0 {
+			expandedJobs := resolvePassedJobNames(n.Jobs, pp)
 			found := false
-			for _, jn := range n.Jobs {
+			for _, jn := range expandedJobs {
 				if jn == m.JobName {
 					found = true
 					break
@@ -1720,8 +1721,9 @@ func (w *Worker) runAutoNotifications(ctx context.Context, m workitem.Body, b *b
 			}
 		}
 		if len(n.Exclude) > 0 {
+			expandedExclude := resolvePassedJobNames(n.Exclude, pp)
 			excluded := false
-			for _, jn := range n.Exclude {
+			for _, jn := range expandedExclude {
 				if jn == m.JobName {
 					excluded = true
 					break

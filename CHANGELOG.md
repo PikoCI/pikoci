@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Support referencing specific `for_each` job instances in `passed`, notification `jobs`, and notification `exclude` (e.g., `passed = ["test--a"]`). Also fixes a bug where notification `jobs`/`exclude` with group names never matched `for_each` instance builds at runtime ([#512](https://github.com/PikoCI/pikoci/issues/512))
 - Cross-reference validation in `ReadPipeline()`: pipeline saves now catch invalid references to non-existent jobs, resources, runners, notifications, resource types, notification types, and secret types. All errors are reported at once. Also surfaces graph rendering errors in the pipeline editor and show views ([#497](https://github.com/PikoCI/pikoci/issues/497))
 - `pipeline validate` CLI command: validate pipeline HCL files for syntax and structural errors without a running server. Supports `--var key=value` and `--vars vars.json` flags. Useful for CI/CD checks, pre-commit hooks, and headless environments ([#155](https://github.com/PikoCI/pikoci/issues/155))
 - Release pipeline with .deb/.rpm packages: binaries are now named `pikoci-<os>-<arch>` (with `.exe` for Windows), Linux packages (.deb and .rpm) are generated via nfpm for amd64/arm64, and a SHA256SUMS file is included in GitHub Releases. The release job is split into discrete tasks (install-tools, build-binaries, package-deb-rpm, create-release) with tool caching ([#346](https://github.com/PikoCI/pikoci/issues/346))

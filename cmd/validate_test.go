@@ -268,3 +268,91 @@ job "build" {
 	assert.Contains(t, err.Error(), "references unknown notification_type")
 	assert.Contains(t, err.Error(), "references unknown runner")
 }
+
+func TestReadPipeline_PassedSpecificForEachInstance_Valid(t *testing.T) {
+	hcl := `
+resource "git" "my-repo" {}
+job "test" {
+  for_each = toset(["a", "b"])
+  get "git" "my-repo" {}
+  task "echo" {
+    run "exec" { path = "echo" }
+  }
+}
+job "deploy" {
+  get "git" "my-repo" {
+    passed = ["test--a"]
+  }
+  task "echo" {
+    run "exec" { path = "echo" }
+  }
+}
+`
+	_, err := pikoci.ReadPipeline(context.Background(), []byte(hcl), nil)
+	assert.NoError(t, err)
+}
+
+func TestReadPipeline_PassedSpecificForEachInstance_Invalid(t *testing.T) {
+	hcl := `
+resource "git" "my-repo" {}
+job "test" {
+  for_each = toset(["a", "b"])
+  get "git" "my-repo" {}
+  task "echo" {
+    run "exec" { path = "echo" }
+  }
+}
+job "deploy" {
+  get "git" "my-repo" {
+    passed = ["test--c"]
+  }
+  task "echo" {
+    run "exec" { path = "echo" }
+  }
+}
+`
+	_, err := pikoci.ReadPipeline(context.Background(), []byte(hcl), nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown job "test--c" in passed`)
+}
+
+func TestReadPipeline_NotificationJobsSpecificForEachInstance_Valid(t *testing.T) {
+	hcl := `
+notification_type "slack" {
+  notify "exec" {}
+}
+notification "slack" "my-notif" {
+  on = ["success"]
+  jobs = ["test--a"]
+}
+job "test" {
+  for_each = toset(["a", "b"])
+  task "echo" {
+    run "exec" { path = "echo" }
+  }
+}
+`
+	_, err := pikoci.ReadPipeline(context.Background(), []byte(hcl), nil)
+	assert.NoError(t, err)
+}
+
+func TestReadPipeline_NotificationExcludeSpecificForEachInstance_Invalid(t *testing.T) {
+	hcl := `
+notification_type "slack" {
+  notify "exec" {}
+}
+notification "slack" "my-notif" {
+  on = ["success"]
+  exclude = ["test--c"]
+}
+job "test" {
+  for_each = toset(["a", "b"])
+  task "echo" {
+    run "exec" { path = "echo" }
+  }
+}
+`
+	_, err := pikoci.ReadPipeline(context.Background(), []byte(hcl), nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown job "test--c"`)
+}

@@ -49,6 +49,32 @@ job "deploy-prod" {
   }
 }
 
+job "validate" {
+  for_each = toset(["lint", "vet"])
+  get "cron" "my_cron" {
+    trigger = true
+  }
+  task "run" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo 'validate ${each.value}'"]
+    }
+  }
+}
+
+job "deploy-after-lint" {
+  get "cron" "my_cron" {
+    trigger = true
+    passed  = ["validate--lint"]
+  }
+  task "deploy" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo 'deploying after lint only'"]
+    }
+  }
+}
+
 job "monitor" {
   get "cron" "my_cron" {
     trigger = true
