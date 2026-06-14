@@ -475,6 +475,34 @@ job "deploy" {
 }
 ```
 
+You can also reference a **specific instance** by its expanded name (`{jobname}--{key}`). This is useful when a downstream job only depends on one particular instance rather than the entire group:
+
+```hcl
+job "test" {
+  for_each = toset(["unit", "integration"])
+
+  get "git" "code" { trigger = true }
+  task "run" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-c", "make test-${each.value}"]
+    }
+  }
+}
+
+job "quick-deploy" {
+  get "git" "code" {
+    trigger = true
+    passed  = ["test--unit"]  # only waits for the unit test instance
+  }
+  task "deploy" {
+    run "exec" { path = "./deploy.sh" }
+  }
+}
+```
+
+Both group names and specific instance names are validated at pipeline load time — referencing a non-existent instance (e.g., `"test--lint"` when only `"unit"` and `"integration"` exist) produces a validation error.
+
 #### Lifecycle on pipeline update
 
 - Adding a key creates a new job instance

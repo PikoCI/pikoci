@@ -149,6 +149,48 @@ notification "slack" "skip-lint" {
 }
 ```
 
+#### Scoping with for_each jobs
+
+Both `jobs` and `exclude` support `for_each` group names and specific instance names:
+
+- **Group name** (e.g., `"test"`) — matches **all** instances of the for_each job (`test--a`, `test--b`, etc.)
+- **Specific instance** (e.g., `"test--a"`) — matches only that particular instance
+
+```hcl
+job "test" {
+  for_each = toset(["unit", "integration"])
+  task "run" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-c", "make test-${each.value}"]
+    }
+  }
+}
+
+# Notify for ALL test instances (group name)
+notification "slack" "all-tests" {
+  params { webhook_url = var.slack_webhook }
+  on = ["failure"]
+  jobs = ["test"]  # matches test--unit AND test--integration
+}
+
+# Notify only for integration test failures (specific instance)
+notification "slack" "integration-alert" {
+  params { webhook_url = var.slack_webhook }
+  on = ["failure"]
+  jobs = ["test--integration"]  # matches only test--integration
+}
+
+# Exclude unit tests from notifications (specific instance)
+notification "slack" "skip-unit" {
+  params { webhook_url = var.slack_webhook }
+  on = ["failure"]
+  exclude = ["test--unit"]  # skips test--unit, still fires for test--integration
+}
+```
+
+Job names in `jobs` and `exclude` are validated at pipeline load time — referencing a non-existent instance produces a validation error.
+
 ## github-check
 
 The `github-check` notification type reports build status back to GitHub as check runs. It uses a GitHub App for authentication.

@@ -5783,6 +5783,456 @@ func TestRunAutoNotifications_ExcludeJob(t *testing.T) {
 	require.Len(t, capturedBuild.Steps, 1)
 }
 
+func TestRunAutoNotifications_JobScope_ForEachGroup(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test--a",
+		BuildID:           10,
+		BuildNumber:       "400",
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:           1,
+				Name:         "test--a",
+				ForEachGroup: "test",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+			{
+				ID:           2,
+				Name:         "test--b",
+				ForEachGroup: "test",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "group-alert",
+				Canonical: "echo-notifier.group-alert",
+				On:        []string{"success"},
+				Jobs:      []string{"test"}, // group name should match for_each instances
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"notified"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "400", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	// Notification scoped to group "test" should fire for instance "test--a"
+	require.Len(t, capturedBuild.Steps, 2) // task + notification
+}
+
+func TestRunAutoNotifications_ExcludeJob_ForEachGroup(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test--a",
+		BuildID:           10,
+		BuildNumber:       "401",
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:           1,
+				Name:         "test--a",
+				ForEachGroup: "test",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+			{
+				ID:           2,
+				Name:         "test--b",
+				ForEachGroup: "test",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "exclude-group-alert",
+				Canonical: "echo-notifier.exclude-group-alert",
+				On:        []string{"success"},
+				Exclude:   []string{"test"}, // group name should exclude for_each instances
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"should not appear"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "401", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	// Notification excluded group "test", so it should NOT fire for instance "test--a"
+	require.Len(t, capturedBuild.Steps, 1) // task only
+}
+
+func TestRunAutoNotifications_JobScope_SpecificInstance(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test--a",
+		BuildID:           10,
+		BuildNumber:       "402",
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:           1,
+				Name:         "test--a",
+				ForEachGroup: "test",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+			{
+				ID:           2,
+				Name:         "test--b",
+				ForEachGroup: "test",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "instance-alert",
+				Canonical: "echo-notifier.instance-alert",
+				On:        []string{"success"},
+				Jobs:      []string{"test--a"}, // specific instance, not group
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"notified"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "402", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	// Notification scoped to specific instance "test--a" should fire
+	require.Len(t, capturedBuild.Steps, 2) // task + notification
+}
+
+func TestRunAutoNotifications_JobScope_SpecificInstance_NoMatchOther(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test--b", // different instance than scoped
+		BuildID:           10,
+		BuildNumber:       "403",
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:           1,
+				Name:         "test--a",
+				ForEachGroup: "test",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+			{
+				ID:           2,
+				Name:         "test--b",
+				ForEachGroup: "test",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "instance-alert",
+				Canonical: "echo-notifier.instance-alert",
+				On:        []string{"success"},
+				Jobs:      []string{"test--a"}, // scoped to test--a only
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"should not appear"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[1], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "403", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	// Notification scoped to "test--a" should NOT fire for "test--b"
+	require.Len(t, capturedBuild.Steps, 1) // task only
+}
+
+func TestRunAutoNotifications_ExcludeJob_SpecificInstance(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test--b",
+		BuildID:           10,
+		BuildNumber:       "404",
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:           1,
+				Name:         "test--a",
+				ForEachGroup: "test",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+			{
+				ID:           2,
+				Name:         "test--b",
+				ForEachGroup: "test",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "exclude-instance-alert",
+				Canonical: "echo-notifier.exclude-instance-alert",
+				On:        []string{"success"},
+				Exclude:   []string{"test--b"}, // exclude only test--b
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"should not appear"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[1], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "404", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	// Notification excluded specific instance "test--b", so it should NOT fire
+	require.Len(t, capturedBuild.Steps, 1) // task only
+}
+
 func TestRunAutoNotifications_NoOnField_Skips(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc := newTestWorker(ctrl)
