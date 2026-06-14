@@ -37,7 +37,7 @@ import {EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection} fro
 import {EditorState, Compartment} from "@codemirror/state"
 import {defaultKeymap, indentWithTab, history, historyKeymap} from "@codemirror/commands"
 import {bracketMatching, indentOnInput, foldGutter, syntaxHighlighting, defaultHighlightStyle, StreamLanguage, HighlightStyle} from "@codemirror/language"
-import {searchKeymap} from "@codemirror/search"
+import {search, searchKeymap, highlightSelectionMatches} from "@codemirror/search"
 import {closeBrackets, closeBracketsKeymap} from "@codemirror/autocomplete"
 import {lintGutter, setDiagnostics} from "@codemirror/lint"
 import {tags} from "@lezer/highlight"
@@ -60,7 +60,9 @@ window.PikoCM = {
   syntaxHighlighting,
   defaultHighlightStyle,
   StreamLanguage,
+  search,
   searchKeymap,
+  highlightSelectionMatches,
   closeBrackets,
   closeBracketsKeymap,
   lintGutter,
