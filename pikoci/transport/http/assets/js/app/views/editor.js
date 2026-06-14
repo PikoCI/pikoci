@@ -659,6 +659,8 @@ export var PipelinesNewView = Backbone.View.extend({
           CM.indentOnInput(),
           CM.foldGutter(),
           CM.lintGutter(),
+          CM.search(),
+          CM.highlightSelectionMatches(),
           this._themeCompartment.of(theme),
           this._highlightCompartment.of(CM.syntaxHighlighting(highlight)),
           hclLanguage(),
