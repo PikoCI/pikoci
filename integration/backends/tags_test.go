@@ -100,7 +100,7 @@ job "gpu-job" {
 	// Start an UNTAGGED worker — should NOT pick up the gpu-tagged job
 	var wg sync.WaitGroup
 	wg.Add(1)
-	untaggedWorker := worker.New(svc, logger.With("worker", "untagged"), "untagged-worker", "test", 1, nil, false)
+	untaggedWorker := worker.New(svc, logger.With("worker", "untagged"), "untagged-worker", "test", "", 1, nil, false)
 	go func() { defer wg.Done(); untaggedWorker.Run(ctx) }()
 
 	// Directly trigger the job to create a pending build
@@ -116,7 +116,7 @@ job "gpu-job" {
 
 	// Now start a GPU-tagged worker — should pick up the build
 	wg.Add(1)
-	gpuWorker := worker.New(svc, logger.With("worker", "gpu"), "gpu-worker", "test", 1, []string{"gpu"}, false)
+	gpuWorker := worker.New(svc, logger.With("worker", "gpu"), "gpu-worker", "test", "", 1, []string{"gpu"}, false)
 	go func() { defer wg.Done(); gpuWorker.Run(ctx) }()
 
 	require.Eventually(t, func() bool {
@@ -186,7 +186,7 @@ job "gpu-job" {
 	// Start an exclusive gpu worker — should only handle gpu-tagged jobs
 	var wg sync.WaitGroup
 	wg.Add(1)
-	exclWorker := worker.New(svc, logger.With("worker", "exclusive-gpu"), "exclusive-gpu-worker", "test", 1, []string{"gpu"}, true)
+	exclWorker := worker.New(svc, logger.With("worker", "exclusive-gpu"), "exclusive-gpu-worker", "test", "", 1, []string{"gpu"}, true)
 	go func() { defer wg.Done(); exclWorker.Run(ctx) }()
 
 	// Directly trigger both jobs to create pending builds

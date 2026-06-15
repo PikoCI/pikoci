@@ -216,7 +216,7 @@ func runLocal(ctx context.Context, logger *slog.Logger, pipelineConfig, jobName 
 
 	// Create worker with overrides
 	workerLogger := logger.With("service", "worker")
-	w := worker.New(svc, workerLogger, "local-run", "", 1, nil, false)
+	w := worker.New(svc, workerLogger, "local-run", "", "", 1, nil, false)
 	w.ResourceOverrides = workerResourceOverrides
 	w.LocalMode = true
 

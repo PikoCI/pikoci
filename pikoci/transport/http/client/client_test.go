@@ -2463,6 +2463,8 @@ func TestWorkerHeartbeat(t *testing.T) {
 		assert.Equal(t, "host1", hr.Hostname)
 		assert.Equal(t, "linux", hr.OS)
 		assert.Equal(t, "amd64", hr.Arch)
+		assert.Equal(t, "v0.4.0", hr.Version)
+		assert.Equal(t, "abc123", hr.Commit)
 		assert.Equal(t, 2, hr.Concurrency)
 		jsonHandler(w, thttp.WorkerHeartbeatResponse{})
 	}).Methods("POST")
@@ -2479,6 +2481,7 @@ func TestWorkerHeartbeat(t *testing.T) {
 		Arch:        "amd64",
 		GoVersion:   "go1.22",
 		Version:     "v0.4.0",
+		Commit:      "abc123",
 		Concurrency: 2,
 	})
 	require.NoError(t, err)

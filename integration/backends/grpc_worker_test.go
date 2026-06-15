@@ -128,7 +128,7 @@ func TestGRPCWorkerFullFlow(t *testing.T) {
 	grpcClient := workerv1.NewWorkerServiceClient(grpcConn)
 
 	// --- Start standalone worker via gRPC ---
-	w := worker.NewGRPC(httpClient, grpcClient, logger.With("worker", "test-worker-1"), "test-worker-1", "test", 1, workerToken, addr, nil, false)
+	w := worker.NewGRPC(httpClient, grpcClient, logger.With("worker", "test-worker-1"), "test-worker-1", "test", "", 1, workerToken, addr, nil, false)
 	go w.Run(ctx)
 
 	// Wait for worker to register

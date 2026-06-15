@@ -17,6 +17,7 @@ type WorkerHeartbeatRequest struct {
 	Arch          string   `json:"arch"`
 	GoVersion     string   `json:"go_version"`
 	Version       string   `json:"version"`
+	Commit        string   `json:"commit"`
 	Concurrency   int      `json:"concurrency"`
 	Tags          []string `json:"tags"`
 	ExclusiveTags bool     `json:"exclusive_tags"`
@@ -52,6 +53,7 @@ func workerHeartbeat(s pikoci.Service) http.HandlerFunc {
 			Arch:          req.Arch,
 			GoVersion:     req.GoVersion,
 			Version:       req.Version,
+			Commit:        req.Commit,
 			Concurrency:   req.Concurrency,
 			Tags:          req.Tags,
 			ExclusiveTags: req.ExclusiveTags,

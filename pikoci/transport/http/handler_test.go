@@ -16,6 +16,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/mock"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/wkr"
 	"go.uber.org/mock/gomock"
 	_ "modernc.org/sqlite"
 )
@@ -758,9 +759,18 @@ func TestWorkerHeartbeat_WithWorkerToken(t *testing.T) {
 	workerJWT, err := token.SignedString(secret)
 	require.NoError(t, err)
 
-	s.EXPECT().WorkerHeartbeat(gomock.Any(), gomock.Any()).Return(nil)
+	s.EXPECT().WorkerHeartbeat(gomock.Any(), gomock.Any()).DoAndReturn(func(_ interface{}, w interface{}) error {
+		wk, ok := w.(wkr.Worker)
+		if !ok {
+			t.Fatal("expected wkr.Worker")
+		}
+		assert.Equal(t, "worker-1", wk.Name)
+		assert.Equal(t, "v1.0.0", wk.Version)
+		assert.Equal(t, "deadbeef", wk.Commit)
+		return nil
+	})
 
-	body := `{"name":"worker-1","hostname":"host1","os":"linux","arch":"amd64","concurrency":2,"queues":"jobs,checks"}`
+	body := `{"name":"worker-1","hostname":"host1","os":"linux","arch":"amd64","version":"v1.0.0","commit":"deadbeef","concurrency":2}`
 	req, err := http.NewRequest(http.MethodPost, server.URL+"/workers/heartbeat", strings.NewReader(body))
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+workerJWT)
