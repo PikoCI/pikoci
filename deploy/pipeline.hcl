@@ -519,11 +519,14 @@ job "publish-release" {
         # Extract changelog
         BODY=$(sed -n "/^## \[$VERSION\]/,/^## \[/{/^## \[$VERSION\]/d;/^## \[/d;p;}" CHANGELOG.md)
 
-        # Create release and upload all artifacts
-        # Use --clobber to allow retries when a previous attempt partially uploaded
+        # Create release (or reuse existing from a partial retry)
         GH_TOKEN="${var.github_token}" gh release create $TAG \
           --title "$TAG" \
           --notes "$BODY" \
+          --repo PikoCI/pikoci 2>/dev/null || true
+
+        # Upload artifacts (--clobber overwrites assets from partial retries)
+        GH_TOKEN="${var.github_token}" gh release upload $TAG \
           --repo PikoCI/pikoci \
           --clobber \
           builds/pikoci-* \
