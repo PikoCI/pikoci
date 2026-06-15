@@ -541,8 +541,12 @@ job "publish-release" {
           builds/*.rpm \
           builds/SHA256SUMS
 
-        # Export changelog for Discord notification (escape newlines for parseOutputFile)
-        echo "CHANGELOG=$(echo "$CHANGELOG" | awk 'NR>1{printf "\\n"}{printf "%s",$$0}')" >> "$PIKOCI_OUTPUT"
+        # Export changelog for Discord (truncate to 1800 chars for Discord's 2000 limit, escape newlines)
+        DISCORD_CL=$(echo "$CHANGELOG" | head -c 1800)
+        if [ "$${#DISCORD_CL}" -lt "$${#CHANGELOG}" ]; then
+          DISCORD_CL="$${DISCORD_CL}..."
+        fi
+        echo "CHANGELOG=$(echo "$DISCORD_CL" | awk 'NR>1{printf "\\n"}{printf "%s",$$0}')" >> "$PIKOCI_OUTPUT"
       EOT
       args = [
         "-v", "pikoci-tools:/pikoci-tools",
