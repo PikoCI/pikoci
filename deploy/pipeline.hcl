@@ -542,7 +542,7 @@ job "publish-release" {
           builds/SHA256SUMS
 
         # Export changelog for Discord notification (escape newlines for parseOutputFile)
-        echo "CHANGELOG=$(echo "$CHANGELOG" | sed ':a;N;$$!ba;s/\n/\\n/g')" >> "$PIKOCI_OUTPUT"
+        echo "CHANGELOG=$(echo "$CHANGELOG" | awk 'NR>1{printf "\\n"}{printf "%s",$$0}')" >> "$PIKOCI_OUTPUT"
       EOT
       args = [
         "-v", "pikoci-tools:/pikoci-tools",
