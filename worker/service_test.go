@@ -7921,7 +7921,7 @@ func TestNew(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := mock.NewService(ctrl)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	w := New(svc, logger, "test-worker", "test", 1, nil, false)
+	w := New(svc, logger, "test-worker", "test", "", 1, nil, false)
 	assert.NotNil(t, w)
 }
 

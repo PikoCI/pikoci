@@ -180,7 +180,7 @@ func runWorker(ctx context.Context, s pikoci.Service, c int, llvl string, name s
 		}
 		nlogger := logger.With("num", i+1, "name", workerName)
 		nlogger.Info(fmt.Sprintf("Starting Worker %d", i+1))
-		w := worker.New(s, nlogger, workerName, Version, c, tags, exclusiveTags)
+		w := worker.New(s, nlogger, workerName, Version, Commit, c, tags, exclusiveTags)
 		workers = append(workers, w)
 
 		go func() {
@@ -209,7 +209,7 @@ func runGRPCWorker(ctx context.Context, s pikoci.Service, grpcClient workerv1.Wo
 		}
 		nlogger := logger.With("num", i+1, "name", workerName)
 		nlogger.Info(fmt.Sprintf("Starting gRPC Worker %d", i+1))
-		w := worker.NewGRPC(s, grpcClient, nlogger, workerName, Version, c, workerToken, grpcAddr, tags, exclusiveTags)
+		w := worker.NewGRPC(s, grpcClient, nlogger, workerName, Version, Commit, c, workerToken, grpcAddr, tags, exclusiveTags)
 		workers = append(workers, w)
 
 		go func() {

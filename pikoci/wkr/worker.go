@@ -19,6 +19,7 @@ type Worker struct {
 	Arch        string    `json:"arch"`
 	GoVersion   string    `json:"go_version"`
 	Version     string    `json:"version"`
+	Commit      string    `json:"commit"`
 	Concurrency int       `json:"concurrency"`
 	Tags          []string  `json:"tags"`
 	ExclusiveTags bool      `json:"exclusive_tags"`

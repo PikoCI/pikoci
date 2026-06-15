@@ -864,7 +864,14 @@
         <% } %>
       </td>
       <td><%- os %>/<%- arch %> (<%- go_version %>)</td>
-      <td><%- version %></td>
+      <td>
+        <%- version %><% if (commit && commit !== "unknown") { %> (<%- commit %>)<% } %>
+        <% if (is_outdated) { %>
+          <span class="text-warning ms-1" title="Worker version does not match server (server: <%= server_version %> (<%= server_commit %>))" data-bs-toggle="tooltip">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+          </span>
+        <% } %>
+      </td>
       <td><%- uptime %></td>
       <td><%- last_seen %></td>
       <td>

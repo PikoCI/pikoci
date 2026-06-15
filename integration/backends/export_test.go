@@ -70,7 +70,7 @@ func TestExportE2E(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		w := worker.New(svc, logger.With("worker", 1), "test-worker-1", "test", 1, nil, false)
+		w := worker.New(svc, logger.With("worker", 1), "test-worker-1", "test", "", 1, nil, false)
 		w.Run(ctx)
 	}()
 

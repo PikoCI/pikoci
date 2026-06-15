@@ -25,41 +25,46 @@ func NewWorkerRepository(db sqlr.Querier, system string) *WorkerRepository {
 
 func (r *WorkerRepository) Upsert(ctx context.Context, w wkr.Worker) error {
 	tagsStr := strings.Join(w.Tags, ",")
+	// "commit" is a reserved word in SQLite, so we quote it with backticks
+	// (works in MySQL and SQLite; adapted to double-quotes for PostgreSQL
+	// by the migrate package).
 	var q string
 	switch r.system {
 	case MySQL:
-		q = `INSERT INTO workers (name, hostname, os, arch, go_version, version, concurrency, tags, exclusive_tags, started_at, last_ping_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE
-				hostname = VALUES(hostname),
-				os = VALUES(os),
-				arch = VALUES(arch),
-				go_version = VALUES(go_version),
-				version = VALUES(version),
-				concurrency = VALUES(concurrency),
-				tags = VALUES(tags),
-				exclusive_tags = VALUES(exclusive_tags),
-				started_at = VALUES(started_at),
-				last_ping_at = VALUES(last_ping_at)`
+		q = "INSERT INTO workers (name, hostname, os, arch, go_version, version, `commit`, concurrency, tags, exclusive_tags, started_at, last_ping_at)" +
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
+			" ON DUPLICATE KEY UPDATE" +
+			" hostname = VALUES(hostname)," +
+			" os = VALUES(os)," +
+			" arch = VALUES(arch)," +
+			" go_version = VALUES(go_version)," +
+			" version = VALUES(version)," +
+			" `commit` = VALUES(`commit`)," +
+			" concurrency = VALUES(concurrency)," +
+			" tags = VALUES(tags)," +
+			" exclusive_tags = VALUES(exclusive_tags)," +
+			" started_at = VALUES(started_at)," +
+			" last_ping_at = VALUES(last_ping_at)"
 	default:
 		// SQLite, mem, PostgreSQL
-		q = `INSERT INTO workers (name, hostname, os, arch, go_version, version, concurrency, tags, exclusive_tags, started_at, last_ping_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(name) DO UPDATE SET
-				hostname = excluded.hostname,
-				os = excluded.os,
-				arch = excluded.arch,
-				go_version = excluded.go_version,
-				version = excluded.version,
-				concurrency = excluded.concurrency,
-				tags = excluded.tags,
-				exclusive_tags = excluded.exclusive_tags,
-				started_at = excluded.started_at,
-				last_ping_at = excluded.last_ping_at`
+		q = "INSERT INTO workers (name, hostname, os, arch, go_version, version, `commit`, concurrency, tags, exclusive_tags, started_at, last_ping_at)" +
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
+			" ON CONFLICT(name) DO UPDATE SET" +
+			" hostname = excluded.hostname," +
+			" os = excluded.os," +
+			" arch = excluded.arch," +
+			" go_version = excluded.go_version," +
+			" version = excluded.version," +
+			" `commit` = excluded.`commit`," +
+			" concurrency = excluded.concurrency," +
+			" tags = excluded.tags," +
+			" exclusive_tags = excluded.exclusive_tags," +
+			" started_at = excluded.started_at," +
+			" last_ping_at = excluded.last_ping_at"
 	}
 
 	_, err := r.querier.ExecContext(ctx, q,
-		w.Name, w.Hostname, w.OS, w.Arch, w.GoVersion, w.Version,
+		w.Name, w.Hostname, w.OS, w.Arch, w.GoVersion, w.Version, w.Commit,
 		w.Concurrency, tagsStr, w.ExclusiveTags, w.StartedAt, w.LastPingAt,
 	)
 	if err != nil {
@@ -69,11 +74,9 @@ func (r *WorkerRepository) Upsert(ctx context.Context, w wkr.Worker) error {
 }
 
 func (r *WorkerRepository) Filter(ctx context.Context) ([]*wkr.Worker, error) {
-	rows, err := r.querier.QueryContext(ctx, `
-		SELECT id, name, hostname, os, arch, go_version, version, concurrency, tags, exclusive_tags, started_at, last_ping_at
-		FROM workers
-		ORDER BY name ASC
-	`)
+	rows, err := r.querier.QueryContext(ctx,
+		"SELECT id, name, hostname, os, arch, go_version, version, `commit`, concurrency, tags, exclusive_tags, started_at, last_ping_at"+
+			" FROM workers ORDER BY name ASC")
 	if err != nil {
 		return nil, fmt.Errorf("failed to query workers: %w", err)
 	}
@@ -90,13 +93,14 @@ func (r *WorkerRepository) Filter(ctx context.Context) ([]*wkr.Worker, error) {
 			arch          sql.NullString
 			goVersion     sql.NullString
 			version       sql.NullString
+			commit        sql.NullString
 			concurrency   sql.NullInt64
 			tagsStr       sql.NullString
 			exclusiveTags sql.NullBool
 			startedAt     sql.NullTime
 			lastPingAt    sql.NullTime
 		)
-		if err := rows.Scan(&id, &name, &hostname, &os, &arch, &goVersion, &version, &concurrency, &tagsStr, &exclusiveTags, &startedAt, &lastPingAt); err != nil {
+		if err := rows.Scan(&id, &name, &hostname, &os, &arch, &goVersion, &version, &commit, &concurrency, &tagsStr, &exclusiveTags, &startedAt, &lastPingAt); err != nil {
 			return nil, fmt.Errorf("failed to scan worker: %w", err)
 		}
 		var tags []string
@@ -111,6 +115,7 @@ func (r *WorkerRepository) Filter(ctx context.Context) ([]*wkr.Worker, error) {
 			Arch:          arch.String,
 			GoVersion:     goVersion.String,
 			Version:       version.String,
+			Commit:        commit.String,
 			Concurrency:   int(concurrency.Int64),
 			Tags:          tags,
 			ExclusiveTags: exclusiveTags.Bool,

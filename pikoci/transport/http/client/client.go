@@ -1040,6 +1040,7 @@ func (cl *Client) WorkerHeartbeat(ctx context.Context, w wkr.Worker) error {
 		Arch:          w.Arch,
 		GoVersion:     w.GoVersion,
 		Version:       w.Version,
+		Commit:        w.Commit,
 		Concurrency:   w.Concurrency,
 		Tags:          w.Tags,
 		ExclusiveTags: w.ExclusiveTags,

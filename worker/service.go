@@ -86,6 +86,7 @@ type Worker struct {
 	StartedAt     time.Time
 	Concurrency   int
 	Version       string
+	Commit        string
 
 	// GRPCAddr is the address of the gRPC server. When set, the worker uses
 	// gRPC streaming instead of HTTP long polling. When empty (embedded worker),
@@ -125,7 +126,7 @@ func resourceCacheEnabled(rt restype.ResourceType, r resource.Resource) bool {
 // returned Worker is ready to be started with Run, which uses HTTP long-poll
 // to receive work items (embedded mode). The service must implement WorkPoller
 // (satisfied by *pikoci.PikoCI) for the embedded poll loop.
-func New(s pikoci.Service, l *slog.Logger, name, version string, concurrency int, tags []string, exclusiveTags bool) *Worker {
+func New(s pikoci.Service, l *slog.Logger, name, version, commit string, concurrency int, tags []string, exclusiveTags bool) *Worker {
 	w := &Worker{
 		pikoci:        s,
 		logger:        l,
@@ -135,6 +136,7 @@ func New(s pikoci.Service, l *slog.Logger, name, version string, concurrency int
 		StartedAt:     time.Now(),
 		Concurrency:   concurrency,
 		Version:       version,
+		Commit:        commit,
 	}
 	if wp, ok := s.(WorkPoller); ok {
 		w.workPoller = wp
@@ -143,7 +145,7 @@ func New(s pikoci.Service, l *slog.Logger, name, version string, concurrency int
 }
 
 // NewGRPC creates a Worker configured for gRPC streaming mode.
-func NewGRPC(s pikoci.Service, gc workerv1.WorkerServiceClient, l *slog.Logger, name, version string, concurrency int, workerToken, grpcAddr string, tags []string, exclusiveTags bool) *Worker {
+func NewGRPC(s pikoci.Service, gc workerv1.WorkerServiceClient, l *slog.Logger, name, version, commit string, concurrency int, workerToken, grpcAddr string, tags []string, exclusiveTags bool) *Worker {
 	return &Worker{
 		pikoci:        s,
 		grpcClient:    gc,
@@ -154,6 +156,7 @@ func NewGRPC(s pikoci.Service, gc workerv1.WorkerServiceClient, l *slog.Logger, 
 		StartedAt:     time.Now(),
 		Concurrency:   concurrency,
 		Version:       version,
+		Commit:        commit,
 		GRPCAddr:      grpcAddr,
 		WorkerToken:   workerToken,
 	}
@@ -194,6 +197,7 @@ func (w *Worker) sendHeartbeat(ctx context.Context) {
 		Arch:          runtime.GOARCH,
 		GoVersion:     runtime.Version(),
 		Version:       w.Version,
+		Commit:        w.Commit,
 		Concurrency:   w.Concurrency,
 		Tags:          w.Tags,
 		ExclusiveTags: w.ExclusiveTags,
