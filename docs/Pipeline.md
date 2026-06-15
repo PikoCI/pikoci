@@ -672,6 +672,21 @@ task "deploy" {
 }
 ```
 
+This also works with Docker runner tasks. The worker automatically remaps the output file path to the container's workdir:
+
+```hcl
+task "build" {
+  run "docker" {
+    image = "golang:1.25"
+    cmd   = <<-EOT
+      cd my-app
+      VERSION=$(git describe --tags)
+      printf '%s\n' "VERSION=$VERSION" >> "$PIKOCI_OUTPUT"
+    EOT
+  }
+}
+```
+
 Rules for the output file:
 - One `KEY=VALUE` per line (split on first `=`, values can contain `=`)
 - Lines starting with `#` are treated as comments and skipped
@@ -679,6 +694,7 @@ Rules for the output file:
 - Keys are uppercased with non-alphanumeric characters replaced by `_`
 - Maximum file size is 1MB
 - If the task fails, its output is not parsed
+- For multiline values, escape newlines as literal `\n` (they are converted back when used in notification messages). Use `printf '%s\n'` instead of `echo` to avoid the shell interpreting the escape sequences
 
 #### Naming convention
 
