@@ -546,7 +546,8 @@ job "publish-release" {
         if [ "$${#DISCORD_CL}" -lt "$${#CHANGELOG}" ]; then
           DISCORD_CL="$${DISCORD_CL}..."
         fi
-        echo "CHANGELOG=$(echo "$DISCORD_CL" | awk 'NR>1{printf "\\n"}{printf "%s",$$0}')" >> "$PIKOCI_OUTPUT"
+        ESCAPED=$(echo "$DISCORD_CL" | awk 'NR>1{printf "\\n"}{printf "%s",$$0}')
+        printf '%s\n' "CHANGELOG=$ESCAPED" >> "$PIKOCI_OUTPUT"
       EOT
       args = [
         "-v", "pikoci-tools:/pikoci-tools",
