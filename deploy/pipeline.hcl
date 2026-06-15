@@ -485,7 +485,7 @@ job "publish-release" {
       cmd   = <<-EOT
         export PATH=/pikoci-tools:$PATH
         cd ${var.git_name}
-        TAG=$GET_PIKOCI_TAG_REF
+        TAG=$GET_PIKOCI_TAG_TAG
         VERSION=$${TAG#v}
 
         # Package for each Linux architecture
@@ -508,7 +508,7 @@ job "publish-release" {
       cmd   = <<-EOT
         export PATH=/pikoci-tools:$PATH
         cd ${var.git_name}
-        TAG=$GET_PIKOCI_TAG_REF
+        TAG=$GET_PIKOCI_TAG_TAG
         VERSION=$${TAG#v}
 
         # Generate SHA256SUMS
@@ -516,23 +516,33 @@ job "publish-release" {
         sha256sum pikoci-linux-* pikoci-darwin-* pikoci-windows-* *.deb *.rpm > SHA256SUMS
         cd ..
 
-        # Extract changelog
-        BODY=$(sed -n "/^## \[$VERSION\]/,/^## \[/{/^## \[$VERSION\]/d;/^## \[/d;p;}" CHANGELOG.md)
+        # Extract changelog for this version
+        CHANGELOG=$(awk '/^## \['"$VERSION"'\]/{found=1; next} found && /^## \[/{exit} found{print}' CHANGELOG.md | sed '/^$/d')
+        if [ -z "$CHANGELOG" ]; then
+          CHANGELOG="See https://github.com/PikoCI/pikoci/releases/tag/$TAG"
+        fi
 
-        # Create release and upload all artifacts
-        # Use --clobber to allow retries when a previous attempt partially uploaded
-        GH_TOKEN="${var.github_token}" gh release create $TAG \
-          --title "$TAG" \
-          --notes "$BODY" \
+        # Create release if it doesn't already exist (retries reuse the existing one)
+        if ! GH_TOKEN="${var.github_token}" gh release view $TAG --repo PikoCI/pikoci >/dev/null 2>&1; then
+          GH_TOKEN="${var.github_token}" gh release create $TAG \
+            --title "$TAG" \
+            --notes "$CHANGELOG" \
+            --repo PikoCI/pikoci
+        fi
+
+        # Upload artifacts (--clobber overwrites assets from partial retries)
+        GH_TOKEN="${var.github_token}" gh release upload $TAG \
           --repo PikoCI/pikoci \
           --clobber \
-          builds/pikoci-* \
+          builds/pikoci-linux-* \
+          builds/pikoci-darwin-* \
+          builds/pikoci-windows-* \
           builds/*.deb \
           builds/*.rpm \
           builds/SHA256SUMS
 
-        # Export changelog for Discord notification
-        echo "CHANGELOG=$(echo "$BODY" | sed ':a;N;$$!ba;s/\n/\\n/g')" >> "$$PIKOCI_OUTPUT"
+        # Export changelog for Discord notification (escape newlines for parseOutputFile)
+        echo "CHANGELOG=$(echo "$CHANGELOG" | sed ':a;N;$$!ba;s/\n/\\n/g')" >> "$PIKOCI_OUTPUT"
       EOT
       args = [
         "-v", "pikoci-tools:/pikoci-tools",
@@ -542,7 +552,7 @@ job "publish-release" {
 
   on_success {
     notify "discord" "announcements" {
-      message = "🚀 **PikoCI $GET_PIKOCI_TAG_REF** has been released!\n\n$TASK_CREATE_RELEASE_CHANGELOG\n\n🔗 https://github.com/PikoCI/pikoci/releases/tag/$GET_PIKOCI_TAG_REF"
+      message = "🚀 **PikoCI $GET_PIKOCI_TAG_TAG** has been released!\n\n$TASK_CREATE_RELEASE_CHANGELOG\n\n🔗 https://github.com/PikoCI/pikoci/releases/tag/$GET_PIKOCI_TAG_TAG"
     }
   }
 }

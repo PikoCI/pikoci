@@ -2340,6 +2340,16 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 					args = append(args, "-e", k+"="+v)
 				}
 			}
+			// Inject PIKOCI_OUTPUT with the path remapped from host to
+			// container. Detect the container workdir by scanning for
+			// "-w <path>" in the already-resolved args.
+			if hostPath, ok := envs["PIKOCI_OUTPUT"]; ok {
+				containerPath := hostPath
+				if cw := findContainerWorkdir(args); cw != "" {
+					containerPath = cw + "/" + filepath.Base(hostPath)
+				}
+				args = append(args, "-e", "PIKOCI_OUTPUT="+containerPath)
+			}
 			continue
 		}
 		ea := os.Expand(a, envFn)
@@ -2643,6 +2653,20 @@ var runnerInternalParams = map[string]bool{
 // parameter that should be excluded from $env injection.
 func isRunnerInternalParam(key string) bool {
 	return runnerInternalParams[key]
+}
+
+// findContainerWorkdir scans resolved args for "-w <path>", "--workdir <path>",
+// or "--workdir=<path>" and returns the container workdir path. Returns "" if not found.
+func findContainerWorkdir(args []string) string {
+	for i := 0; i < len(args); i++ {
+		if (args[i] == "-w" || args[i] == "--workdir") && i+1 < len(args) {
+			return args[i+1]
+		}
+		if strings.HasPrefix(args[i], "--workdir=") {
+			return strings.TrimPrefix(args[i], "--workdir=")
+		}
+	}
+	return ""
 }
 
 // validateParams filters userParams through allowedParams, returning accepted
