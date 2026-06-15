@@ -308,7 +308,7 @@ job "deploy" {
     }
   }
   on_success "shell" {
-    cmd = "systemctl kill --signal=QUIT pikoci pikoci-worker@worker-1 pikoci-worker@worker-2"
+    cmd = "pkill -QUIT -u pikoci pikoci || true"
   }
 }
 
