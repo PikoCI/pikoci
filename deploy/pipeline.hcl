@@ -490,10 +490,10 @@ job "publish-release" {
 
         # Package for each Linux architecture
         for ARCH in amd64 arm64; do
-          cp builds/pikoci-linux-$ARCH ./pikoci
+          cp builds/pikoci-linux-$ARCH ./pikoci-bin
           GOARCH=$ARCH VERSION=$VERSION nfpm pkg --packager deb --target builds/pikoci_$${VERSION}_$${ARCH}.deb
           GOARCH=$ARCH VERSION=$VERSION nfpm pkg --packager rpm --target builds/pikoci-$${VERSION}.$${ARCH}.rpm
-          rm ./pikoci
+          rm ./pikoci-bin
         done
       EOT
       args = [

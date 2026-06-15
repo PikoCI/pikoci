@@ -8,7 +8,7 @@ vendor: "PikoCI"
 homepage: "https://pikoci.com"
 license: "Apache-2.0"
 contents:
-  - src: ./pikoci
+  - src: ./pikoci-bin
     dst: /usr/local/bin/pikoci
     file_info:
       mode: 0755
