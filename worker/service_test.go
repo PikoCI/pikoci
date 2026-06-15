@@ -5502,6 +5502,118 @@ func TestRunNotifyStep_MessageInterpolation(t *testing.T) {
 	assert.Contains(t, notifyLogs, "done")
 }
 
+func TestProcessJob_DockerRunner_PIKOCIOutput_FlowsToNotification(t *testing.T) {
+	// End-to-end test: a task using a Docker-like runner (with $env and -w)
+	// writes to $PIKOCI_OUTPUT, and the job-level on_success notification
+	// receives the exported variable in its message.
+	//
+	// Since we can't run real Docker in unit tests, we use a shell wrapper
+	// that extracts -e flags and executes the command, mimicking Docker behavior.
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "docker-output-job",
+		BuildID:           10,
+		BuildNumber:       "50",
+		VersionID:         1,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "docker-output-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "produce",
+							Run: utils.RunnerCommand{
+								Runner: "docker",
+								Params: map[string]string{
+									"image": "unused",
+									"cmd":   `echo "RELEASE_NOTES=Fixed bug and added feature" >> "$PIKOCI_OUTPUT"`,
+								},
+							},
+						},
+					},
+				},
+				OnSuccess: []job.HookStep{
+					{
+						Type: job.StepTypeNotify,
+						Notify: &job.NotifyStep{
+							Type:    "echo-notifier",
+							Name:    "my-alert",
+							Message: "Released: $TASK_PRODUCE_RELEASE_NOTES",
+						},
+					},
+				},
+			},
+		},
+		Notifications: []notification.Notification{
+			{
+				ID:        1,
+				Type:      "echo-notifier",
+				Name:      "my-alert",
+				Canonical: "echo-notifier.my-alert",
+				Params:    &notification.Params{Params: map[string]string{}},
+			},
+		},
+		NotificationTypes: []notiftype.NotificationType{
+			{
+				ID:   1,
+				Name: "echo-notifier",
+				Notify: &utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"-c", `printf '%s' "$NOTIFY_MESSAGE"`},
+					Params: map[string]string{"path": "/bin/sh"},
+				},
+				Params: []string{},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+			// Docker-like runner: includes -w /workdir so findContainerWorkdir
+			// detects it and remaps PIKOCI_OUTPUT. The actual command runs via
+			// /bin/sh which inherits PIKOCI_OUTPUT from process env (set by
+			// runRunner's cmd.Env). We use "true" to absorb the extra args
+			// (-w, /workdir, $env flags, $image) before "&&" runs the real cmd.
+			{Name: "docker", Run: utils.RunCommand{
+				Path: "/bin/sh",
+				Args: []string{"-ec", "$cmd", "--", "-w", "/workdir", "$env", "$image"},
+			}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "50", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status,
+		"job should succeed; steps: %+v", capturedBuild.Steps)
+	// The notification is the second step (after the task).
+	require.GreaterOrEqual(t, len(capturedBuild.Steps), 2,
+		"expected task + notification steps")
+	notifyStep := capturedBuild.Steps[len(capturedBuild.Steps)-1]
+	assert.Contains(t, notifyStep.Logs, "Released: Fixed bug and added feature",
+		"notification message should contain the exported PIKOCI_OUTPUT variable")
+}
+
 // --- runAutoNotifications tests ---
 
 func TestRunAutoNotifications_SuccessEvent(t *testing.T) {
