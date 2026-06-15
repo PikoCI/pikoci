@@ -2633,6 +2633,179 @@ func TestIsRunnerInternalParam(t *testing.T) {
 	}
 }
 
+func TestFindContainerWorkdir(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "found",
+			args: []string{"run", "--rm", "-v", "/host:/workdir", "-w", "/workdir", "-e", "FOO=bar", "image"},
+			want: "/workdir",
+		},
+		{
+			name: "not found",
+			args: []string{"run", "--rm", "-v", "/host:/data", "image"},
+			want: "",
+		},
+		{
+			name: "w flag at end without value",
+			args: []string{"run", "-w"},
+			want: "",
+		},
+		{
+			name: "custom workdir",
+			args: []string{"run", "-w", "/app/src", "image"},
+			want: "/app/src",
+		},
+		{
+			name: "long form --workdir",
+			args: []string{"run", "--workdir", "/app", "image"},
+			want: "/app",
+		},
+		{
+			name: "long form --workdir=path",
+			args: []string{"run", "--workdir=/app/data", "image"},
+			want: "/app/data",
+		},
+		{
+			name: "workdir at end without value",
+			args: []string{"run", "--workdir"},
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, findContainerWorkdir(tt.args))
+		})
+	}
+}
+
+func TestRunRunner_EnvPlaceholder_RemapsPIKOCIOutput(t *testing.T) {
+	// Verifies that $env injects PIKOCI_OUTPUT with remapped container path
+	// when -w is present in the runner args.
+	ctrl := gomock.NewController(t)
+	w, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	cwd := t.TempDir()
+
+	// Runner template with -w /workdir (like the built-in docker runner).
+	ru := runner.Runner{
+		Name: "docker",
+		Run:  utils.RunCommand{Path: "echo", Args: []string{"-w", "/workdir", "$env", "$args"}},
+	}
+
+	rc := utils.RunnerCommand{
+		Runner: "docker",
+		Args:   []string{"hello"},
+		Params: map[string]string{
+			"cmd":           "echo test",
+			"image":         "alpine",
+			"PIKOCI_OUTPUT": cwd + "/.pikoci-output-12345",
+			"GET_REPO_REF":  "abc123",
+		},
+	}
+
+	out, _, _ := w.runRunner(ctx, ru, cwd, rc)
+
+	// The output should contain the remapped PIKOCI_OUTPUT path
+	assert.Contains(t, out, "PIKOCI_OUTPUT=/workdir/.pikoci-output-12345",
+		"PIKOCI_OUTPUT should be remapped to container workdir")
+	// Regular env vars should also be present
+	assert.Contains(t, out, "GET_REPO_REF=abc123")
+}
+
+func TestRunRunner_EnvPlaceholder_DockerTemplate(t *testing.T) {
+	// Simulates the full built-in docker runner template to verify
+	// PIKOCI_OUTPUT remapping works with the real arg layout.
+	ctrl := gomock.NewController(t)
+	w, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	cwd := t.TempDir()
+
+	// Mirror the real docker.hcl template but use echo to inspect args.
+	ru := runner.Runner{
+		Name: "docker",
+		Run: utils.RunCommand{
+			Path: "echo",
+			Args: []string{
+				"run", "--rm",
+				"-v", "$WORKDIR:/workdir",
+				"-w", "/workdir",
+				"$env",
+				"$args",
+				"$image",
+				"/bin/sh", "-ec", "$cmd",
+			},
+		},
+	}
+
+	rc := utils.RunnerCommand{
+		Runner: "docker",
+		Args:   []string{"-v", "cache:/cache"},
+		Params: map[string]string{
+			"cmd":           "echo hello",
+			"image":         "golang:1.25",
+			"PIKOCI_OUTPUT": cwd + "/.pikoci-output-42",
+			"GET_REPO_REF":  "abc123",
+			"TASK_BUILD_VER": "2.0",
+		},
+	}
+
+	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	require.NoError(t, err)
+
+	// Verify volume mount expanded
+	assert.Contains(t, out, "-v "+cwd+":/workdir")
+	// Verify PIKOCI_OUTPUT remapped to container path
+	assert.Contains(t, out, "PIKOCI_OUTPUT=/workdir/.pikoci-output-42")
+	// Verify regular env vars injected
+	assert.Contains(t, out, "GET_REPO_REF=abc123")
+	assert.Contains(t, out, "TASK_BUILD_VER=2.0")
+	// Verify internal params NOT injected as -e flags
+	assert.NotContains(t, out, "-e cmd=")
+	assert.NotContains(t, out, "-e image=")
+	// Verify image and cmd expanded
+	assert.Contains(t, out, "golang:1.25")
+	assert.Contains(t, out, "echo hello")
+}
+
+func TestRunRunner_EnvPlaceholder_PIKOCIOutputNoWorkdir(t *testing.T) {
+	// When no -w flag is present, PIKOCI_OUTPUT should be injected with the
+	// original host path (no remapping).
+	ctrl := gomock.NewController(t)
+	w, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	cwd := t.TempDir()
+
+	ru := runner.Runner{
+		Name: "custom",
+		Run:  utils.RunCommand{Path: "echo", Args: []string{"$env", "$args"}},
+	}
+
+	hostPath := cwd + "/.pikoci-output-99999"
+	rc := utils.RunnerCommand{
+		Runner: "custom",
+		Args:   []string{"hello"},
+		Params: map[string]string{
+			"cmd":           "echo test",
+			"PIKOCI_OUTPUT": hostPath,
+			"GET_REPO_REF":  "abc123",
+		},
+	}
+
+	out, _, _ := w.runRunner(ctx, ru, cwd, rc)
+
+	// Without -w, the original host path should be used
+	assert.Contains(t, out, "PIKOCI_OUTPUT="+hostPath,
+		"PIKOCI_OUTPUT should use original host path when no -w flag")
+	assert.Contains(t, out, "GET_REPO_REF=abc123")
+}
+
 func TestProcessResourceCheck_RawSecretFormat(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc := newTestWorker(ctrl)

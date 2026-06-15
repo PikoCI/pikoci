@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `$PIKOCI_OUTPUT` now works in Docker runner tasks. The host path is remapped to the container workdir (detected via `-w`/`--workdir`) and injected as an `-e` flag during `$env` expansion ([#519](https://github.com/PikoCI/pikoci/issues/519))
+
 ## [0.5.0] - 2026-06-15
 
 ### Refactored
