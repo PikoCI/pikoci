@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-16
+
 ### Added
 
 - Worker list now shows full version with commit hash (e.g., `v0.5.0 (abc1234)`) and flags outdated workers with a warning icon and banner when their version+commit doesn't match the server ([#522](https://github.com/PikoCI/pikoci/issues/522))
