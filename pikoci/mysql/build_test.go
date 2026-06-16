@@ -659,6 +659,68 @@ func TestFindReadyDownstreamVersion_CronPipelineRenameScenario(t *testing.T) {
 	assert.Equal(t, uint32(newCronVersionID), vID)
 }
 
+func TestAggregateStatusByVersionIDs(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'agg-pipe', 'agg-pipe')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'build')`, ppID)
+	require.NoError(t, err)
+	jobID, _ := res.LastInsertId()
+
+	// Build 1: succeeded, consumed version 10
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'succeeded', '1')`, jobID)
+	require.NoError(t, err)
+	b1, _ := res.LastInsertId()
+	_, err = db.ExecContext(ctx, `INSERT INTO build_get_versions (build_id, step_name, version_id) VALUES (?, 'repo', 10)`, b1)
+	require.NoError(t, err)
+
+	// Build 2: failed, consumed version 10 (should make agg status "failed")
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'failed', '2')`, jobID)
+	require.NoError(t, err)
+	b2, _ := res.LastInsertId()
+	_, err = db.ExecContext(ctx, `INSERT INTO build_get_versions (build_id, step_name, version_id) VALUES (?, 'repo', 10)`, b2)
+	require.NoError(t, err)
+
+	// Build 3: succeeded, consumed version 20
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'succeeded', '3')`, jobID)
+	require.NoError(t, err)
+	b3, _ := res.LastInsertId()
+	_, err = db.ExecContext(ctx, `INSERT INTO build_get_versions (build_id, step_name, version_id) VALUES (?, 'repo', 20)`, b3)
+	require.NoError(t, err)
+
+	br := mysql.NewBuildRepository(db, mysql.Mem)
+
+	result, err := br.AggregateStatusByVersionIDs(ctx, []uint32{10, 20, 30})
+	require.NoError(t, err)
+
+	// Version 10: has succeeded + failed → "failed" wins
+	assert.Equal(t, "failed", result[10])
+	// Version 20: only succeeded → "succeeded"
+	assert.Equal(t, "succeeded", result[20])
+	// Version 30: no builds → not in map
+	_, exists := result[30]
+	assert.False(t, exists)
+}
+
+func TestAggregateStatusByVersionIDs_Empty(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	br := mysql.NewBuildRepository(db, mysql.Mem)
+
+	result, err := br.AggregateStatusByVersionIDs(ctx, []uint32{})
+	require.NoError(t, err)
+	assert.Nil(t, result)
+
+	result, err = br.AggregateStatusByVersionIDs(ctx, nil)
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
 func TestCountRunningInSerialGroups(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

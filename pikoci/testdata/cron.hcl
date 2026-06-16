@@ -83,6 +83,19 @@ job "deploy-after-lint" {
   }
 }
 
+job "failing" {
+  get "cron" "my_cron" {
+    trigger = true
+    passed  = ["gen"]
+  }
+  task "fail" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo 'about to fail' && sleep 10 && exit 1"]
+    }
+  }
+}
+
 job "monitor" {
   get "cron" "my_cron" {
     trigger = true

@@ -48,4 +48,5 @@ type Params struct {
 type Version struct {
 	ID      uint32                 `json:"id"`
 	Version map[string]interface{} `json:"version"`
+	Status  string                 `json:"status,omitempty"`
 }

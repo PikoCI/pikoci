@@ -66,6 +66,21 @@ func (q *PikoCI) ListResourceVersions(ctx context.Context, tc, pc, rCan string, 
 		slices.Reverse(rvers)
 	}
 
+	if len(rvers) > 0 {
+		versionIDs := make([]uint32, len(rvers))
+		for i, v := range rvers {
+			versionIDs[i] = v.ID
+		}
+		statuses, err := q.Builds.AggregateStatusByVersionIDs(ctx, versionIDs)
+		if err == nil {
+			for _, v := range rvers {
+				if s, ok := statuses[v.ID]; ok {
+					v.Status = s
+				}
+			}
+		}
+	}
+
 	return rvers, hasMore, nil
 }
 

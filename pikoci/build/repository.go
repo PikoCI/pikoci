@@ -40,4 +40,6 @@ type Repository interface {
 	// CountRunningInSerialGroups returns the number of running builds for jobs (excluding excludeJobName)
 	// that share any of the given serial groups within the same pipeline.
 	CountRunningInSerialGroups(ctx context.Context, tc, pn string, serialGroups []string, excludeJobName string) (int, error)
+	// AggregateStatusByVersionIDs returns the aggregate build status for each version ID.
+	AggregateStatusByVersionIDs(ctx context.Context, versionIDs []uint32) (map[uint32]string, error)
 }

@@ -2823,6 +2823,7 @@ func TestListPublicResourceVersions(t *testing.T) {
 		{ID: 2},
 		{ID: 1},
 	}, nil)
+	s.Builds.EXPECT().AggregateStatusByVersionIDs(ctx, []uint32{2, 1}).Return(nil, nil)
 
 	vers, hasMore, err := s.S.ListPublicResourceVersions(ctx, "main", "my-pipeline", "git.repo", nil, nil, 0)
 	require.NoError(t, err)

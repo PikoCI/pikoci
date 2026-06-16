@@ -575,6 +575,57 @@ func (r *BuildRepository) StartPending(ctx context.Context, tc, pn, jn string, b
 	return nil
 }
 
+func (r *BuildRepository) AggregateStatusByVersionIDs(ctx context.Context, versionIDs []uint32) (map[uint32]string, error) {
+	if len(versionIDs) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(versionIDs))
+	args := make([]interface{}, len(versionIDs))
+	for i, id := range versionIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := `
+		SELECT bgv.version_id,
+			CASE
+				WHEN SUM(CASE WHEN b.status = 'failed' THEN 1 ELSE 0 END) > 0 THEN 'failed'
+				WHEN SUM(CASE WHEN b.status = 'started' THEN 1 ELSE 0 END) > 0 THEN 'started'
+				WHEN SUM(CASE WHEN b.status = 'pending' THEN 1 ELSE 0 END) > 0 THEN 'pending'
+				WHEN SUM(CASE WHEN b.status = 'succeeded' THEN 1 ELSE 0 END) > 0 THEN 'succeeded'
+				ELSE ''
+			END AS agg_status
+		FROM build_get_versions bgv
+		JOIN builds b ON b.id = bgv.build_id
+		WHERE bgv.version_id IN (` + strings.Join(placeholders, ",") + `)
+		GROUP BY bgv.version_id
+	`
+
+	rows, err := r.querier.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query aggregate status by version IDs: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[uint32]string)
+	for rows.Next() {
+		var versionID uint32
+		var status string
+		if err := rows.Scan(&versionID, &status); err != nil {
+			return nil, fmt.Errorf("failed to scan aggregate status: %w", err)
+		}
+		if status != "" {
+			result[versionID] = status
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate aggregate status: %w", err)
+	}
+
+	return result, nil
+}
+
 func scanBuild(s sqlr.Scanner) (*build.Build, error) {
 	var b dbBuild
 

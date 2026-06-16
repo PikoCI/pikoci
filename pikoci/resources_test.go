@@ -53,6 +53,7 @@ func TestListResourceVersions(t *testing.T) {
 		{ID: 2},
 		{ID: 1},
 	}, nil)
+	s.Builds.EXPECT().AggregateStatusByVersionIDs(ctx, []uint32{2, 1}).Return(nil, nil)
 
 	vers, hasMore, err := s.S.ListResourceVersions(ctx, "main", "my-pipeline", "git.repo", nil, nil, 0)
 	require.NoError(t, err)
@@ -73,6 +74,7 @@ func TestListResourceVersions_WithLimit(t *testing.T) {
 		{ID: 4},
 		{ID: 3},
 	}, nil)
+	s.Builds.EXPECT().AggregateStatusByVersionIDs(ctx, []uint32{5, 4}).Return(nil, nil)
 
 	vers, hasMore, err := s.S.ListResourceVersions(ctx, "main", "my-pipeline", "git.repo", nil, nil, 2)
 	require.NoError(t, err)
@@ -90,6 +92,7 @@ func TestListResourceVersions_After(t *testing.T) {
 		{ID: 4},
 		{ID: 5},
 	}, nil)
+	s.Builds.EXPECT().AggregateStatusByVersionIDs(ctx, []uint32{5, 4}).Return(nil, nil)
 
 	vers, hasMore, err := s.S.ListResourceVersions(ctx, "main", "my-pipeline", "git.repo", nil, &after, 0)
 	require.NoError(t, err)
@@ -98,6 +101,29 @@ func TestListResourceVersions_After(t *testing.T) {
 	// Reversed to newest-first
 	assert.Equal(t, uint32(5), vers[0].ID)
 	assert.Equal(t, uint32(4), vers[1].ID)
+}
+
+func TestListResourceVersions_WithStatus(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
+		{ID: 3},
+		{ID: 2},
+		{ID: 1},
+	}, nil)
+	s.Builds.EXPECT().AggregateStatusByVersionIDs(ctx, []uint32{3, 2, 1}).Return(map[uint32]string{
+		3: "started",
+		1: "succeeded",
+	}, nil)
+
+	vers, _, err := s.S.ListResourceVersions(ctx, "main", "my-pipeline", "git.repo", nil, nil, 0)
+	require.NoError(t, err)
+	require.Len(t, vers, 3)
+	assert.Equal(t, "started", vers[0].Status)
+	assert.Equal(t, "", vers[1].Status)
+	assert.Equal(t, "succeeded", vers[2].Status)
 }
 
 func TestGetPipelineResource(t *testing.T) {
