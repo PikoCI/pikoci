@@ -211,6 +211,7 @@ func (r *ResourceRepository) FindByWebhookToken(ctx context.Context, token strin
 		&dbr.LastCheck,
 		&dbr.NextCheck,
 		&dbr.WebhookToken,
+		&dbr.Tags,
 		&dbr.Cache,
 		&dbr.PinnedVersionID,
 		&tc,
