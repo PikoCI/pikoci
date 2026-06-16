@@ -27,6 +27,8 @@ type Resource struct {
 	LastCheck    time.Time `json:"last_check"`
 	NextCheck    time.Time `json:"next_check"`
 	WebhookToken string    `json:"webhook_token"`
+
+	LatestVersion *Version `json:"latest_version,omitempty"`
 }
 
 // GetParams returns the resource's parameters as a string map, or nil if no

@@ -95,6 +95,8 @@ const (
 	// EvaluateDownstreamJobs is the route for evaluating downstream jobs after a build succeeds.
 	EvaluateDownstreamJobs
 
+	// ListPipelineResources is the route for listing all resources of a pipeline.
+	ListPipelineResources
 	// GetPipelineResource is the route for retrieving a single pipeline resource.
 	GetPipelineResource
 	// UpdatePipelineResource is the route for updating a pipeline resource.

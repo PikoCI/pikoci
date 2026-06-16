@@ -36,7 +36,8 @@ var publicFallbackRoutes = map[RouteName]bool{
 	GetPipelineImage:     true,
 	GetPipelineJob:       true,
 	ListJobBuilds:        true,
-	GetPipelineResource:  true,
+	ListPipelineResources: true,
+	GetPipelineResource:   true,
 	ListResourceVersions: true,
 }
 
@@ -255,6 +256,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds-get-versions/{build_id}").Name(FindBuildGetVersions.String()).Handler(findBuildGetVersions(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_id}/get-versions").Name(InsertBuildGetVersion.String()).Handler(insertBuildGetVersion(s))
 
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources").Name(ListPipelineResources.String()).Handler(listPipelineResources(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/versions").Name(CreateResourceVersion.String()).Handler(createResourceVersion(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/versions").Name(ListResourceVersions.String()).Handler(listResourceVersions(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}").Name(GetPipelineResource.String()).Handler(getPipelineResource(s))
