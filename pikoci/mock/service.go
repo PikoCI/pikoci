@@ -534,6 +534,21 @@ func (mr *ServiceMockRecorder) ListJobBuilds(ctx, tc, pn, jn, before, after, lim
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListJobBuilds", reflect.TypeOf((*Service)(nil).ListJobBuilds), ctx, tc, pn, jn, before, after, limit)
 }
 
+// ListPipelineResources mocks base method.
+func (m *Service) ListPipelineResources(ctx context.Context, tc, pn string) ([]*resource.Resource, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPipelineResources", ctx, tc, pn)
+	ret0, _ := ret[0].([]*resource.Resource)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPipelineResources indicates an expected call of ListPipelineResources.
+func (mr *ServiceMockRecorder) ListPipelineResources(ctx, tc, pn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPipelineResources", reflect.TypeOf((*Service)(nil).ListPipelineResources), ctx, tc, pn)
+}
+
 // ListPipelines mocks base method.
 func (m *Service) ListPipelines(ctx context.Context, tc string) ([]*pipeline.Pipeline, error) {
 	m.ctrl.T.Helper()
@@ -563,6 +578,21 @@ func (m *Service) ListPublicJobBuilds(ctx context.Context, tc, pn, jn string, be
 func (mr *ServiceMockRecorder) ListPublicJobBuilds(ctx, tc, pn, jn, before, after, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPublicJobBuilds", reflect.TypeOf((*Service)(nil).ListPublicJobBuilds), ctx, tc, pn, jn, before, after, limit)
+}
+
+// ListPublicPipelineResources mocks base method.
+func (m *Service) ListPublicPipelineResources(ctx context.Context, tc, pn string) ([]*resource.Resource, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPublicPipelineResources", ctx, tc, pn)
+	ret0, _ := ret[0].([]*resource.Resource)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPublicPipelineResources indicates an expected call of ListPublicPipelineResources.
+func (mr *ServiceMockRecorder) ListPublicPipelineResources(ctx, tc, pn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPublicPipelineResources", reflect.TypeOf((*Service)(nil).ListPublicPipelineResources), ctx, tc, pn)
 }
 
 // ListPublicResourceVersions mocks base method.

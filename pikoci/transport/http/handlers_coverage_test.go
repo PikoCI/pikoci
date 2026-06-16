@@ -1511,6 +1511,79 @@ func TestListResourceVersions_Error(t *testing.T) {
 	assert.Equal(t, "db error", got.Err)
 }
 
+func TestListPipelineResources_Success(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+	resources := []*resource.Resource{
+		{Name: "res1", Canonical: "res1", WebhookToken: "secret1"},
+		{Name: "res2", Canonical: "res2", WebhookToken: "secret2"},
+	}
+	e.svc.EXPECT().ListPipelineResources(gomock.Any(), "main", "my-pipe").Return(resources, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/pipelines/my-pipe/resources", e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got ListPipelineResourcesResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Len(t, got.Resources, 2)
+	// Non-admin member should have webhook tokens stripped
+	assert.Empty(t, got.Resources[0].WebhookToken)
+	assert.Empty(t, got.Resources[1].WebhookToken)
+}
+
+func TestListPipelineResources_AdminSeesWebhookTokens(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	resources := []*resource.Resource{
+		{Name: "res1", Canonical: "res1", WebhookToken: "secret1"},
+	}
+	e.svc.EXPECT().ListPipelineResources(gomock.Any(), "main", "my-pipe").Return(resources, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/pipelines/my-pipe/resources", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got ListPipelineResourcesResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Equal(t, "secret1", got.Resources[0].WebhookToken)
+}
+
+func TestListPipelineResources_Error(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+	e.svc.EXPECT().ListPipelineResources(gomock.Any(), "main", "my-pipe").Return(nil, fmt.Errorf("db error"))
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/pipelines/my-pipe/resources", e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	var got ListPipelineResourcesResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Equal(t, "db error", got.Err)
+}
+
+func TestListPipelineResources_PublicFallback(t *testing.T) {
+	e := newTestEnv(t)
+	pp := &pipeline.Pipeline{Name: "public-pipe", Canonical: "public-pipe", Public: true}
+	resources := []*resource.Resource{
+		{Name: "res1", Canonical: "res1"},
+	}
+	e.svc.EXPECT().GetPublicPipeline(gomock.Any(), "main", "public-pipe").Return(pp, nil)
+	e.svc.EXPECT().ListPublicPipelineResources(gomock.Any(), "main", "public-pipe").Return(resources, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/pipelines/public-pipe/resources", "", "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got ListPipelineResourcesResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Len(t, got.Resources, 1)
+}
+
 func TestGetPipelineResource_Success(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectMemberAuth()

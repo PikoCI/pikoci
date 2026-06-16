@@ -144,6 +144,69 @@ var PipelinesCardView = Backbone.View.extend({
   },
 });
 
+var PipelineResourcesPanelView = Backbone.View.extend({
+  template: _.template($('#pipeline-resources-panel-view').html()),
+  initialize: function(options) {
+    this.collection = options.collection;
+    this.pipeline = options.pipeline;
+    this.listenTo(this.collection, 'sync', this.render);
+    this.collection.fetch();
+    var that = this;
+    this.intervalID = window.setInterval(function() {
+      that.collection.fetch();
+    }, fetchInterval);
+  },
+  events: {
+    'click #close-resources-panel': 'closePanel',
+    'click .check-resource-now': 'checkNow',
+    'click .piko-resource-card-name': clickLink,
+  },
+  render: function() {
+    var teamCanonical = this.pipeline.collection ? this.pipeline.collection.team.get('canonical') : '';
+    var pipelineCanonical = this.pipeline.get('canonical');
+    var basePath = '/teams/' + teamCanonical + '/pipelines/' + pipelineCanonical;
+    var sf = addSessionFunctions({});
+    this.$el.html(this.template({
+      resources: this.collection.toJSON(),
+      isMember: sf.isMember(teamCanonical),
+      pikoTimeAgo: pikoTimeAgo,
+      resourceUrl: function(canonical) {
+        return basePath + '/resources/' + canonical + '/versions';
+      },
+    }));
+    return this;
+  },
+  closePanel: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.$el.removeClass('open');
+  },
+  checkNow: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var canonical = $(event.currentTarget).data('canonical');
+    var teamCanonical = this.pipeline.collection ? this.pipeline.collection.team.get('canonical') : '';
+    var pipelineCanonical = this.pipeline.get('canonical');
+    var url = '/teams/' + teamCanonical + '/pipelines/' + pipelineCanonical + '/resources/' + canonical + '/trigger';
+    var that = this;
+    $.ajax({
+      url: url, type: 'POST', contentType: 'application/json',
+      headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+      success: function() {
+        window.app.apiNotice.setSuccess('Resource check triggered');
+        that.collection.fetch();
+      },
+      error: function() {
+        window.app.apiNotice.set({error: 'Failed to trigger resource check'});
+      },
+    });
+  },
+  remove: function() {
+    clearInterval(this.intervalID);
+    Backbone.View.prototype.remove.call(this);
+  },
+});
+
 export var PipelineShowView = Backbone.View.extend({
   template: _.template($('#pipeline-show-view').html()),
   initialize: function(options) {
@@ -159,6 +222,13 @@ export var PipelineShowView = Backbone.View.extend({
       }
     });
 
+    var pipelineModel = this.model;
+    var PanelResources = Backbone.Collection.extend({
+      url: function() { return pipelineModel.url() + "/resources"; },
+      parse: function(response) { return response.data; },
+    });
+    this.resourcesCollection = new PanelResources();
+
     var that = this;
     this.intervalID = window.setInterval(function() {
       that.image.fetch({isInterval: true});
@@ -170,6 +240,7 @@ export var PipelineShowView = Backbone.View.extend({
     'click #delete-pipeline': 'clickDelete',
     'click #pause-pipeline': 'clickPausePipeline',
     'click #unpause-pipeline': 'clickUnpausePipeline',
+    'click #toggle-resources-panel': 'toggleResourcesPanel',
   },
   render: function () {
     this.$el.html(this.template(addSessionFunctions({ pipeline: this.model.toJSON(), team: this.model.collection.team.toJSON() })));
@@ -184,16 +255,30 @@ export var PipelineShowView = Backbone.View.extend({
     }});
     this.$el.find("#graphviz").html(this.graphView.render().el);
     this.image.trigger("change", this.image);
+
+    this.panelView = new PipelineResourcesPanelView({
+      collection: this.resourcesCollection,
+      pipeline: this.model,
+      el: this.$el.find('#pipeline-resources-panel'),
+    });
+
     return this;
   },
   remove: function() {
     clearInterval(this.intervalID);
+    if (this.panelView) { this.panelView.remove(); }
     if (this.graphZoom) { this.graphZoom.destroy(); }
     Backbone.View.prototype.remove.call(this);
   },
-  clickPipeline: function(event) {
+  toggleResourcesPanel: function(event) {
     event.preventDefault();
-    if (event.target.parentElement.href !== undefined){
+    event.stopPropagation();
+    this.$el.find('#pipeline-resources-panel').toggleClass('open');
+  },
+  clickPipeline: function(event) {
+    // Only handle clicks on SVG links inside the graph
+    if (event.target.parentElement && event.target.parentElement.href && event.target.parentElement.href.baseVal) {
+      event.preventDefault();
       window.app.router.navigate(event.target.parentElement.href.baseVal, { trigger: true });
     }
   },

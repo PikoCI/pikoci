@@ -126,6 +126,42 @@ func TestListResourceVersions_WithStatus(t *testing.T) {
 	assert.Equal(t, "succeeded", vers[2].Status)
 }
 
+func TestListPipelineResources(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().Filter(ctx, "main", "my-pipeline").Return([]*resource.Resource{
+		{Name: "res1", Canonical: "res1"},
+		{Name: "res2", Canonical: "res2"},
+	}, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "res1", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{
+		{ID: 10, Version: map[string]interface{}{"ref": "abc"}},
+	}, nil)
+	s.Builds.EXPECT().AggregateStatusByVersionIDs(ctx, []uint32{10}).Return(map[uint32]string{10: "succeeded"}, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "res2", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return(nil, nil)
+
+	rs, err := s.S.ListPipelineResources(ctx, "main", "my-pipeline")
+	require.NoError(t, err)
+	assert.Len(t, rs, 2)
+	require.NotNil(t, rs[0].LatestVersion)
+	assert.Equal(t, uint32(10), rs[0].LatestVersion.ID)
+	assert.Equal(t, "succeeded", rs[0].LatestVersion.Status)
+	assert.Nil(t, rs[1].LatestVersion)
+}
+
+func TestListPipelineResources_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.ListPipelineResources(ctx, "INVALID", "my-pipeline")
+	require.Error(t, err)
+
+	_, err = s.S.ListPipelineResources(ctx, "main", "INVALID")
+	require.Error(t, err)
+}
+
 func TestGetPipelineResource(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)

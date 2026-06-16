@@ -10,6 +10,49 @@ import (
 	"github.com/pikoci/pikoci/pikoci/resource"
 )
 
+type ListPipelineResourcesResponse struct {
+	Resources []*resource.Resource `json:"data,omitempty"`
+	Err       string               `json:"error,omitempty"`
+}
+
+func (r ListPipelineResourcesResponse) Error() string { return r.Err }
+
+func listPipelineResources(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var ctx = r.Context()
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		var resources []*resource.Resource
+		var err error
+		if isPublic, _ := ctx.Value(IsPublicAccessKey).(bool); isPublic {
+			resources, err = s.ListPublicPipelineResources(ctx, tc, pc)
+		} else {
+			resources, err = s.ListPipelineResources(ctx, tc, pc)
+			if resources != nil {
+				un, _ := ctx.Value(UsernameContextKey).(string)
+				isAdmin := false
+				if un != "" {
+					um, uerr := s.GetUser(ctx, un)
+					if uerr == nil && um.IsAdmin(tc) {
+						isAdmin = true
+					}
+				}
+				if !isAdmin {
+					for _, res := range resources {
+						res.WebhookToken = ""
+					}
+				}
+			}
+		}
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(ListPipelineResourcesResponse{Resources: resources, Err: errs}, w)
+	}
+}
+
 type CreateResourceVersionRequest struct {
 	TeamCanonical     string           `json:"team_canonical"`
 	PipelineCanonical string           `json:"pipeline_canonical"`

@@ -263,6 +263,7 @@
           <% } %>
         </h1>
         <div class="d-flex gap-2">
+          <button type="button" id="toggle-resources-panel" class="btn btn-outline-secondary"><i class="bi bi-box"></i> Resources</button>
           <% if (isMember(team.canonical) && pipeline.jobs && pipeline.jobs.length > 0) { %>
             <% if (pipeline.jobs.some(function(j) { return j.paused; })) { %>
               <button type="button" id="unpause-pipeline" class="btn btn-primary" data-loading-text="Unpausing..."><i class="bi bi-play-circle"></i> Unpause</button>
@@ -276,7 +277,10 @@
           <% } %>
         </div>
       </div>
-      <div class="piko-graph-container" id="graphviz"></div>
+      <div class="piko-graph-wrapper">
+        <div class="piko-graph-container" id="graphviz"></div>
+        <div id="pipeline-resources-panel" class="piko-resources-panel"></div>
+      </div>
       <div class="piko-graph-legend">
         <span class="piko-graph-legend-item">
           <svg width="22" height="14" viewBox="0 0 22 14"><polygon points="0,0 16,0 22,7 16,14 0,14" fill="#83769C" stroke="#5F574F" stroke-width="1"/></svg>
@@ -306,6 +310,47 @@
           <span class="piko-graph-legend-swatch" style="background:#29ADFF;"></span>
           Paused
         </span>
+      </div>
+    </script>
+
+    <script type="text/template" id="pipeline-resources-panel-view">
+      <div class="piko-resources-panel-header">
+        <span class="fw-bold">Resources</span>
+        <button type="button" id="close-resources-panel" style="background:none;border:none;color:var(--text-secondary);font-size:1.2rem;cursor:pointer;padding:0;line-height:1">&times;</button>
+      </div>
+      <div class="piko-resources-panel-body">
+        <% if (resources.length === 0) { %>
+          <p class="piko-resource-card-meta small mb-0">No resources in this pipeline.</p>
+        <% } else { %>
+          <% _.each(resources, function(r) { %>
+            <div class="piko-resource-card">
+              <div class="piko-resource-card-header">
+                <% if (r.latest_version && r.latest_version.status) { %>
+                  <span class="piko-version-status-dot" style="background:var(--status-<%= r.latest_version.status %>);" title="<%= r.latest_version.status %>"></span>
+                <% } %>
+                <a href="<%= resourceUrl(r.canonical) %>" class="piko-resource-card-name" data-navigate="true"><%- r.canonical %></a>
+                <span class="piko-resource-card-type"><%- r.type %></span>
+              </div>
+              <% if (r.latest_version && r.latest_version.version) { %>
+                <div class="piko-resource-card-version">
+                  <% _.each(r.latest_version.version, function(v, k) { %>
+                    <%- k %>: <span><%- v %></span>
+                  <% }); %>
+                </div>
+              <% } %>
+              <div class="piko-resource-card-meta">
+                <% if (r.last_check && !r.last_check.startsWith('0001-01-01')) { %>
+                  <span>Checked: <%- pikoTimeAgo(r.last_check) %></span>
+                <% } %>
+              </div>
+              <% if (isMember) { %>
+                <button class="btn btn-sm btn-outline-warning check-resource-now mt-1" data-canonical="<%- r.canonical %>">
+                  <i class="bi bi-arrow-clockwise"></i> Check Now
+                </button>
+              <% } %>
+            </div>
+          <% }); %>
+        <% } %>
       </div>
     </script>
 

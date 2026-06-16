@@ -111,6 +111,9 @@ type Service interface {
 	// ListPublicJobBuilds returns paginated builds for a job on a public pipeline,
 	// with secret step logs redacted.
 	ListPublicJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error)
+	// ListPublicPipelineResources returns all resources for a public pipeline with
+	// sensitive fields sanitized.
+	ListPublicPipelineResources(ctx context.Context, tc, pn string) ([]*resource.Resource, error)
 	// GetPublicPipelineResource retrieves a resource from a public pipeline with
 	// sensitive fields sanitized.
 	GetPublicPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error)
@@ -167,6 +170,8 @@ type Service interface {
 	// upstream jobs succeeded with a common version), it creates a pending build.
 	EvaluateDownstreamJobs(ctx context.Context, tc, pn, completedJobName string) error
 
+	// ListPipelineResources returns all resources for the given pipeline.
+	ListPipelineResources(ctx context.Context, tc, pn string) ([]*resource.Resource, error)
 	// GetPipelineResource retrieves a resource by its canonical name within a pipeline.
 	GetPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error)
 	// UpdatePipelineResource updates a resource's metadata within a pipeline.

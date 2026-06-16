@@ -1237,6 +1237,27 @@ func (q *PikoCI) ListPublicJobBuilds(ctx context.Context, tc, pCan, jn string, b
 	return builds, hasMore, nil
 }
 
+// ListPublicPipelineResources returns all resources for a public pipeline with
+// sensitive fields sanitized.
+func (q *PikoCI) ListPublicPipelineResources(ctx context.Context, tc, pCan string) ([]*resource.Resource, error) {
+	_, err := q.Pipelines.FindPublic(ctx, tc, pCan)
+	if err != nil {
+		return nil, fmt.Errorf("pipeline not found or not public: %w", err)
+	}
+
+	rs, err := q.ListPipelineResources(ctx, tc, pCan)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, r := range rs {
+		sr := sanitizeResourceForPublic(*r)
+		rs[i] = &sr
+	}
+
+	return rs, nil
+}
+
 // GetPublicPipelineResource retrieves a resource from a public pipeline with
 // sensitive fields sanitized.
 func (q *PikoCI) GetPublicPipelineResource(ctx context.Context, tc, pCan, rCan string) (*resource.Resource, error) {

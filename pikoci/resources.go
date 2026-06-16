@@ -84,6 +84,38 @@ func (q *PikoCI) ListResourceVersions(ctx context.Context, tc, pc, rCan string, 
 	return rvers, hasMore, nil
 }
 
+// ListPipelineResources returns all resources for the given pipeline,
+// enriched with the latest version and its aggregate build status.
+func (q *PikoCI) ListPipelineResources(ctx context.Context, tc, pc string) ([]*resource.Resource, error) {
+	if !utils.ValidateCanonical(tc) {
+		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
+	} else if !utils.ValidateCanonical(pc) {
+		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pc)
+	}
+
+	rs, err := q.Resources.Filter(ctx, tc, pc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Pipeline Resources: %w", err)
+	}
+
+	for _, r := range rs {
+		vers, err := q.Resources.FilterVersions(ctx, tc, pc, r.Canonical, nil, nil, 1)
+		if err != nil || len(vers) == 0 {
+			continue
+		}
+		v := vers[0]
+		statuses, err := q.Builds.AggregateStatusByVersionIDs(ctx, []uint32{v.ID})
+		if err == nil {
+			if s, ok := statuses[v.ID]; ok {
+				v.Status = s
+			}
+		}
+		r.LatestVersion = v
+	}
+
+	return rs, nil
+}
+
 // GetPipelineResource retrieves a resource by its canonical name within a pipeline.
 func (q *PikoCI) GetPipelineResource(ctx context.Context, tc, pc, rCan string) (*resource.Resource, error) {
 	if !utils.ValidateCanonical(tc) {

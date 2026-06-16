@@ -59,6 +59,7 @@ var (
 		InsertBuildGetVersion:          admin,
 		FindBuildGetVersions:   admin,
 
+		ListPipelineResources:   member,
 		GetPipelineResource:     member,
 		UpdatePipelineResource:  admin,
 		TriggerPipelineResource: member,

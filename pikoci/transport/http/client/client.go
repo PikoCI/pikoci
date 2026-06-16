@@ -421,6 +421,11 @@ func (cl *Client) ListPublicJobBuilds(ctx context.Context, tc, pn, jn string, be
 	return cl.ListJobBuilds(ctx, tc, pn, jn, before, after, limit)
 }
 
+// ListPublicPipelineResources lists resources for a public pipeline. It delegates to ListPipelineResources.
+func (cl *Client) ListPublicPipelineResources(ctx context.Context, tc, pn string) ([]*resource.Resource, error) {
+	return cl.ListPipelineResources(ctx, tc, pn)
+}
+
 // GetPublicPipelineResource retrieves a resource from a public pipeline. It delegates to GetPipelineResource.
 func (cl *Client) GetPublicPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error) {
 	return cl.GetPipelineResource(ctx, tc, pn, rCan)
@@ -895,6 +900,22 @@ func (cl *Client) ListResourceVersions(ctx context.Context, tc, pn, rCan string,
 	}
 
 	return resp.Versions, hasMore, nil
+}
+
+// ListPipelineResources returns all resources for a pipeline.
+func (cl *Client) ListPipelineResources(ctx context.Context, tc, pn string) ([]*resource.Resource, error) {
+	var resp thttp.ListPipelineResourcesResponse
+
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/resources", cl.url, tc, pn), nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return resp.Resources, nil
 }
 
 // GetPipelineResource retrieves a single resource from a pipeline.
