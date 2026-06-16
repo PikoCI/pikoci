@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Resource version rows now show a colored status dot indicating the aggregate build status of all jobs that consumed that version ([#534](https://github.com/PikoCI/pikoci/issues/534))
 - Pipeline show page now has a "Resources" button that opens a slide-out panel listing all pipeline resources with name, type, latest version, build status, last check time, and a "Check Now" button ([#536](https://github.com/PikoCI/pikoci/issues/536))
+- Resource nodes in the pipeline graph view now show a native browser tooltip on hover with the latest version's key-value pairs and aggregate build status ([#537](https://github.com/PikoCI/pikoci/issues/537))
 
 ### Fixed
 

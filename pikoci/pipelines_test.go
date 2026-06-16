@@ -1412,6 +1412,8 @@ func TestGetPipelineImage_HidesUnlinkedResources(t *testing.T) {
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "build", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "github-check.ci", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
 	require.NoError(t, err)
@@ -1461,6 +1463,7 @@ func TestGetPipelineImage_QuotesHyphenatedName(t *testing.T) {
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "hello-world").Return(pp, nil)
 	s.Builds.EXPECT().Filter(ctx, "main", "hello-world", "hello", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "hello-world", "cron.tick", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "hello-world", "dot")
 	require.NoError(t, err)
@@ -1504,6 +1507,8 @@ func TestGetPipelineImage_ShowsLinkedResources(t *testing.T) {
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "test", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
 	require.NoError(t, err)
@@ -1556,6 +1561,8 @@ func TestGetPipelineImage_PassedReusesPutOutputNode(t *testing.T) {
 	s.Pipelines.EXPECT().Find(ctx, "main", "artifact-pipeline").Return(pp, nil)
 	s.Builds.EXPECT().Filter(ctx, "main", "artifact-pipeline", "build", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
 	s.Builds.EXPECT().Filter(ctx, "main", "artifact-pipeline", "deploy", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "artifact-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "artifact-pipeline", "artifact.output", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "artifact-pipeline", "dot")
 	require.NoError(t, err)
@@ -1756,6 +1763,7 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 			pp := makePipeline()
 			s.Pipelines.EXPECT().Find(ctx, "main", "p").Return(pp, nil)
 			s.Builds.EXPECT().Filter(ctx, "main", "p", "j", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return(tt.builds, nil)
+			s.Resources.EXPECT().FilterVersions(ctx, "main", "p", "cron.tick", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
 			img, err := s.S.GetPipelineImage(ctx, "main", "p", "dot")
 			require.NoError(t, err)
@@ -3629,6 +3637,7 @@ job "test" {
 
 	// No builds for the job
 	s.Builds.EXPECT().Filter(ctx, "main", "pikoci", "test", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "pikoci", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
 	img, err := s.S.CreatePipelineImage(ctx, "main", hclConfig, nil, "dot")
 	require.NoError(t, err)
@@ -3704,6 +3713,7 @@ job "test" {
 
 	// No builds for the job
 	s.Builds.EXPECT().Filter(ctx, "main", "pikoci", "test", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "pikoci", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
 	img, err := s.S.CreatePipelineImage(ctx, "main", hclConfig, nil, "image.dot")
 	require.NoError(t, err)
@@ -3734,6 +3744,7 @@ func TestGetPublicPipelineImage_DOT(t *testing.T) {
 
 	s.Pipelines.EXPECT().FindPublic(ctx, "main", "my-pipeline").Return(pp, nil)
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
 	img, err := s.S.GetPublicPipelineImage(ctx, "main", "my-pipeline", "dot")
 	require.NoError(t, err)
@@ -3824,6 +3835,7 @@ func TestGetPipelineImage_DOT(t *testing.T) {
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
 	require.NoError(t, err)
@@ -3928,6 +3940,8 @@ func TestGetPipelineImage_WithBuildStatuses(t *testing.T) {
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "running-job", gomock.Any(), gomock.Any(), gomock.Any()).Return([]*build.Build{
 		{ID: 3, BuildNumber: "1", Status: build.Started},
 	}, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
 	require.NoError(t, err)
@@ -3970,6 +3984,7 @@ func TestGetPipelineImage_WithPassedConstraints(t *testing.T) {
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "upstream", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "downstream", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
 	require.NoError(t, err)
@@ -4002,6 +4017,7 @@ func TestGetPipelineImage_ResourceWithError(t *testing.T) {
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
 	require.NoError(t, err)
@@ -4033,10 +4049,118 @@ func TestGetPipelineImage_PinnedResource(t *testing.T) {
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
 	require.NoError(t, err)
 	assert.Contains(t, string(img), "graph")
+}
+
+func TestGetPipelineImage_ResourceTooltip(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	pp := &pipeline.Pipeline{
+		ID:        1,
+		Name:      "my-pipeline",
+		Canonical: "my-pipeline",
+		Jobs: []job.Job{
+			{
+				Name: "my-job",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo"}},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Canonical: "git.repo", Name: "repo", Type: "git"},
+		},
+	}
+
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{
+		{ID: 10, Version: map[string]interface{}{"ref": "abc1234", "sha": "deadbeef"}},
+	}, nil)
+	s.Builds.EXPECT().AggregateStatusByVersionIDs(ctx, []uint32{10}).Return(map[uint32]string{10: "succeeded"}, nil)
+
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
+	require.NoError(t, err)
+
+	dot := string(img)
+	assert.Contains(t, dot, `tooltip="ref: abc1234\nsha: deadbeef\nsucceeded"`)
+}
+
+func TestGetPipelineImage_ResourceTooltipNoVersions(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	pp := &pipeline.Pipeline{
+		ID:        1,
+		Name:      "my-pipeline",
+		Canonical: "my-pipeline",
+		Jobs: []job.Job{
+			{
+				Name: "my-job",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "cron", Name: "timer"}},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Canonical: "cron.timer", Name: "timer", Type: "cron"},
+		},
+	}
+
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
+	require.NoError(t, err)
+
+	dot := string(img)
+	// No tooltip attribute should be present when there are no versions
+	assert.NotContains(t, dot, "tooltip=")
+}
+
+func TestGetPipelineImage_ResourceTooltipNoStatus(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	pp := &pipeline.Pipeline{
+		ID:        1,
+		Name:      "my-pipeline",
+		Canonical: "my-pipeline",
+		Jobs: []job.Job{
+			{
+				Name: "my-job",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo"}},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Canonical: "git.repo", Name: "repo", Type: "git"},
+		},
+	}
+
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{
+		{ID: 5, Version: map[string]interface{}{"ref": "main"}},
+	}, nil)
+	s.Builds.EXPECT().AggregateStatusByVersionIDs(ctx, []uint32{5}).Return(nil, nil)
+
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
+	require.NoError(t, err)
+
+	dot := string(img)
+	// Tooltip should only show version KVs, no status line
+	assert.Contains(t, dot, `tooltip="ref: main"`)
 }
 
 func TestCreatePipeline_WithRunnerType(t *testing.T) {

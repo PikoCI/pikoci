@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"os/exec"
+	"sort"
 	"regexp"
 	"strconv"
 	"strings"
@@ -565,6 +566,23 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		}
 	}
 
+	// Build tooltip text for each resource from its latest version.
+	resourceTooltips := make(map[string]string)
+	for _, r := range pp.Resources {
+		vers, err := q.Resources.FilterVersions(ctx, tc, pp.Canonical, r.Canonical, nil, nil, 1)
+		if err != nil || len(vers) == 0 {
+			continue
+		}
+		v := vers[0]
+		statuses, err := q.Builds.AggregateStatusByVersionIDs(ctx, []uint32{v.ID})
+		if err == nil {
+			if s, ok := statuses[v.ID]; ok {
+				v.Status = s
+			}
+		}
+		resourceTooltips[r.Canonical] = buildResourceTooltip(v)
+	}
+
 	resourceBorders := make(map[string]string)
 	resourceStyles := make(map[string]string)
 	resourcePenwidths := make(map[string]string)
@@ -599,6 +617,9 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		}
 		if penwidth != "" {
 			attrs["penwidth"] = penwidth
+		}
+		if tip, ok := resourceTooltips[r.Canonical]; ok {
+			attrs[string(gographviz.Tooltip)] = fmt.Sprintf(`"%s"`, tip)
 		}
 		err = graph.AddNode(pn, fmt.Sprintf(`"%s"`, r.Canonical), attrs)
 		if err != nil {
@@ -745,6 +766,9 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 			if pw := resourcePenwidths[rCan]; pw != "" {
 				putAttrs["penwidth"] = pw
 			}
+			if tip, ok := resourceTooltips[rCan]; ok {
+				putAttrs[string(gographviz.Tooltip)] = fmt.Sprintf(`"%s"`, tip)
+			}
 			err = graph.AddNode(pn, nn, putAttrs)
 			if err != nil {
 				return nil, fmt.Errorf("failed to add node to Graph: %w", err)
@@ -823,6 +847,9 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 					if pw := resourcePenwidths[rCan]; pw != "" {
 						passedAttrs["penwidth"] = pw
 					}
+					if tip, ok := resourceTooltips[rCan]; ok {
+						passedAttrs[string(gographviz.Tooltip)] = fmt.Sprintf(`"%s"`, tip)
+					}
 					err = graph.AddNode(pn, nn, passedAttrs)
 					if err != nil {
 						return nil, fmt.Errorf("failed to add node to Graph: %w", err)
@@ -843,6 +870,26 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 
 	str := graph.String()
 	return []byte(str), nil
+}
+
+// buildResourceTooltip formats a resource version's key-value pairs and
+// aggregate build status into a newline-separated tooltip string.
+func buildResourceTooltip(v *resource.Version) string {
+	keys := make([]string, 0, len(v.Version))
+	for k := range v.Version {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var lines []string
+	for _, k := range keys {
+		val := fmt.Sprintf("%v", v.Version[k])
+		val = strings.ReplaceAll(val, `"`, `\"`)
+		lines = append(lines, fmt.Sprintf("%s: %s", k, val))
+	}
+	if v.Status != "" {
+		lines = append(lines, v.Status)
+	}
+	return strings.Join(lines, "\\n")
 }
 
 // convertDOTImage converts raw DOT bytes to the requested format.
