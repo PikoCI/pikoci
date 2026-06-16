@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `in_parallel` sub-step durations now display as formatted time (`HH:MM:SS`) instead of raw nanoseconds ([#526](https://github.com/PikoCI/pikoci/issues/526))
+- Webhook triggers now work correctly after the `tags` column was added to resources. `FindByWebhookToken` was missing the `tags` Scan destination, causing all webhook calls to return 400 ([#544](https://github.com/PikoCI/pikoci/issues/544))
 
 ## [0.5.1] - 2026-06-16
 
