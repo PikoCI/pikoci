@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `in_parallel` sub-step durations now display as formatted time (`HH:MM:SS`) instead of raw nanoseconds ([#526](https://github.com/PikoCI/pikoci/issues/526))
+
 ## [0.5.1] - 2026-06-16
 
 ### Added

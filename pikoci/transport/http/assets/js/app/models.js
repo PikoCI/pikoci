@@ -159,6 +159,9 @@ export var Build = Backbone.Model.extend({
     }
     _.each(data.steps, function(s, i) {
       data.steps[i].duration = durationToString(s.duration);
+      _.each(s.sub_steps || [], function(child, j) {
+        data.steps[i].sub_steps[j].duration = durationToString(child.duration);
+      });
     });
     _.each(data.job, function(j, i) {
       data.job[i].duration = durationToString(j.duration);

@@ -12,10 +12,18 @@ job "gen" {
   get "cron" "my_cron" {
     trigger = true
   }
-  task "create-file" {
-    run "exec" {
-      path = "/bin/sh"
-      args = ["-ec", "mkdir -p output && echo \"cron triggered at: $(date)\" > output/timestamp.txt && cat output/timestamp.txt"]
+  in_parallel {
+    task "create-file" {
+      run "exec" {
+        path = "/bin/sh"
+        args = ["-ec", "mkdir -p output && echo \"cron triggered at: $(date)\" > output/timestamp.txt && cat output/timestamp.txt"]
+      }
+    }
+    task "create-summary" {
+      run "exec" {
+        path = "/bin/sh"
+        args = ["-ec", "mkdir -p output && echo \"summary generated\" > output/summary.txt && cat output/summary.txt"]
+      }
     }
   }
   put "artifact" "cron_output" {
