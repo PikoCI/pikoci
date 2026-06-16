@@ -6,6 +6,7 @@ import (
 
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -540,6 +541,8 @@ job "deploy" {
 	// Expect Build.Filter for each expanded job + regular jobs
 	s.Builds.EXPECT().Filter(ctx, "main", "pikoci", gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil).AnyTimes()
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "pikoci", gomock.Any(), (*uint32)(nil), (*uint32)(nil), uint32(1)).
+		Return([]*resource.Version{}, nil).AnyTimes()
 
 	img, err := s.S.CreatePipelineImage(ctx, "main", hclConfig, nil, "dot")
 	require.NoError(t, err)
