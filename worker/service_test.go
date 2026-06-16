@@ -1341,6 +1341,80 @@ func TestRunHooks_JobLevel_NoStepName(t *testing.T) {
 	assert.Equal(t, "on_failure", b.Job[0].Name)
 }
 
+func TestRunHooks_FailedRunner_StepMarkedFailed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           10,
+	}
+
+	pp := testPipeline()
+	cwd := t.TempDir()
+
+	b := build.Build{
+		ID:          70,
+		BuildNumber: "70",
+		Status:      build.Succeeded,
+		Job:         []build.Step{},
+	}
+
+	hooks := []job.HookStep{
+		runnerHook(utils.RunnerCommand{Runner: "exec", Params: map[string]string{"path": "false"}}),
+	}
+
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "70", gomock.Any()).
+		Return(nil).AnyTimes()
+
+	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "step", hooks, "on_success", nil, nil)
+
+	require.Len(t, b.Job, 1)
+	assert.Equal(t, build.Failed, b.Job[0].Status, "hook step should be marked as failed")
+	assert.Equal(t, build.Succeeded, b.Status, "build status should remain unchanged")
+}
+
+func TestRunHooks_MixedSuccess_StepStatuses(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           10,
+	}
+
+	pp := testPipeline()
+	cwd := t.TempDir()
+
+	b := build.Build{
+		ID:          71,
+		BuildNumber: "71",
+		Status:      build.Succeeded,
+		Job:         []build.Step{},
+	}
+
+	hooks := []job.HookStep{
+		runnerHook(utils.RunnerCommand{Runner: "exec", Args: []string{"ok"}, Params: map[string]string{"path": "echo"}}),
+		runnerHook(utils.RunnerCommand{Runner: "exec", Params: map[string]string{"path": "false"}}),
+	}
+
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "71", gomock.Any()).
+		Return(nil).AnyTimes()
+
+	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "step", hooks, "ensure", nil, nil)
+
+	require.Len(t, b.Job, 2)
+	assert.Equal(t, build.Succeeded, b.Job[0].Status, "first hook should succeed")
+	assert.Equal(t, build.Failed, b.Job[1].Status, "second hook should fail")
+	assert.Equal(t, build.Succeeded, b.Status, "build status should remain unchanged")
+}
+
 func TestProcessMessage_JobDispatch(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc := newTestWorker(ctrl)
@@ -8533,4 +8607,204 @@ func TestProcessJob_InParallel_PendingSubSteps(t *testing.T) {
 	w.processJob(ctx, m, cwd, pp)
 
 	assert.True(t, sawPendingSubSteps, "should have seen sub-steps with status=pending while waiting for semaphore")
+}
+
+func TestProcessJob_OnSuccessHook_Fails_BuildStaysSucceeded(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "success-hook-fail-job",
+		BuildID:           10,
+		BuildNumber:       "400",
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "success-hook-fail-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "pass",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"ok"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+				OnSuccess: []job.HookStep{
+					runnerHook(utils.RunnerCommand{
+						Runner: "exec",
+						Params: map[string]string{"path": "false"},
+					}),
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "400", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status, "build should stay succeeded")
+	require.GreaterOrEqual(t, len(capturedBuild.Job), 1)
+	// Find the on_success hook step
+	found := false
+	for _, step := range capturedBuild.Job {
+		if step.Type == "hook" {
+			assert.Equal(t, build.Failed, step.Status, "on_success hook step should be marked failed")
+			found = true
+		}
+	}
+	assert.True(t, found, "should have found the on_success hook step")
+}
+
+func TestProcessJob_OnFailureHook_Fails_BuildStaysFailed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "fail-hook-fail-job",
+		BuildID:           10,
+		BuildNumber:       "401",
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "fail-hook-fail-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "will-fail",
+							Run:  utils.RunnerCommand{Runner: "exec", Params: map[string]string{"path": "false"}},
+						},
+					},
+				},
+				OnFailure: []job.HookStep{
+					runnerHook(utils.RunnerCommand{
+						Runner: "exec",
+						Params: map[string]string{"path": "false"},
+					}),
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "401", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Failed, capturedBuild.Status, "build should stay failed")
+	found := false
+	for _, step := range capturedBuild.Job {
+		if step.Type == "hook" {
+			assert.Equal(t, build.Failed, step.Status, "on_failure hook step should be marked failed")
+			found = true
+		}
+	}
+	assert.True(t, found, "should have found the on_failure hook step")
+}
+
+func TestProcessJob_EnsureHook_Fails_BuildStatusUnchanged(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "ensure-hook-fail-job",
+		BuildID:           10,
+		BuildNumber:       "402",
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "ensure-hook-fail-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "pass",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"ok"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+				Ensure: []job.HookStep{
+					runnerHook(utils.RunnerCommand{
+						Runner: "exec",
+						Params: map[string]string{"path": "false"},
+					}),
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "402", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status, "build should stay succeeded")
+	found := false
+	for _, step := range capturedBuild.Job {
+		if step.Type == "hook" {
+			assert.Equal(t, build.Failed, step.Status, "ensure hook step should be marked failed")
+			found = true
+		}
+	}
+	assert.True(t, found, "should have found the ensure hook step")
 }

@@ -85,5 +85,21 @@ job "monitor" {
       path = "/bin/sh"
       args = ["-ec", "echo '--- monitor ---' && echo 'cron version: $GET_MY_CRON_DATE' && echo 'done'"]
     }
+    on_success "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo 'hook ok'"]
+    }
+    on_failure "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "false"]
+    }
+  }
+  on_success "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "false"]
+  }
+  ensure "exec" {
+    path = "/bin/sh"
+    args = ["-ec", "echo 'ensure ran'"]
   }
 }

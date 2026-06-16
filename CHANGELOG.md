@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Hook steps (`on_success`, `on_failure`, `ensure`) now correctly report their exit code. A failing hook command marks the step as `Failed` in the UI while leaving the overall build status unchanged ([#518](https://github.com/PikoCI/pikoci/issues/518))
 - `$PIKOCI_OUTPUT` now works in Docker runner tasks. The host path is remapped to the container workdir (detected via `-w`/`--workdir`) and injected as an `-e` flag during `$env` expansion ([#519](https://github.com/PikoCI/pikoci/issues/519))
 
 ## [0.5.0] - 2026-06-15
