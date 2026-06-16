@@ -590,6 +590,13 @@ textarea.form-control {
 /* ============================================================
    VERSION TABLE (Resource versions)
    ============================================================ */
+.piko-version-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
 .piko-version-kv {
   font-family: var(--font-mono);
   font-size: 0.82rem;

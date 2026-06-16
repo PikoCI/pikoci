@@ -675,6 +675,9 @@
             <% if (pinned_version_id === id) { %>
               <span class="piko-badge piko-badge-pending">pinned</span>
             <% } %>
+            <% if (status) { %>
+              <span class="piko-version-status-dot" style="background:var(--status-<%= status %>);" title="<%= status %>"></span>
+            <% } %>
             <span class="piko-version-kv">
               <% _.mapObject(version, function(v, k) { %>
                 <%- k %>: <span><%- v %></span>

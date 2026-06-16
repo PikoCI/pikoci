@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Resource version rows now show a colored status dot indicating the aggregate build status of all jobs that consumed that version ([#534](https://github.com/PikoCI/pikoci/issues/534))
+
 ### Fixed
 
 - `in_parallel` sub-step durations now display as formatted time (`HH:MM:SS`) instead of raw nanoseconds ([#526](https://github.com/PikoCI/pikoci/issues/526))

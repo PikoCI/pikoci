@@ -42,6 +42,21 @@ func (m *BuildRepository) EXPECT() *BuildRepositoryMockRecorder {
 	return m.recorder
 }
 
+// AggregateStatusByVersionIDs mocks base method.
+func (m *BuildRepository) AggregateStatusByVersionIDs(ctx context.Context, versionIDs []uint32) (map[uint32]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AggregateStatusByVersionIDs", ctx, versionIDs)
+	ret0, _ := ret[0].(map[uint32]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AggregateStatusByVersionIDs indicates an expected call of AggregateStatusByVersionIDs.
+func (mr *BuildRepositoryMockRecorder) AggregateStatusByVersionIDs(ctx, versionIDs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AggregateStatusByVersionIDs", reflect.TypeOf((*BuildRepository)(nil).AggregateStatusByVersionIDs), ctx, versionIDs)
+}
+
 // CountRunning mocks base method.
 func (m *BuildRepository) CountRunning(ctx context.Context, tc, pn, jn string) (int, error) {
 	m.ctrl.T.Helper()
