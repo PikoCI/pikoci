@@ -1867,9 +1867,13 @@ func (w *Worker) runHooks(ctx context.Context, m workitem.Body, b *build.Build, 
 				w.updateBuild(ctx, m, *b)
 			}
 
-			out, d, _ = w.runRunner(ctx, ru, cwd, rc, onPartialLog)
-
-			(*steps)[stepIdx] = build.Step{Type: "hook", Name: name, Logs: out, Duration: d, Status: build.Succeeded}
+			var runErr error
+			out, d, runErr = w.runRunner(ctx, ru, cwd, rc, onPartialLog)
+			hookStatus := build.Succeeded
+			if runErr != nil {
+				hookStatus = build.Failed
+			}
+			(*steps)[stepIdx] = build.Step{Type: "hook", Name: name, Logs: out, Duration: d, Status: hookStatus}
 			if err := w.updateBuild(ctx, m, *b); err != nil {
 				return
 			}
