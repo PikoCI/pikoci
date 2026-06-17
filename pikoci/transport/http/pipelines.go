@@ -226,12 +226,13 @@ func getPipelineImage(s pikoci.Service) http.HandlerFunc {
 		req.TeamCanonical = vars["team_canonical"]
 		req.Name = vars["pipeline_canonical"]
 		req.Format = vars["ext"]
+		hideIntermediates := r.URL.Query().Get("hide_intermediates") == "1"
 		var img []byte
 		var err error
 		if isPublic, _ := ctx.Value(IsPublicAccessKey).(bool); isPublic {
-			img, err = s.GetPublicPipelineImage(ctx, req.TeamCanonical, req.Name, req.Format)
+			img, err = s.GetPublicPipelineImage(ctx, req.TeamCanonical, req.Name, req.Format, hideIntermediates)
 		} else {
-			img, err = s.GetPipelineImage(ctx, req.TeamCanonical, req.Name, req.Format)
+			img, err = s.GetPipelineImage(ctx, req.TeamCanonical, req.Name, req.Format, hideIntermediates)
 		}
 		if err != nil {
 			encodeResponse(GetPipelineImageResponse{Err: err.Error()}, w)

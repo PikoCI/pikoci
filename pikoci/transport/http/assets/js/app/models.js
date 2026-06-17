@@ -129,11 +129,14 @@ export var Pipeline = Backbone.Model.extend({
 
 export var PipelineImage = Backbone.Model.extend({
   url: function() {
-    return this.pipeline.url() + "/image.dot";
+    var base = this.pipeline.url() + "/image.dot";
+    if (this.hideIntermediates) base += "?hide_intermediates=1";
+    return base;
   },
   initialize: function(attr, opts) {
     opts = opts || {};
     this.pipeline = opts.pipeline;
+    this.hideIntermediates = false;
   },
 });
 

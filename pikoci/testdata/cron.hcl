@@ -61,6 +61,7 @@ job "validate" {
   for_each = toset(["lint", "vet"])
   get "cron" "my_cron" {
     trigger = true
+    passed  = ["gen"]
   }
   task "run" {
     run "exec" {
@@ -79,6 +80,19 @@ job "deploy-after-lint" {
     run "exec" {
       path = "/bin/sh"
       args = ["-ec", "echo 'deploying after lint only'"]
+    }
+  }
+}
+
+job "validate-report" {
+  get "cron" "my_cron" {
+    trigger = true
+    passed  = ["validate--lint", "validate--vet"]
+  }
+  task "report" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo 'all validations passed, generating report'"]
     }
   }
 }

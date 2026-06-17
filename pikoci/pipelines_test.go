@@ -1415,7 +1415,7 @@ func TestGetPipelineImage_HidesUnlinkedResources(t *testing.T) {
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "github-check.ci", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false)
 	require.NoError(t, err)
 
 	dot := string(img)
@@ -1465,7 +1465,7 @@ func TestGetPipelineImage_QuotesHyphenatedName(t *testing.T) {
 	s.Builds.EXPECT().Filter(ctx, "main", "hello-world", "hello", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "hello-world", "cron.tick", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "hello-world", "dot")
+	img, err := s.S.GetPipelineImage(ctx, "main", "hello-world", "dot", false)
 	require.NoError(t, err)
 
 	dot := string(img)
@@ -1510,7 +1510,7 @@ func TestGetPipelineImage_ShowsLinkedResources(t *testing.T) {
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false)
 	require.NoError(t, err)
 
 	dot := string(img)
@@ -1564,7 +1564,7 @@ func TestGetPipelineImage_PassedReusesPutOutputNode(t *testing.T) {
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "artifact-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "artifact-pipeline", "artifact.output", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "artifact-pipeline", "dot")
+	img, err := s.S.GetPipelineImage(ctx, "main", "artifact-pipeline", "dot", false)
 	require.NoError(t, err)
 
 	dot := string(img)
@@ -1765,7 +1765,7 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 			s.Builds.EXPECT().Filter(ctx, "main", "p", "j", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return(tt.builds, nil)
 			s.Resources.EXPECT().FilterVersions(ctx, "main", "p", "cron.tick", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
-			img, err := s.S.GetPipelineImage(ctx, "main", "p", "dot")
+			img, err := s.S.GetPipelineImage(ctx, "main", "p", "dot", false)
 			require.NoError(t, err)
 
 			dot := string(img)
@@ -3746,7 +3746,7 @@ func TestGetPublicPipelineImage_DOT(t *testing.T) {
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
-	img, err := s.S.GetPublicPipelineImage(ctx, "main", "my-pipeline", "dot")
+	img, err := s.S.GetPublicPipelineImage(ctx, "main", "my-pipeline", "dot", false)
 	require.NoError(t, err)
 	assert.Contains(t, string(img), "graph")
 }
@@ -3758,7 +3758,7 @@ func TestGetPublicPipelineImage_NotFound(t *testing.T) {
 
 	s.Pipelines.EXPECT().FindPublic(ctx, "main", "my-pipeline").Return(nil, assert.AnError)
 
-	_, err := s.S.GetPublicPipelineImage(ctx, "main", "my-pipeline", "dot")
+	_, err := s.S.GetPublicPipelineImage(ctx, "main", "my-pipeline", "dot", false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pipeline not found or not public")
 }
@@ -3776,7 +3776,7 @@ func TestGetPublicPipelineImage_InvalidFormat(t *testing.T) {
 
 	s.Pipelines.EXPECT().FindPublic(ctx, "main", "my-pipeline").Return(pp, nil)
 
-	_, err := s.S.GetPublicPipelineImage(ctx, "main", "my-pipeline", "bmp")
+	_, err := s.S.GetPublicPipelineImage(ctx, "main", "my-pipeline", "bmp", false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid image format")
 }
@@ -3786,7 +3786,7 @@ func TestGetPipelineImage_InvalidTeamCanonical(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	_, err := s.S.GetPipelineImage(ctx, "INVALID", "my-pipeline", "dot")
+	_, err := s.S.GetPipelineImage(ctx, "INVALID", "my-pipeline", "dot", false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid Team Canonical")
 }
@@ -3796,7 +3796,7 @@ func TestGetPipelineImage_InvalidPipelineCanonical(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	_, err := s.S.GetPipelineImage(ctx, "main", "INVALID", "dot")
+	_, err := s.S.GetPipelineImage(ctx, "main", "INVALID", "dot", false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid Pipeline Canonical")
 }
@@ -3806,7 +3806,7 @@ func TestGetPipelineImage_InvalidFormat(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	_, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "bmp")
+	_, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "bmp", false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid image format")
 }
@@ -3837,7 +3837,7 @@ func TestGetPipelineImage_DOT(t *testing.T) {
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false)
 	require.NoError(t, err)
 	assert.Contains(t, string(img), "graph")
 }
@@ -3857,7 +3857,7 @@ func TestGetPipelineImage_FormatFromExtension(t *testing.T) {
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "image.dot")
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "image.dot", false)
 	require.NoError(t, err)
 	assert.Contains(t, string(img), "graph")
 }
@@ -3877,7 +3877,7 @@ func TestGetPipelineImage_EmptyFormat(t *testing.T) {
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "")
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "", false)
 	require.NoError(t, err)
 	assert.Contains(t, string(img), "graph")
 }
@@ -3943,7 +3943,7 @@ func TestGetPipelineImage_WithBuildStatuses(t *testing.T) {
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false)
 	require.NoError(t, err)
 	result := string(img)
 	assert.Contains(t, result, "graph")
@@ -3986,7 +3986,7 @@ func TestGetPipelineImage_WithPassedConstraints(t *testing.T) {
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "downstream", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false)
 	require.NoError(t, err)
 	result := string(img)
 	assert.Contains(t, result, "upstream")
@@ -4019,7 +4019,7 @@ func TestGetPipelineImage_ResourceWithError(t *testing.T) {
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false)
 	require.NoError(t, err)
 	assert.Contains(t, string(img), "graph")
 }
@@ -4051,7 +4051,7 @@ func TestGetPipelineImage_PinnedResource(t *testing.T) {
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false)
 	require.NoError(t, err)
 	assert.Contains(t, string(img), "graph")
 }
@@ -4085,7 +4085,7 @@ func TestGetPipelineImage_ResourceTooltip(t *testing.T) {
 	}, nil)
 	s.Builds.EXPECT().AggregateStatusByVersionIDs(ctx, []uint32{10}).Return(map[uint32]string{10: "succeeded"}, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false)
 	require.NoError(t, err)
 
 	dot := string(img)
@@ -4118,7 +4118,7 @@ func TestGetPipelineImage_ResourceTooltipNoVersions(t *testing.T) {
 	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false)
 	require.NoError(t, err)
 
 	dot := string(img)
@@ -4155,7 +4155,7 @@ func TestGetPipelineImage_ResourceTooltipNoStatus(t *testing.T) {
 	}, nil)
 	s.Builds.EXPECT().AggregateStatusByVersionIDs(ctx, []uint32{5}).Return(nil, nil)
 
-	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot")
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false)
 	require.NoError(t, err)
 
 	dot := string(img)
@@ -4664,3 +4664,62 @@ func TestListPublicPipelineJobs_NotPublic(t *testing.T) {
 	_, err := s.S.ListPublicPipelineJobs(ctx, tc, pn)
 	require.Error(t, err)
 }
+
+func TestGetPipelineImage_HideIntermediates(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	pp := &pipeline.Pipeline{
+		Name:      "my-pipeline",
+		Canonical: "my-pipeline",
+		Jobs: []job.Job{
+			{
+				Name: "build",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "cron", Name: "timer", Trigger: true}},
+					{Type: job.StepTypePut, Put: &job.PutStep{Type: "artifact", Name: "output"}},
+				},
+			},
+			{
+				Name: "deploy",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "artifact", Name: "output", Trigger: true, Passed: []string{"build"}}},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Canonical: "cron.timer", Name: "timer", Type: "cron"},
+			{ID: 2, Canonical: "artifact.output", Name: "output", Type: "artifact"},
+		},
+	}
+
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "build", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "deploy", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "artifact.output", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", true)
+	require.NoError(t, err)
+
+	dot := string(img)
+	// Entry-point resource should be kept
+	assert.Contains(t, dot, `"cron.timer"`)
+	// Direct job-to-job edge should exist
+	assert.Contains(t, dot, `"build"--"deploy"`)
+	// Put output node should NOT exist
+	assert.NotContains(t, dot, `"build-artifact.output-out"`)
+	// No cds shape nodes for intermediate resources
+	lines := strings.Split(dot, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, "->") || strings.Contains(trimmed, `"cron.timer"`) {
+			continue
+		}
+		if strings.Contains(trimmed, `"artifact.output"`) && strings.Contains(trimmed, "cds") {
+			t.Errorf("intermediate resource should not appear when hideIntermediates=true: %s", trimmed)
+		}
+	}
+}
+

@@ -510,7 +510,7 @@ var (
 
 // GetPipelineImage generates a DOT graph representation of a pipeline's jobs
 // and resources, colored by the latest build status of each job.
-func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string) ([]byte, error) {
+func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string, hideIntermediates bool) ([]byte, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
 	} else if !utils.ValidateCanonical(pCan) {
@@ -532,7 +532,7 @@ func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string) 
 		return nil, fmt.Errorf("failed to get Pipeline %q: %w", pCan, err)
 	}
 
-	img, err := q.generateImage(ctx, tc, pp)
+	img, err := q.generateImage(ctx, tc, pp, hideIntermediates)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate image: %w", err)
 	}
@@ -540,10 +540,111 @@ func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string) 
 	return convertDOTImage(ctx, img, format)
 }
 
+// resolvedBuildStatus holds the latest completed and running builds for a job.
+type resolvedBuildStatus struct {
+	completedBuild *build.Build
+	runningBuild   *build.Build
+}
+
+// resolveBuildStatus finds the latest completed build (including retries) and
+// any running/pending build from a list of builds sorted newest-first.
+func resolveBuildStatus(builds []*build.Build) resolvedBuildStatus {
+	var cb, rb *build.Build
+	for _, b := range builds {
+		if b.Status == build.Started && (rb == nil || rb.Status == build.Pending) {
+			rb = b
+		} else if b.Status == build.Pending && rb == nil {
+			rb = b
+		}
+	}
+	// Find the latest terminal build by walking back through main build
+	// groups until one with a completed (non-running, non-pending) build
+	// is found.
+	seen := map[string]bool{}
+	for cb == nil {
+		var mainBN string
+		for _, b := range builds {
+			if !strings.Contains(b.BuildNumber, ".") && !seen[b.BuildNumber] {
+				mainBN = b.BuildNumber
+				break
+			}
+		}
+		if mainBN == "" {
+			break
+		}
+		seen[mainBN] = true
+		for _, b := range builds {
+			if b.BuildNumber == mainBN || strings.HasPrefix(b.BuildNumber, mainBN+".") {
+				if b.Status != build.Started && b.Status != build.Pending {
+					cb = b
+					break
+				}
+			}
+		}
+	}
+	return resolvedBuildStatus{completedBuild: cb, runningBuild: rb}
+}
+
+// jobNodeVisuals holds the computed visual properties for rendering a job node
+// in a DOT graph.
+type jobNodeVisuals struct {
+	color              string
+	borderColor        string
+	clusterStyle       string
+	clusterBorderColor string
+}
+
+// resolveJobVisuals fetches builds for a job and computes its fill color,
+// border color, and cluster (running indicator) style.
+func (q *PikoCI) resolveJobVisuals(ctx context.Context, tc string, pp *pipeline.Pipeline, j job.Job) (jobNodeVisuals, error) {
+	builds, err := q.Builds.Filter(ctx, tc, pp.Canonical, j.Name, nil, nil, 0)
+	if err != nil {
+		return jobNodeVisuals{}, fmt.Errorf("failed to filter builds from Job %q: %w", j.Name, err)
+	}
+
+	color := colorDefault
+	borderColor := colorDefaultBorder
+
+	bs := resolveBuildStatus(builds)
+
+	if bs.completedBuild != nil {
+		if c, ok := jobColors[bs.completedBuild.Status]; ok {
+			color = c
+		}
+		if c, ok := jobBorderColors[bs.completedBuild.Status]; ok {
+			borderColor = c
+		}
+	}
+
+	if j.Paused {
+		color = colorPaused
+		borderColor = colorPausedBorder
+	}
+
+	clusterStyle := "invis"
+	clusterBorderColor := jobBorderColors[build.Started]
+	if bs.runningBuild != nil {
+		clusterStyle = `"dashed,bold"`
+		if bs.runningBuild.Status == build.Pending {
+			clusterBorderColor = colorDefaultBorder
+		}
+	}
+
+	return jobNodeVisuals{
+		color:              color,
+		borderColor:        borderColor,
+		clusterStyle:       clusterStyle,
+		clusterBorderColor: clusterBorderColor,
+	}, nil
+}
+
 // generateImage builds a DOT-format directed graph representing the pipeline's
 // jobs, resources, and their interconnections. Each job node is colored based on
 // its latest build status, and running builds are highlighted with a dashed border.
-func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipeline) ([]byte, error) {
+// When hideIntermediates is true, intermediate resource nodes (between jobs via
+// passed constraints and put outputs) are removed, keeping only entry-point
+// trigger resources and drawing direct job-to-job edges.
+func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipeline, hideRes bool) ([]byte, error) {
 	var (
 		pn  = fmt.Sprintf(`"%s"`, pp.Canonical)
 		err error
@@ -568,19 +669,34 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 
 	// Build tooltip text for each resource from its latest version.
 	resourceTooltips := make(map[string]string)
+	type resVersion struct {
+		canonical string
+		version   *resource.Version
+	}
+	var resVersions []resVersion
+	var versionIDs []uint32
 	for _, r := range pp.Resources {
 		vers, err := q.Resources.FilterVersions(ctx, tc, pp.Canonical, r.Canonical, nil, nil, 1)
 		if err != nil || len(vers) == 0 {
 			continue
 		}
-		v := vers[0]
-		statuses, err := q.Builds.AggregateStatusByVersionIDs(ctx, []uint32{v.ID})
-		if err == nil {
-			if s, ok := statuses[v.ID]; ok {
-				v.Status = s
+		resVersions = append(resVersions, resVersion{canonical: r.Canonical, version: vers[0]})
+		versionIDs = append(versionIDs, vers[0].ID)
+	}
+	if len(versionIDs) > 0 {
+		statuses, err := q.Builds.AggregateStatusByVersionIDs(ctx, versionIDs)
+		if err != nil {
+			q.logger.Warn("failed to fetch aggregate version statuses for tooltips", "error", err)
+		} else {
+			for _, rv := range resVersions {
+				if s, ok := statuses[rv.version.ID]; ok {
+					rv.version.Status = s
+				}
 			}
 		}
-		resourceTooltips[r.Canonical] = buildResourceTooltip(v)
+	}
+	for _, rv := range resVersions {
+		resourceTooltips[rv.canonical] = buildResourceTooltip(rv.version)
 	}
 
 	resourceBorders := make(map[string]string)
@@ -629,86 +745,15 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 
 	// Print all the Jobs and the connection to resources
 	for i, j := range pp.Jobs {
-		builds, err := q.Builds.Filter(ctx, tc, pp.Canonical, j.Name, nil, nil, 0)
+		vis, err := q.resolveJobVisuals(ctx, tc, pp, j)
 		if err != nil {
-			return nil, fmt.Errorf("failed to filter builds from Job %q: %w", j.Name, err)
-		}
-		color := colorDefault
-		borderColor := colorDefaultBorder
-
-		// cb: latest completed build (including retries) for fill color.
-		//     For the most recent main build number, if a retry succeeded
-		//     the color should reflect that success, not the original failure.
-		// rb: any running build (including retries) for dashed outline
-		var (
-			cb *build.Build
-			rb *build.Build
-		)
-		// Find the latest main build number first
-		var latestMain string
-		for _, b := range builds {
-			if b.Status == build.Started && (rb == nil || rb.Status == build.Pending) {
-				rb = b
-			} else if b.Status == build.Pending && rb == nil {
-				rb = b
-			}
-			if !strings.Contains(b.BuildNumber, ".") && latestMain == "" {
-				latestMain = b.BuildNumber
-			}
-		}
-		// Find the latest terminal build by walking back through main build
-		// groups until one with a completed (non-running, non-pending) build
-		// is found.
-		seen := map[string]bool{} // track which main groups we've checked
-		for cb == nil {
-			var mainBN string
-			for _, b := range builds {
-				if !strings.Contains(b.BuildNumber, ".") && !seen[b.BuildNumber] {
-					mainBN = b.BuildNumber
-					break
-				}
-			}
-			if mainBN == "" {
-				break
-			}
-			seen[mainBN] = true
-			for _, b := range builds {
-				if b.BuildNumber == mainBN || strings.HasPrefix(b.BuildNumber, mainBN+".") {
-					if b.Status != build.Started && b.Status != build.Pending {
-						cb = b
-						break
-					}
-				}
-			}
-		}
-
-		if cb != nil {
-			if c, ok := jobColors[cb.Status]; ok {
-				color = c
-			}
-			if c, ok := jobBorderColors[cb.Status]; ok {
-				borderColor = c
-			}
-		}
-
-		if j.Paused {
-			color = colorPaused
-			borderColor = colorPausedBorder
-		}
-
-		style := "invis"
-		clusterBorderColor := jobBorderColors[build.Started]
-		if rb != nil {
-			style = `"dashed,bold"`
-			if rb.Status == build.Pending {
-				clusterBorderColor = colorDefaultBorder
-			}
+			return nil, err
 		}
 
 		jg := fmt.Sprintf("cluster_%d", i)
 		graph.AddSubGraph(pn, jg, map[string]string{
-			string(gographviz.Style): style,
-			string(gographviz.Color): clusterBorderColor,
+			string(gographviz.Style): vis.clusterStyle,
+			string(gographviz.Color): vis.clusterBorderColor,
 		})
 
 		burl := fmt.Sprintf(`"/teams/%s/pipelines/%s/jobs/%s/builds"`, tc, pp.Canonical, j.Name)
@@ -716,10 +761,10 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		err = graph.AddNode(jg, quotedJobName, map[string]string{
 			string(gographviz.Margin):    "0.5",
 			string(gographviz.Shape):     "rectangle",
-			string(gographviz.FillColor): color,
+			string(gographviz.FillColor): vis.color,
 			string(gographviz.Style):     "filled",
 			string(gographviz.FontColor): "white",
-			string(gographviz.Color):     borderColor,
+			string(gographviz.Color):     vis.borderColor,
 			string(gographviz.URL):       burl,
 		})
 		if err != nil {
@@ -744,40 +789,43 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		// Draw job→resource edges for all put steps (plan + hooks).
 		// Each job gets its own output resource node to avoid all jobs
 		// pointing to a single shared resource box.
-		for _, p := range j.AllPutSteps() {
-			rCan := fmt.Sprintf("%s.%s", p.Type, p.Name)
-			nn := fmt.Sprintf(`"%s-%s-out"`, j.Name, rCan)
-			vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Canonical, rCan)
-			border := resourceBorders[rCan]
-			rStyle := resourceStyles[rCan]
-			if rStyle == "" {
-				rStyle = "filled"
-			}
-			putAttrs := map[string]string{
-				string(gographviz.Label):     fmt.Sprintf(`"%s"`, rCan),
-				string(gographviz.Margin):    "0.2",
-				string(gographviz.Shape):     "cds",
-				string(gographviz.FillColor): colorResource,
-				string(gographviz.Style):     rStyle,
-				string(gographviz.FontColor): "white",
-				string(gographviz.URL):       vurl,
-				string(gographviz.Color):     border,
-			}
-			if pw := resourcePenwidths[rCan]; pw != "" {
-				putAttrs["penwidth"] = pw
-			}
-			if tip, ok := resourceTooltips[rCan]; ok {
-				putAttrs[string(gographviz.Tooltip)] = fmt.Sprintf(`"%s"`, tip)
-			}
-			err = graph.AddNode(pn, nn, putAttrs)
-			if err != nil {
-				return nil, fmt.Errorf("failed to add node to Graph: %w", err)
-			}
-			err = graph.AddEdge(quotedJobName, nn, false, map[string]string{
-				string(gographviz.Style): "solid",
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
+		// Skipped when hiding intermediate resources.
+		if !hideRes {
+			for _, p := range j.AllPutSteps() {
+				rCan := fmt.Sprintf("%s.%s", p.Type, p.Name)
+				nn := fmt.Sprintf(`"%s-%s-out"`, j.Name, rCan)
+				vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Canonical, rCan)
+				border := resourceBorders[rCan]
+				rStyle := resourceStyles[rCan]
+				if rStyle == "" {
+					rStyle = "filled"
+				}
+				putAttrs := map[string]string{
+					string(gographviz.Label):     fmt.Sprintf(`"%s"`, rCan),
+					string(gographviz.Margin):    "0.2",
+					string(gographviz.Shape):     "cds",
+					string(gographviz.FillColor): colorResource,
+					string(gographviz.Style):     rStyle,
+					string(gographviz.FontColor): "white",
+					string(gographviz.URL):       vurl,
+					string(gographviz.Color):     border,
+				}
+				if pw := resourcePenwidths[rCan]; pw != "" {
+					putAttrs["penwidth"] = pw
+				}
+				if tip, ok := resourceTooltips[rCan]; ok {
+					putAttrs[string(gographviz.Tooltip)] = fmt.Sprintf(`"%s"`, tip)
+				}
+				err = graph.AddNode(pn, nn, putAttrs)
+				if err != nil {
+					return nil, fmt.Errorf("failed to add node to Graph: %w", err)
+				}
+				err = graph.AddEdge(quotedJobName, nn, false, map[string]string{
+					string(gographviz.Style): "solid",
+				})
+				if err != nil {
+					return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
+				}
 			}
 		}
 	}
@@ -814,54 +862,65 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 						expandedPassed = append(expandedPassed, name)
 					}
 				}
-				for _, p := range expandedPassed {
-					rCan := fmt.Sprintf("%s.%s", g.Type, g.Name)
+				if hideRes {
+					// Direct job-to-job edges when hiding intermediates
+					for _, p := range expandedPassed {
+						quotedPassedName := fmt.Sprintf(`"%s"`, p)
+						err = graph.AddEdge(quotedPassedName, quotedJobName, false, nil)
+						if err != nil {
+							return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
+						}
+					}
+				} else {
+					for _, p := range expandedPassed {
+						rCan := fmt.Sprintf("%s.%s", g.Type, g.Name)
 
-					// Reuse the put output node if the passed job already has one for this resource
-					key := fmt.Sprintf("%s-%s", p, rCan)
-					if nn, ok := putOutputNodes[key]; ok {
+						// Reuse the put output node if the passed job already has one for this resource
+						key := fmt.Sprintf("%s-%s", p, rCan)
+						if nn, ok := putOutputNodes[key]; ok {
+							err = graph.AddEdge(nn, quotedJobName, false, nil)
+							if err != nil {
+								return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
+							}
+							continue
+						}
+
+						nn := fmt.Sprintf(`"%s-%s-%s"`, p, g.Name, j.Name)
+						vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Canonical, rCan)
+						border := resourceBorders[rCan]
+						rStyle := resourceStyles[rCan]
+						if rStyle == "" {
+							rStyle = "filled"
+						}
+						passedAttrs := map[string]string{
+							string(gographviz.Label):     fmt.Sprintf(`"%s"`, rCan),
+							string(gographviz.Margin):    "0.2",
+							string(gographviz.Shape):     "cds",
+							string(gographviz.FillColor): colorResource,
+							string(gographviz.Style):     rStyle,
+							string(gographviz.FontColor): "white",
+							string(gographviz.URL):       vurl,
+							string(gographviz.Color):     border,
+						}
+						if pw := resourcePenwidths[rCan]; pw != "" {
+							passedAttrs["penwidth"] = pw
+						}
+						if tip, ok := resourceTooltips[rCan]; ok {
+							passedAttrs[string(gographviz.Tooltip)] = fmt.Sprintf(`"%s"`, tip)
+						}
+						err = graph.AddNode(pn, nn, passedAttrs)
+						if err != nil {
+							return nil, fmt.Errorf("failed to add node to Graph: %w", err)
+						}
+						quotedPassedName := fmt.Sprintf(`"%s"`, p)
+						err = graph.AddEdge(quotedPassedName, nn, false, nil)
+						if err != nil {
+							return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
+						}
 						err = graph.AddEdge(nn, quotedJobName, false, nil)
 						if err != nil {
 							return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
 						}
-						continue
-					}
-
-					nn := fmt.Sprintf(`"%s-%s-%s"`, p, g.Name, j.Name)
-					vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Canonical, rCan)
-					border := resourceBorders[rCan]
-					rStyle := resourceStyles[rCan]
-					if rStyle == "" {
-						rStyle = "filled"
-					}
-					passedAttrs := map[string]string{
-						string(gographviz.Label):     fmt.Sprintf(`"%s"`, rCan),
-						string(gographviz.Margin):    "0.2",
-						string(gographviz.Shape):     "cds",
-						string(gographviz.FillColor): colorResource,
-						string(gographviz.Style):     rStyle,
-						string(gographviz.FontColor): "white",
-						string(gographviz.URL):       vurl,
-						string(gographviz.Color):     border,
-					}
-					if pw := resourcePenwidths[rCan]; pw != "" {
-						passedAttrs["penwidth"] = pw
-					}
-					if tip, ok := resourceTooltips[rCan]; ok {
-						passedAttrs[string(gographviz.Tooltip)] = fmt.Sprintf(`"%s"`, tip)
-					}
-					err = graph.AddNode(pn, nn, passedAttrs)
-					if err != nil {
-						return nil, fmt.Errorf("failed to add node to Graph: %w", err)
-					}
-					quotedPassedName := fmt.Sprintf(`"%s"`, p)
-					err = graph.AddEdge(quotedPassedName, nn, false, nil)
-					if err != nil {
-						return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
-					}
-					err = graph.AddEdge(nn, quotedJobName, false, nil)
-					if err != nil {
-						return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
 					}
 				}
 			}
@@ -883,6 +942,7 @@ func buildResourceTooltip(v *resource.Version) string {
 	var lines []string
 	for _, k := range keys {
 		val := fmt.Sprintf("%v", v.Version[k])
+		val = strings.ReplaceAll(val, `\`, `\\`)
 		val = strings.ReplaceAll(val, `"`, `\"`)
 		lines = append(lines, fmt.Sprintf("%s: %s", k, val))
 	}
@@ -1116,7 +1176,7 @@ func (q *PikoCI) CreatePipelineImage(ctx context.Context, tc string, pipeline []
 		return nil, fmt.Errorf("invalid image format %q", format)
 	}
 
-	img, err := q.generateImage(ctx, tc, pp)
+	img, err := q.generateImage(ctx, tc, pp, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate image: %w", err)
 	}
@@ -1228,7 +1288,7 @@ func (q *PikoCI) GetPublicPipeline(ctx context.Context, tc, pCan string) (*pipel
 }
 
 // GetPublicPipelineImage generates a DOT graph image for a public pipeline.
-func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pCan, format string) ([]byte, error) {
+func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pCan, format string, hideIntermediates bool) ([]byte, error) {
 	pp, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline not found or not public: %w", err)
@@ -1244,7 +1304,7 @@ func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pCan, format st
 		return nil, fmt.Errorf("invalid image format %q", format)
 	}
 
-	img, err := q.generateImage(ctx, tc, pp)
+	img, err := q.generateImage(ctx, tc, pp, hideIntermediates)
 	if err != nil {
 		return nil, err
 	}

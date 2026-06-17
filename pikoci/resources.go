@@ -72,7 +72,9 @@ func (q *PikoCI) ListResourceVersions(ctx context.Context, tc, pc, rCan string, 
 			versionIDs[i] = v.ID
 		}
 		statuses, err := q.Builds.AggregateStatusByVersionIDs(ctx, versionIDs)
-		if err == nil {
+		if err != nil {
+			q.logger.Warn("failed to fetch aggregate version statuses", "error", err)
+		} else {
 			for _, v := range rvers {
 				if s, ok := statuses[v.ID]; ok {
 					v.Status = s
@@ -98,19 +100,32 @@ func (q *PikoCI) ListPipelineResources(ctx context.Context, tc, pc string) ([]*r
 		return nil, fmt.Errorf("failed to list Pipeline Resources: %w", err)
 	}
 
+	// Fetch latest version for each resource
+	var versionIDs []uint32
 	for _, r := range rs {
 		vers, err := q.Resources.FilterVersions(ctx, tc, pc, r.Canonical, nil, nil, 1)
 		if err != nil || len(vers) == 0 {
 			continue
 		}
-		v := vers[0]
-		statuses, err := q.Builds.AggregateStatusByVersionIDs(ctx, []uint32{v.ID})
-		if err == nil {
-			if s, ok := statuses[v.ID]; ok {
-				v.Status = s
+		r.LatestVersion = vers[0]
+		versionIDs = append(versionIDs, vers[0].ID)
+	}
+
+	// Batch fetch aggregate build statuses for all latest versions
+	if len(versionIDs) > 0 {
+		statuses, err := q.Builds.AggregateStatusByVersionIDs(ctx, versionIDs)
+		if err != nil {
+			q.logger.Warn("failed to fetch aggregate version statuses", "error", err)
+		} else {
+			for _, r := range rs {
+				if r.LatestVersion == nil {
+					continue
+				}
+				if s, ok := statuses[r.LatestVersion.ID]; ok {
+					r.LatestVersion.Status = s
+				}
 			}
 		}
-		r.LatestVersion = v
 	}
 
 	return rs, nil

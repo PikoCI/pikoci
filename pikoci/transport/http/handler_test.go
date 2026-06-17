@@ -551,7 +551,7 @@ func TestGetPipelineImage_DOT_ReturnsJSON(t *testing.T) {
 
 	dotOutput := []byte(`digraph "test" { A -> B; }`)
 	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
-	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".dot").Return(dotOutput, nil)
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".dot", false).Return(dotOutput, nil)
 
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.dot", nil)
 	require.NoError(t, err)
@@ -589,7 +589,7 @@ func TestGetPipelineImage_SVG_ReturnsRawSVG(t *testing.T) {
 
 	svgOutput := []byte(`<svg><text>hello</text></svg>`)
 	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
-	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg").Return(svgOutput, nil)
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg", false).Return(svgOutput, nil)
 
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.svg", nil)
 	require.NoError(t, err)
@@ -625,7 +625,7 @@ func TestGetPipelineImage_PNG_ReturnsRawPNG(t *testing.T) {
 
 	pngOutput := []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}
 	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
-	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".png").Return(pngOutput, nil)
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".png", false).Return(pngOutput, nil)
 
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.png", nil)
 	require.NoError(t, err)
@@ -661,7 +661,7 @@ func TestGetPipelineImage_SVG_NoJSONHeaderRequired(t *testing.T) {
 
 	svgOutput := []byte(`<svg><text>test</text></svg>`)
 	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
-	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg").Return(svgOutput, nil)
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg", false).Return(svgOutput, nil)
 
 	// No Content-Type header — simulates browser request
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.svg", nil)
@@ -690,7 +690,7 @@ func TestGetPipelineImage_PublicFallback_SVG(t *testing.T) {
 	s.EXPECT().GetPublicPipeline(gomock.Any(), "main", "my-pipeline").Return(&pipeline.Pipeline{
 		Name: "my-pipeline", Canonical: "my-pipeline",
 	}, nil)
-	s.EXPECT().GetPublicPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg").Return(svgOutput, nil)
+	s.EXPECT().GetPublicPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg", false).Return(svgOutput, nil)
 
 	// No auth header — should fall back to public
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.svg", nil)
@@ -725,7 +725,7 @@ func TestGetPipelineImage_Error_ReturnsJSON(t *testing.T) {
 	jwtToken := signJWT(t, secret, um)
 
 	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
-	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg").Return(nil, assert.AnError)
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg", false).Return(nil, assert.AnError)
 
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.svg", nil)
 	require.NoError(t, err)
@@ -742,6 +742,7 @@ func TestGetPipelineImage_Error_ReturnsJSON(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&result)
 	assert.NotEmpty(t, result.Err)
 }
+
 
 func TestWorkerHeartbeat_WithWorkerToken(t *testing.T) {
 	ctrl := gomock.NewController(t)

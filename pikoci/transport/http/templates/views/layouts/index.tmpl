@@ -278,10 +278,20 @@
       </div>
       <div class="piko-view-toolbar">
         <button class="piko-view-btn" data-view="graph">Graph</button>
-        <button class="piko-view-btn piko-view-btn-disabled" data-view="pipeline">Pipeline</button>
         <button class="piko-view-btn" data-view="list">List</button>
         <div class="piko-view-sep"></div>
         <button class="piko-view-btn" id="toggle-resources-panel"><i class="bi bi-box"></i> Resources</button>
+        <div class="piko-gear-wrap">
+          <button class="piko-gear-btn" id="toggle-gear-panel"><i class="bi bi-gear"></i></button>
+          <div class="piko-gear-panel" id="gear-panel">
+            <label class="piko-gear-option">
+              <input type="checkbox" id="gear-hide-intermediates"> Hide intermediate resources
+            </label>
+            <label class="piko-gear-option">
+              <input type="checkbox" id="gear-group-parallel" disabled> Group parallel jobs
+            </label>
+          </div>
+        </div>
       </div>
       <div class="piko-pipeline-body">
       <div id="pipeline-resources-panel" class="piko-resources-panel"></div>
@@ -351,7 +361,7 @@
             <div class="piko-resource-card">
               <div class="piko-resource-card-header">
                 <% if (r.latest_version && r.latest_version.status) { %>
-                  <span class="piko-version-status-dot" style="background:var(--status-<%= r.latest_version.status %>);" title="<%= r.latest_version.status %>"></span>
+                  <span class="piko-version-status-dot" style="background:var(--status-<%- r.latest_version.status %>);" title="<%- r.latest_version.status %>"></span>
                 <% } %>
                 <a href="<%= resourceUrl(r.canonical) %>" class="piko-resource-card-name" data-navigate="true"><%- r.canonical %></a>
                 <span class="piko-resource-card-type"><%- r.type %></span>
@@ -749,7 +759,7 @@
               <span class="piko-badge piko-badge-pending">pinned</span>
             <% } %>
             <% if (status) { %>
-              <span class="piko-version-status-dot" style="background:var(--status-<%= status %>);" title="<%= status %>"></span>
+              <span class="piko-version-status-dot" style="background:var(--status-<%- status %>);" title="<%- status %>"></span>
             <% } %>
             <span class="piko-version-kv">
               <% _.mapObject(version, function(v, k) { %>

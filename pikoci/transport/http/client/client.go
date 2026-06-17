@@ -407,9 +407,11 @@ func (cl *Client) GetPublicPipeline(ctx context.Context, tc, pn string) (*pipeli
 }
 
 // GetPublicPipelineImage retrieves a public pipeline's image. It delegates to GetPipelineImage.
-func (cl *Client) GetPublicPipelineImage(ctx context.Context, tc, pn, format string) ([]byte, error) {
-	return cl.GetPipelineImage(ctx, tc, pn, format)
+func (cl *Client) GetPublicPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates bool) ([]byte, error) {
+	return cl.GetPipelineImage(ctx, tc, pn, format, hideIntermediates)
 }
+
+
 
 // GetPublicPipelineJob retrieves a job from a public pipeline. It delegates to GetPipelineJob.
 func (cl *Client) GetPublicPipelineJob(ctx context.Context, tc, pn, jn string) (*job.Job, error) {
@@ -476,14 +478,18 @@ func (cl *Client) GetPipeline(ctx context.Context, tc, pn string) (*pipeline.Pip
 }
 
 // GetPipelineImage retrieves the rendered image of a pipeline in the given format.
-func (cl *Client) GetPipelineImage(ctx context.Context, tc, pn, format string) ([]byte, error) {
+func (cl *Client) GetPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates bool) ([]byte, error) {
+	q := ""
+	if hideIntermediates {
+		q = "?hide_intermediates=1"
+	}
 	if format == "svg" || format == "png" {
-		return cl.RequestRaw(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/image.%s", cl.url, tc, pn, format))
+		return cl.RequestRaw(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/image.%s%s", cl.url, tc, pn, format, q))
 	}
 
 	var resp thttp.GetPipelineImageResponse
 
-	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/image.%s", cl.url, tc, pn, format), nil, &resp)
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/image.%s%s", cl.url, tc, pn, format, q), nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -1148,4 +1154,3 @@ func (cl *Client) DeleteWorker(ctx context.Context, name string) error {
 
 	return nil
 }
-
