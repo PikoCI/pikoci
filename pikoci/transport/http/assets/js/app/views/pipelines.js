@@ -1,8 +1,9 @@
 'use strict';
 
-import { session } from '../collections.js';
-import { PipelineImage } from '../models.js';
+import { session, Builds, Jobs } from '../collections.js';
+import { PipelineImage, Job, Pipeline } from '../models.js';
 import { addSessionFunctions, clickLink, fetchInterval, pikoTimeAgo, withLoading } from '../namespace.js';
+import { JobBuildsView } from './jobs.js';
 import { PipelineGraphView, PikoGraphZoom } from './editor.js';
 
 export var PipelinesView = Backbone.View.extend({
@@ -229,6 +230,9 @@ export var PipelineShowView = Backbone.View.extend({
     });
     this.resourcesCollection = new PanelResources();
 
+    this.listView = null;
+    this.currentView = localStorage.getItem("piko-pipeline-view") || "graph";
+
     var that = this;
     this.intervalID = window.setInterval(function() {
       that.image.fetch({isInterval: true});
@@ -241,6 +245,7 @@ export var PipelineShowView = Backbone.View.extend({
     'click #pause-pipeline': 'clickPausePipeline',
     'click #unpause-pipeline': 'clickUnpausePipeline',
     'click #toggle-resources-panel': 'toggleResourcesPanel',
+    'click .piko-view-btn': 'switchView',
   },
   render: function () {
     this.$el.html(this.template(addSessionFunctions({ pipeline: this.model.toJSON(), team: this.model.collection.team.toJSON() })));
@@ -262,12 +267,53 @@ export var PipelineShowView = Backbone.View.extend({
       el: this.$el.find('#pipeline-resources-panel'),
     });
 
+    this._applyView(this.currentView);
+
     return this;
+  },
+  _applyView: function(mode) {
+    this.$('.piko-view-btn').removeClass('active');
+    this.$('.piko-view-btn[data-view="' + mode + '"]').addClass('active');
+    if (mode === 'list') {
+      this.$('.piko-view-graph').hide();
+      this.$('.piko-view-list').show();
+      if (!this.listView) {
+        this.listView = new PipelineListView({
+          el: this.$('.piko-view-list'),
+          pipeline: this.model,
+          resourcesCollection: this.resourcesCollection,
+        });
+      }
+    } else {
+      this.$('.piko-view-graph').show();
+      this.$('.piko-view-list').hide();
+    }
+  },
+  switchView: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var btn = $(event.currentTarget);
+    var mode = btn.data('view');
+    if (!mode) return;
+    if (btn.hasClass('piko-view-btn-disabled')) return;
+    if (btn.attr('id') === 'toggle-resources-panel') return;
+    this.currentView = mode;
+    localStorage.setItem("piko-pipeline-view", mode);
+    this._applyView(mode);
+    // Update URL to match the current view
+    var tc = this.model.collection.team.get('canonical');
+    var pc = this.model.get('canonical');
+    if (mode === 'list' && this.listView && this.listView.selectedJob) {
+      window.app.router.navigate('teams/' + tc + '/pipelines/' + pc + '/jobs/' + this.listView.selectedJob + '/builds', { trigger: false, replace: true });
+    } else {
+      window.app.router.navigate('teams/' + tc + '/pipelines/' + pc, { trigger: false, replace: true });
+    }
   },
   remove: function() {
     clearInterval(this.intervalID);
     if (this.panelView) { this.panelView.remove(); }
     if (this.graphZoom) { this.graphZoom.destroy(); }
+    if (this.listView) { this.listView.remove(); }
     Backbone.View.prototype.remove.call(this);
   },
   toggleResourcesPanel: function(event) {
@@ -325,5 +371,556 @@ export var PipelineShowView = Backbone.View.extend({
         },
       });
     });
+  },
+});
+
+// --- PipelineListView ---
+
+var statusLabels = {
+  succeeded: 'passed',
+  failed: 'failed',
+  started: 'running',
+  pending: 'pending',
+  cancelled: 'cancelled',
+};
+
+var PipelineListView = Backbone.View.extend({
+  jobRowTemplate: _.template($('#pipeline-list-job-row').html()),
+  initialize: function(options) {
+    this.pipeline = options.pipeline;
+    this.resourcesCollection = options.resourcesCollection;
+    this.jobsData = [];
+    this.selectedJob = null;
+    this.selectedResource = null;
+    this.chainJobs = [];
+    this.jobBuildsView = null;
+    this._storagePrefix = 'piko-list-' + this.pipeline.get('canonical') + '-';
+    this.collapsedGroups = JSON.parse(localStorage.getItem(this._storagePrefix + 'collapsed') || '{}');
+
+    // Find trigger resources (resources consumed by a get step with trigger=true and no passed)
+    this.triggerResources = this._findTriggerResources();
+
+    // Restore from localStorage or default to first trigger resource
+    var savedResource = localStorage.getItem(this._storagePrefix + 'resource');
+    if (savedResource && this.triggerResources.indexOf(savedResource) >= 0) {
+      this.selectedResource = savedResource;
+    } else if (this.triggerResources.length > 0) {
+      this.selectedResource = this.triggerResources[0];
+    }
+
+    this.listenTo(this.resourcesCollection, 'sync', this._renderResourceSelector);
+    if (this.resourcesCollection.length === 0) {
+      this.resourcesCollection.fetch();
+    }
+
+    this._renderResourceSelector();
+    this._fetchJobs();
+    var that = this;
+    this._jobsIntervalID = window.setInterval(function() {
+      that._fetchJobs();
+    }, fetchInterval);
+  },
+  events: {
+    'click .piko-job-row': '_onClickJob',
+    'click .piko-parallel-header': '_onToggleParallel',
+    'click .piko-rsel-trigger': '_onToggleResourceMenu',
+    'click .piko-rsel-option': '_onSelectResource',
+    'click .piko-resource-check-btn': '_onCheckResource',
+  },
+
+  // --- Resource & chain resolution ---
+
+  _findTriggerResources: function() {
+    var jobs = this.pipeline.get('jobs') || [];
+    var seen = {};
+    var result = [];
+    for (var i = 0; i < jobs.length; i++) {
+      var plan = jobs[i].plan || [];
+      for (var j = 0; j < plan.length; j++) {
+        var s = plan[j];
+        if (s.type === 'get' && s.get && s.get.trigger && (!s.get.passed || s.get.passed.length === 0)) {
+          var canonical = s.get.type + '.' + s.get.name;
+          if (!seen[canonical]) {
+            seen[canonical] = true;
+            result.push(canonical);
+          }
+        }
+      }
+    }
+    return result;
+  },
+
+  _resolveChain: function(resourceCanonical) {
+    var allJobs = this.pipeline.get('jobs') || [];
+    var jobByName = {};
+    for (var i = 0; i < allJobs.length; i++) {
+      jobByName[allJobs[i].name] = allJobs[i];
+    }
+
+    // Step 1: find entry-point jobs that get this resource directly (no passed)
+    var visited = {};
+    var queue = [];
+    var chain = [];
+    for (var i = 0; i < allJobs.length; i++) {
+      var plan = allJobs[i].plan || [];
+      for (var j = 0; j < plan.length; j++) {
+        var s = plan[j];
+        if (s.type === 'get' && s.get) {
+          var can = s.get.type + '.' + s.get.name;
+          if (can === resourceCanonical && (!s.get.passed || s.get.passed.length === 0)) {
+            if (!visited[allJobs[i].name]) {
+              visited[allJobs[i].name] = true;
+              queue.push(allJobs[i].name);
+            }
+          }
+        }
+      }
+    }
+
+    // Step 2: BFS — for each job in the chain, find downstream jobs via passed constraints
+    while (queue.length > 0) {
+      var jobName = queue.shift();
+      chain.push(jobName);
+      // Find all jobs that have a get step with passed containing jobName
+      for (var i = 0; i < allJobs.length; i++) {
+        if (visited[allJobs[i].name]) continue;
+        var plan = allJobs[i].plan || [];
+        for (var j = 0; j < plan.length; j++) {
+          var s = plan[j];
+          if (s.type === 'get' && s.get && s.get.passed) {
+            for (var k = 0; k < s.get.passed.length; k++) {
+              if (s.get.passed[k] === jobName) {
+                visited[allJobs[i].name] = true;
+                queue.push(allJobs[i].name);
+                break;
+              }
+            }
+          }
+          if (visited[allJobs[i].name]) break;
+        }
+      }
+    }
+
+    return chain;
+  },
+
+  _renderResourceSelector: function() {
+    // Don't re-render while the dropdown is open
+    if (this.$('.piko-rsel-menu').hasClass('open')) return;
+
+    var bar = this.$('.piko-list-resource-bar');
+    if (this.triggerResources.length === 0) {
+      bar.html('<span style="color:var(--text-muted)">No trigger resources</span>');
+      return;
+    }
+    var resMap = {};
+    this.resourcesCollection.each(function(r) {
+      resMap[r.get('canonical')] = r.toJSON();
+    });
+
+    var res = resMap[this.selectedResource] || {};
+    var lv = res.latest_version;
+    var statusClass = (lv && lv.status) ? lv.status : '';
+
+    // Custom dropdown trigger
+    var html = '<div class="piko-rsel">';
+    html += '<button class="piko-rsel-trigger" type="button">';
+    if (statusClass) {
+      html += '<span class="piko-rsel-dot piko-status-dot-' + statusClass + '"></span>';
+    }
+    html += '<span class="piko-rsel-label">' + _.escape(this.selectedResource) + '</span>';
+    html += '<i class="bi bi-chevron-down piko-rsel-arrow"></i>';
+    html += '</button>';
+
+    // Dropdown menu
+    html += '<div class="piko-rsel-menu">';
+    for (var i = 0; i < this.triggerResources.length; i++) {
+      var canonical = this.triggerResources[i];
+      var r = resMap[canonical] || {};
+      var rlv = r.latest_version;
+      var rStatus = (rlv && rlv.status) ? rlv.status : '';
+      var active = canonical === this.selectedResource ? ' active' : '';
+      html += '<div class="piko-rsel-option' + active + '" data-canonical="' + _.escape(canonical) + '">';
+      html += '<span class="piko-rsel-dot piko-status-dot-' + rStatus + '"></span>';
+      html += '<span>' + _.escape(canonical) + '</span>';
+      html += '</div>';
+    }
+    html += '</div></div>';
+
+    // Version + check info
+    html += '<span class="piko-resource-bar-info">';
+    if (lv && lv.version) {
+      for (var key in lv.version) {
+        if (lv.version.hasOwnProperty(key)) {
+          html += '<span class="piko-resource-bar-ver">' + _.escape(key + ': ' + lv.version[key]) + '</span>';
+          break;
+        }
+      }
+    }
+    if (res.check_interval) {
+      html += '<span class="piko-resource-bar-meta">' + _.escape(res.check_interval) + '</span>';
+    }
+    if (res.last_check) {
+      html += '<span class="piko-resource-bar-meta">checked ' + pikoTimeAgo(res.last_check) + '</span>';
+    }
+    html += '</span>';
+
+    if (!session.isEmpty()) {
+      html += '<button class="btn btn-sm btn-outline-warning piko-resource-check-btn"><i class="bi bi-arrow-clockwise"></i> Check Now</button>';
+    }
+
+    bar.html(html);
+  },
+
+  _onToggleResourceMenu: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var menu = this.$('.piko-rsel-menu');
+    var isOpen = menu.hasClass('open');
+    menu.toggleClass('open');
+    if (!isOpen) {
+      // Close on outside click
+      var that = this;
+      $(document).one('click', function() { that.$('.piko-rsel-menu').removeClass('open'); });
+    }
+  },
+
+  _onSelectResource: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var canonical = $(event.currentTarget).data('canonical');
+    this.$('.piko-rsel-menu').removeClass('open');
+    if (!canonical || canonical === this.selectedResource) return;
+    this.selectedResource = canonical;
+    localStorage.setItem(this._storagePrefix + 'resource', canonical);
+    this.selectedJob = null;
+    if (this.jobBuildsView) {
+      this.jobBuildsView.remove();
+      this.jobBuildsView = null;
+    }
+    this.$('.piko-job-detail').empty();
+    this._renderResourceSelector();
+    this._renderJobList();
+    if (this.chainJobs.length > 0) {
+      this._selectJob(this.chainJobs[0]);
+    }
+  },
+
+  _onCheckResource: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var canonical = this.selectedResource;
+    if (!canonical) return;
+    var tc = this.pipeline.collection ? this.pipeline.collection.team.get('canonical') : '';
+    var pc = this.pipeline.get('canonical');
+    var url = '/teams/' + tc + '/pipelines/' + pc + '/resources/' + canonical + '/trigger';
+    var that = this;
+    $.ajax({
+      url: url, type: 'POST', contentType: 'application/json',
+      headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+      success: function() {
+        window.app.apiNotice.setSuccess('Resource check triggered');
+        that.resourcesCollection.fetch();
+      },
+      error: function() {
+        window.app.apiNotice.set({error: 'Failed to trigger resource check'});
+      },
+    });
+  },
+
+  // --- Data fetching ---
+
+  _fetchJobs: function() {
+    var that = this;
+    var url = this.pipeline.url() + "/jobs";
+    $.ajax({
+      url: url,
+      type: 'GET',
+      contentType: 'application/json',
+      headers: session.isEmpty() ? {} : { 'Authorization': 'Bearer ' + session.get('jwt') },
+      success: function(resp) {
+        if (resp && resp.data) {
+          that.jobsData = resp.data;
+          that._renderJobList();
+          // Auto-select saved job or first non-succeeded job
+          if (!that.selectedJob && that.chainJobs.length > 0) {
+            var pick = null;
+            var savedJob = localStorage.getItem(that._storagePrefix + 'job');
+            if (savedJob && that.chainJobs.indexOf(savedJob) >= 0) {
+              pick = savedJob;
+            } else {
+              pick = that.chainJobs[0];
+              var statusMap = that._buildStatusMap();
+              for (var i = 0; i < that.chainJobs.length; i++) {
+                var d = statusMap[that.chainJobs[i]];
+                if (d && d.latest_status && d.latest_status !== 'succeeded') {
+                  pick = that.chainJobs[i];
+                  break;
+                }
+              }
+            }
+            that._selectJob(pick);
+          }
+        }
+      },
+    });
+  },
+
+  _buildStatusMap: function() {
+    var statusMap = {};
+    for (var i = 0; i < this.jobsData.length; i++) {
+      statusMap[this.jobsData[i].name] = this.jobsData[i];
+    }
+    return statusMap;
+  },
+
+  // --- Rendering ---
+
+  _buildTree: function(chainJobs) {
+    // Build a parent→children map and find roots (entry-point jobs).
+    var allJobs = this.pipeline.get('jobs') || [];
+    var jobByName = {};
+    for (var i = 0; i < allJobs.length; i++) jobByName[allJobs[i].name] = allJobs[i];
+    var chainSet = {};
+    for (var i = 0; i < chainJobs.length; i++) chainSet[chainJobs[i]] = true;
+
+    // For each chain job, find its upstream parents (passed constraints within the chain)
+    var parents = {}; // jobName → [parentJobName, ...]
+    var children = {}; // jobName → [childJobName, ...]
+    for (var i = 0; i < chainJobs.length; i++) {
+      parents[chainJobs[i]] = [];
+      children[chainJobs[i]] = [];
+    }
+    for (var i = 0; i < chainJobs.length; i++) {
+      var name = chainJobs[i];
+      var pj = jobByName[name];
+      if (!pj) continue;
+      var plan = pj.plan || [];
+      for (var j = 0; j < plan.length; j++) {
+        var s = plan[j];
+        if (s.type === 'get' && s.get && s.get.passed) {
+          for (var k = 0; k < s.get.passed.length; k++) {
+            if (chainSet[s.get.passed[k]]) {
+              parents[name].push(s.get.passed[k]);
+              children[s.get.passed[k]].push(name);
+            }
+          }
+        }
+      }
+    }
+
+    // Roots are jobs with no parents in the chain
+    var roots = [];
+    for (var i = 0; i < chainJobs.length; i++) {
+      if (parents[chainJobs[i]].length === 0) {
+        roots.push(chainJobs[i]);
+      }
+    }
+
+    return { roots: roots, children: children, parents: parents };
+  },
+
+  _renderJobList: function() {
+    if (!this.selectedResource) return;
+
+    this.chainJobs = this._resolveChain(this.selectedResource);
+    var statusMap = this._buildStatusMap();
+    var tree = this._buildTree(this.chainJobs);
+
+    // Render tree recursively. Siblings (jobs sharing the same set of parents)
+    // are grouped as parallel when there are 2+.
+    var that = this;
+    var rendered = {};
+
+    var renderChildren = function(parentName) {
+      var kids = tree.children[parentName] || [];
+      if (kids.length === 0) return '';
+
+      // Group siblings by their parent set (jobs with identical parents are parallel)
+      var groupKey = function(name) {
+        return (tree.parents[name] || []).slice().sort().join(',');
+      };
+      var keyToKids = {};
+      var kidOrder = [];
+      for (var i = 0; i < kids.length; i++) {
+        if (rendered[kids[i]]) continue;
+        var gk = groupKey(kids[i]);
+        if (!keyToKids[gk]) {
+          keyToKids[gk] = [];
+          kidOrder.push(gk);
+        }
+        keyToKids[gk].push(kids[i]);
+      }
+
+      var html = '';
+      for (var i = 0; i < kidOrder.length; i++) {
+        var group = keyToKids[kidOrder[i]];
+        // Filter out already rendered
+        group = group.filter(function(n) { return !rendered[n]; });
+        if (group.length === 0) continue;
+
+        if (group.length >= 2) {
+          html += that._renderParallelGroup(group, statusMap, function(names) {
+            var sub = '';
+            for (var j = 0; j < names.length; j++) {
+              rendered[names[j]] = true;
+            }
+            for (var j = 0; j < names.length; j++) {
+              sub += renderChildren(names[j]);
+            }
+            return sub;
+          });
+        } else {
+          var name = group[0];
+          rendered[name] = true;
+          var data = statusMap[name] || { name: name, latest_status: '' };
+          html += that._renderJobRow(data);
+          html += renderChildren(name);
+        }
+      }
+      return html;
+    };
+
+    // Render roots
+    var roots = tree.roots;
+    var html = '';
+    if (roots.length >= 2) {
+      html += this._renderParallelGroup(roots, statusMap, function(names) {
+        var sub = '';
+        for (var j = 0; j < names.length; j++) {
+          rendered[names[j]] = true;
+        }
+        for (var j = 0; j < names.length; j++) {
+          sub += renderChildren(names[j]);
+        }
+        return sub;
+      });
+    } else if (roots.length === 1) {
+      rendered[roots[0]] = true;
+      var data = statusMap[roots[0]] || { name: roots[0], latest_status: '' };
+      html += this._renderJobRow(data);
+      html += renderChildren(roots[0]);
+    }
+
+    this.$('.piko-job-list').html(html);
+  },
+
+  _renderJobRow: function(data) {
+    var status = data.latest_status || '';
+    if (data.has_running) status = 'started';
+    if (data.paused) status = 'paused';
+    var isActive = this.selectedJob === data.name;
+    return '<div class="piko-job-row' + (isActive ? ' active' : '') + '" data-job="' + _.escape(data.name) + '">' +
+      this.jobRowTemplate({
+        name: data.name,
+        status: status,
+        statusLabel: statusLabels[status] || '',
+      }) +
+      '</div>';
+  },
+
+  // renderChildrenFn(jobNames) → html string for downstream jobs of the group members
+  _renderParallelGroup: function(jobNames, statusMap, renderChildrenFn) {
+    var groupKey = jobNames.slice().sort().join(',');
+    var isCollapsed = this.collapsedGroups[groupKey];
+    var arrow = isCollapsed ? '&#9654;' : '&#9660;';
+    var counts = {};
+    for (var i = 0; i < jobNames.length; i++) {
+      var d = statusMap[jobNames[i]] || {};
+      var s = d.paused ? 'paused' : (d.has_running ? 'started' : (d.latest_status || ''));
+      counts[s] = (counts[s] || 0) + 1;
+    }
+    var html = '<div class="piko-parallel-header" data-group="' + _.escape(groupKey) + '"><span>' + arrow + ' parallel</span>';
+    html += '<span class="piko-parallel-counts">';
+    for (var st in counts) {
+      if (st) html += '<span class="piko-status-dot-' + st + '" style="width:8px;height:8px;border-radius:50%;display:inline-block"></span> ' + counts[st] + ' ';
+    }
+    html += '</span></div>';
+    html += '<div class="piko-parallel-nested"' + (isCollapsed ? ' style="display:none"' : '') + '>';
+    for (var j = 0; j < jobNames.length; j++) {
+      var data = statusMap[jobNames[j]] || { name: jobNames[j], latest_status: '' };
+      html += this._renderJobRow(data);
+      if (renderChildrenFn) {
+        var childHtml = renderChildrenFn([jobNames[j]]);
+        if (childHtml) {
+          html += '<div class="piko-job-children">' + childHtml + '</div>';
+        }
+      }
+    }
+    html += '</div>';
+    return html;
+  },
+
+  // --- Job selection & detail ---
+
+  _onClickJob: function(event) {
+    event.preventDefault();
+    var jobName = $(event.currentTarget).data('job');
+    if (jobName) {
+      this._selectJob(jobName);
+    }
+  },
+
+  _selectJob: function(jobName) {
+    this.selectedJob = jobName;
+    localStorage.setItem(this._storagePrefix + 'job', jobName);
+    // Update URL to match the job builds path
+    var tc = this.pipeline.collection ? this.pipeline.collection.team.get('canonical') : '';
+    var pc = this.pipeline.get('canonical');
+    window.app.router.navigate('teams/' + tc + '/pipelines/' + pc + '/jobs/' + jobName + '/builds', { trigger: false, replace: true });
+    this.$('.piko-job-row').removeClass('active');
+    this.$('.piko-job-row[data-job="' + jobName + '"]').addClass('active');
+
+    if (this.jobBuildsView) {
+      this.jobBuildsView.remove();
+      this.jobBuildsView = null;
+    }
+
+    var jbs = new Jobs(null, { pipeline: this.pipeline });
+    var jb = new Job({ name: jobName }, { collection: jbs });
+    var builds = new Builds(null, { job: jb });
+
+    var that = this;
+    jb.fetch({
+      success: function() {
+        var detailEl = $('<div></div>');
+        that.$('.piko-job-detail').html(detailEl);
+        that.jobBuildsView = new JobBuildsView({
+          el: detailEl,
+          collection: builds,
+          job: jb,
+          pipeline: that.pipeline,
+          embedded: true,
+        });
+        that.jobBuildsView.render();
+      },
+      error: function() {
+        that.$('.piko-job-detail').html('<div style="padding:14px;color:var(--text-muted)">Failed to load job.</div>');
+      },
+    });
+  },
+
+  _onToggleParallel: function(event) {
+    var header = $(event.currentTarget);
+    var nested = header.next('.piko-parallel-nested');
+    nested.toggle();
+    var groupKey = header.data('group');
+    var isVisible = nested.is(':visible');
+    if (groupKey) {
+      if (isVisible) {
+        delete this.collapsedGroups[groupKey];
+      } else {
+        this.collapsedGroups[groupKey] = true;
+      }
+    }
+    localStorage.setItem(this._storagePrefix + 'collapsed', JSON.stringify(this.collapsedGroups));
+    var arrow = isVisible ? '&#9660;' : '&#9654;';
+    header.find('span:first').html(arrow + ' parallel');
+  },
+
+  remove: function() {
+    if (this._jobsIntervalID) clearInterval(this._jobsIntervalID);
+    if (this.jobBuildsView) { this.jobBuildsView.remove(); }
+    Backbone.View.prototype.remove.call(this);
   },
 });

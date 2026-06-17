@@ -41,6 +41,7 @@ var (
 		GetPipelineImage:    member,
 		CreatePipelineImage: admin,
 
+		ListPipelineJobs:   member,
 		TriggerPipelineJob: member,
 		GetPipelineJob:     member,
 

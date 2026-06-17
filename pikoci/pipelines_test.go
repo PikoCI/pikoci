@@ -4418,3 +4418,249 @@ job "test" {
 	_, err := s.S.CreatePipeline(ctx, "main", "boolvar-override", hclConfig, vars)
 	require.NoError(t, err)
 }
+
+func TestListPipelineJobs_NoBuilds(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	pn := "my-pipeline"
+
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: pn, Canonical: pn,
+		Jobs: []job.Job{
+			{ID: 1, Name: "job-a"},
+			{ID: 2, Name: "job-b"},
+		},
+	}
+	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, tc, pn, "job-a", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
+	s.Builds.EXPECT().Filter(ctx, tc, pn, "job-b", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
+
+	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, "job-a", result[0].Name)
+	assert.Equal(t, "", result[0].LatestStatus)
+	assert.False(t, result[0].HasRunning)
+	assert.Equal(t, "job-b", result[1].Name)
+	assert.Equal(t, "", result[1].LatestStatus)
+	assert.False(t, result[1].HasRunning)
+}
+
+func TestListPipelineJobs_SucceededBuild(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	pn := "my-pipeline"
+
+	startedAt := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: pn, Canonical: pn,
+		Jobs: []job.Job{{ID: 1, Name: "build"}},
+	}
+	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, tc, pn, "build", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+		{ID: 1, BuildNumber: "1", Status: build.Succeeded, Duration: time.Second, StartedAt: startedAt},
+	}, nil)
+
+	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, build.Succeeded.String(), result[0].LatestStatus)
+	assert.False(t, result[0].HasRunning)
+	assert.Equal(t, "1", result[0].LatestBuildNumber)
+	assert.Equal(t, int64(time.Second), result[0].LatestBuildDuration)
+	require.NotNil(t, result[0].StartedAt)
+	assert.Equal(t, startedAt, *result[0].StartedAt)
+}
+
+func TestListPipelineJobs_FailedBuild(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	pn := "my-pipeline"
+
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: pn, Canonical: pn,
+		Jobs: []job.Job{{ID: 1, Name: "test"}},
+	}
+	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, tc, pn, "test", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+		{ID: 1, BuildNumber: "1", Status: build.Failed, Duration: 2 * time.Second, StartedAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)},
+	}, nil)
+
+	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, build.Failed.String(), result[0].LatestStatus)
+	assert.False(t, result[0].HasRunning)
+}
+
+func TestListPipelineJobs_RunningBuild(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	pn := "my-pipeline"
+
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: pn, Canonical: pn,
+		Jobs: []job.Job{{ID: 1, Name: "deploy"}},
+	}
+	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, tc, pn, "deploy", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+		{ID: 1, BuildNumber: "1", Status: build.Started},
+	}, nil)
+
+	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.True(t, result[0].HasRunning)
+	// No completed build, so LatestStatus should be empty
+	assert.Equal(t, "", result[0].LatestStatus)
+}
+
+func TestListPipelineJobs_PendingBuild(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	pn := "my-pipeline"
+
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: pn, Canonical: pn,
+		Jobs: []job.Job{{ID: 1, Name: "gen"}},
+	}
+	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, tc, pn, "gen", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+		{ID: 1, BuildNumber: "1", Status: build.Pending},
+	}, nil)
+
+	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.True(t, result[0].HasRunning)
+	assert.Equal(t, "", result[0].LatestStatus)
+}
+
+func TestListPipelineJobs_MixedStatuses(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	pn := "my-pipeline"
+
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: pn, Canonical: pn,
+		Jobs: []job.Job{
+			{ID: 1, Name: "job-ok"},
+			{ID: 2, Name: "job-fail"},
+		},
+	}
+	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, tc, pn, "job-ok", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+		{ID: 1, BuildNumber: "1", Status: build.Succeeded, StartedAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)},
+	}, nil)
+	s.Builds.EXPECT().Filter(ctx, tc, pn, "job-fail", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+		{ID: 2, BuildNumber: "1", Status: build.Failed, StartedAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)},
+	}, nil)
+
+	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, build.Succeeded.String(), result[0].LatestStatus)
+	assert.Equal(t, build.Failed.String(), result[1].LatestStatus)
+}
+
+func TestListPipelineJobs_RetryBuild(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	pn := "my-pipeline"
+
+	startedAt := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: pn, Canonical: pn,
+		Jobs: []job.Job{{ID: 1, Name: "build"}},
+	}
+	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, tc, pn, "build", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+		{ID: 2, BuildNumber: "1.1", Status: build.Succeeded, Duration: 5 * time.Second, StartedAt: startedAt},
+		{ID: 1, BuildNumber: "1", Status: build.Failed, Duration: 3 * time.Second, StartedAt: startedAt},
+	}, nil)
+
+	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, build.Succeeded.String(), result[0].LatestStatus)
+	assert.Equal(t, "1.1", result[0].LatestBuildNumber)
+}
+
+func TestListPipelineJobs_JobOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	pn := "my-pipeline"
+
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: pn, Canonical: pn,
+		Jobs: []job.Job{
+			{ID: 1, Name: "first"},
+			{ID: 2, Name: "second"},
+			{ID: 3, Name: "third"},
+		},
+	}
+	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, tc, pn, "first", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
+	s.Builds.EXPECT().Filter(ctx, tc, pn, "second", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
+	s.Builds.EXPECT().Filter(ctx, tc, pn, "third", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
+
+	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
+	require.NoError(t, err)
+	require.Len(t, result, 3)
+	assert.Equal(t, "first", result[0].Name)
+	assert.Equal(t, "second", result[1].Name)
+	assert.Equal(t, "third", result[2].Name)
+}
+
+func TestListPublicPipelineJobs_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	pn := "my-pipeline"
+
+	startedAt := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: pn, Canonical: pn,
+		Jobs: []job.Job{{ID: 1, Name: "build"}},
+	}
+	s.Pipelines.EXPECT().FindPublic(ctx, tc, pn).Return(pp, nil)
+	s.Builds.EXPECT().Filter(ctx, tc, pn, "build", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+		{ID: 1, BuildNumber: "1", Status: build.Succeeded, Duration: time.Second, StartedAt: startedAt},
+	}, nil)
+
+	result, err := s.S.ListPublicPipelineJobs(ctx, tc, pn)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, build.Succeeded.String(), result[0].LatestStatus)
+	assert.Equal(t, "1", result[0].LatestBuildNumber)
+}
+
+func TestListPublicPipelineJobs_NotPublic(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	pn := "private-pipeline"
+
+	s.Pipelines.EXPECT().FindPublic(ctx, tc, pn).Return(nil, assert.AnError)
+
+	_, err := s.S.ListPublicPipelineJobs(ctx, tc, pn)
+	require.Error(t, err)
+}

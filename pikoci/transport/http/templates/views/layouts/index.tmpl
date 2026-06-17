@@ -263,7 +263,6 @@
           <% } %>
         </h1>
         <div class="d-flex gap-2">
-          <button type="button" id="toggle-resources-panel" class="btn btn-outline-secondary"><i class="bi bi-box"></i> Resources</button>
           <% if (isMember(team.canonical) && pipeline.jobs && pipeline.jobs.length > 0) { %>
             <% if (pipeline.jobs.some(function(j) { return j.paused; })) { %>
               <button type="button" id="unpause-pipeline" class="btn btn-primary" data-loading-text="Unpausing..."><i class="bi bi-play-circle"></i> Unpause</button>
@@ -277,41 +276,67 @@
           <% } %>
         </div>
       </div>
-      <div class="piko-graph-wrapper">
-        <div class="piko-graph-container" id="graphviz"></div>
-        <div id="pipeline-resources-panel" class="piko-resources-panel"></div>
+      <div class="piko-view-toolbar">
+        <button class="piko-view-btn" data-view="graph">Graph</button>
+        <button class="piko-view-btn piko-view-btn-disabled" data-view="pipeline">Pipeline</button>
+        <button class="piko-view-btn" data-view="list">List</button>
+        <div class="piko-view-sep"></div>
+        <button class="piko-view-btn" id="toggle-resources-panel"><i class="bi bi-box"></i> Resources</button>
       </div>
-      <div class="piko-graph-legend">
-        <span class="piko-graph-legend-item">
-          <svg width="22" height="14" viewBox="0 0 22 14"><polygon points="0,0 16,0 22,7 16,14 0,14" fill="#83769C" stroke="#5F574F" stroke-width="1"/></svg>
-          Resource
-        </span>
-        <span class="piko-graph-legend-item">
-          <span class="piko-graph-legend-swatch" style="background:var(--status-succeeded);"></span>
-          Succeeded
-        </span>
-        <span class="piko-graph-legend-item">
-          <span class="piko-graph-legend-swatch" style="background:var(--status-failed);"></span>
-          Failed
-        </span>
-        <span class="piko-graph-legend-item">
-          <span class="piko-graph-legend-swatch" style="background:var(--status-started);border:1.5px dashed var(--status-started);"></span>
-          Running
-        </span>
-        <span class="piko-graph-legend-item">
-          <span class="piko-graph-legend-swatch" style="background:var(--status-cancelled);"></span>
-          Cancelled
-        </span>
-        <span class="piko-graph-legend-item">
-          <span class="piko-graph-legend-swatch" style="background:#83769C;"></span>
-          No builds
-        </span>
-        <span class="piko-graph-legend-item">
-          <span class="piko-graph-legend-swatch" style="background:#29ADFF;"></span>
-          Paused
-        </span>
+      <div class="piko-pipeline-body">
+      <div id="pipeline-resources-panel" class="piko-resources-panel"></div>
+      <div class="piko-view-graph">
+        <div class="piko-graph-wrapper">
+          <div class="piko-graph-container" id="graphviz"></div>
+        </div>
+        <div class="piko-graph-legend">
+          <span class="piko-graph-legend-item">
+            <svg width="22" height="14" viewBox="0 0 22 14"><polygon points="0,0 16,0 22,7 16,14 0,14" fill="#83769C" stroke="#5F574F" stroke-width="1"/></svg>
+            Resource
+          </span>
+          <span class="piko-graph-legend-item">
+            <span class="piko-graph-legend-swatch" style="background:var(--status-succeeded);"></span>
+            Succeeded
+          </span>
+          <span class="piko-graph-legend-item">
+            <span class="piko-graph-legend-swatch" style="background:var(--status-failed);"></span>
+            Failed
+          </span>
+          <span class="piko-graph-legend-item">
+            <span class="piko-graph-legend-swatch" style="background:var(--status-started);border:1.5px dashed var(--status-started);"></span>
+            Running
+          </span>
+          <span class="piko-graph-legend-item">
+            <span class="piko-graph-legend-swatch" style="background:var(--status-cancelled);"></span>
+            Cancelled
+          </span>
+          <span class="piko-graph-legend-item">
+            <span class="piko-graph-legend-swatch" style="background:#83769C;"></span>
+            No builds
+          </span>
+          <span class="piko-graph-legend-item">
+            <span class="piko-graph-legend-swatch" style="background:#29ADFF;"></span>
+            Paused
+          </span>
+        </div>
+      </div>
+      <div class="piko-view-list" style="display:none">
+        <div class="piko-list-resource-bar"></div>
+        <div class="piko-list-panels">
+          <div class="piko-list-left">
+            <div class="piko-job-list"></div>
+          </div>
+          <div class="piko-job-detail"></div>
+        </div>
+      </div>
       </div>
     </script>
+
+    <script type="text/template" id="pipeline-list-job-row">
+      <div class="piko-job-row-dot piko-status-dot-<%= status %>"></div>
+      <span class="piko-job-row-name"><%- name %></span>
+    </script>
+
 
     <script type="text/template" id="pipeline-resources-panel-view">
       <div class="piko-resources-panel-header">
@@ -339,6 +364,9 @@
                 </div>
               <% } %>
               <div class="piko-resource-card-meta">
+                <% if (r.check_interval) { %>
+                  <span><%- r.check_interval %></span>
+                <% } %>
                 <% if (r.last_check && !r.last_check.startsWith('0001-01-01')) { %>
                   <span>Checked: <%- pikoTimeAgo(r.last_check) %></span>
                 <% } %>

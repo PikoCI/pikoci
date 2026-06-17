@@ -685,10 +685,257 @@ textarea.form-control {
 .piko-graph-container svg polygon[fill="#ffffff"] {
   fill: transparent;
 }
-/* Resources panel wrapper */
-.piko-graph-wrapper {
+/* View switcher toolbar */
+.piko-view-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-body);
+}
+.piko-view-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.piko-view-btn:hover:not(.piko-view-btn-disabled) {
+  background: var(--bg-hover);
+}
+.piko-view-btn.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+}
+.piko-view-btn-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.piko-view-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+}
+/* List view layout */
+.piko-view-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 380px;
+}
+.piko-list-resource-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-body);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+/* Custom resource dropdown */
+.piko-rsel {
+  position: relative;
+}
+.piko-rsel-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.piko-rsel-trigger:hover {
+  border-color: var(--text-muted);
+}
+.piko-rsel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.piko-rsel-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.piko-rsel-arrow {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+.piko-rsel-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  z-index: 30;
+  overflow: hidden;
+}
+.piko-rsel-menu.open {
+  display: block;
+}
+.piko-rsel-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.piko-rsel-option:hover {
+  background: var(--bg-body);
+}
+.piko-rsel-option.active {
+  font-weight: 600;
+  background: var(--bg-body);
+}
+.piko-rsel-status {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.piko-resource-bar-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow: hidden;
+}
+.piko-resource-bar-ver {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 250px;
+}
+.piko-resource-bar-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.piko-resource-check-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.piko-list-panels {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.piko-list-left {
+  width: 240px;
+  min-width: 240px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.piko-job-list {
+  overflow-y: auto;
+  flex: 1;
+}
+/* Job detail (right panel) */
+.piko-job-detail {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+.piko-job-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.piko-job-row:hover {
+  background: var(--bg-hover);
+}
+.piko-job-row.active {
+  background: var(--bg-hover);
+  border-left: 2px solid var(--primary, #378ADD);
+}
+.piko-job-row-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.piko-status-dot-succeeded { background: var(--status-succeeded); }
+.piko-status-dot-failed { background: var(--status-failed); }
+.piko-status-dot-started { background: var(--status-started); }
+.piko-status-dot-pending { background: var(--status-pending); }
+.piko-status-dot-cancelled { background: var(--status-cancelled); }
+.piko-status-dot-paused { background: #29ADFF; }
+.piko-status-dot- { background: var(--status-pending); }
+.piko-job-row-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.piko-job-row-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+/* Parallel group */
+.piko-parallel-header {
+  padding: 6px 14px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.piko-parallel-header:hover {
+  background: var(--bg-hover);
+}
+.piko-parallel-nested {
+  border-left: 2px solid var(--border);
+  margin-left: 22px;
+}
+.piko-parallel-nested > .piko-job-row {
+  padding-left: 12px;
+}
+.piko-job-children {
+  margin-left: 10px;
+}
+.piko-parallel-counts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 11px;
+}
+/* Pipeline body — shared wrapper for graph/list + resources panel */
+.piko-pipeline-body {
   position: relative;
   overflow: hidden;
+}
+.piko-graph-wrapper {
 }
 /* Resources slide-out panel */
 .piko-resources-panel {

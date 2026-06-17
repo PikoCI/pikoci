@@ -96,6 +96,35 @@ job "failing" {
   }
 }
 
+resource "cron" "nightly" {
+  check_interval = "@every 60s"
+}
+
+job "nightly-cleanup" {
+  get "cron" "nightly" {
+    trigger = true
+  }
+  task "cleanup" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo '--- nightly-cleanup ---' && echo 'cleaning old artifacts...' && sleep 2 && echo 'done'"]
+    }
+  }
+}
+
+job "nightly-report" {
+  get "cron" "nightly" {
+    trigger = true
+    passed  = ["nightly-cleanup"]
+  }
+  task "report" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo '--- nightly-report ---' && echo 'generating report...' && sleep 2 && echo 'done'"]
+    }
+  }
+}
+
 job "monitor" {
   get "cron" "my_cron" {
     trigger = true

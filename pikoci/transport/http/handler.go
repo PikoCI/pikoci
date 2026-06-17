@@ -34,6 +34,7 @@ const (
 var publicFallbackRoutes = map[RouteName]bool{
 	GetPipeline:          true,
 	GetPipelineImage:     true,
+	ListPipelineJobs:     true,
 	GetPipelineJob:       true,
 	ListJobBuilds:        true,
 	ListPipelineResources: true,
@@ -239,6 +240,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/pause").Name(PauseJob.String()).Handler(pauseJob(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/unpause").Name(UnpauseJob.String()).Handler(unpauseJob(s))
 
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs").Name(ListPipelineJobs.String()).Handler(listPipelineJobs(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/trigger").Name(TriggerPipelineJob.String()).Handler(triggerPipelineJob(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}").Name(GetPipelineJob.String()).Handler(getPipelineJob(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds").Name(CreateJobBuild.String()).Handler(createJobBuild(s))

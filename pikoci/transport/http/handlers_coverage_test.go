@@ -2301,3 +2301,58 @@ func TestListResourceVersions_PublicFallback(t *testing.T) {
 	assert.Empty(t, got.Err)
 	assert.Len(t, got.Versions, 1)
 }
+
+func TestListPipelineJobs_Success(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+	jobs := []job.WithStatus{
+		{Job: job.Job{Name: "build"}, LatestStatus: "succeeded"},
+		{Job: job.Job{Name: "test"}, LatestStatus: "failed"},
+	}
+	e.svc.EXPECT().ListPipelineJobs(gomock.Any(), "main", "my-pipe").Return(jobs, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/pipelines/my-pipe/jobs", e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got ListPipelineJobsResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Len(t, got.Jobs, 2)
+	assert.Equal(t, "build", got.Jobs[0].Name)
+	assert.Equal(t, "succeeded", got.Jobs[0].LatestStatus)
+}
+
+func TestListPipelineJobs_Error(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+	e.svc.EXPECT().ListPipelineJobs(gomock.Any(), "main", "my-pipe").Return(nil, fmt.Errorf("db error"))
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/pipelines/my-pipe/jobs", e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	var got ListPipelineJobsResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Equal(t, "db error", got.Err)
+}
+
+func TestListPipelineJobs_PublicFallback(t *testing.T) {
+	e := newTestEnv(t)
+	pp := &pipeline.Pipeline{Name: "public-pipe", Canonical: "public-pipe", Public: true}
+	jobs := []job.WithStatus{
+		{Job: job.Job{Name: "build"}, LatestStatus: "succeeded"},
+	}
+	e.svc.EXPECT().GetPublicPipeline(gomock.Any(), "main", "public-pipe").Return(pp, nil)
+	e.svc.EXPECT().ListPublicPipelineJobs(gomock.Any(), "main", "public-pipe").Return(jobs, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/pipelines/public-pipe/jobs", "", "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got ListPipelineJobsResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Len(t, got.Jobs, 1)
+	assert.Equal(t, "build", got.Jobs[0].Name)
+}

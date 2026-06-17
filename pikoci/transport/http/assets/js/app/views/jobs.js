@@ -12,6 +12,7 @@ export var JobBuildsView = Backbone.View.extend({
 
     this.job = opts.job;
     this.pipeline = opts.pipeline;
+    this.embedded = opts.embedded || false;
 
     var that = this;
     this.collection.fetch({
@@ -70,9 +71,11 @@ export var JobBuildsView = Backbone.View.extend({
   doActivate: function(bid) {
     bid = this.collection.setActive(bid);
     this.currentBuildID = bid;
-    var tc = this.collection.job.collection.pipeline.collection.team.get("canonical");
-    var url = new URL(location.origin+"/teams/"+tc+"/pipelines/"+this.pipeline.get("canonical")+"/jobs/"+this.job.get("name")+"/builds/"+bid);
-    window.app.router.navigate(url.pathname, { trigger: false, replace: true });
+    if (!this.embedded) {
+      var tc = this.collection.job.collection.pipeline.collection.team.get("canonical");
+      var url = new URL(location.origin+"/teams/"+tc+"/pipelines/"+this.pipeline.get("canonical")+"/jobs/"+this.job.get("name")+"/builds/"+bid);
+      window.app.router.navigate(url.pathname, { trigger: false, replace: true });
+    }
   },
   bindScrollListener: function() {
     var that = this;
@@ -166,9 +169,11 @@ export var JobBuildsView = Backbone.View.extend({
     var bid = el.id.split("-")[1];
     this.collection.setActive(bid);
     this.currentBuildID = bid;
-    var tc = this.collection.job.collection.pipeline.collection.team.get("canonical");
-    var url = new URL(location.origin+"/teams/"+tc+"/pipelines/"+this.pipeline.get("canonical")+"/jobs/"+this.job.get("name")+"/builds/"+bid);
-    window.app.router.navigate(url.pathname, { trigger: false, replace: true });
+    if (!this.embedded) {
+      var tc = this.collection.job.collection.pipeline.collection.team.get("canonical");
+      var url = new URL(location.origin+"/teams/"+tc+"/pipelines/"+this.pipeline.get("canonical")+"/jobs/"+this.job.get("name")+"/builds/"+bid);
+      window.app.router.navigate(url.pathname, { trigger: false, replace: true });
+    }
   }
 });
 
