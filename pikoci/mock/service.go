@@ -370,18 +370,18 @@ func (mr *ServiceMockRecorder) GetPipeline(ctx, tc, pn any) *gomock.Call {
 }
 
 // GetPipelineImage mocks base method.
-func (m *Service) GetPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates bool) ([]byte, error) {
+func (m *Service) GetPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates, groupParallel bool) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPipelineImage", ctx, tc, pn, format, hideIntermediates)
+	ret := m.ctrl.Call(m, "GetPipelineImage", ctx, tc, pn, format, hideIntermediates, groupParallel)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetPipelineImage indicates an expected call of GetPipelineImage.
-func (mr *ServiceMockRecorder) GetPipelineImage(ctx, tc, pn, format, hideIntermediates any) *gomock.Call {
+func (mr *ServiceMockRecorder) GetPipelineImage(ctx, tc, pn, format, hideIntermediates, groupParallel any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPipelineImage", reflect.TypeOf((*Service)(nil).GetPipelineImage), ctx, tc, pn, format, hideIntermediates)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPipelineImage", reflect.TypeOf((*Service)(nil).GetPipelineImage), ctx, tc, pn, format, hideIntermediates, groupParallel)
 }
 
 // GetPipelineJob mocks base method.
@@ -430,18 +430,18 @@ func (mr *ServiceMockRecorder) GetPublicPipeline(ctx, tc, pn any) *gomock.Call {
 }
 
 // GetPublicPipelineImage mocks base method.
-func (m *Service) GetPublicPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates bool) ([]byte, error) {
+func (m *Service) GetPublicPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates, groupParallel bool) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPublicPipelineImage", ctx, tc, pn, format, hideIntermediates)
+	ret := m.ctrl.Call(m, "GetPublicPipelineImage", ctx, tc, pn, format, hideIntermediates, groupParallel)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetPublicPipelineImage indicates an expected call of GetPublicPipelineImage.
-func (mr *ServiceMockRecorder) GetPublicPipelineImage(ctx, tc, pn, format, hideIntermediates any) *gomock.Call {
+func (mr *ServiceMockRecorder) GetPublicPipelineImage(ctx, tc, pn, format, hideIntermediates, groupParallel any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPublicPipelineImage", reflect.TypeOf((*Service)(nil).GetPublicPipelineImage), ctx, tc, pn, format, hideIntermediates)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPublicPipelineImage", reflect.TypeOf((*Service)(nil).GetPublicPipelineImage), ctx, tc, pn, format, hideIntermediates, groupParallel)
 }
 
 // GetPublicPipelineJob mocks base method.

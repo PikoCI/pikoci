@@ -55,9 +55,19 @@ job "test-mock" {
     run "docker" {
       image = var.go_image
       cmd   = <<-EOT
-        apt-get update -qq && apt-get install -qq -y jq
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq && apt-get install -qq -y jq graphviz
         cp /usr/bin/jq /pikoci-tools/
         cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true
+        if [ ! -f /pikoci-tools/dot ]; then
+          cp /usr/bin/dot /pikoci-tools/
+          LIBDIR=$(ls -d /usr/lib/*-linux-gnu 2>/dev/null | head -1)
+          cp "$LIBDIR"/lib*.so* /pikoci-tools/ 2>/dev/null || true
+          mkdir -p /pikoci-tools/graphviz
+          cp "$LIBDIR"/graphviz/*.so* "$LIBDIR"/graphviz/config* /pikoci-tools/graphviz/ 2>/dev/null || true
+          dot -c 2>/dev/null || true
+          sed -i "s|$LIBDIR/graphviz|/pikoci-tools/graphviz|g" /pikoci-tools/graphviz/config* 2>/dev/null || true
+        fi
         if [ ! -f /pikoci-tools/codecov ]; then
           ARCH=$(dpkg --print-architecture)
           if [ "$ARCH" = "arm64" ]; then
@@ -76,7 +86,7 @@ job "test-mock" {
   task "make" {
     run "docker" {
       image = var.go_image
-      cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH && cd ${var.git_name} && make test-mock"
+      cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH GVBINDIR=/pikoci-tools/graphviz && cd ${var.git_name} && make test-mock"
       args  = [
         "-v", "pikoci-go-mod:/go/pkg/mod",
         "-v", "pikoci-build:/root/.cache/go-build",

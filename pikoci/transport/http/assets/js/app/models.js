@@ -130,13 +130,17 @@ export var Pipeline = Backbone.Model.extend({
 export var PipelineImage = Backbone.Model.extend({
   url: function() {
     var base = this.pipeline.url() + "/image.dot";
-    if (this.hideIntermediates) base += "?hide_intermediates=1";
+    var params = [];
+    if (this.hideIntermediates) params.push("hide_intermediates=1");
+    if (this.groupParallel) params.push("group_parallel=1");
+    if (params.length > 0) base += "?" + params.join("&");
     return base;
   },
   initialize: function(attr, opts) {
     opts = opts || {};
     this.pipeline = opts.pipeline;
     this.hideIntermediates = false;
+    this.groupParallel = false;
   },
 });
 
