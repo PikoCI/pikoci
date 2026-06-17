@@ -204,6 +204,12 @@ export var Router = Backbone.Router.extend({
     if (!this.setup(!isLogin, true)) {
       return;
     }
+    // If user prefers list view, redirect to pipeline show (list view will pick up the job)
+    if (localStorage.getItem("piko-pipeline-view") === "list") {
+      localStorage.setItem('piko-list-' + pn + '-job', jn);
+      this.navigate('teams/' + tc + '/pipelines/' + pn, { trigger: true, replace: true });
+      return;
+    }
     var promises = [];
     var t = teams.get(tc);
     if (t === undefined) {

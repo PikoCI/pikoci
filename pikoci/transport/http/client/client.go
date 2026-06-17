@@ -546,6 +546,29 @@ func (cl *Client) DeletePipeline(ctx context.Context, tc, pn string) error {
 	return nil
 }
 
+// ListPipelineJobs returns all jobs for a pipeline enriched with their latest
+// build status.
+func (cl *Client) ListPipelineJobs(ctx context.Context, tc, pn string) ([]job.WithStatus, error) {
+	var resp thttp.ListPipelineJobsResponse
+
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs", cl.url, tc, pn), nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return resp.Jobs, nil
+}
+
+// ListPublicPipelineJobs returns all jobs for a public pipeline enriched with
+// their latest build status.
+func (cl *Client) ListPublicPipelineJobs(ctx context.Context, tc, pn string) ([]job.WithStatus, error) {
+	return cl.ListPipelineJobs(ctx, tc, pn)
+}
+
 // TriggerPipelineJob triggers a manual run of the specified job.
 func (cl *Client) TriggerPipelineJob(ctx context.Context, tc, pn, jn string) error {
 	var resp thttp.TriggerPipelineJobResponse

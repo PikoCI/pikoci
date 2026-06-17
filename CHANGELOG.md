@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resource version rows now show a colored status dot indicating the aggregate build status of all jobs that consumed that version ([#534](https://github.com/PikoCI/pikoci/issues/534))
 - Pipeline show page now has a "Resources" button that opens a slide-out panel listing all pipeline resources with name, type, latest version, build status, last check time, and a "Check Now" button ([#536](https://github.com/PikoCI/pikoci/issues/536))
 - Resource nodes in the pipeline graph view now show a native browser tooltip on hover with the latest version's key-value pairs and aggregate build status ([#537](https://github.com/PikoCI/pikoci/issues/537))
+- Pipeline show page now has a **List view** with a [Graph] [Pipeline] [List] view switcher toolbar. The list view shows an execution chain scoped to a selected trigger resource, with jobs displayed in a tree layout reflecting the pipeline DAG. Parallel siblings are grouped under collapsible headers. Clicking a job shows its builds in the right panel (reusing the existing job builds view). A resource selector bar at the top lets you switch between trigger resources and trigger resource checks. View preference, selected resource/job, and collapsed groups persist across reloads ([#538](https://github.com/PikoCI/pikoci/issues/538))
+- New `ListPipelineJobs` API endpoint (`GET /teams/{tc}/pipelines/{pc}/jobs`) returns all pipeline jobs enriched with latest build status, running state, build number, duration, and start time. Supports public pipeline fallback ([#538](https://github.com/PikoCI/pikoci/issues/538))
 
 ### Fixed
 

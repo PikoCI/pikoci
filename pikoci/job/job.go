@@ -225,3 +225,14 @@ type InParallelStep struct {
 	Limit    int        `json:"limit,omitempty"`
 	FailFast bool       `json:"fail_fast,omitempty"`
 }
+
+// WithStatus enriches a Job with its latest build status information,
+// used by the list view to show job status without fetching full builds.
+type WithStatus struct {
+	Job
+	LatestStatus        string     `json:"latest_status"`
+	HasRunning          bool       `json:"has_running"`
+	LatestBuildNumber   string     `json:"latest_build_number"`
+	LatestBuildDuration int64      `json:"latest_build_duration"`
+	StartedAt           *time.Time `json:"started_at,omitempty"`
+}

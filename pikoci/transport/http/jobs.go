@@ -8,6 +8,34 @@ import (
 	"github.com/pikoci/pikoci/pikoci/job"
 )
 
+type ListPipelineJobsResponse struct {
+	Jobs []job.WithStatus `json:"data,omitempty"`
+	Err  string           `json:"error,omitempty"`
+}
+
+func (r ListPipelineJobsResponse) Error() string { return r.Err }
+
+func listPipelineJobs(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var ctx = r.Context()
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		var jobs []job.WithStatus
+		var err error
+		if isPublic, _ := ctx.Value(IsPublicAccessKey).(bool); isPublic {
+			jobs, err = s.ListPublicPipelineJobs(ctx, tc, pc)
+		} else {
+			jobs, err = s.ListPipelineJobs(ctx, tc, pc)
+		}
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(ListPipelineJobsResponse{Jobs: jobs, Err: errs}, w)
+	}
+}
+
 type TriggerPipelineJobRequest struct {
 	TeamCanonical     string `json:"team_canonical"`
 	PipelineCanonical string `json:"pipeline_canonical"`

@@ -63,6 +63,8 @@ const (
 
 	// TriggerPipelineJob is the route for triggering a pipeline job.
 	TriggerPipelineJob
+	// ListPipelineJobs is the route for listing all jobs of a pipeline with status.
+	ListPipelineJobs
 	// GetPipelineJob is the route for retrieving a single pipeline job.
 	GetPipelineJob
 

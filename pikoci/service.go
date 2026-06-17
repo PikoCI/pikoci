@@ -130,6 +130,12 @@ type Service interface {
 	// TriggerPipelineJob creates a pending build for the specified job and enqueues
 	// it for execution.
 	TriggerPipelineJob(ctx context.Context, tc, pn, jn string) error
+	// ListPipelineJobs returns all jobs for the given pipeline enriched with
+	// their latest build status.
+	ListPipelineJobs(ctx context.Context, tc, pn string) ([]job.WithStatus, error)
+	// ListPublicPipelineJobs returns all jobs for a public pipeline enriched
+	// with their latest build status.
+	ListPublicPipelineJobs(ctx context.Context, tc, pn string) ([]job.WithStatus, error)
 	// GetPipelineJob retrieves a job by its name within a pipeline.
 	GetPipelineJob(ctx context.Context, tc, pn, jn string) (*job.Job, error)
 
