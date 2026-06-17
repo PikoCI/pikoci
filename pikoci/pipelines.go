@@ -510,7 +510,7 @@ var (
 
 // GetPipelineImage generates a DOT graph representation of a pipeline's jobs
 // and resources, colored by the latest build status of each job.
-func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string, hideIntermediates bool) ([]byte, error) {
+func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string, hideIntermediates, groupParallel bool) ([]byte, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
 	} else if !utils.ValidateCanonical(pCan) {
@@ -532,7 +532,7 @@ func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string, 
 		return nil, fmt.Errorf("failed to get Pipeline %q: %w", pCan, err)
 	}
 
-	img, err := q.generateImage(ctx, tc, pp, hideIntermediates)
+	img, err := q.generateImage(ctx, tc, pp, hideIntermediates, groupParallel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate image: %w", err)
 	}
@@ -644,7 +644,7 @@ func (q *PikoCI) resolveJobVisuals(ctx context.Context, tc string, pp *pipeline.
 // When hideIntermediates is true, intermediate resource nodes (between jobs via
 // passed constraints and put outputs) are removed, keeping only entry-point
 // trigger resources and drawing direct job-to-job edges.
-func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipeline, hideRes bool) ([]byte, error) {
+func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipeline, hideRes, groupParallel bool) ([]byte, error) {
 	var (
 		pn  = fmt.Sprintf(`"%s"`, pp.Canonical)
 		err error
@@ -743,8 +743,90 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		}
 	}
 
+	// Build a map of for_each group names to instance names for passed expansion
+	forEachGroupInstances := make(map[string][]string)
+	for _, j := range pp.Jobs {
+		if j.ForEachGroup != "" {
+			forEachGroupInstances[j.ForEachGroup] = append(forEachGroupInstances[j.ForEachGroup], j.Name)
+		}
+	}
+
+	// expandPassed expands for_each group names to instance names in a passed list.
+	expandPassed := func(passed []string) []string {
+		var expanded []string
+		for _, name := range passed {
+			if instances, ok := forEachGroupInstances[name]; ok {
+				expanded = append(expanded, instances...)
+			} else {
+				expanded = append(expanded, name)
+			}
+		}
+		return expanded
+	}
+
+	// Detect parallel groups: jobs sharing identical expanded passed parent sets.
+	// Only groups with 2+ members qualify. Root jobs (no parents) are never grouped.
+	jobToGroupNode := make(map[string]string) // jobName → group node name
+	type parallelGroup struct {
+		nodeName string
+		jobs     []job.Job
+	}
+	var parallelGroups []parallelGroup
+	if groupParallel {
+		keyToJobs := make(map[string][]job.Job)
+		var keyOrder []string
+		for _, j := range pp.Jobs {
+			var allPassed []string
+			for _, g := range j.GetSteps() {
+				if len(g.Passed) > 0 {
+					allPassed = append(allPassed, expandPassed(g.Passed)...)
+				}
+			}
+			if len(allPassed) == 0 {
+				continue // root jobs are never grouped
+			}
+			sort.Strings(allPassed)
+			// Deduplicate
+			deduped := allPassed[:0]
+			for i, p := range allPassed {
+				if i == 0 || p != allPassed[i-1] {
+					deduped = append(deduped, p)
+				}
+			}
+			key := strings.Join(deduped, ",")
+			if _, ok := keyToJobs[key]; !ok {
+				keyOrder = append(keyOrder, key)
+			}
+			keyToJobs[key] = append(keyToJobs[key], j)
+		}
+		for gi, key := range keyOrder {
+			jobs := keyToJobs[key]
+			if len(jobs) < 2 {
+				continue
+			}
+			gn := fmt.Sprintf(`"parallel_%d"`, gi)
+			pg := parallelGroup{nodeName: gn, jobs: jobs}
+			parallelGroups = append(parallelGroups, pg)
+			for _, j := range jobs {
+				jobToGroupNode[j.Name] = gn
+			}
+		}
+	}
+
+	// resolveNodeName returns the graph node name for a job, remapping to group node if grouped.
+	resolveNodeName := func(jobName string) string {
+		if gn, ok := jobToGroupNode[jobName]; ok {
+			return gn
+		}
+		return fmt.Sprintf(`"%s"`, jobName)
+	}
+
 	// Print all the Jobs and the connection to resources
 	for i, j := range pp.Jobs {
+		if _, grouped := jobToGroupNode[j.Name]; grouped {
+			continue // grouped jobs are rendered as part of their parallel group node
+		}
+
 		vis, err := q.resolveJobVisuals(ctx, tc, pp, j)
 		if err != nil {
 			return nil, err
@@ -830,6 +912,140 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		}
 	}
 
+	// Render parallel group nodes as HTML label tables
+	for _, pg := range parallelGroups {
+		// Determine worst status for border color
+		statusPriority := map[build.Status]int{
+			build.Failed:    4,
+			build.Started:   3,
+			build.Cancelled: 2,
+			build.Succeeded: 1,
+		}
+		worstPriority := 0
+		var worstStatus build.Status
+		var rows []string
+		for _, j := range pg.jobs {
+			vis, verr := q.resolveJobVisuals(ctx, tc, pp, j)
+			if verr != nil {
+				return nil, verr
+			}
+			dotColor := strings.Trim(vis.color, `"`)
+			builds, berr := q.Builds.Filter(ctx, tc, pp.Canonical, j.Name, nil, nil, 0)
+			if berr == nil {
+				bs := resolveBuildStatus(builds)
+				if bs.completedBuild != nil {
+					if p, ok := statusPriority[bs.completedBuild.Status]; ok && p > worstPriority {
+						worstPriority = p
+						worstStatus = bs.completedBuild.Status
+					}
+				}
+				// Running/pending builds override the dot color so the
+				// status is visible (normal nodes use a dashed cluster
+				// border, but grouped jobs have no individual cluster).
+				if bs.runningBuild != nil {
+					if c, ok := jobColors[bs.runningBuild.Status]; ok {
+						dotColor = strings.Trim(c, `"`)
+					}
+					if p, ok := statusPriority[bs.runningBuild.Status]; ok && p > worstPriority {
+						worstPriority = p
+						worstStatus = bs.runningBuild.Status
+					}
+				}
+			}
+			if j.Paused {
+				dotColor = strings.Trim(colorPaused, `"`)
+			}
+			burl := fmt.Sprintf("/teams/%s/pipelines/%s/jobs/%s/builds", tc, pp.Canonical, j.Name)
+			row := fmt.Sprintf(
+				`<TR><TD BGCOLOR="%s" WIDTH="12" HEIGHT="12"> </TD><TD ALIGN="LEFT" HREF="%s"><FONT COLOR="white"> %s </FONT></TD></TR>`,
+				dotColor, burl, j.Name,
+			)
+			rows = append(rows, row)
+		}
+		borderColor := strings.Trim(colorDefaultBorder, `"`)
+		if worstPriority > 0 {
+			if c, ok := jobBorderColors[worstStatus]; ok {
+				borderColor = strings.Trim(c, `"`)
+			}
+		}
+		header := fmt.Sprintf(
+			`<TR><TD COLSPAN="2" BGCOLOR="#1D2B53" ALIGN="CENTER"><FONT COLOR="white"><B>PARALLEL (%d JOBS)</B></FONT></TD></TR>`,
+			len(pg.jobs),
+		)
+		htmlLabel := fmt.Sprintf(
+			`<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="4" CELLPADDING="6" COLOR="%s" BGCOLOR="#1D2B53" STYLE="ROUNDED">%s%s</TABLE>>`,
+			borderColor, header, strings.Join(rows, ""),
+		)
+		err = graph.AddNode(pn, pg.nodeName, map[string]string{
+			string(gographviz.Shape): "plaintext",
+			string(gographviz.Label): htmlLabel,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to add parallel group node to Graph: %w", err)
+		}
+
+		// Draw resource→group edges for get steps without passed constraints
+		for _, j := range pg.jobs {
+			for _, g := range j.GetSteps() {
+				if len(g.Passed) == 0 {
+					rCan := fmt.Sprintf(`"%s.%s"`, g.Type, g.Name)
+					opt := make(map[string]string)
+					if g.Trigger {
+						opt[string(gographviz.Style)] = "solid"
+					} else {
+						opt[string(gographviz.Style)] = "dashed"
+					}
+					err = graph.AddEdge(rCan, pg.nodeName, false, opt)
+					if err != nil {
+						return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
+					}
+				}
+			}
+		}
+
+		// Draw group→resource edges for put steps (when not hiding intermediates)
+		if !hideRes {
+			for _, j := range pg.jobs {
+				for _, p := range j.AllPutSteps() {
+					rCan := fmt.Sprintf("%s.%s", p.Type, p.Name)
+					nn := fmt.Sprintf(`"%s-%s-out"`, j.Name, rCan)
+					vurl := fmt.Sprintf(`"/teams/%s/pipelines/%s/resources/%s/versions"`, tc, pp.Canonical, rCan)
+					border := resourceBorders[rCan]
+					rStyle := resourceStyles[rCan]
+					if rStyle == "" {
+						rStyle = "filled"
+					}
+					putAttrs := map[string]string{
+						string(gographviz.Label):     fmt.Sprintf(`"%s"`, rCan),
+						string(gographviz.Margin):    "0.2",
+						string(gographviz.Shape):     "cds",
+						string(gographviz.FillColor): colorResource,
+						string(gographviz.Style):     rStyle,
+						string(gographviz.FontColor): "white",
+						string(gographviz.URL):       vurl,
+						string(gographviz.Color):     border,
+					}
+					if pw := resourcePenwidths[rCan]; pw != "" {
+						putAttrs["penwidth"] = pw
+					}
+					if tip, ok := resourceTooltips[rCan]; ok {
+						putAttrs[string(gographviz.Tooltip)] = fmt.Sprintf(`"%s"`, tip)
+					}
+					err = graph.AddNode(pn, nn, putAttrs)
+					if err != nil {
+						return nil, fmt.Errorf("failed to add node to Graph: %w", err)
+					}
+					err = graph.AddEdge(pg.nodeName, nn, false, map[string]string{
+						string(gographviz.Style): "solid",
+					})
+					if err != nil {
+						return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
+					}
+				}
+			}
+		}
+	}
+
 	// Collect put output node names per job+resource so passed edges can reuse them
 	putOutputNodes := make(map[string]string) // key: "jobName-type.name" → node name
 	for _, j := range pp.Jobs {
@@ -840,32 +1056,16 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		}
 	}
 
-	// Build a map of for_each group names to instance names for passed expansion
-	forEachGroupInstances := make(map[string][]string)
-	for _, j := range pp.Jobs {
-		if j.ForEachGroup != "" {
-			forEachGroupInstances[j.ForEachGroup] = append(forEachGroupInstances[j.ForEachGroup], j.Name)
-		}
-	}
-
 	// Now we print all the jobs interconnections depending on resources
 	for _, j := range pp.Jobs {
-		quotedJobName := fmt.Sprintf(`"%s"`, j.Name)
+		quotedJobName := resolveNodeName(j.Name)
 		for _, g := range j.GetSteps() {
 			if len(g.Passed) != 0 {
-				// Expand for_each group names to instance names
-				var expandedPassed []string
-				for _, name := range g.Passed {
-					if instances, ok := forEachGroupInstances[name]; ok {
-						expandedPassed = append(expandedPassed, instances...)
-					} else {
-						expandedPassed = append(expandedPassed, name)
-					}
-				}
+				expandedPassed := expandPassed(g.Passed)
 				if hideRes {
 					// Direct job-to-job edges when hiding intermediates
 					for _, p := range expandedPassed {
-						quotedPassedName := fmt.Sprintf(`"%s"`, p)
+						quotedPassedName := resolveNodeName(p)
 						err = graph.AddEdge(quotedPassedName, quotedJobName, false, nil)
 						if err != nil {
 							return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
@@ -908,11 +1108,11 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 						if tip, ok := resourceTooltips[rCan]; ok {
 							passedAttrs[string(gographviz.Tooltip)] = fmt.Sprintf(`"%s"`, tip)
 						}
+						quotedPassedName := resolveNodeName(p)
 						err = graph.AddNode(pn, nn, passedAttrs)
 						if err != nil {
 							return nil, fmt.Errorf("failed to add node to Graph: %w", err)
 						}
-						quotedPassedName := fmt.Sprintf(`"%s"`, p)
 						err = graph.AddEdge(quotedPassedName, nn, false, nil)
 						if err != nil {
 							return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
@@ -1176,7 +1376,7 @@ func (q *PikoCI) CreatePipelineImage(ctx context.Context, tc string, pipeline []
 		return nil, fmt.Errorf("invalid image format %q", format)
 	}
 
-	img, err := q.generateImage(ctx, tc, pp, false)
+	img, err := q.generateImage(ctx, tc, pp, false, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate image: %w", err)
 	}
@@ -1288,7 +1488,7 @@ func (q *PikoCI) GetPublicPipeline(ctx context.Context, tc, pCan string) (*pipel
 }
 
 // GetPublicPipelineImage generates a DOT graph image for a public pipeline.
-func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pCan, format string, hideIntermediates bool) ([]byte, error) {
+func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pCan, format string, hideIntermediates, groupParallel bool) ([]byte, error) {
 	pp, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline not found or not public: %w", err)
@@ -1304,7 +1504,7 @@ func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pCan, format st
 		return nil, fmt.Errorf("invalid image format %q", format)
 	}
 
-	img, err := q.generateImage(ctx, tc, pp, hideIntermediates)
+	img, err := q.generateImage(ctx, tc, pp, hideIntermediates, groupParallel)
 	if err != nil {
 		return nil, err
 	}

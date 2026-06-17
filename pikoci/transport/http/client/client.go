@@ -407,8 +407,8 @@ func (cl *Client) GetPublicPipeline(ctx context.Context, tc, pn string) (*pipeli
 }
 
 // GetPublicPipelineImage retrieves a public pipeline's image. It delegates to GetPipelineImage.
-func (cl *Client) GetPublicPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates bool) ([]byte, error) {
-	return cl.GetPipelineImage(ctx, tc, pn, format, hideIntermediates)
+func (cl *Client) GetPublicPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates, groupParallel bool) ([]byte, error) {
+	return cl.GetPipelineImage(ctx, tc, pn, format, hideIntermediates, groupParallel)
 }
 
 
@@ -478,10 +478,17 @@ func (cl *Client) GetPipeline(ctx context.Context, tc, pn string) (*pipeline.Pip
 }
 
 // GetPipelineImage retrieves the rendered image of a pipeline in the given format.
-func (cl *Client) GetPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates bool) ([]byte, error) {
-	q := ""
+func (cl *Client) GetPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates, groupParallel bool) ([]byte, error) {
+	var params []string
 	if hideIntermediates {
-		q = "?hide_intermediates=1"
+		params = append(params, "hide_intermediates=1")
+	}
+	if groupParallel {
+		params = append(params, "group_parallel=1")
+	}
+	q := ""
+	if len(params) > 0 {
+		q = "?" + strings.Join(params, "&")
 	}
 	if format == "svg" || format == "png" {
 		return cl.RequestRaw(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/image.%s%s", cl.url, tc, pn, format, q))

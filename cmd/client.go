@@ -325,7 +325,7 @@ var pipelinesGraphCmd = &cobra.Command{
 			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
 		}
 
-		image, err := c.GetPipelineImage(cmd.Context(), tc, pCan, format, false)
+		image, err := c.GetPipelineImage(cmd.Context(), tc, pCan, format, false, false)
 		if err != nil {
 			return fmt.Errorf("failed to get pipeline graph for %q: %w", name, err)
 		}

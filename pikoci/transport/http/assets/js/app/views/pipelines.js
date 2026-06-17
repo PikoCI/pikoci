@@ -224,6 +224,7 @@ export var PipelineShowView = Backbone.View.extend({
   initialize: function(options) {
     this.image = options.image;
     this.image.hideIntermediates = localStorage.getItem("piko-hide-intermediates") === "1";
+    this.image.groupParallel = localStorage.getItem("piko-group-parallel") === "1";
     this.image.fetch({
       error: function(model, xhr) {
         try {
@@ -260,6 +261,7 @@ export var PipelineShowView = Backbone.View.extend({
     'click #toggle-resources-panel': 'toggleResourcesPanel',
     'click #toggle-gear-panel': 'toggleGearPanel',
     'change #gear-hide-intermediates': 'toggleHideIntermediates',
+    'change #gear-group-parallel': 'toggleGroupParallel',
     'click .piko-view-btn': 'switchView',
   },
   render: function () {
@@ -283,6 +285,7 @@ export var PipelineShowView = Backbone.View.extend({
     });
 
     this.$('#gear-hide-intermediates').prop('checked', this.image.hideIntermediates);
+    this.$('#gear-group-parallel').prop('checked', this.image.groupParallel);
     this._applyView(this.currentView);
 
     return this;
@@ -353,6 +356,12 @@ export var PipelineShowView = Backbone.View.extend({
     var checked = $(event.target).is(':checked');
     localStorage.setItem("piko-hide-intermediates", checked ? "1" : "0");
     this.image.hideIntermediates = checked;
+    this.image.fetch();
+  },
+  toggleGroupParallel: function(event) {
+    var checked = $(event.target).is(':checked');
+    localStorage.setItem("piko-group-parallel", checked ? "1" : "0");
+    this.image.groupParallel = checked;
     this.image.fetch();
   },
   toggleGearPanel: function(event) {

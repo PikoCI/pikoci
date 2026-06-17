@@ -434,7 +434,7 @@ func TestGetPipelineImage_DOT(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	img, err := c.GetPipelineImage(context.Background(), "team", "mypipe", "dot", false)
+	img, err := c.GetPipelineImage(context.Background(), "team", "mypipe", "dot", false, false)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("dot-data"), img)
 }
@@ -451,7 +451,7 @@ func TestGetPipelineImage_SVG(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	img, err := c.GetPipelineImage(context.Background(), "team", "mypipe", "svg", false)
+	img, err := c.GetPipelineImage(context.Background(), "team", "mypipe", "svg", false, false)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("svg-data"), img)
 }
@@ -468,7 +468,7 @@ func TestGetPipelineImage_PNG(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	img, err := c.GetPipelineImage(context.Background(), "team", "mypipe", "png", false)
+	img, err := c.GetPipelineImage(context.Background(), "team", "mypipe", "png", false, false)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("png-data"), img)
 }
@@ -910,7 +910,7 @@ func TestGetPublicPipelineImage(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	img, err := c.GetPublicPipelineImage(context.Background(), "team", "mypipe", "dot", false)
+	img, err := c.GetPublicPipelineImage(context.Background(), "team", "mypipe", "dot", false, false)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("dot-data"), img)
 }
@@ -2244,7 +2244,7 @@ func TestGetPipelineImage_Error(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	_, err = c.GetPipelineImage(context.Background(), "team1", "pipe", "dot", false)
+	_, err = c.GetPipelineImage(context.Background(), "team1", "pipe", "dot", false, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
@@ -2326,7 +2326,7 @@ func TestRequestRaw_Error(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	_, err = c.GetPipelineImage(context.Background(), "team1", "nopipe", "svg", false)
+	_, err = c.GetPipelineImage(context.Background(), "team1", "nopipe", "svg", false, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pipeline not found")
 }
@@ -2351,7 +2351,7 @@ func TestRequestRaw_RefreshToken(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	data, err := c.GetPipelineImage(context.Background(), "team1", "pipe", "svg", false)
+	data, err := c.GetPipelineImage(context.Background(), "team1", "pipe", "svg", false, false)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "<svg>")
 	assert.Equal(t, int32(1), refreshCalled.Load())
@@ -2449,7 +2449,7 @@ func TestGetPublicPipelineImage_DelegatesToGetPipelineImage(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	img, err := c.GetPublicPipelineImage(context.Background(), "team1", "pipe", "dot", false)
+	img, err := c.GetPublicPipelineImage(context.Background(), "team1", "pipe", "dot", false, false)
 	require.NoError(t, err)
 	assert.Contains(t, string(img), "digraph")
 }
