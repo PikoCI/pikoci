@@ -3,7 +3,6 @@ package pikoci
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
@@ -106,6 +105,12 @@ func (q *PikoCI) ListPipelineJobs(ctx context.Context, tc, pn string) ([]job.Wit
 // ListPublicPipelineJobs returns all jobs for a public pipeline enriched
 // with their latest build status.
 func (q *PikoCI) ListPublicPipelineJobs(ctx context.Context, tc, pn string) ([]job.WithStatus, error) {
+	if !utils.ValidateCanonical(tc) {
+		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
+	} else if !utils.ValidateCanonical(pn) {
+		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pn)
+	}
+
 	pp, err := q.Pipelines.FindPublic(ctx, tc, pn)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline not found or not public: %w", err)
@@ -125,56 +130,24 @@ func (q *PikoCI) enrichJobsWithStatus(ctx context.Context, tc, pn string, jobs [
 			return nil, fmt.Errorf("failed to filter builds for job %q: %w", j.Name, err)
 		}
 
-		// Find latest completed build (including retries) and any running build.
-		// Same logic as generateImage in pipelines.go.
-		var cb *build.Build
-		var rb *build.Build
-		for _, b := range builds {
-			if b.Status == build.Started && (rb == nil || rb.Status == build.Pending) {
-				rb = b
-			} else if b.Status == build.Pending && rb == nil {
-				rb = b
-			}
-		}
-		seen := map[string]bool{}
-		for cb == nil {
-			var mainBN string
-			for _, b := range builds {
-				if !strings.Contains(b.BuildNumber, ".") && !seen[b.BuildNumber] {
-					mainBN = b.BuildNumber
-					break
-				}
-			}
-			if mainBN == "" {
-				break
-			}
-			seen[mainBN] = true
-			for _, b := range builds {
-				if b.BuildNumber == mainBN || strings.HasPrefix(b.BuildNumber, mainBN+".") {
-					if b.Status != build.Started && b.Status != build.Pending {
-						cb = b
-						break
-					}
-				}
-			}
-		}
+		bs := resolveBuildStatus(builds)
 
-		if cb != nil {
-			ws.LatestStatus = cb.Status.String()
-			ws.LatestBuildNumber = cb.BuildNumber
-			ws.LatestBuildDuration = int64(cb.Duration)
-			if !cb.StartedAt.IsZero() {
-				t := cb.StartedAt
+		if bs.completedBuild != nil {
+			ws.LatestStatus = bs.completedBuild.Status.String()
+			ws.LatestBuildNumber = bs.completedBuild.BuildNumber
+			ws.LatestBuildDuration = int64(bs.completedBuild.Duration)
+			if !bs.completedBuild.StartedAt.IsZero() {
+				t := bs.completedBuild.StartedAt
 				ws.StartedAt = &t
 			}
 		}
 
-		if rb != nil {
+		if bs.runningBuild != nil {
 			ws.HasRunning = true
-			if cb == nil {
-				ws.LatestBuildNumber = rb.BuildNumber
-				if !rb.StartedAt.IsZero() {
-					t := rb.StartedAt
+			if bs.completedBuild == nil {
+				ws.LatestBuildNumber = bs.runningBuild.BuildNumber
+				if !bs.runningBuild.StartedAt.IsZero() {
+					t := bs.runningBuild.StartedAt
 					ws.StartedAt = &t
 				}
 			}

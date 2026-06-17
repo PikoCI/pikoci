@@ -630,8 +630,8 @@ textarea.form-control {
   overflow: hidden;
   position: relative;
   cursor: grab;
-  /* Fill remaining viewport height */
-  min-height: calc(100vh - 200px);
+  /* Fill remaining viewport height (navbar + title + toolbar + legend + padding) */
+  min-height: calc(100vh - 290px);
 }
 .piko-graph-container.panning { cursor: grabbing; }
 
@@ -720,6 +720,53 @@ textarea.form-control {
   height: 16px;
   background: var(--border);
   margin: 0 4px;
+}
+/* Gear panel */
+.piko-gear-wrap {
+  position: relative;
+}
+.piko-gear-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.piko-gear-btn:hover {
+  background: var(--bg-hover);
+}
+.piko-gear-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  z-index: 30;
+  padding: 8px 12px;
+  min-width: 220px;
+}
+.piko-gear-panel.open {
+  display: block;
+}
+.piko-gear-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.piko-gear-option input[disabled] + span,
+.piko-gear-option:has(input[disabled]) {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 /* List view layout */
 .piko-view-list {

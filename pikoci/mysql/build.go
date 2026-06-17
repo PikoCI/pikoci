@@ -594,6 +594,7 @@ func (r *BuildRepository) AggregateStatusByVersionIDs(ctx context.Context, versi
 				WHEN SUM(CASE WHEN b.status = 'started' THEN 1 ELSE 0 END) > 0 THEN 'started'
 				WHEN SUM(CASE WHEN b.status = 'pending' THEN 1 ELSE 0 END) > 0 THEN 'pending'
 				WHEN SUM(CASE WHEN b.status = 'succeeded' THEN 1 ELSE 0 END) > 0 THEN 'succeeded'
+				WHEN SUM(CASE WHEN b.status = 'cancelled' THEN 1 ELSE 0 END) > 0 THEN 'cancelled'
 				ELSE ''
 			END AS agg_status
 		FROM build_get_versions bgv

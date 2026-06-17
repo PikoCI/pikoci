@@ -105,7 +105,7 @@ type Service interface {
 	// GetPublicPipeline retrieves a public pipeline with sensitive fields sanitized.
 	GetPublicPipeline(ctx context.Context, tc, pn string) (*pipeline.Pipeline, error)
 	// GetPublicPipelineImage generates a DOT graph image for a public pipeline.
-	GetPublicPipelineImage(ctx context.Context, tc, pn, format string) ([]byte, error)
+	GetPublicPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates bool) ([]byte, error)
 	// GetPublicPipelineJob retrieves a job from a public pipeline.
 	GetPublicPipelineJob(ctx context.Context, tc, pn, jn string) (*job.Job, error)
 	// ListPublicJobBuilds returns paginated builds for a job on a public pipeline,
@@ -121,8 +121,9 @@ type Service interface {
 	ListPublicResourceVersions(ctx context.Context, tc, pn, rCan string, before *uint32, after *uint32, limit uint32) ([]*resource.Version, bool, error)
 
 	// GetPipelineImage generates a DOT graph representation of a pipeline's jobs
-	// and resources.
-	GetPipelineImage(ctx context.Context, tc, pn, format string) ([]byte, error)
+	// and resources. When hideIntermediates is true, intermediate resource nodes
+	// are removed and jobs connect directly.
+	GetPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates bool) ([]byte, error)
 	// CreatePipelineImage generates a DOT graph image from raw pipeline
 	// configuration bytes without persisting the pipeline.
 	CreatePipelineImage(ctx context.Context, tc string, pp []byte, vars map[string]interface{}, format string) ([]byte, error)

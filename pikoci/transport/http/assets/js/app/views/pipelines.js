@@ -151,11 +151,21 @@ var PipelineResourcesPanelView = Backbone.View.extend({
     this.collection = options.collection;
     this.pipeline = options.pipeline;
     this.listenTo(this.collection, 'sync', this.render);
+    this._polling = false;
+  },
+  startPolling: function() {
+    if (this._polling) return;
+    this._polling = true;
     this.collection.fetch();
     var that = this;
     this.intervalID = window.setInterval(function() {
       that.collection.fetch();
     }, fetchInterval);
+  },
+  stopPolling: function() {
+    if (!this._polling) return;
+    this._polling = false;
+    clearInterval(this.intervalID);
   },
   events: {
     'click #close-resources-panel': 'closePanel',
@@ -181,6 +191,7 @@ var PipelineResourcesPanelView = Backbone.View.extend({
     event.preventDefault();
     event.stopPropagation();
     this.$el.removeClass('open');
+    this.stopPolling();
   },
   checkNow: function(event) {
     event.preventDefault();
@@ -203,7 +214,7 @@ var PipelineResourcesPanelView = Backbone.View.extend({
     });
   },
   remove: function() {
-    clearInterval(this.intervalID);
+    this.stopPolling();
     Backbone.View.prototype.remove.call(this);
   },
 });
@@ -212,6 +223,7 @@ export var PipelineShowView = Backbone.View.extend({
   template: _.template($('#pipeline-show-view').html()),
   initialize: function(options) {
     this.image = options.image;
+    this.image.hideIntermediates = localStorage.getItem("piko-hide-intermediates") === "1";
     this.image.fetch({
       error: function(model, xhr) {
         try {
@@ -231,7 +243,8 @@ export var PipelineShowView = Backbone.View.extend({
     this.resourcesCollection = new PanelResources();
 
     this.listView = null;
-    this.currentView = localStorage.getItem("piko-pipeline-view") || "graph";
+    var savedView = localStorage.getItem("piko-pipeline-view") || "graph";
+    this.currentView = savedView === "pipeline" ? "graph" : savedView;
 
     var that = this;
     this.intervalID = window.setInterval(function() {
@@ -245,6 +258,8 @@ export var PipelineShowView = Backbone.View.extend({
     'click #pause-pipeline': 'clickPausePipeline',
     'click #unpause-pipeline': 'clickUnpausePipeline',
     'click #toggle-resources-panel': 'toggleResourcesPanel',
+    'click #toggle-gear-panel': 'toggleGearPanel',
+    'change #gear-hide-intermediates': 'toggleHideIntermediates',
     'click .piko-view-btn': 'switchView',
   },
   render: function () {
@@ -267,6 +282,7 @@ export var PipelineShowView = Backbone.View.extend({
       el: this.$el.find('#pipeline-resources-panel'),
     });
 
+    this.$('#gear-hide-intermediates').prop('checked', this.image.hideIntermediates);
     this._applyView(this.currentView);
 
     return this;
@@ -277,16 +293,22 @@ export var PipelineShowView = Backbone.View.extend({
     if (mode === 'list') {
       this.$('.piko-view-graph').hide();
       this.$('.piko-view-list').show();
+      this.$('.piko-gear-wrap').hide();
+      this.$('#gear-panel').removeClass('open');
       if (!this.listView) {
         this.listView = new PipelineListView({
           el: this.$('.piko-view-list'),
           pipeline: this.model,
           resourcesCollection: this.resourcesCollection,
         });
+      } else {
+        this.listView.resumePolling();
       }
     } else {
       this.$('.piko-view-graph').show();
       this.$('.piko-view-list').hide();
+      this.$('.piko-gear-wrap').show();
+      if (this.listView) { this.listView.pausePolling(); }
     }
   },
   switchView: function(event) {
@@ -319,7 +341,36 @@ export var PipelineShowView = Backbone.View.extend({
   toggleResourcesPanel: function(event) {
     event.preventDefault();
     event.stopPropagation();
-    this.$el.find('#pipeline-resources-panel').toggleClass('open');
+    var panel = this.$el.find('#pipeline-resources-panel');
+    panel.toggleClass('open');
+    if (panel.hasClass('open')) {
+      this.panelView.startPolling();
+    } else {
+      this.panelView.stopPolling();
+    }
+  },
+  toggleHideIntermediates: function(event) {
+    var checked = $(event.target).is(':checked');
+    localStorage.setItem("piko-hide-intermediates", checked ? "1" : "0");
+    this.image.hideIntermediates = checked;
+    this.image.fetch();
+  },
+  toggleGearPanel: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var panel = this.$('#gear-panel');
+    panel.toggleClass('open');
+    if (panel.hasClass('open')) {
+      var that = this;
+      var closeHandler = function(e) {
+        if (!$(e.target).closest('#gear-panel').length) {
+          that.$('#gear-panel').removeClass('open');
+        } else {
+          $(document).one('click', closeHandler);
+        }
+      };
+      $(document).one('click', closeHandler);
+    }
   },
   clickPipeline: function(event) {
     // Only handle clicks on SVG links inside the graph
@@ -760,7 +811,7 @@ var PipelineListView = Backbone.View.extend({
         if (group.length === 0) continue;
 
         if (group.length >= 2) {
-          html += that._renderParallelGroup(group, statusMap, function(names) {
+          html += that._renderParallelGroup(group, statusMap, tree, rendered, function(names) {
             var sub = '';
             for (var j = 0; j < names.length; j++) {
               rendered[names[j]] = true;
@@ -775,7 +826,8 @@ var PipelineListView = Backbone.View.extend({
           rendered[name] = true;
           var data = statusMap[name] || { name: name, latest_status: '' };
           html += that._renderJobRow(data);
-          html += renderChildren(name);
+          var childHtml = renderChildren(name);
+          if (childHtml) html += '<div class="piko-job-children">' + childHtml + '</div>';
         }
       }
       return html;
@@ -785,7 +837,7 @@ var PipelineListView = Backbone.View.extend({
     var roots = tree.roots;
     var html = '';
     if (roots.length >= 2) {
-      html += this._renderParallelGroup(roots, statusMap, function(names) {
+      html += this._renderParallelGroup(roots, statusMap, tree, rendered, function(names) {
         var sub = '';
         for (var j = 0; j < names.length; j++) {
           rendered[names[j]] = true;
@@ -799,7 +851,8 @@ var PipelineListView = Backbone.View.extend({
       rendered[roots[0]] = true;
       var data = statusMap[roots[0]] || { name: roots[0], latest_status: '' };
       html += this._renderJobRow(data);
-      html += renderChildren(roots[0]);
+      var childHtml = renderChildren(roots[0]);
+      if (childHtml) html += '<div class="piko-job-children">' + childHtml + '</div>';
     }
 
     this.$('.piko-job-list').html(html);
@@ -820,7 +873,7 @@ var PipelineListView = Backbone.View.extend({
   },
 
   // renderChildrenFn(jobNames) → html string for downstream jobs of the group members
-  _renderParallelGroup: function(jobNames, statusMap, renderChildrenFn) {
+  _renderParallelGroup: function(jobNames, statusMap, tree, rendered, renderChildrenFn) {
     var groupKey = jobNames.slice().sort().join(',');
     var isCollapsed = this.collapsedGroups[groupKey];
     var arrow = isCollapsed ? '&#9654;' : '&#9660;';
@@ -837,6 +890,31 @@ var PipelineListView = Backbone.View.extend({
     }
     html += '</span></div>';
     html += '<div class="piko-parallel-nested"' + (isCollapsed ? ' style="display:none"' : '') + '>';
+
+    // Identify fan-in children: jobs whose parents are ALL members of this parallel group.
+    // Mark them as rendered so they're skipped inside individual members,
+    // then render them after the parallel block.
+    var groupSet = {};
+    for (var i = 0; i < jobNames.length; i++) groupSet[jobNames[i]] = true;
+    var fanInChildren = [];
+    for (var i = 0; i < jobNames.length; i++) {
+      var kids = tree.children[jobNames[i]] || [];
+      for (var k = 0; k < kids.length; k++) {
+        if (rendered[kids[k]]) continue;
+        var kidParents = tree.parents[kids[k]] || [];
+        if (kidParents.length >= 2) {
+          var allInGroup = true;
+          for (var p = 0; p < kidParents.length; p++) {
+            if (!groupSet[kidParents[p]]) { allInGroup = false; break; }
+          }
+          if (allInGroup) {
+            rendered[kids[k]] = true;
+            fanInChildren.push(kids[k]);
+          }
+        }
+      }
+    }
+
     for (var j = 0; j < jobNames.length; j++) {
       var data = statusMap[jobNames[j]] || { name: jobNames[j], latest_status: '' };
       html += this._renderJobRow(data);
@@ -847,7 +925,22 @@ var PipelineListView = Backbone.View.extend({
         }
       }
     }
+
+    // Render fan-in children inside the nested block, continuing the flow
+    // at the same indentation as the parallel siblings
+    for (var i = 0; i < fanInChildren.length; i++) {
+      var data = statusMap[fanInChildren[i]] || { name: fanInChildren[i], latest_status: '' };
+      html += this._renderJobRow(data);
+      if (renderChildrenFn) {
+        var childHtml = renderChildrenFn([fanInChildren[i]]);
+        if (childHtml) {
+          html += '<div class="piko-job-children">' + childHtml + '</div>';
+        }
+      }
+    }
+
     html += '</div>';
+
     return html;
   },
 
@@ -918,8 +1011,22 @@ var PipelineListView = Backbone.View.extend({
     header.find('span:first').html(arrow + ' parallel');
   },
 
+  pausePolling: function() {
+    if (this._jobsIntervalID) {
+      clearInterval(this._jobsIntervalID);
+      this._jobsIntervalID = null;
+    }
+  },
+  resumePolling: function() {
+    if (this._jobsIntervalID) return;
+    this._fetchJobs();
+    var that = this;
+    this._jobsIntervalID = window.setInterval(function() {
+      that._fetchJobs();
+    }, fetchInterval);
+  },
   remove: function() {
-    if (this._jobsIntervalID) clearInterval(this._jobsIntervalID);
+    this.pausePolling();
     if (this.jobBuildsView) { this.jobBuildsView.remove(); }
     Backbone.View.prototype.remove.call(this);
   },
