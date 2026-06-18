@@ -150,10 +150,13 @@ func TestRetryJobBuild_BaseBuild(t *testing.T) {
 	ctx := context.TODO()
 
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3").
-		Return(&build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}, nil)
-	// RetryJobBuild now creates a pending build first
+		Return(&build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}, nil).Times(2)
+	// RetryJobBuild now creates a pending build with RetrySourceBuildID set
 	s.Builds.EXPECT().CreateRetry(ctx, "main", "my-pipeline", "my-job", "3", gomock.Any()).
-		Return(uint32(10), "3.1", nil)
+		DoAndReturn(func(ctx context.Context, tc, pc, jn, pbn string, b build.Build) (uint32, string, error) {
+			assert.Equal(t, uint32(5), b.RetrySourceBuildID)
+			return uint32(10), "3.1", nil
+		})
 
 	err := s.S.RetryJobBuild(ctx, "main", "my-pipeline", "my-job", "3")
 	require.NoError(t, err)
@@ -167,9 +170,15 @@ func TestRetryJobBuild_RetryOfRetry(t *testing.T) {
 	// Retrying "3.1" should extract parent "3"
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3.1").
 		Return(&build.Build{ID: 7, BuildNumber: "3.1", Status: build.Failed}, nil)
+	// Find parent build "3" to get its ID for version pinning
+	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3").
+		Return(&build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}, nil)
 	// RetryJobBuild creates a pending build using parent build number
 	s.Builds.EXPECT().CreateRetry(ctx, "main", "my-pipeline", "my-job", "3", gomock.Any()).
-		Return(uint32(12), "3.2", nil)
+		DoAndReturn(func(ctx context.Context, tc, pc, jn, pbn string, b build.Build) (uint32, string, error) {
+			assert.Equal(t, uint32(5), b.RetrySourceBuildID)
+			return uint32(12), "3.2", nil
+		})
 
 	err := s.S.RetryJobBuild(ctx, "main", "my-pipeline", "my-job", "3.1")
 	require.NoError(t, err)
