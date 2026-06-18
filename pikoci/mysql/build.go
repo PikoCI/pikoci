@@ -42,8 +42,9 @@ type dbBuild struct {
 	Error             sql.NullString
 	StartedAt         sql.NullTime
 	Duration          sql.NullInt64
-	VersionID         sql.NullInt64
-	ResourceCanonical sql.NullString
+	VersionID            sql.NullInt64
+	ResourceCanonical    sql.NullString
+	RetrySourceBuildID   int64
 }
 
 func newDBBuild(b build.Build) dbBuild {
@@ -56,8 +57,9 @@ func newDBBuild(b build.Build) dbBuild {
 		Error:             toNullString(b.Error),
 		StartedAt:         toNullTime(b.StartedAt),
 		Duration:          toNullInt64(int(b.Duration)),
-		VersionID:         toNullInt64(int(b.VersionID)),
-		ResourceCanonical: toNullString(b.ResourceCanonical),
+		VersionID:          toNullInt64(int(b.VersionID)),
+		ResourceCanonical:  toNullString(b.ResourceCanonical),
+		RetrySourceBuildID: int64(b.RetrySourceBuildID),
 	}
 }
 
@@ -70,8 +72,9 @@ func (dbb *dbBuild) toDomainEntity() *build.Build {
 		Error:             dbb.Error.String,
 		StartedAt:         dbb.StartedAt.Time,
 		Duration:          time.Duration(dbb.Duration.Int64),
-		VersionID:         uint32(dbb.VersionID.Int64),
-		ResourceCanonical: dbb.ResourceCanonical.String,
+		VersionID:          uint32(dbb.VersionID.Int64),
+		ResourceCanonical:  dbb.ResourceCanonical.String,
+		RetrySourceBuildID: uint32(dbb.RetrySourceBuildID),
 	}
 
 	_ = json.Unmarshal([]byte(dbb.Steps.String), &b.Steps)
@@ -108,8 +111,8 @@ func (r *BuildRepository) Create(ctx context.Context, tc, pn, jn string, b build
 		buildNumber := fmt.Sprintf("%d", nextNum)
 
 		res, err := r.querier.ExecContext(ctx, `
-			INSERT INTO builds(steps, job, status, error, started_at, duration, build_number, version_id, resource_canonical, job_id)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+			INSERT INTO builds(steps, job, status, error, started_at, duration, build_number, version_id, resource_canonical, retry_source_build_id, job_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 				-- job_id
 				(
 					SELECT j.id
@@ -119,7 +122,7 @@ func (r *BuildRepository) Create(ctx context.Context, tc, pn, jn string, b build
 					JOIN teams AS t
 						ON p.team_id = t.id
 					WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
-				))`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, buildNumber, dbb.VersionID, dbb.ResourceCanonical, tc, pn, jn)
+				))`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, buildNumber, dbb.VersionID, dbb.ResourceCanonical, dbb.RetrySourceBuildID, tc, pn, jn)
 		if err != nil {
 			if isUniqueViolation(err) {
 				continue
@@ -167,8 +170,8 @@ func (r *BuildRepository) CreateRetry(ctx context.Context, tc, pn, jn, parentBui
 		buildNumber := fmt.Sprintf("%s.%d", parentBuildNumber, nextNum)
 
 		res, err := r.querier.ExecContext(ctx, `
-			INSERT INTO builds(steps, job, status, error, started_at, duration, build_number, version_id, resource_canonical, job_id)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+			INSERT INTO builds(steps, job, status, error, started_at, duration, build_number, version_id, resource_canonical, retry_source_build_id, job_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 				(
 					SELECT j.id
 					FROM jobs AS j
@@ -177,7 +180,7 @@ func (r *BuildRepository) CreateRetry(ctx context.Context, tc, pn, jn, parentBui
 					JOIN teams AS t
 						ON p.team_id = t.id
 					WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
-				))`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, buildNumber, dbb.VersionID, dbb.ResourceCanonical, tc, pn, jn)
+				))`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, buildNumber, dbb.VersionID, dbb.ResourceCanonical, dbb.RetrySourceBuildID, tc, pn, jn)
 		if err != nil {
 			if isUniqueViolation(err) {
 				continue
@@ -222,7 +225,7 @@ func (r *BuildRepository) FindGetVersions(ctx context.Context, buildID uint32) (
 
 func (r *BuildRepository) Find(ctx context.Context, tc, pn, jn string, buildNumber string) (*build.Build, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical
+		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical, b.retry_source_build_id
 		FROM builds AS b
 		JOIN jobs AS j
 			ON b.job_id = j.id
@@ -243,7 +246,7 @@ func (r *BuildRepository) Find(ctx context.Context, tc, pn, jn string, buildNumb
 
 func (r *BuildRepository) Filter(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, error) {
 	query := `
-		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical
+		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical, b.retry_source_build_id
 		FROM builds AS b
 		JOIN jobs AS j
 			ON b.job_id = j.id
@@ -518,7 +521,7 @@ func (r *BuildRepository) CountRunningInSerialGroups(ctx context.Context, tc, pn
 
 func (r *BuildRepository) FindByID(ctx context.Context, buildID uint32) (*build.Build, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical
+		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical, b.retry_source_build_id
 		FROM builds AS b
 		WHERE b.id = ?
 	`, buildID)
@@ -532,7 +535,7 @@ func (r *BuildRepository) FindByID(ctx context.Context, buildID uint32) (*build.
 
 func (r *BuildRepository) FindOldestPending(ctx context.Context, tc, pn, jn string) (*build.Build, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical
+		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical, b.retry_source_build_id
 		FROM builds AS b
 		JOIN jobs AS j
 			ON b.job_id = j.id
@@ -641,6 +644,7 @@ func scanBuild(s sqlr.Scanner) (*build.Build, error) {
 		&b.Duration,
 		&b.VersionID,
 		&b.ResourceCanonical,
+		&b.RetrySourceBuildID,
 	)
 
 	if err != nil {

@@ -11,6 +11,8 @@ import (
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/team"
+	"github.com/pikoci/pikoci/pikoci/workitem"
 	"go.uber.org/mock/gomock"
 )
 
@@ -150,10 +152,13 @@ func TestRetryJobBuild_BaseBuild(t *testing.T) {
 	ctx := context.TODO()
 
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3").
-		Return(&build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}, nil)
-	// RetryJobBuild now creates a pending build first
+		Return(&build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}, nil).Times(2)
+	// RetryJobBuild now creates a pending build with RetrySourceBuildID set
 	s.Builds.EXPECT().CreateRetry(ctx, "main", "my-pipeline", "my-job", "3", gomock.Any()).
-		Return(uint32(10), "3.1", nil)
+		DoAndReturn(func(ctx context.Context, tc, pc, jn, pbn string, b build.Build) (uint32, string, error) {
+			assert.Equal(t, uint32(5), b.RetrySourceBuildID)
+			return uint32(10), "3.1", nil
+		})
 
 	err := s.S.RetryJobBuild(ctx, "main", "my-pipeline", "my-job", "3")
 	require.NoError(t, err)
@@ -167,9 +172,15 @@ func TestRetryJobBuild_RetryOfRetry(t *testing.T) {
 	// Retrying "3.1" should extract parent "3"
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3.1").
 		Return(&build.Build{ID: 7, BuildNumber: "3.1", Status: build.Failed}, nil)
+	// Find parent build "3" to get its ID for version pinning
+	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3").
+		Return(&build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}, nil)
 	// RetryJobBuild creates a pending build using parent build number
 	s.Builds.EXPECT().CreateRetry(ctx, "main", "my-pipeline", "my-job", "3", gomock.Any()).
-		Return(uint32(12), "3.2", nil)
+		DoAndReturn(func(ctx context.Context, tc, pc, jn, pbn string, b build.Build) (uint32, string, error) {
+			assert.Equal(t, uint32(5), b.RetrySourceBuildID)
+			return uint32(12), "3.2", nil
+		})
 
 	err := s.S.RetryJobBuild(ctx, "main", "my-pipeline", "my-job", "3.1")
 	require.NoError(t, err)
@@ -967,4 +978,62 @@ func TestEvaluateDownstreamJobs_ForEachGroupExpansion(t *testing.T) {
 
 	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint-go")
 	require.NoError(t, err)
+}
+
+// --- NextWork tests ---
+
+func TestNextWork_RetryBuildSetsRetryFields(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Pipelines.EXPECT().FilterAll(ctx).Return([]*pipeline.WithTeam{
+		{
+			Pipeline: pipeline.Pipeline{Canonical: "my-pipeline", Jobs: []job.Job{{Name: "my-job"}}},
+			Team:     team.Team{Canonical: "main"},
+		},
+	}, nil)
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "my-job").
+		Return(&build.Build{ID: 10, BuildNumber: "3.1", Status: build.Pending, RetrySourceBuildID: 5}, nil)
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
+		Return(&job.Job{Name: "my-job"}, nil)
+	s.Builds.EXPECT().StartPending(ctx, "main", "my-pipeline", "my-job", uint32(10)).Return(nil)
+	s.Builds.EXPECT().FindByID(ctx, uint32(10)).Return(
+		&build.Build{ID: 10, BuildNumber: "3.1", Status: build.Started, VersionID: 42, RetrySourceBuildID: 5}, nil)
+
+	item, err := s.P.NextWork(ctx, workitem.WorkerContext{})
+	require.NoError(t, err)
+	require.NotNil(t, item)
+	assert.Equal(t, "job", item.Type)
+	assert.Equal(t, uint32(5), item.Body.RetryBuildID)
+	assert.Equal(t, "3", item.Body.RetryBuildNumber)
+	assert.Equal(t, uint32(10), item.Body.BuildID)
+	assert.Equal(t, "3.1", item.Body.BuildNumber)
+}
+
+func TestNextWork_NonRetryBuildNoRetryFields(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Pipelines.EXPECT().FilterAll(ctx).Return([]*pipeline.WithTeam{
+		{
+			Pipeline: pipeline.Pipeline{Canonical: "my-pipeline", Jobs: []job.Job{{Name: "my-job"}}},
+			Team:     team.Team{Canonical: "main"},
+		},
+	}, nil)
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "my-job").
+		Return(&build.Build{ID: 7, BuildNumber: "1", Status: build.Pending}, nil)
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
+		Return(&job.Job{Name: "my-job"}, nil)
+	s.Builds.EXPECT().StartPending(ctx, "main", "my-pipeline", "my-job", uint32(7)).Return(nil)
+	s.Builds.EXPECT().FindByID(ctx, uint32(7)).Return(
+		&build.Build{ID: 7, BuildNumber: "1", Status: build.Started, VersionID: 10}, nil)
+
+	item, err := s.P.NextWork(ctx, workitem.WorkerContext{})
+	require.NoError(t, err)
+	require.NotNil(t, item)
+	assert.Equal(t, "job", item.Type)
+	assert.Equal(t, uint32(0), item.Body.RetryBuildID)
+	assert.Equal(t, "", item.Body.RetryBuildNumber)
 }

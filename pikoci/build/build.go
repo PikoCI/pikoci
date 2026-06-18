@@ -46,6 +46,8 @@ type Build struct {
 	VersionID         uint32 `json:"version_id,omitempty"`
 	ResourceCanonical string `json:"resource_canonical,omitempty"`
 
+	RetrySourceBuildID uint32 `json:"retry_source_build_id,omitempty"`
+
 	// SuppressUpdates prevents updateBuild from persisting this build.
 	// Used by in_parallel goroutines that operate on local build copies.
 	SuppressUpdates bool `json:"-"`

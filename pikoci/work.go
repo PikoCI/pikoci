@@ -3,6 +3,7 @@ package pikoci
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/pikoci/pikoci/pikoci/scheduler"
@@ -56,7 +57,7 @@ func (q *PikoCI) NextWork(ctx context.Context, wc workitem.WorkerContext) (*work
 				continue
 			}
 
-			return &workitem.Item{
+			item := &workitem.Item{
 				Type: "job",
 				Body: workitem.Body{
 					TeamCanonical:     pwt.Team.Canonical,
@@ -66,7 +67,14 @@ func (q *PikoCI) NextWork(ctx context.Context, wc workitem.WorkerContext) (*work
 					BuildNumber:       started.BuildNumber,
 					VersionID:         started.VersionID,
 				},
-			}, nil
+			}
+			if started.RetrySourceBuildID != 0 {
+				item.Body.RetryBuildID = started.RetrySourceBuildID
+				if idx := strings.Index(started.BuildNumber, "."); idx != -1 {
+					item.Body.RetryBuildNumber = started.BuildNumber[:idx]
+				}
+			}
+			return item, nil
 		}
 	}
 

@@ -239,8 +239,14 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 		parentBN = buildNumber[:idx]
 	}
 
+	// Find the parent build to get its ID for version pinning
+	parentBuild, err := q.Builds.Find(ctx, tc, pc, jn, parentBN)
+	if err != nil {
+		return fmt.Errorf("failed to Find parent Build %q: %w", parentBN, err)
+	}
+
 	// Create a pending retry build first
-	_, err = q.CreateRetryJobBuild(ctx, tc, pc, jn, parentBN, build.Build{Status: build.Pending})
+	_, err = q.CreateRetryJobBuild(ctx, tc, pc, jn, parentBN, build.Build{Status: build.Pending, RetrySourceBuildID: parentBuild.ID})
 	if err != nil {
 		return fmt.Errorf("failed to create pending retry build: %w", err)
 	}
