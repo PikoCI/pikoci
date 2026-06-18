@@ -867,12 +867,12 @@ var PipelineListView = Backbone.View.extend({
     this.$('.piko-job-list').html(html);
   },
 
-  _renderJobRow: function(data) {
+  _renderJobRow: function(data, extraClass) {
     var status = data.latest_status || '';
     if (data.has_running) status = 'started';
     if (data.paused) status = 'paused';
     var isActive = this.selectedJob === data.name;
-    return '<div class="piko-job-row' + (isActive ? ' active' : '') + '" data-job="' + _.escape(data.name) + '">' +
+    return '<div class="piko-job-row' + (isActive ? ' active' : '') + (extraClass || '') + '" data-job="' + _.escape(data.name) + '">' +
       this.jobRowTemplate({
         name: data.name,
         status: status,
@@ -901,11 +901,10 @@ var PipelineListView = Backbone.View.extend({
     html += '<div class="piko-parallel-nested"' + (isCollapsed ? ' style="display:none"' : '') + '>';
 
     // Identify fan-in children: jobs whose parents are ALL members of this parallel group.
-    // Mark them as rendered so they're skipped inside individual members,
-    // then render them after the parallel block.
     var groupSet = {};
     for (var i = 0; i < jobNames.length; i++) groupSet[jobNames[i]] = true;
     var fanInChildren = [];
+    var fanInParentSet = {};
     for (var i = 0; i < jobNames.length; i++) {
       var kids = tree.children[jobNames[i]] || [];
       for (var k = 0; k < kids.length; k++) {
@@ -919,14 +918,61 @@ var PipelineListView = Backbone.View.extend({
           if (allInGroup) {
             rendered[kids[k]] = true;
             fanInChildren.push(kids[k]);
+            for (var p = 0; p < kidParents.length; p++) {
+              fanInParentSet[kidParents[p]] = true;
+            }
           }
         }
       }
     }
 
+    var hasFanIn = fanInChildren.length > 0;
+
+    // Build the fan-in section HTML (parents in bordered block + children after)
+    var fanInHtml = '';
+    if (hasFanIn) {
+      fanInHtml += '<div class="piko-fan-in-section">';
+      for (var j = 0; j < jobNames.length; j++) {
+        if (!fanInParentSet[jobNames[j]]) continue;
+        var data = statusMap[jobNames[j]] || { name: jobNames[j], latest_status: '' };
+        fanInHtml += this._renderJobRow(data);
+        if (renderChildrenFn) {
+          var childHtml = renderChildrenFn([jobNames[j]]);
+          if (childHtml) {
+            fanInHtml += '<div class="piko-job-children">' + childHtml + '</div>';
+          }
+        }
+      }
+      fanInHtml += '</div>';
+      fanInHtml += '<div class="piko-fan-in-cont">';
+      for (var i = 0; i < fanInChildren.length; i++) {
+        var data = statusMap[fanInChildren[i]] || { name: fanInChildren[i], latest_status: '' };
+        fanInHtml += this._renderJobRow(data);
+        if (renderChildrenFn) {
+          var childHtml = renderChildrenFn([fanInChildren[i]]);
+          if (childHtml) {
+            fanInHtml += '<div class="piko-job-children">' + childHtml + '</div>';
+          }
+        }
+      }
+      fanInHtml += '</div>';
+    }
+
+    // Render members in order; non-fan-in-parent jobs get extra padding when
+    // fan-in exists so all dots align. Insert the fan-in section at the
+    // position of the first fan-in parent.
+    var fanInInserted = false;
+    var alignClass = hasFanIn ? ' piko-fan-in-aligned' : '';
     for (var j = 0; j < jobNames.length; j++) {
+      if (fanInParentSet[jobNames[j]]) {
+        if (!fanInInserted) {
+          html += fanInHtml;
+          fanInInserted = true;
+        }
+        continue;
+      }
       var data = statusMap[jobNames[j]] || { name: jobNames[j], latest_status: '' };
-      html += this._renderJobRow(data);
+      html += this._renderJobRow(data, alignClass);
       if (renderChildrenFn) {
         var childHtml = renderChildrenFn([jobNames[j]]);
         if (childHtml) {
@@ -934,18 +980,8 @@ var PipelineListView = Backbone.View.extend({
         }
       }
     }
-
-    // Render fan-in children inside the nested block, continuing the flow
-    // at the same indentation as the parallel siblings
-    for (var i = 0; i < fanInChildren.length; i++) {
-      var data = statusMap[fanInChildren[i]] || { name: fanInChildren[i], latest_status: '' };
-      html += this._renderJobRow(data);
-      if (renderChildrenFn) {
-        var childHtml = renderChildrenFn([fanInChildren[i]]);
-        if (childHtml) {
-          html += '<div class="piko-job-children">' + childHtml + '</div>';
-        }
-      }
+    if (fanInHtml && !fanInInserted) {
+      html += fanInHtml;
     }
 
     html += '</div>';
