@@ -43,6 +43,31 @@ The following data is **removed** for security:
 
 SVG and PNG endpoints return raw image data with the appropriate `Content-Type` header and `Access-Control-Allow-Origin: *` for cross-origin embedding. The pipeline must be public for unauthenticated access.
 
+### Query parameters
+
+The SVG, PNG, and DOT image endpoints accept optional query parameters to customize the rendered graph:
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `hide_intermediates` | `1` | Hide intermediate resource nodes between jobs, drawing direct job-to-job edges (keeps only entry-point trigger resources) |
+| `group_parallel` | `1` | Collapse jobs sharing identical upstream parents into a single compact node |
+
+Example:
+
+```
+/teams/main/pipelines/my-pipeline/image.svg?hide_intermediates=1&group_parallel=1
+```
+
+## Sharing pipeline graphs
+
+In the graph view, click the **share button** (<i class="bi bi-share"></i>) next to the gear icon to open a panel with copyable URLs for the pipeline graph:
+
+- **SVG** — direct link to the SVG image
+- **PNG** — direct link to the PNG image
+- **Markdown** — ready-to-paste `![pipeline](url)` snippet
+
+The URLs automatically include query parameters matching your current gear options (hide intermediates, group parallel), so what you see is what gets shared.
+
 ## Embedding pipeline graphs
 
 Public pipelines can be embedded directly in READMEs, dashboards, or any HTML page. **The pipeline must be marked as public** (see above) for unauthenticated embedding to work — non-public pipelines require authentication and will return an error for anonymous requests.
@@ -51,6 +76,12 @@ Public pipelines can be embedded directly in READMEs, dashboards, or any HTML pa
 
 ```markdown
 ![Pipeline](https://ci.example.com/teams/main/pipelines/my-pipeline/image.svg)
+```
+
+**Markdown with options:**
+
+```markdown
+![Pipeline](https://ci.example.com/teams/main/pipelines/my-pipeline/image.svg?hide_intermediates=1&group_parallel=1)
 ```
 
 **HTML:**
