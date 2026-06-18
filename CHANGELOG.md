@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `ListPipelineJobs` API endpoint (`GET /teams/{tc}/pipelines/{pc}/jobs`) returns all pipeline jobs enriched with latest build status, running state, build number, duration, and start time. Supports public pipeline fallback ([#538](https://github.com/PikoCI/pikoci/issues/538))
 - Pipeline graph view now has a gear icon (⚙) with a "Hide intermediate resources" toggle that removes resource nodes between jobs and draws direct job-to-job edges, keeping only entry-point trigger resources ([#548](https://github.com/PikoCI/pikoci/issues/548), [#539](https://github.com/PikoCI/pikoci/issues/539), [#431](https://github.com/PikoCI/pikoci/issues/431))
 - Gear panel now has a "Group parallel jobs" toggle that collapses jobs sharing identical upstream parents into a single compact node with a colored status dot per job and individually clickable rows ([#540](https://github.com/PikoCI/pikoci/issues/540))
+- Pipeline graph view now has a share button that opens a panel with copyable SVG, PNG, and Markdown image URLs reflecting the current gear options. List view linear job chains no longer render nested — only parallel groups and fan-in structures create visual nesting ([#517](https://github.com/PikoCI/pikoci/issues/517))
 
 ### Fixed
 

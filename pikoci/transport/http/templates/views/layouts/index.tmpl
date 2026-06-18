@@ -292,6 +292,26 @@
             </label>
           </div>
         </div>
+        <div class="piko-share-wrap">
+          <button class="piko-gear-btn" id="toggle-share-panel"><i class="bi bi-share"></i></button>
+          <div class="piko-share-panel" id="share-panel">
+            <div class="piko-share-row">
+              <span class="piko-share-label">SVG</span>
+              <input type="text" class="piko-share-url" id="share-svg-url" readonly>
+              <button class="piko-share-copy" data-target="share-svg-url">Copy</button>
+            </div>
+            <div class="piko-share-row">
+              <span class="piko-share-label">PNG</span>
+              <input type="text" class="piko-share-url" id="share-png-url" readonly>
+              <button class="piko-share-copy" data-target="share-png-url">Copy</button>
+            </div>
+            <div class="piko-share-row">
+              <span class="piko-share-label">Markdown</span>
+              <input type="text" class="piko-share-url" id="share-md-url" readonly>
+              <button class="piko-share-copy" data-target="share-md-url">Copy</button>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="piko-pipeline-body">
       <div id="pipeline-resources-panel" class="piko-resources-panel"></div>
