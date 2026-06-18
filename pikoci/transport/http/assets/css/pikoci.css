@@ -970,6 +970,23 @@ textarea.form-control {
 .piko-job-children {
   margin-left: 10px;
 }
+/* Fan-in: bordered section groups the fan-in parents */
+.piko-fan-in-section {
+  border-left: 2px solid var(--text-muted);
+  margin-left: 6px;
+}
+.piko-fan-in-section > .piko-job-row {
+  padding-left: 12px;
+}
+/* Fan-in continuation: same indent as inside the section, no border */
+.piko-fan-in-cont {
+  margin-left: 8px;
+  padding-left: 12px;
+}
+/* Non-fan-in jobs get extra padding to align dots with fan-in-section jobs */
+.piko-fan-in-aligned {
+  padding-left: 20px !important;
+}
 .piko-parallel-counts {
   display: flex;
   align-items: center;
