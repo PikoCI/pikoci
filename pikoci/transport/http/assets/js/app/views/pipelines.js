@@ -528,6 +528,9 @@ var PipelineListView = Backbone.View.extend({
     this._jobsIntervalID = window.setInterval(function() {
       that._fetchJobs();
     }, fetchInterval);
+    this._resourcesIntervalID = window.setInterval(function() {
+      that.resourcesCollection.fetch();
+    }, fetchInterval);
   },
   events: {
     'click .piko-job-row': '_onClickJob',
@@ -614,10 +617,51 @@ var PipelineListView = Backbone.View.extend({
   },
 
   _renderResourceSelector: function() {
-    // Don't re-render while the dropdown is open
-    if (this.$('.piko-rsel-menu').hasClass('open')) return;
-
     var bar = this.$('.piko-list-resource-bar');
+    var menuOpen = this.$('.piko-rsel-menu').hasClass('open');
+
+    if (menuOpen) {
+      // Targeted in-place update: refresh status dots and info without closing the dropdown
+      var resMap = {};
+      this.resourcesCollection.each(function(r) {
+        resMap[r.get('canonical')] = r.toJSON();
+      });
+      var selRes = resMap[this.selectedResource] || {};
+      var selLv = selRes.latest_version;
+      var selStatus = (selLv && selLv.status) ? selLv.status : '';
+
+      // Update trigger button dot
+      var triggerDot = this.$('.piko-rsel-trigger .piko-rsel-dot');
+      triggerDot.attr('class', 'piko-rsel-dot piko-status-dot-' + selStatus);
+
+      // Update each option dot
+      this.$('.piko-rsel-option').each(function() {
+        var canonical = $(this).data('canonical');
+        var r = resMap[canonical] || {};
+        var rlv = r.latest_version;
+        var rStatus = (rlv && rlv.status) ? rlv.status : '';
+        $(this).find('.piko-rsel-dot').attr('class', 'piko-rsel-dot piko-status-dot-' + rStatus);
+      });
+
+      // Update info text
+      var infoHtml = '';
+      if (selLv && selLv.version) {
+        for (var key in selLv.version) {
+          if (selLv.version.hasOwnProperty(key)) {
+            infoHtml += '<span class="piko-resource-bar-ver">' + _.escape(key + ': ' + selLv.version[key]) + '</span>';
+            break;
+          }
+        }
+      }
+      if (selRes.check_interval) {
+        infoHtml += '<span class="piko-resource-bar-meta">' + _.escape(selRes.check_interval) + '</span>';
+      }
+      if (selRes.last_check) {
+        infoHtml += '<span class="piko-resource-bar-meta">checked ' + pikoTimeAgo(selRes.last_check) + '</span>';
+      }
+      this.$('.piko-resource-bar-info').html(infoHtml);
+      return;
+    }
     if (this.triggerResources.length === 0) {
       bar.html('<span style="color:var(--text-muted)">No trigger resources</span>');
       return;
@@ -1099,13 +1143,21 @@ var PipelineListView = Backbone.View.extend({
       clearInterval(this._jobsIntervalID);
       this._jobsIntervalID = null;
     }
+    if (this._resourcesIntervalID) {
+      clearInterval(this._resourcesIntervalID);
+      this._resourcesIntervalID = null;
+    }
   },
   resumePolling: function() {
     if (this._jobsIntervalID) return;
     this._fetchJobs();
+    this.resourcesCollection.fetch();
     var that = this;
     this._jobsIntervalID = window.setInterval(function() {
       that._fetchJobs();
+    }, fetchInterval);
+    this._resourcesIntervalID = window.setInterval(function() {
+      that.resourcesCollection.fetch();
     }, fetchInterval);
   },
   remove: function() {

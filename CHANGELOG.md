@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- List view: resource selector bar now polls for updates on the same interval as job data, keeping the status dot, latest version, and "checked X ago" timestamp fresh without manual refresh. Updates are applied in-place when the dropdown is open so it stays open ([#558](https://github.com/PikoCI/pikoci/issues/558))
 - List view: fan-in jobs (jobs with multiple upstream parents in a parallel group) now render with a left-side bar grouping their parents and the fan-in job indented after the bar, clearly showing the dependency relationship ([#551](https://github.com/PikoCI/pikoci/issues/551))
 - Retrying a build now reuses the resource versions from the original build instead of fetching the latest version ([#552](https://github.com/PikoCI/pikoci/issues/552))
 - `in_parallel` sub-step durations now display as formatted time (`HH:MM:SS`) instead of raw nanoseconds ([#526](https://github.com/PikoCI/pikoci/issues/526))
