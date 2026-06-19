@@ -702,6 +702,9 @@ textarea.form-control {
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .piko-view-btn:hover:not(.piko-view-btn-disabled) {
   background: var(--bg-hover);
@@ -715,16 +718,9 @@ textarea.form-control {
   opacity: 0.4;
   cursor: not-allowed;
 }
-.piko-view-sep {
-  width: 1px;
-  height: 16px;
-  background: var(--border);
-  margin: 0 4px;
-}
 /* Gear panel */
 .piko-gear-wrap {
   position: relative;
-  margin-left: auto;
 }
 .piko-gear-btn {
   font-size: 12px;
