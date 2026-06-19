@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/pikoci/pikoci/pikoci/mock"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/user"
 	"github.com/pikoci/pikoci/pikoci/wkr"
 	"go.uber.org/mock/gomock"
@@ -551,7 +552,7 @@ func TestGetPipelineImage_DOT_ReturnsJSON(t *testing.T) {
 
 	dotOutput := []byte(`digraph "test" { A -> B; }`)
 	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
-	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".dot", false, false).Return(dotOutput, nil)
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".dot", false, false, (*uint32)(nil)).Return(dotOutput, nil)
 
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.dot", nil)
 	require.NoError(t, err)
@@ -589,7 +590,7 @@ func TestGetPipelineImage_SVG_ReturnsRawSVG(t *testing.T) {
 
 	svgOutput := []byte(`<svg><text>hello</text></svg>`)
 	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
-	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg", false, false).Return(svgOutput, nil)
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg", false, false, (*uint32)(nil)).Return(svgOutput, nil)
 
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.svg", nil)
 	require.NoError(t, err)
@@ -625,7 +626,7 @@ func TestGetPipelineImage_PNG_ReturnsRawPNG(t *testing.T) {
 
 	pngOutput := []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}
 	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
-	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".png", false, false).Return(pngOutput, nil)
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".png", false, false, (*uint32)(nil)).Return(pngOutput, nil)
 
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.png", nil)
 	require.NoError(t, err)
@@ -661,7 +662,7 @@ func TestGetPipelineImage_SVG_NoJSONHeaderRequired(t *testing.T) {
 
 	svgOutput := []byte(`<svg><text>test</text></svg>`)
 	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
-	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg", false, false).Return(svgOutput, nil)
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg", false, false, (*uint32)(nil)).Return(svgOutput, nil)
 
 	// No Content-Type header — simulates browser request
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.svg", nil)
@@ -690,7 +691,7 @@ func TestGetPipelineImage_PublicFallback_SVG(t *testing.T) {
 	s.EXPECT().GetPublicPipeline(gomock.Any(), "main", "my-pipeline").Return(&pipeline.Pipeline{
 		Name: "my-pipeline", Canonical: "my-pipeline",
 	}, nil)
-	s.EXPECT().GetPublicPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg", false, false).Return(svgOutput, nil)
+	s.EXPECT().GetPublicPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg", false, false, (*uint32)(nil)).Return(svgOutput, nil)
 
 	// No auth header — should fall back to public
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.svg", nil)
@@ -725,7 +726,7 @@ func TestGetPipelineImage_Error_ReturnsJSON(t *testing.T) {
 	jwtToken := signJWT(t, secret, um)
 
 	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
-	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg", false, false).Return(nil, assert.AnError)
+	s.EXPECT().GetPipelineImage(gomock.Any(), "main", "my-pipeline", ".svg", false, false, (*uint32)(nil)).Return(nil, assert.AnError)
 
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/image.svg", nil)
 	require.NoError(t, err)
@@ -948,4 +949,170 @@ func TestDeleteWorker_NonAdminForbidden(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestGetResourceVersionPath_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	versionPath := &resource.VersionPathResponse{
+		Resource: resource.VersionPathResource{
+			Canonical: "git.repo",
+			Version:   map[string]interface{}{"ref": "abc123"},
+		},
+		Path:      []resource.VersionPathEntry{{JobName: "build"}},
+		Completed: 1,
+		Total:     1,
+	}
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+	s.EXPECT().GetResourceVersionPath(gomock.Any(), "main", "my-pipeline", "git.repo", uint32(42)).Return(versionPath, nil)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/resources/git.repo/versions/42/path", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Content-Type"), "application/json")
+
+	var result GetResourceVersionPathResponse
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
+	assert.Empty(t, result.Err)
+	require.NotNil(t, result.Data)
+	assert.Equal(t, "git.repo", result.Data.Resource.Canonical)
+	assert.Equal(t, 1, result.Data.Completed)
+	assert.Equal(t, 1, result.Data.Total)
+}
+
+func TestGetResourceVersionPath_InvalidVersionID(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/resources/git.repo/versions/not-a-number/path", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Contains(t, resp.Header.Get("Content-Type"), "application/json")
+
+	var result GetResourceVersionPathResponse
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
+	assert.Equal(t, "invalid version_id", result.Err)
+	assert.Nil(t, result.Data)
+}
+
+func TestGetResourceVersionPath_PublicFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	versionPath := &resource.VersionPathResponse{
+		Resource: resource.VersionPathResource{
+			Canonical: "git.repo",
+			Version:   map[string]interface{}{"ref": "def456"},
+		},
+		Path:      []resource.VersionPathEntry{{JobName: "test"}},
+		Completed: 0,
+		Total:     1,
+	}
+	s.EXPECT().GetPublicPipeline(gomock.Any(), "main", "my-pipeline").Return(&pipeline.Pipeline{
+		Name: "my-pipeline", Canonical: "my-pipeline",
+	}, nil)
+	s.EXPECT().GetPublicResourceVersionPath(gomock.Any(), "main", "my-pipeline", "git.repo", uint32(42)).Return(versionPath, nil)
+
+	// No auth header — should fall back to public
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/resources/git.repo/versions/42/path", nil)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Content-Type"), "application/json")
+
+	var result GetResourceVersionPathResponse
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
+	assert.Empty(t, result.Err)
+	require.NotNil(t, result.Data)
+	assert.Equal(t, "git.repo", result.Data.Resource.Canonical)
+}
+
+func TestGetResourceVersionPath_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+	s.EXPECT().GetResourceVersionPath(gomock.Any(), "main", "my-pipeline", "git.repo", uint32(42)).Return(nil, assert.AnError)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/resources/git.repo/versions/42/path", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Contains(t, resp.Header.Get("Content-Type"), "application/json")
+
+	var result GetResourceVersionPathResponse
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
+	assert.NotEmpty(t, result.Err)
 }
