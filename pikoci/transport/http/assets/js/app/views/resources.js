@@ -187,6 +187,7 @@ export var ResourceVersionsView = Backbone.View.extend({
 var ResourceVersionView = Backbone.View.extend({
   template: _.template($('#resource-version-view').html()),
   events: {
+    'click .track-version': 'clickTrackVersion',
     'click .trigger-version': 'clickTriggerVersion',
     'click .pin-version': 'clickPinVersion',
   },
@@ -199,9 +200,21 @@ var ResourceVersionView = Backbone.View.extend({
     var data = this.model.toJSON();
     data.isFirst = this.isFirst;
     data.pinned_version_id = this.resource.get('pinned_version_id');
+    // Read tracked version from URL query param (not the router property, which is transient)
+    var urlParams = new URLSearchParams(window.location.search);
+    data.tracked_version_id = urlParams.get('version') ? parseInt(urlParams.get('version'), 10) : null;
     data.isMember = session.isMember(this.resource.collection.pipeline.collection.team.get('canonical'));
     this.$el.html(this.template(data));
     return this;
+  },
+  clickTrackVersion: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var versionID = this.model.get('id');
+    var rs = this.resource;
+    var tc = rs.collection.pipeline.collection.team.get('canonical');
+    var pn = rs.collection.pipeline.get('canonical');
+    window.app.router.navigate('teams/' + tc + '/pipelines/' + pn + '?version=' + versionID, { trigger: true });
   },
   clickTriggerVersion: function(event) {
     event.preventDefault();

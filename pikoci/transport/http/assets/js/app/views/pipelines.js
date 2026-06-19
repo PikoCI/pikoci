@@ -6,6 +6,22 @@ import { addSessionFunctions, clickLink, fetchInterval, pikoTimeAgo, withLoading
 import { JobBuildsView } from './jobs.js';
 import { PipelineGraphView, PikoGraphZoom } from './editor.js';
 
+// Extract a human-readable ref string from a version metadata map.
+function versionRef(v) {
+  if (!v) return '';
+  if (typeof v === 'string') return v;
+  if (v.ref) return v.ref;
+  if (v.digest) return v.digest;
+  if (v.tag) return v.tag;
+  if (typeof v.version === 'string') return v.version;
+  for (var key in v) {
+    if (v.hasOwnProperty(key)) {
+      return key + ': ' + v[key];
+    }
+  }
+  return '';
+}
+
 export var PipelinesView = Backbone.View.extend({
   template: _.template($('#pipelines-view').html()),
   initialize: function() {
@@ -150,7 +166,8 @@ var PipelineResourcesPanelView = Backbone.View.extend({
   initialize: function(options) {
     this.collection = options.collection;
     this.pipeline = options.pipeline;
-    this.listenTo(this.collection, 'sync', this.render);
+    this._expandedResources = {};
+    this.listenTo(this.collection, 'sync', this._onSync);
     this._polling = false;
   },
   startPolling: function() {
@@ -171,6 +188,43 @@ var PipelineResourcesPanelView = Backbone.View.extend({
     'click #close-resources-panel': 'closePanel',
     'click .check-resource-now': 'checkNow',
     'click .piko-resource-card-name': clickLink,
+    'click .piko-resource-expand-toggle': 'toggleVersionsList',
+    'click .piko-panel-track-btn': 'trackVersionFromPanel',
+    'click .piko-panel-trigger-btn': 'triggerVersionFromPanel',
+    'click .piko-panel-pin-btn': 'pinVersionFromPanel',
+  },
+  _onSync: function() {
+    // If any version lists are expanded, do targeted updates instead of full re-render
+    if (Object.keys(this._expandedResources).length > 0) {
+      this._updateResourceCards();
+      return;
+    }
+    this.render();
+  },
+  _updateResourceCards: function() {
+    var that = this;
+    this.collection.each(function(r) {
+      var rData = r.toJSON();
+      var card = that.$('.piko-resource-card[data-canonical="' + rData.canonical + '"]');
+      if (card.length === 0) return;
+      // Update status dot
+      var dot = card.find('.piko-version-status-dot');
+      if (rData.latest_version && rData.latest_version.status) {
+        if (dot.length) {
+          dot.css('background', 'var(--status-' + rData.latest_version.status + ')');
+        }
+      }
+      // Update meta
+      var meta = card.find('.piko-resource-card-meta');
+      var metaHtml = '';
+      if (rData.check_interval) {
+        metaHtml += '<span>' + _.escape(rData.check_interval) + '</span>';
+      }
+      if (rData.last_check && !rData.last_check.startsWith('0001-01-01')) {
+        metaHtml += '<span>Checked: ' + pikoTimeAgo(rData.last_check) + '</span>';
+      }
+      meta.html(metaHtml);
+    });
   },
   render: function() {
     var teamCanonical = this.pipeline.collection ? this.pipeline.collection.team.get('canonical') : '';
@@ -213,6 +267,135 @@ var PipelineResourcesPanelView = Backbone.View.extend({
       },
     });
   },
+  toggleVersionsList: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var canonical = $(event.currentTarget).data('canonical');
+    var container = this.$('.piko-resource-panel-versions[data-canonical="' + canonical + '"]');
+    if (container.is(':visible')) {
+      container.hide();
+      delete this._expandedResources[canonical];
+      $(event.currentTarget).find('i').removeClass('bi-chevron-up').addClass('bi-chevron-down');
+      return;
+    }
+    $(event.currentTarget).find('i').removeClass('bi-chevron-down').addClass('bi-chevron-up');
+    container.show();
+    this._expandedResources[canonical] = true;
+    this._fetchPanelVersions(canonical, container);
+  },
+  _fetchPanelVersions: function(canonical, container) {
+    var teamCanonical = this.pipeline.collection ? this.pipeline.collection.team.get('canonical') : '';
+    var pipelineCanonical = this.pipeline.get('canonical');
+    var url = '/teams/' + teamCanonical + '/pipelines/' + pipelineCanonical + '/resources/' + canonical + '/versions?limit=5';
+    var resModel = this.collection.findWhere({canonical: canonical});
+    var pinnedVersionID = resModel ? resModel.get('pinned_version_id') : null;
+    var trackedVersionID = (this.parentShowView && this.parentShowView.trackedVersion) ? this.parentShowView.trackedVersion.versionID : null;
+    $.ajax({
+      url: url, type: 'GET', contentType: 'application/json',
+      headers: session.isEmpty() ? {} : { 'Authorization': 'Bearer ' + session.get('jwt') },
+      success: function(resp) {
+        if (!resp || !resp.data) return;
+        var html = '';
+        for (var i = 0; i < resp.data.length; i++) {
+          var v = resp.data[i];
+          var ref = v.version ? versionRef(v.version) : '';
+          var status = v.status || '';
+          var isPinned = pinnedVersionID === v.id;
+          var isTracked = trackedVersionID === v.id;
+          html += '<div class="piko-resource-panel-version-item' + (isTracked ? ' tracked' : '') + '">';
+          html += '<span class="piko-vsel-dot piko-status-dot-' + status + '"></span>';
+          html += '<span class="piko-vsel-ref">' + _.escape(ref) + '</span>';
+          if (isTracked) {
+            html += '<span class="piko-panel-tracking-badge"><i class="bi bi-signpost-2"></i></span>';
+          } else {
+            html += '<button class="piko-panel-track-btn" data-canonical="' + _.escape(canonical) + '" data-version-id="' + v.id + '" data-version-ref="' + _.escape(ref) + '" title="Track"><i class="bi bi-signpost-2"></i></button>';
+          }
+          html += '<button class="piko-panel-trigger-btn" data-canonical="' + _.escape(canonical) + '" data-version-id="' + v.id + '" title="Trigger"><i class="bi bi-play-fill"></i></button>';
+          html += '<button class="piko-panel-pin-btn ' + (isPinned ? 'pinned' : '') + '" data-canonical="' + _.escape(canonical) + '" data-version-id="' + v.id + '" title="' + (isPinned ? 'Unpin' : 'Pin') + '"><i class="bi ' + (isPinned ? 'bi-pin-fill' : 'bi-pin') + '"></i></button>';
+          html += '</div>';
+        }
+        container.html(html);
+      },
+    });
+  },
+  trackVersionFromPanel: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var btn = $(event.currentTarget);
+    var canonical = btn.data('canonical');
+    var versionID = parseInt(btn.data('version-id'), 10);
+    var ref = btn.data('version-ref') || '';
+    if (typeof ref === 'object') ref = versionRef(ref);
+    if (this.parentShowView && this.parentShowView.trackVersion) {
+      this.parentShowView.trackVersion(canonical, versionID, ref);
+    }
+  },
+  triggerVersionFromPanel: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var btn = $(event.currentTarget);
+    var canonical = btn.data('canonical');
+    var versionID = parseInt(btn.data('version-id'), 10);
+    var tc = this.pipeline.collection ? this.pipeline.collection.team.get('canonical') : '';
+    var pc = this.pipeline.get('canonical');
+    var url = '/teams/' + tc + '/pipelines/' + pc + '/resources/' + canonical + '/versions/' + versionID + '/trigger';
+    withLoading(btn, function() {
+      return $.ajax({
+        url: url, type: 'POST', contentType: 'application/json',
+        headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+        success: function() {
+          window.app.apiNotice.setSuccess('Triggered downstream jobs with version #' + versionID);
+        },
+      });
+    });
+  },
+  pinVersionFromPanel: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var btn = $(event.currentTarget);
+    var canonical = btn.data('canonical');
+    var versionID = parseInt(btn.data('version-id'), 10);
+    var tc = this.pipeline.collection ? this.pipeline.collection.team.get('canonical') : '';
+    var pc = this.pipeline.get('canonical');
+    var isPinned = btn.hasClass('pinned');
+    var that = this;
+    var url;
+    if (isPinned) {
+      url = '/teams/' + tc + '/pipelines/' + pc + '/resources/' + canonical + '/unpin';
+      withLoading(btn, function() {
+        return $.ajax({
+          url: url, type: 'POST', contentType: 'application/json',
+          headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+          success: function() {
+            window.app.apiNotice.setSuccess('Resource unpinned');
+            that.collection.fetch();
+          },
+        });
+      });
+    } else {
+      url = '/teams/' + tc + '/pipelines/' + pc + '/resources/' + canonical + '/pin';
+      withLoading(btn, function() {
+        return $.ajax({
+          url: url, type: 'POST', contentType: 'application/json',
+          data: JSON.stringify({version_id: versionID}),
+          headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+          success: function() {
+            window.app.apiNotice.setSuccess('Resource pinned to version #' + versionID);
+            that.collection.fetch();
+          },
+        });
+      });
+    }
+  },
+  refreshExpandedVersions: function() {
+    var that = this;
+    _.each(this._expandedResources, function(val, canonical) {
+      var container = that.$('.piko-resource-panel-versions[data-canonical="' + canonical + '"]');
+      if (container.length && container.is(':visible')) {
+        that._fetchPanelVersions(canonical, container);
+      }
+    });
+  },
   remove: function() {
     this.stopPolling();
     Backbone.View.prototype.remove.call(this);
@@ -225,6 +408,26 @@ export var PipelineShowView = Backbone.View.extend({
     this.image = options.image;
     this.image.hideIntermediates = localStorage.getItem("piko-hide-intermediates") === "1";
     this.image.groupParallel = localStorage.getItem("piko-group-parallel") === "1";
+
+    this.listView = null;
+    this.trackedVersion = null;
+    this.versionPathData = null;
+    var savedView = localStorage.getItem("piko-pipeline-view") || "graph";
+    this.currentView = savedView === "pipeline" ? "graph" : savedView;
+
+    // Check for tracked version: first from router property (in-app navigation),
+    // then from URL query param (page reload / direct link)
+    var urlVersionID = window.app.router._trackedVersionID || null;
+    delete window.app.router._trackedVersionID;
+    if (!urlVersionID) {
+      var urlParams = new URLSearchParams(window.location.search);
+      urlVersionID = urlParams.get('version') ? parseInt(urlParams.get('version'), 10) : null;
+    }
+    if (urlVersionID) {
+      this._pendingVersionID = urlVersionID;
+      this.image.versionID = this._pendingVersionID;
+    }
+
     this.image.fetch({
       error: function(model, xhr) {
         try {
@@ -243,13 +446,12 @@ export var PipelineShowView = Backbone.View.extend({
     });
     this.resourcesCollection = new PanelResources();
 
-    this.listView = null;
-    var savedView = localStorage.getItem("piko-pipeline-view") || "graph";
-    this.currentView = savedView === "pipeline" ? "graph" : savedView;
-
     var that = this;
     this.intervalID = window.setInterval(function() {
       that.image.fetch({isInterval: true});
+      if (that.trackedVersion) {
+        that._pollVersionPath();
+      }
     }, fetchInterval);
   },
   events: {
@@ -265,6 +467,7 @@ export var PipelineShowView = Backbone.View.extend({
     'change #gear-hide-intermediates': 'toggleHideIntermediates',
     'change #gear-group-parallel': 'toggleGroupParallel',
     'click .piko-view-btn': 'switchView',
+    'click #clear-version-scope': 'clearVersionScope',
   },
   render: function () {
     this.$el.html(this.template(addSessionFunctions({ pipeline: this.model.toJSON(), team: this.model.collection.team.toJSON() })));
@@ -290,6 +493,21 @@ export var PipelineShowView = Backbone.View.extend({
     this.$('#gear-group-parallel').prop('checked', this.image.groupParallel);
     this._applyView(this.currentView);
 
+    // If loaded with ?version= param, find the resource and initiate tracking.
+    // The versionID was already set on image before the first fetch in initialize().
+    if (this._pendingVersionID) {
+      var vid = this._pendingVersionID;
+      delete this._pendingVersionID;
+      var that = this;
+      this.resourcesCollection.fetch({
+        success: function() {
+          that._resolveVersionResource(vid);
+        },
+      });
+    }
+
+    this.panelView.parentShowView = this;
+
     return this;
   },
   _applyView: function(mode) {
@@ -307,6 +525,7 @@ export var PipelineShowView = Backbone.View.extend({
           el: this.$('.piko-view-list'),
           pipeline: this.model,
           resourcesCollection: this.resourcesCollection,
+          parentShowView: this,
         });
       } else {
         this.listView.resumePolling();
@@ -330,13 +549,17 @@ export var PipelineShowView = Backbone.View.extend({
     this.currentView = mode;
     localStorage.setItem("piko-pipeline-view", mode);
     this._applyView(mode);
-    // Update URL to match the current view
+    // Update URL to match the current view, preserving ?version= if tracking
     var tc = this.model.collection.team.get('canonical');
     var pc = this.model.get('canonical');
+    var vqs = (this.trackedVersion && this.trackedVersion.versionID) ? '?version=' + this.trackedVersion.versionID : '';
     if (mode === 'list' && this.listView && this.listView.selectedJob) {
       window.app.router.navigate('teams/' + tc + '/pipelines/' + pc + '/jobs/' + this.listView.selectedJob + '/builds', { trigger: false, replace: true });
     } else {
       window.app.router.navigate('teams/' + tc + '/pipelines/' + pc, { trigger: false, replace: true });
+    }
+    if (vqs) {
+      window.history.replaceState(null, '', window.location.pathname + vqs);
     }
   },
   remove: function() {
@@ -430,11 +653,119 @@ export var PipelineShowView = Backbone.View.extend({
       setTimeout(function() { btn.text(original); }, 1500);
     });
   },
+  trackVersion: function(resourceCanonical, versionID, versionRef) {
+    this.trackedVersion = { resource: resourceCanonical, versionID: versionID, ref: versionRef };
+    this.image.versionID = versionID;
+    this.image.fetch();
+    this._pollVersionPath();
+    this._updateVersionURL();
+    // Refresh expanded panel version lists to show tracked indicator
+    if (this.panelView) { this.panelView.refreshExpandedVersions(); }
+  },
+  clearVersionScope: function(event) {
+    if (event) { event.preventDefault(); event.stopPropagation(); }
+    this.trackedVersion = null;
+    this.versionPathData = null;
+    this.$('#version-scope-banner').hide();
+    this.image.versionID = null;
+    this.image.fetch();
+    if (this.listView) { this.listView.clearVersionScope(); }
+    // Remove ?version from URL using history API
+    var tc = this.model.collection.team.get('canonical');
+    var pc = this.model.get('canonical');
+    window.history.replaceState(null, '', '/teams/' + tc + '/pipelines/' + pc);
+    if (this.panelView) { this.panelView.refreshExpandedVersions(); }
+  },
+  showVersionBanner: function(resource, ref, completed, total) {
+    this.$('#version-banner-resource').text(resource);
+    this.$('#version-banner-ref').text(ref);
+    this.$('#version-banner-progress').text(completed + '/' + total + ' completed');
+    this.$('#version-scope-banner').show();
+  },
+  _pollVersionPath: function() {
+    if (!this.trackedVersion || !this.trackedVersion.resource) return;
+    var that = this;
+    var tv = this.trackedVersion;
+    var url = this.model.url() + '/resources/' + tv.resource + '/versions/' + tv.versionID + '/path';
+    $.ajax({
+      url: url,
+      type: 'GET',
+      contentType: 'application/json',
+      headers: { 'Authorization': 'Bearer ' + session.get('jwt') },
+      success: function(resp) {
+        if (!resp.data) return;
+        that.versionPathData = resp.data;
+        // Determine the ref to display
+        var ref = tv.ref || '';
+        if (!ref && resp.data.resource && resp.data.resource.version) {
+          var v = resp.data.resource.version;
+          ref = versionRef(v);
+        }
+        that.showVersionBanner(resp.data.resource.canonical, ref, resp.data.completed, resp.data.total);
+        if (that.listView && that.listView.applyVersionScope) {
+          that.listView.applyVersionScope(resp.data);
+        }
+      },
+    });
+  },
+  _updateVersionURL: function() {
+    if (!this.trackedVersion) return;
+    var tc = this.model.collection.team.get('canonical');
+    var pc = this.model.get('canonical');
+    var path = '/teams/' + tc + '/pipelines/' + pc;
+    // Use history.replaceState to set ?version= without triggering Backbone routing
+    window.history.replaceState(null, '', path + '?version=' + this.trackedVersion.versionID);
+  },
+  _resolveVersionResource: function(versionID) {
+    // Try each resource sequentially until we find the one that owns this version
+    var that = this;
+    var resources = this.resourcesCollection.toJSON();
+    var idx = 0;
+    function tryNext() {
+      if (idx >= resources.length) return;
+      var rCan = resources[idx].canonical;
+      idx++;
+      var url = that.model.url() + '/resources/' + rCan + '/versions/' + versionID + '/path';
+      $.ajax({
+        url: url, type: 'GET', contentType: 'application/json',
+        headers: session.isEmpty() ? {} : { 'Authorization': 'Bearer ' + session.get('jwt') },
+        success: function(resp) {
+          if (resp.data && resp.data.path && resp.data.path.length > 0) {
+            that.trackedVersion = { resource: rCan, versionID: versionID, ref: '' };
+            that.versionPathData = resp.data;
+            var v = resp.data.resource.version || {};
+            var ref = versionRef(v);
+            that.trackedVersion.ref = ref;
+            that.showVersionBanner(rCan, ref, resp.data.completed, resp.data.total);
+            if (that.listView && that.listView.applyVersionScope) {
+              that.listView.applyVersionScope(resp.data);
+            }
+          } else {
+            tryNext();
+          }
+        },
+        error: function() {
+          tryNext();
+        },
+      });
+    }
+    tryNext();
+  },
   clickPipeline: function(event) {
     // Only handle clicks on SVG links inside the graph
     if (event.target.parentElement && event.target.parentElement.href && event.target.parentElement.href.baseVal) {
       event.preventDefault();
-      window.app.router.navigate(event.target.parentElement.href.baseVal, { trigger: true });
+      var href = event.target.parentElement.href.baseVal;
+      // Pass tracked version via a property on the router so the handler
+      // can read it synchronously (Backbone can't handle query params).
+      if (this.trackedVersion && this.trackedVersion.versionID) {
+        window.app.router._trackedVersionID = this.trackedVersion.versionID;
+      }
+      window.app.router.navigate(href, { trigger: true });
+      // After navigate, set ?version= in URL for reload persistence
+      if (this.trackedVersion && this.trackedVersion.versionID) {
+        window.history.replaceState(null, '', window.location.pathname + '?version=' + this.trackedVersion.versionID);
+      }
     }
   },
   clickEdit: function(event){
@@ -498,6 +829,7 @@ var PipelineListView = Backbone.View.extend({
   initialize: function(options) {
     this.pipeline = options.pipeline;
     this.resourcesCollection = options.resourcesCollection;
+    this.parentShowView = options.parentShowView || null;
     this.jobsData = [];
     this.selectedJob = null;
     this.selectedResource = null;
@@ -538,6 +870,8 @@ var PipelineListView = Backbone.View.extend({
     'click .piko-rsel-trigger': '_onToggleResourceMenu',
     'click .piko-rsel-option': '_onSelectResource',
     'click .piko-resource-check-btn': '_onCheckResource',
+    'click .piko-vsel-btn': '_onToggleVersionMenu',
+    'click .piko-vsel-item': '_onSelectVersion',
   },
 
   // --- Resource & chain resolution ---
@@ -617,10 +951,11 @@ var PipelineListView = Backbone.View.extend({
   },
 
   _renderResourceSelector: function() {
-    var bar = this.$('.piko-list-resource-bar');
+    var container = this.$('.piko-rsel-container');
     var menuOpen = this.$('.piko-rsel-menu').hasClass('open');
+    var versionMenuOpen = this.$('.piko-vsel-menu').hasClass('open');
 
-    if (menuOpen) {
+    if (menuOpen || versionMenuOpen) {
       // Targeted in-place update: refresh status dots and info without closing the dropdown
       var resMap = {};
       this.resourcesCollection.each(function(r) {
@@ -663,7 +998,7 @@ var PipelineListView = Backbone.View.extend({
       return;
     }
     if (this.triggerResources.length === 0) {
-      bar.html('<span style="color:var(--text-muted)">No trigger resources</span>');
+      container.html('<span style="color:var(--text-muted)">No trigger resources</span>');
       return;
     }
     var resMap = {};
@@ -700,6 +1035,9 @@ var PipelineListView = Backbone.View.extend({
     }
     html += '</div></div>';
 
+    // Version selector placeholder (rendered by _renderVersionSelector)
+    html += '<div class="piko-vsel-wrap"></div>';
+
     // Version + check info
     html += '<span class="piko-resource-bar-info">';
     if (lv && lv.version) {
@@ -722,7 +1060,8 @@ var PipelineListView = Backbone.View.extend({
       html += '<button class="btn btn-sm btn-outline-warning piko-resource-check-btn"><i class="bi bi-arrow-clockwise"></i> Check Now</button>';
     }
 
-    bar.html(html);
+    container.html(html);
+    this._renderVersionSelector();
   },
 
   _onToggleResourceMenu: function(event) {
@@ -745,6 +1084,8 @@ var PipelineListView = Backbone.View.extend({
     this.$('.piko-rsel-menu').removeClass('open');
     if (!canonical || canonical === this.selectedResource) return;
     this.selectedResource = canonical;
+    this._recentVersions = null;
+    this.clearVersionScope();
     localStorage.setItem(this._storagePrefix + 'resource', canonical);
     this.selectedJob = null;
     if (this.jobBuildsView) {
@@ -779,6 +1120,204 @@ var PipelineListView = Backbone.View.extend({
         window.app.apiNotice.set({error: 'Failed to trigger resource check'});
       },
     });
+  },
+
+  // --- Version selector & scoping ---
+
+  _renderVersionSelector: function() {
+    // Skip re-render when the version menu is open to avoid destroying it
+    if (this.$('.piko-vsel-menu').hasClass('open')) {
+      return;
+    }
+    var wrap = this.$('.piko-vsel-wrap');
+    if (!this.selectedResource) {
+      wrap.empty();
+      return;
+    }
+    var label = this._scopedVersionRef || 'All';
+    var html = '<button class="piko-vsel-btn" type="button">';
+    html += '<i class="bi bi-signpost-2"></i>';
+    html += '<span>' + _.escape(label) + '</span>';
+    html += '<i class="bi bi-chevron-down"></i>';
+    html += '</button>';
+    html += '<div class="piko-vsel-menu">';
+    html += '<div class="piko-vsel-item piko-vsel-item-all" data-version-id="">All versions</div>';
+    if (this._recentVersions) {
+      for (var i = 0; i < this._recentVersions.length; i++) {
+        var v = this._recentVersions[i];
+        var ref = '';
+        if (v.version) {
+          ref = versionRef(v.version);
+        }
+        var status = v.status || '';
+        var active = (this._scopedVersionID && this._scopedVersionID === v.id) ? ' active' : '';
+        html += '<div class="piko-vsel-item' + active + '" data-version-id="' + v.id + '" data-version-ref="' + _.escape(ref) + '">';
+        html += '<span class="piko-vsel-dot piko-status-dot-' + status + '"></span>';
+        html += '<span class="piko-vsel-ref">' + _.escape(ref) + '</span>';
+        html += '</div>';
+      }
+    }
+    html += '</div>';
+    wrap.html(html);
+    // Fetch recent versions if not loaded
+    if (!this._recentVersions) {
+      this._fetchRecentVersions();
+    }
+  },
+
+  _fetchRecentVersions: function() {
+    if (!this.selectedResource) return;
+    var that = this;
+    var url = this.pipeline.url() + '/resources/' + this.selectedResource + '/versions?limit=10';
+    $.ajax({
+      url: url,
+      type: 'GET',
+      contentType: 'application/json',
+      headers: session.isEmpty() ? {} : { 'Authorization': 'Bearer ' + session.get('jwt') },
+      success: function(resp) {
+        if (resp && resp.data) {
+          that._recentVersions = resp.data;
+          // If menu is open, update items in-place instead of full re-render
+          var menu = that.$('.piko-vsel-menu');
+          if (menu.hasClass('open')) {
+            that._updateVersionMenuItems(menu);
+          } else {
+            that._renderVersionSelector();
+          }
+        }
+      },
+    });
+  },
+
+  _updateVersionMenuItems: function(menu) {
+    var html = '<div class="piko-vsel-item piko-vsel-item-all" data-version-id="">All versions</div>';
+    if (this._recentVersions) {
+      for (var i = 0; i < this._recentVersions.length; i++) {
+        var v = this._recentVersions[i];
+        var ref = '';
+        if (v.version) {
+          ref = versionRef(v.version);
+        }
+        var status = v.status || '';
+        var active = (this._scopedVersionID && this._scopedVersionID === v.id) ? ' active' : '';
+        html += '<div class="piko-vsel-item' + active + '" data-version-id="' + v.id + '" data-version-ref="' + _.escape(ref) + '">';
+        html += '<span class="piko-vsel-dot piko-status-dot-' + status + '"></span>';
+        html += '<span class="piko-vsel-ref">' + _.escape(ref) + '</span>';
+        html += '</div>';
+      }
+    }
+    menu.html(html);
+  },
+
+  _onToggleVersionMenu: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var menu = this.$('.piko-vsel-menu');
+    var isOpen = menu.hasClass('open');
+    menu.toggleClass('open');
+    if (!isOpen) {
+      this._fetchRecentVersions();
+      var that = this;
+      setTimeout(function() {
+        $(document).one('click', function() { that.$('.piko-vsel-menu').removeClass('open'); });
+      }, 0);
+    }
+  },
+
+  _onSelectVersion: function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.$('.piko-vsel-menu').removeClass('open');
+    var el = $(event.currentTarget);
+    var versionID = el.data('version-id');
+    if (versionID === '' || versionID === undefined) {
+      // "All" selected - clear scope
+      this.clearVersionScope();
+      if (this.parentShowView) {
+        this.parentShowView.clearVersionScope();
+      }
+      return;
+    }
+    var ref = el.data('version-ref') || '';
+    this._scopedVersionID = parseInt(versionID, 10);
+    this._scopedVersionRef = ref;
+    this._renderVersionSelector();
+    // Trigger tracking on parent PipelineShowView (updates banner, graph, and polls)
+    if (this.parentShowView && this.parentShowView.trackVersion) {
+      this.parentShowView.trackVersion(this.selectedResource, this._scopedVersionID, ref);
+    } else {
+      // Fallback: fetch path directly for list-only scoping
+      var url = this.pipeline.url() + '/resources/' + this.selectedResource + '/versions/' + this._scopedVersionID + '/path';
+      var that = this;
+      $.ajax({
+        url: url, type: 'GET', contentType: 'application/json',
+        headers: session.isEmpty() ? {} : { 'Authorization': 'Bearer ' + session.get('jwt') },
+        success: function(resp) {
+          if (resp && resp.data) {
+            that.applyVersionScope(resp.data);
+          }
+        },
+      });
+    }
+  },
+
+  applyVersionScope: function(pathData) {
+    if (!pathData || !pathData.path) return;
+    this._versionPathData = pathData;
+    if (pathData.resource && pathData.resource.version) {
+      var v = pathData.resource.version;
+      this._scopedVersionRef = versionRef(v);
+    }
+    // Try to extract version ID from path builds if not already set
+    if (!this._scopedVersionID) {
+      for (var i = 0; i < pathData.path.length; i++) {
+        if (pathData.path[i].build && pathData.path[i].build.version_id) {
+          this._scopedVersionID = pathData.path[i].build.version_id;
+          break;
+        }
+      }
+    }
+    // Override chain with path job names
+    var pathJobs = [];
+    var pathBuildMap = {};
+    for (var i = 0; i < pathData.path.length; i++) {
+      pathJobs.push(pathData.path[i].job_name);
+      if (pathData.path[i].build) {
+        pathBuildMap[pathData.path[i].job_name] = pathData.path[i].build;
+      }
+    }
+    var wasScoped = !!this._versionChainJobs;
+    this._versionChainJobs = pathJobs;
+    this._versionBuildMap = pathBuildMap;
+    this.chainJobs = pathJobs;
+    this._renderJobList();
+    this._renderVersionSelector();
+    // Only re-select the job when the scope is first applied (not on every poll)
+    if (!wasScoped) {
+      if (this.selectedJob && pathJobs.indexOf(this.selectedJob) >= 0) {
+        this._selectJob(this.selectedJob);
+      } else if (pathJobs.length > 0) {
+        this._selectJob(pathJobs[0]);
+      }
+    }
+  },
+
+  clearVersionScope: function() {
+    this._scopedVersionID = null;
+    this._scopedVersionRef = null;
+    this._versionPathData = null;
+    this._versionChainJobs = null;
+    this._versionBuildMap = null;
+    // Re-resolve normal chain
+    if (this.selectedResource) {
+      this.chainJobs = this._resolveChain(this.selectedResource);
+    }
+    this._renderJobList();
+    this._renderVersionSelector();
+    // Re-select current job to show all builds (no version filter)
+    if (this.selectedJob) {
+      this._selectJob(this.selectedJob);
+    }
   },
 
   // --- Data fetching ---
@@ -876,8 +1415,22 @@ var PipelineListView = Backbone.View.extend({
   _renderJobList: function() {
     if (!this.selectedResource) return;
 
-    this.chainJobs = this._resolveChain(this.selectedResource);
+    // Use version-scoped chain if tracking, otherwise resolve from pipeline
+    if (!this._versionChainJobs) {
+      this.chainJobs = this._resolveChain(this.selectedResource);
+    }
     var statusMap = this._buildStatusMap();
+    // When version-scoped, override status with the tracked version's build status
+    if (this._versionBuildMap) {
+      for (var jn in this._versionBuildMap) {
+        if (this._versionBuildMap.hasOwnProperty(jn)) {
+          var b = this._versionBuildMap[jn];
+          statusMap[jn] = statusMap[jn] || {};
+          statusMap[jn].latest_status = b.status;
+          statusMap[jn].has_running = (b.status === 'started' || b.status === 'pending');
+        }
+      }
+    }
     var tree = this._buildTree(this.chainJobs);
 
     // Render tree recursively. Siblings (jobs sharing the same set of parents)
@@ -1084,10 +1637,14 @@ var PipelineListView = Backbone.View.extend({
   _selectJob: function(jobName) {
     this.selectedJob = jobName;
     localStorage.setItem(this._storagePrefix + 'job', jobName);
-    // Update URL to match the job builds path
+    // Update URL to match the job builds path, preserving ?version= if tracking
     var tc = this.pipeline.collection ? this.pipeline.collection.team.get('canonical') : '';
     var pc = this.pipeline.get('canonical');
     window.app.router.navigate('teams/' + tc + '/pipelines/' + pc + '/jobs/' + jobName + '/builds', { trigger: false, replace: true });
+    var trackedVID = (this.parentShowView && this.parentShowView.trackedVersion) ? this.parentShowView.trackedVersion.versionID : null;
+    if (trackedVID) {
+      window.history.replaceState(null, '', window.location.pathname + '?version=' + trackedVID);
+    }
     this.$('.piko-job-row').removeClass('active');
     this.$('.piko-job-row[data-job="' + jobName + '"]').addClass('active');
 
@@ -1111,6 +1668,7 @@ var PipelineListView = Backbone.View.extend({
           job: jb,
           pipeline: that.pipeline,
           embedded: true,
+          trackedVersionID: trackedVID,
         });
         that.jobBuildsView.render();
       },

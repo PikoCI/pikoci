@@ -405,6 +405,23 @@ func (r *ResourceRepository) FilterVersions(ctx context.Context, tc, pn, rCan st
 	return rvs, nil
 }
 
+// FindVersionByID retrieves a single version by its ID, returning the version
+// and the canonical of the resource it belongs to.
+func (r *ResourceRepository) FindVersionByID(ctx context.Context, versionID uint32) (*resource.Version, string, error) {
+	var v dbResourceVersion
+	var rCan string
+	err := r.querier.QueryRowContext(ctx, `
+		SELECT rv.id, rv.version, res.canonical
+		FROM resource_versions AS rv
+		JOIN resources AS res ON rv.resource_id = res.id
+		WHERE rv.id = ?
+	`, versionID).Scan(&v.ID, &v.Version, &rCan)
+	if err != nil {
+		return nil, "", fmt.Errorf("version %d not found: %w", versionID, err)
+	}
+	return v.toDomainEntity(), rCan, nil
+}
+
 func (r *ResourceRepository) PinVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error {
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE resources AS r

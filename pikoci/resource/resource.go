@@ -3,7 +3,11 @@
 // images) that are checked for new versions and used as inputs/outputs in jobs.
 package resource
 
-import "time"
+import (
+	"time"
+
+	"github.com/pikoci/pikoci/pikoci/build"
+)
 
 // Resource represents a versioned external artifact tracked by a pipeline.
 // Each resource has a type, a name, optional parameters, and a check interval
@@ -51,4 +55,28 @@ type Version struct {
 	ID      uint32                 `json:"id"`
 	Version map[string]interface{} `json:"version"`
 	Status  string                 `json:"status,omitempty"`
+}
+
+// VersionPathEntry represents a single job in a version's path through the
+// pipeline, along with the build (if any) that consumed this version.
+type VersionPathEntry struct {
+	JobName string         `json:"job_name"`
+	Build   *build.Build   `json:"build"`
+	Retries []*build.Build `json:"retries"`
+}
+
+// VersionPathResponse is the response from the version path endpoint. It
+// includes the resource and version being tracked, the ordered path of jobs,
+// and progress summary.
+type VersionPathResponse struct {
+	Resource  VersionPathResource `json:"resource"`
+	Path      []VersionPathEntry  `json:"path"`
+	Completed int                 `json:"completed"`
+	Total     int                 `json:"total"`
+}
+
+// VersionPathResource identifies the resource and version being tracked.
+type VersionPathResource struct {
+	Canonical string                 `json:"canonical"`
+	Version   map[string]interface{} `json:"version"`
 }

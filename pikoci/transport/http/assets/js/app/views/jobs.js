@@ -13,20 +13,48 @@ export var JobBuildsView = Backbone.View.extend({
     this.job = opts.job;
     this.pipeline = opts.pipeline;
     this.embedded = opts.embedded || false;
+    this.trackedVersionID = opts.trackedVersionID || null;
 
     var that = this;
-    this.collection.fetch({
-      reset: true,
-      success: function(){
-        that.activateAndNavigate(opts.currentBuildID);
-        that.bindScrollListener();
-      },
-    });
+    if (this.trackedVersionID) {
+      // When tracking a version, fetch the version path to find the correct
+      // build IDs for this job, then filter to only show those
+      this._fetchTrackedBuilds(function() {
+        that.collection.fetch({
+          reset: true,
+          success: function() {
+            that._filterByTrackedBuildIDs();
+            that.activateAndNavigate(opts.currentBuildID);
+            that.bindScrollListener();
+          },
+        });
+      });
+    } else {
+      this.collection.fetch({
+        reset: true,
+        success: function(){
+          that.activateAndNavigate(opts.currentBuildID);
+          that.bindScrollListener();
+        },
+      });
+    }
 
     this.intervalID = window.setInterval(function() {
-      that.collection.fetchNew({
-        success: function() { that.fetchActiveBuild(); }
-      });
+      if (that.trackedVersionID) {
+        // Re-fetch tracked build IDs to pick up retries, then refresh builds
+        that._fetchTrackedBuilds(function() {
+          that.collection.fetchNew({
+            success: function() {
+              that._filterByTrackedBuildIDs();
+              that.fetchActiveBuild();
+            }
+          });
+        });
+      } else {
+        that.collection.fetchNew({
+          success: function() { that.fetchActiveBuild(); }
+        });
+      }
     }, fetchInterval);
   },
   events: {
@@ -34,6 +62,7 @@ export var JobBuildsView = Backbone.View.extend({
     'click #pause-job': 'clickPauseJob',
     'click #unpause-job': 'clickUnpauseJob',
     'click .piko-build-tab': 'clickOnTab',
+    'click #job-version-back': 'clickBackToPipeline',
   },
   addBuilds: function() {
     var that = this;
@@ -47,7 +76,58 @@ export var JobBuildsView = Backbone.View.extend({
       pipeline: this.collection.job.collection.pipeline.toJSON(),
       job: this.collection.job.toJSON(),
     })));
+    // Show version tracking banner if tracking (not when embedded in list view)
+    if (this.trackedVersionID && !this.embedded) {
+      this._showVersionBanner();
+    }
     return this;
+  },
+  _showVersionBanner: function() {
+    var banner = this.$('#job-version-banner');
+    if (!banner.length) return;
+    // Fetch version path to get resource name and ref
+    var that = this;
+    var tc = this.collection.job.collection.pipeline.collection.team.get('canonical');
+    var pc = this.pipeline.get('canonical');
+    var resources = this.pipeline.get('resources') || [];
+    var idx = 0;
+    function tryNext() {
+      if (idx >= resources.length) return;
+      var rCan = resources[idx].canonical;
+      idx++;
+      var url = '/teams/' + tc + '/pipelines/' + pc + '/resources/' + rCan + '/versions/' + that.trackedVersionID + '/path';
+      $.ajax({
+        url: url, type: 'GET', contentType: 'application/json',
+        headers: session.isEmpty() ? {} : { 'Authorization': 'Bearer ' + session.get('jwt') },
+        success: function(resp) {
+          if (resp.data && resp.data.path && resp.data.path.length > 0) {
+            var v = resp.data.resource.version || {};
+            that.$('#job-version-banner-resource').text(resp.data.resource.canonical);
+            that.$('#job-version-banner-ref').text(v.ref || v.digest || v.tag || (function() {
+              for (var k in v) { if (v.hasOwnProperty(k)) return k + ': ' + v[k]; }
+              return '';
+            })());
+            banner.show();
+          } else {
+            tryNext();
+          }
+        },
+        error: function() { tryNext(); },
+      });
+    }
+    tryNext();
+  },
+  clickBackToPipeline: function(event) {
+    event.preventDefault();
+    var tc = this.collection.job.collection.pipeline.collection.team.get('canonical');
+    var pc = this.pipeline.get('canonical');
+    if (this.trackedVersionID) {
+      window.app.router._trackedVersionID = this.trackedVersionID;
+    }
+    window.app.router.navigate('teams/' + tc + '/pipelines/' + pc, { trigger: true });
+    if (this.trackedVersionID) {
+      window.history.replaceState(null, '', '/teams/' + tc + '/pipelines/' + pc + '?version=' + this.trackedVersionID);
+    }
   },
   activateAndNavigate: function(requestedBID) {
     var that = this;
@@ -73,8 +153,12 @@ export var JobBuildsView = Backbone.View.extend({
     this.currentBuildID = bid;
     if (!this.embedded) {
       var tc = this.collection.job.collection.pipeline.collection.team.get("canonical");
-      var url = new URL(location.origin+"/teams/"+tc+"/pipelines/"+this.pipeline.get("canonical")+"/jobs/"+this.job.get("name")+"/builds/"+bid);
-      window.app.router.navigate(url.pathname, { trigger: false, replace: true });
+      var navPath = "teams/"+tc+"/pipelines/"+this.pipeline.get("canonical")+"/jobs/"+this.job.get("name")+"/builds/"+bid;
+      window.app.router.navigate(navPath, { trigger: false, replace: true });
+      // Preserve ?version= in URL via history API
+      if (this.trackedVersionID) {
+        window.history.replaceState(null, '', window.location.pathname + '?version=' + this.trackedVersionID);
+      }
     }
   },
   bindScrollListener: function() {
@@ -90,6 +174,10 @@ export var JobBuildsView = Backbone.View.extend({
   remove: function() {
     clearInterval(this.intervalID);
     this.$('#builds-tabs').off('scroll', this._scrollHandler);
+    // Preserve tracked version for the next view (e.g., navigating back to pipeline)
+    if (this.trackedVersionID) {
+      window.app.router._trackedVersionID = this.trackedVersionID;
+    }
     Backbone.View.prototype.remove.call(this);
   },
   addBuild: function(m) {
@@ -129,6 +217,74 @@ export var JobBuildsView = Backbone.View.extend({
         m.fetch();
       }
     });
+  },
+  _fetchTrackedBuilds: function(callback) {
+    // Find which resource has the tracked version and get path data
+    var that = this;
+    var tc = this.collection.job.collection.pipeline.collection.team.get('canonical');
+    var pn = this.pipeline.get('canonical');
+    var jn = this.job.get('name');
+    var resources = this.pipeline.get('resources') || [];
+    this._trackedBuildIDs = null;
+    // Try the pipeline resources endpoint to find path
+    var url = '/teams/' + tc + '/pipelines/' + pn + '/resources';
+    $.ajax({
+      url: url, type: 'GET', contentType: 'application/json',
+      headers: session.isEmpty() ? {} : { 'Authorization': 'Bearer ' + session.get('jwt') },
+      success: function(resp) {
+        if (!resp || !resp.data) { callback(); return; }
+        var resList = resp.data;
+        var idx = 0;
+        function tryNextResource() {
+          if (idx >= resList.length) { callback(); return; }
+          var rCan = resList[idx].canonical;
+          idx++;
+          var pathUrl = '/teams/' + tc + '/pipelines/' + pn + '/resources/' + rCan + '/versions/' + that.trackedVersionID + '/path';
+          $.ajax({
+            url: pathUrl, type: 'GET', contentType: 'application/json',
+            headers: session.isEmpty() ? {} : { 'Authorization': 'Bearer ' + session.get('jwt') },
+            success: function(pathResp) {
+              if (pathResp.data && pathResp.data.path && pathResp.data.path.length > 0) {
+                // Found the right resource - extract build IDs for this job
+                var ids = {};
+                for (var i = 0; i < pathResp.data.path.length; i++) {
+                  var entry = pathResp.data.path[i];
+                  if (entry.job_name === jn && entry.build) {
+                    ids[entry.build.id] = true;
+                    if (entry.retries) {
+                      for (var j = 0; j < entry.retries.length; j++) {
+                        ids[entry.retries[j].id] = true;
+                      }
+                    }
+                  }
+                }
+                that._trackedBuildIDs = ids;
+                callback();
+              } else {
+                tryNextResource();
+              }
+            },
+            error: function() { tryNextResource(); },
+          });
+        }
+        tryNextResource();
+      },
+      error: function() { callback(); },
+    });
+  },
+  _filterByTrackedBuildIDs: function() {
+    if (!this._trackedBuildIDs) return;
+    var ids = this._trackedBuildIDs;
+    var toRemove = this.collection.filter(function(m) {
+      return !ids[m.get('id')];
+    });
+    // Only re-render if the set of builds actually changed
+    if (toRemove.length === 0 && this._lastFilteredCount === this.collection.length) return;
+    this._lastFilteredCount = this.collection.length - toRemove.length;
+    this.collection.remove(toRemove, {silent: true});
+    this.$('#builds-tabs').empty();
+    this.$('#builds-content').empty();
+    this.addBuilds();
   },
   clickTriggerJob: function(event) {
     event.preventDefault();
@@ -171,8 +327,11 @@ export var JobBuildsView = Backbone.View.extend({
     this.currentBuildID = bid;
     if (!this.embedded) {
       var tc = this.collection.job.collection.pipeline.collection.team.get("canonical");
-      var url = new URL(location.origin+"/teams/"+tc+"/pipelines/"+this.pipeline.get("canonical")+"/jobs/"+this.job.get("name")+"/builds/"+bid);
-      window.app.router.navigate(url.pathname, { trigger: false, replace: true });
+      var navPath = "teams/"+tc+"/pipelines/"+this.pipeline.get("canonical")+"/jobs/"+this.job.get("name")+"/builds/"+bid;
+      window.app.router.navigate(navPath, { trigger: false, replace: true });
+      if (this.trackedVersionID) {
+        window.history.replaceState(null, '', window.location.pathname + '?version=' + this.trackedVersionID);
+      }
     }
   }
 });

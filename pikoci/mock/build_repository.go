@@ -178,6 +178,21 @@ func (mr *BuildRepositoryMockRecorder) FindByID(ctx, buildID any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByID", reflect.TypeOf((*BuildRepository)(nil).FindByID), ctx, buildID)
 }
 
+// FindByVersionAndJobs mocks base method.
+func (m *BuildRepository) FindByVersionAndJobs(ctx context.Context, tc, pn string, versionID uint32, jobNames []string) (map[string][]*build.Build, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindByVersionAndJobs", ctx, tc, pn, versionID, jobNames)
+	ret0, _ := ret[0].(map[string][]*build.Build)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindByVersionAndJobs indicates an expected call of FindByVersionAndJobs.
+func (mr *BuildRepositoryMockRecorder) FindByVersionAndJobs(ctx, tc, pn, versionID, jobNames any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByVersionAndJobs", reflect.TypeOf((*BuildRepository)(nil).FindByVersionAndJobs), ctx, tc, pn, versionID, jobNames)
+}
+
 // FindGetVersions mocks base method.
 func (m *BuildRepository) FindGetVersions(ctx context.Context, buildID uint32) (map[string]uint32, error) {
 	m.ctrl.T.Helper()

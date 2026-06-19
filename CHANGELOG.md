@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Version tracking**: Track a specific resource version through the pipeline to see which jobs it passed through and their build status. Available from the resource versions page (Track button), the Resources panel (expandable version list with Track/Trigger/Pin), and a new version dropdown in the list view. When tracking, both graph and list views scope to only the version's path, a banner shows progress, and the URL is shareable via `?version=ID` ([#432](https://github.com/PikoCI/pikoci/issues/432))
+- New `GetResourceVersionPath` API endpoint (`GET /teams/{tc}/pipelines/{pc}/resources/{rCan}/versions/{vID}/path`) returns the ordered chain of jobs a version passes through, with build status for each job including retries. Follows version propagation through intermediate put/get resources ([#432](https://github.com/PikoCI/pikoci/issues/432))
+- Pipeline graph image endpoint now accepts a `version_id` query parameter to filter the graph to only the tracked version's path with version-specific build colors ([#432](https://github.com/PikoCI/pikoci/issues/432))
 - Resource version rows now show a colored status dot indicating the aggregate build status of all jobs that consumed that version ([#534](https://github.com/PikoCI/pikoci/issues/534))
 - Pipeline show page now has a "Resources" button that opens a slide-out panel listing all pipeline resources with name, type, latest version, build status, last check time, and a "Check Now" button ([#536](https://github.com/PikoCI/pikoci/issues/536))
 - Resource nodes in the pipeline graph view now show a native browser tooltip on hover with the latest version's key-value pairs and aggregate build status ([#537](https://github.com/PikoCI/pikoci/issues/537))
@@ -20,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- "Group parallel jobs" now correctly groups root jobs (jobs with no `passed` constraints) that share the same trigger resource, such as parallel CI jobs triggered by the same git resource ([#432](https://github.com/PikoCI/pikoci/issues/432))
 - List view: resource selector bar now polls for updates on the same interval as job data, keeping the status dot, latest version, and "checked X ago" timestamp fresh without manual refresh. Updates are applied in-place when the dropdown is open so it stays open ([#558](https://github.com/PikoCI/pikoci/issues/558))
 - List view: fan-in jobs (jobs with multiple upstream parents in a parallel group) now render with a left-side bar grouping their parents and the fan-in job indented after the bar, clearly showing the dependency relationship ([#551](https://github.com/PikoCI/pikoci/issues/551))
 - Retrying a build now reuses the resource versions from the original build instead of fetching the latest version ([#552](https://github.com/PikoCI/pikoci/issues/552))

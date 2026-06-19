@@ -117,6 +117,9 @@ const (
 	// TriggerResourceVersion is the route for triggering downstream jobs with a specific version.
 	TriggerResourceVersion
 
+	// GetResourceVersionPath is the route for retrieving a version's path through the pipeline.
+	GetResourceVersionPath
+
 	// WebhookTrigger is the route for incoming webhook triggers.
 	WebhookTrigger
 	// RegenerateWebhookToken is the route for regenerating a resource's webhook token.

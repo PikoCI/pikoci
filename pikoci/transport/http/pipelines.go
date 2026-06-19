@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -228,12 +229,20 @@ func getPipelineImage(s pikoci.Service) http.HandlerFunc {
 		req.Format = vars["ext"]
 		hideIntermediates := r.URL.Query().Get("hide_intermediates") == "1"
 		groupParallel := r.URL.Query().Get("group_parallel") == "1"
+		var versionID *uint32
+		if vidStr := r.URL.Query().Get("version_id"); vidStr != "" {
+			vid, err := strconv.ParseUint(vidStr, 10, 32)
+			if err == nil {
+				v := uint32(vid)
+				versionID = &v
+			}
+		}
 		var img []byte
 		var err error
 		if isPublic, _ := ctx.Value(IsPublicAccessKey).(bool); isPublic {
-			img, err = s.GetPublicPipelineImage(ctx, req.TeamCanonical, req.Name, req.Format, hideIntermediates, groupParallel)
+			img, err = s.GetPublicPipelineImage(ctx, req.TeamCanonical, req.Name, req.Format, hideIntermediates, groupParallel, versionID)
 		} else {
-			img, err = s.GetPipelineImage(ctx, req.TeamCanonical, req.Name, req.Format, hideIntermediates, groupParallel)
+			img, err = s.GetPipelineImage(ctx, req.TeamCanonical, req.Name, req.Format, hideIntermediates, groupParallel, versionID)
 		}
 		if err != nil {
 			encodeResponse(GetPipelineImageResponse{Err: err.Error()}, w)

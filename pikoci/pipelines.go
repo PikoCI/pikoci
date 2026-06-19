@@ -508,9 +508,18 @@ var (
 	colorPinned         = `"#FFA300"`
 )
 
+// versionFilterOpts holds the parameters for filtering a pipeline graph to
+// show only jobs in a specific version's path.
+type versionFilterOpts struct {
+	resourceCanonical string
+	versionID         uint32
+	chainJobs         map[string]bool
+	buildsByJob       map[string][]*build.Build
+}
+
 // GetPipelineImage generates a DOT graph representation of a pipeline's jobs
 // and resources, colored by the latest build status of each job.
-func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string, hideIntermediates, groupParallel bool) ([]byte, error) {
+func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string, hideIntermediates, groupParallel bool, versionID *uint32) ([]byte, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
 	} else if !utils.ValidateCanonical(pCan) {
@@ -532,12 +541,48 @@ func (q *PikoCI) GetPipelineImage(ctx context.Context, tc, pCan, format string, 
 		return nil, fmt.Errorf("failed to get Pipeline %q: %w", pCan, err)
 	}
 
-	img, err := q.generateImage(ctx, tc, pp, hideIntermediates, groupParallel)
+	var vf *versionFilterOpts
+	if versionID != nil {
+		vf, err = q.buildVersionFilter(ctx, tc, pCan, pp, *versionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build version filter: %w", err)
+		}
+	}
+
+	img, err := q.generateImage(ctx, tc, pp, hideIntermediates, groupParallel, vf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate image: %w", err)
 	}
 
 	return convertDOTImage(ctx, img, format)
+}
+
+// buildVersionFilter resolves the version's chain and fetches builds,
+// returning filter options for generateImage.
+func (q *PikoCI) buildVersionFilter(ctx context.Context, tc, pn string, pp *pipeline.Pipeline, versionID uint32) (*versionFilterOpts, error) {
+	// Look up which resource this version belongs to
+	_, rCan, err := q.Resources.FindVersionByID(ctx, versionID)
+	if err != nil {
+		return nil, fmt.Errorf("version %d not found: %w", versionID, err)
+	}
+
+	chain := resolveResourceChain(pp.Jobs, rCan)
+	chainSet := make(map[string]bool, len(chain))
+	for _, jn := range chain {
+		chainSet[jn] = true
+	}
+
+	buildsByJob, err := q.chainWalkBuilds(ctx, tc, pn, versionID, chain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find builds: %w", err)
+	}
+
+	return &versionFilterOpts{
+		resourceCanonical: rCan,
+		versionID:         versionID,
+		chainJobs:         chainSet,
+		buildsByJob:       buildsByJob,
+	}, nil
 }
 
 // resolvedBuildStatus holds the latest completed and running builds for a job.
@@ -638,13 +683,53 @@ func (q *PikoCI) resolveJobVisuals(ctx context.Context, tc string, pp *pipeline.
 	}, nil
 }
 
+// resolveJobVisualsFromBuilds computes job node visuals from a provided set of
+// builds rather than fetching from the database. Used when rendering a
+// version-scoped graph where only specific builds are relevant.
+func resolveJobVisualsFromBuilds(builds []*build.Build, j job.Job) jobNodeVisuals {
+	color := colorDefault
+	borderColor := colorDefaultBorder
+
+	bs := resolveBuildStatus(builds)
+
+	if bs.completedBuild != nil {
+		if c, ok := jobColors[bs.completedBuild.Status]; ok {
+			color = c
+		}
+		if c, ok := jobBorderColors[bs.completedBuild.Status]; ok {
+			borderColor = c
+		}
+	}
+
+	if j.Paused {
+		color = colorPaused
+		borderColor = colorPausedBorder
+	}
+
+	clusterStyle := "invis"
+	clusterBorderColor := jobBorderColors[build.Started]
+	if bs.runningBuild != nil {
+		clusterStyle = `"dashed,bold"`
+		if bs.runningBuild.Status == build.Pending {
+			clusterBorderColor = colorDefaultBorder
+		}
+	}
+
+	return jobNodeVisuals{
+		color:              color,
+		borderColor:        borderColor,
+		clusterStyle:       clusterStyle,
+		clusterBorderColor: clusterBorderColor,
+	}
+}
+
 // generateImage builds a DOT-format directed graph representing the pipeline's
 // jobs, resources, and their interconnections. Each job node is colored based on
 // its latest build status, and running builds are highlighted with a dashed border.
 // When hideIntermediates is true, intermediate resource nodes (between jobs via
 // passed constraints and put outputs) are removed, keeping only entry-point
 // trigger resources and drawing direct job-to-job edges.
-func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipeline, hideRes, groupParallel bool) ([]byte, error) {
+func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipeline, hideRes, groupParallel bool, versionFilter *versionFilterOpts) ([]byte, error) {
 	var (
 		pn  = fmt.Sprintf(`"%s"`, pp.Canonical)
 		err error
@@ -654,6 +739,19 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 	graph.SetName(pn)
 	graph.SetStrict(true)
 	graph.AddAttr(pn, string(gographviz.RankDir), "LR")
+
+	// When version filter is active, work with a local copy restricted to chain jobs
+	if versionFilter != nil {
+		var filteredJobs []job.Job
+		for _, j := range pp.Jobs {
+			if versionFilter.chainJobs[j.Name] {
+				filteredJobs = append(filteredJobs, j)
+			}
+		}
+		localPP := *pp
+		localPP.Jobs = filteredJobs
+		pp = &localPP
+	}
 
 	// Collect resources referenced by get steps without passed constraints.
 	// Resources only accessed via get-with-passed don't need a standalone node
@@ -782,18 +880,31 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 					allPassed = append(allPassed, expandPassed(g.Passed)...)
 				}
 			}
+			var key string
 			if len(allPassed) == 0 {
-				continue // root jobs are never grouped
-			}
-			sort.Strings(allPassed)
-			// Deduplicate
-			deduped := allPassed[:0]
-			for i, p := range allPassed {
-				if i == 0 || p != allPassed[i-1] {
-					deduped = append(deduped, p)
+				// Root jobs: group by their trigger resource set
+				var triggerResources []string
+				for _, g := range j.GetSteps() {
+					if len(g.Passed) == 0 {
+						triggerResources = append(triggerResources, g.ResourceCanonical())
+					}
 				}
+				if len(triggerResources) == 0 {
+					continue
+				}
+				sort.Strings(triggerResources)
+				key = "root:" + strings.Join(triggerResources, ",")
+			} else {
+				sort.Strings(allPassed)
+				// Deduplicate
+				deduped := allPassed[:0]
+				for i, p := range allPassed {
+					if i == 0 || p != allPassed[i-1] {
+						deduped = append(deduped, p)
+					}
+				}
+				key = strings.Join(deduped, ",")
 			}
-			key := strings.Join(deduped, ",")
 			if _, ok := keyToJobs[key]; !ok {
 				keyOrder = append(keyOrder, key)
 			}
@@ -827,9 +938,16 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 			continue // grouped jobs are rendered as part of their parallel group node
 		}
 
-		vis, err := q.resolveJobVisuals(ctx, tc, pp, j)
-		if err != nil {
-			return nil, err
+		var vis jobNodeVisuals
+		if versionFilter != nil {
+			// Use only the version-specific builds for coloring
+			vis = resolveJobVisualsFromBuilds(versionFilter.buildsByJob[j.Name], j)
+		} else {
+			var verr error
+			vis, verr = q.resolveJobVisuals(ctx, tc, pp, j)
+			if verr != nil {
+				return nil, verr
+			}
 		}
 
 		jg := fmt.Sprintf("cluster_%d", i)
@@ -925,23 +1043,28 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		var worstStatus build.Status
 		var rows []string
 		for _, j := range pg.jobs {
-			vis, verr := q.resolveJobVisuals(ctx, tc, pp, j)
-			if verr != nil {
-				return nil, verr
+			var vis jobNodeVisuals
+			var jobBuilds []*build.Build
+			if versionFilter != nil {
+				vis = resolveJobVisualsFromBuilds(versionFilter.buildsByJob[j.Name], j)
+				jobBuilds = versionFilter.buildsByJob[j.Name]
+			} else {
+				var verr error
+				vis, verr = q.resolveJobVisuals(ctx, tc, pp, j)
+				if verr != nil {
+					return nil, verr
+				}
+				jobBuilds, _ = q.Builds.Filter(ctx, tc, pp.Canonical, j.Name, nil, nil, 0)
 			}
 			dotColor := strings.Trim(vis.color, `"`)
-			builds, berr := q.Builds.Filter(ctx, tc, pp.Canonical, j.Name, nil, nil, 0)
-			if berr == nil {
-				bs := resolveBuildStatus(builds)
+			if len(jobBuilds) > 0 {
+				bs := resolveBuildStatus(jobBuilds)
 				if bs.completedBuild != nil {
 					if p, ok := statusPriority[bs.completedBuild.Status]; ok && p > worstPriority {
 						worstPriority = p
 						worstStatus = bs.completedBuild.Status
 					}
 				}
-				// Running/pending builds override the dot color so the
-				// status is visible (normal nodes use a dashed cluster
-				// border, but grouped jobs have no individual cluster).
 				if bs.runningBuild != nil {
 					if c, ok := jobColors[bs.runningBuild.Status]; ok {
 						dotColor = strings.Trim(c, `"`)
@@ -1376,7 +1499,7 @@ func (q *PikoCI) CreatePipelineImage(ctx context.Context, tc string, pipeline []
 		return nil, fmt.Errorf("invalid image format %q", format)
 	}
 
-	img, err := q.generateImage(ctx, tc, pp, false, false)
+	img, err := q.generateImage(ctx, tc, pp, false, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate image: %w", err)
 	}
@@ -1488,7 +1611,7 @@ func (q *PikoCI) GetPublicPipeline(ctx context.Context, tc, pCan string) (*pipel
 }
 
 // GetPublicPipelineImage generates a DOT graph image for a public pipeline.
-func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pCan, format string, hideIntermediates, groupParallel bool) ([]byte, error) {
+func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pCan, format string, hideIntermediates, groupParallel bool, versionID *uint32) ([]byte, error) {
 	pp, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline not found or not public: %w", err)
@@ -1504,7 +1627,15 @@ func (q *PikoCI) GetPublicPipelineImage(ctx context.Context, tc, pCan, format st
 		return nil, fmt.Errorf("invalid image format %q", format)
 	}
 
-	img, err := q.generateImage(ctx, tc, pp, hideIntermediates, groupParallel)
+	var vf *versionFilterOpts
+	if versionID != nil {
+		vf, err = q.buildVersionFilter(ctx, tc, pCan, pp, *versionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build version filter: %w", err)
+		}
+	}
+
+	img, err := q.generateImage(ctx, tc, pp, hideIntermediates, groupParallel, vf)
 	if err != nil {
 		return nil, err
 	}

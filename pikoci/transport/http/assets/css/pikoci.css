@@ -1296,6 +1296,7 @@ textarea.form-control {
 .piko-badge-started { background: #fff0d0; color: #9a7000; }
 .piko-badge-cancelled { background: #f5e6df; color: #8A3F2B; }
 .piko-badge-pending { background: #e8e0f0; color: #5F574F; }
+.piko-badge-primary { background: rgba(41,173,255,0.15); color: #29ADFF; }
 [data-theme="dark"] .piko-badge-succeeded { background: rgba(0,168,58,0.15); color: #00E436; }
 [data-theme="dark"] .piko-badge-failed { background: rgba(255,0,77,0.15); color: #FF77A8; }
 [data-theme="dark"] .piko-badge-started { background: rgba(255,163,0,0.15); color: #FFA300; }
@@ -1795,4 +1796,233 @@ body.piko-fullscreen .btn-primary { display: none; }
     padding: 1.5rem 1.25rem;
     margin: 0 12px;
   }
+}
+
+/* ============================================================
+   Version Scope Banner
+   ============================================================ */
+.piko-version-banner {
+  background: linear-gradient(135deg, #1D2B53 0%, #2a3a65 100%);
+  border-bottom: 3px solid #29ADFF;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+}
+.piko-version-banner-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  font-size: 0.85rem;
+  color: #fff;
+}
+.piko-version-banner-icon {
+  color: #29ADFF;
+  font-size: 1rem;
+}
+.piko-version-banner-label {
+  color: #83769C;
+  font-weight: 500;
+}
+.piko-version-banner-resource {
+  color: #29ADFF;
+  font-weight: 600;
+}
+.piko-version-banner-ref {
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(41,173,255,0.15);
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.8rem;
+}
+.piko-version-banner-progress {
+  margin-left: auto;
+  color: #83769C;
+  font-size: 0.8rem;
+}
+.piko-version-banner-clear {
+  background: transparent;
+  border: 1px solid #5F574F;
+  color: #83769C;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+.piko-version-banner-clear:hover {
+  border-color: #29ADFF;
+  color: #fff;
+}
+
+/* ============================================================
+   Version Selector (List View)
+   ============================================================ */
+.piko-rsel-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.piko-vsel-wrap {
+  position: relative;
+  display: inline-block;
+  margin-left: 8px;
+}
+.piko-vsel-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: #1D2B53;
+  border: 1px solid #5F574F;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  transition: border-color 0.15s;
+}
+.piko-vsel-btn:hover {
+  border-color: #29ADFF;
+}
+.piko-vsel-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 280px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: #1D2B53;
+  border: 1px solid #5F574F;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  z-index: 100;
+  padding: 4px 0;
+}
+.piko-vsel-menu.open {
+  display: block;
+}
+.piko-vsel-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: #fff;
+  transition: background 0.1s;
+}
+.piko-vsel-item:hover {
+  background: rgba(41,173,255,0.12);
+}
+.piko-vsel-item.active {
+  background: rgba(41,173,255,0.2);
+}
+.piko-vsel-item-all {
+  border-bottom: 1px solid #5F574F;
+  color: #83769C;
+}
+.piko-vsel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.piko-vsel-ref {
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   Resources Panel - Track Button & Versions List
+   ============================================================ */
+.piko-panel-track-btn {
+  background: transparent;
+  border: 1px solid #5F574F;
+  color: #29ADFF;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.15s;
+}
+.piko-panel-track-btn:hover {
+  border-color: #29ADFF;
+  background: rgba(41,173,255,0.1);
+}
+.piko-panel-trigger-btn,
+.piko-panel-pin-btn {
+  background: transparent;
+  border: 1px solid #5F574F;
+  color: #83769C;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.15s;
+}
+.piko-panel-trigger-btn:hover {
+  border-color: #FFA300;
+  color: #FFA300;
+  background: rgba(255,163,0,0.1);
+}
+.piko-panel-pin-btn:hover {
+  border-color: #FFA300;
+  color: #FFA300;
+  background: rgba(255,163,0,0.1);
+}
+.piko-panel-pin-btn.pinned {
+  border-color: #FFA300;
+  color: #FFA300;
+}
+.piko-resource-panel-versions {
+  padding: 4px 0 8px 12px;
+  border-left: 2px solid #5F574F;
+  margin-left: 8px;
+}
+.piko-resource-panel-version-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 0.78rem;
+  color: #fff;
+}
+.piko-resource-panel-version-item .piko-vsel-ref {
+  flex: 1;
+  min-width: 0;
+}
+.piko-resource-panel-version-item.tracked {
+  background: rgba(41,173,255,0.08);
+  border-radius: 4px;
+}
+.piko-panel-tracking-badge {
+  color: #29ADFF;
+  font-size: 0.78rem;
+  padding: 2px 6px;
+}
+.piko-resource-expand-toggle {
+  background: transparent;
+  border: none;
+  color: #83769C;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 0.72rem;
+}
+.piko-resource-expand-toggle:hover {
+  color: #29ADFF;
 }

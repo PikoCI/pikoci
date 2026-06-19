@@ -204,6 +204,15 @@ export var Router = Backbone.Router.extend({
     if (!this.setup(!isLogin, true)) {
       return;
     }
+    // Pick up tracked version: first from router property (set by graph click
+    // before navigate), then from URL query param (set after navigate for reload)
+    var trackedVersionID = this._trackedVersionID || null;
+    delete this._trackedVersionID;
+    if (!trackedVersionID) {
+      var urlParams = new URLSearchParams(window.location.search);
+      trackedVersionID = urlParams.get('version') ? parseInt(urlParams.get('version'), 10) : null;
+    }
+
     // If user prefers list view, redirect to pipeline show (list view will pick up the job)
     if (localStorage.getItem("piko-pipeline-view") === "list") {
       localStorage.setItem('piko-list-' + pn + '-job', jn);
@@ -233,6 +242,7 @@ export var Router = Backbone.Router.extend({
         currentBuildID: bid,
         job: jb,
         pipeline: pp,
+        trackedVersionID: trackedVersionID,
       });
       $('#main').html(that.contentView.render().el);
       $('#breadcrumb').html(new BreadcrumbView({

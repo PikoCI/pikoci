@@ -133,6 +133,7 @@ export var PipelineImage = Backbone.Model.extend({
     var params = [];
     if (this.hideIntermediates) params.push("hide_intermediates=1");
     if (this.groupParallel) params.push("group_parallel=1");
+    if (this.versionID) params.push("version_id=" + this.versionID);
     if (params.length > 0) base += "?" + params.join("&");
     return base;
   },
@@ -141,6 +142,7 @@ export var PipelineImage = Backbone.Model.extend({
     this.pipeline = opts.pipeline;
     this.hideIntermediates = false;
     this.groupParallel = false;
+    this.versionID = null;
   },
 });
 

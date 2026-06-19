@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-const _RouteNameName = "user_loginrefresh_tokencreate_userlist_usersget_userupdate_userdelete_userchange_passwordupdate_profilecreate_teamlist_teamsget_teamupdate_teamdelete_teamcreate_team_memberupdate_team_memberdelete_team_membercreate_pipelineupdate_pipelineget_pipelinedelete_pipelinelist_pipelinesget_pipeline_imagecreate_pipeline_imagetrigger_pipeline_joblist_pipeline_jobsget_pipeline_jobcreate_job_buildcreate_retry_job_buildupdate_job_builddelete_job_buildlist_job_buildsinsert_build_get_versionfind_build_get_versionsget_job_buildcancel_job_buildretry_job_buildstart_pending_buildfind_oldest_pending_buildnotify_serial_group_pending_buildsevaluate_downstream_jobslist_pipeline_resourcesget_pipeline_resourceupdate_pipeline_resourcetrigger_pipeline_resourcecreate_resource_versionlist_resource_versionspin_resource_versionunpin_resource_versiontrigger_resource_versionwebhook_triggerregenerate_webhook_tokencreate_triggerlist_triggers_afterexport_databasepause_pipelineunpause_pipelinepause_jobunpause_jobget_versionworker_heartbeatlist_workersworkers_healthdelete_worker"
+const _RouteNameName = "user_loginrefresh_tokencreate_userlist_usersget_userupdate_userdelete_userchange_passwordupdate_profilecreate_teamlist_teamsget_teamupdate_teamdelete_teamcreate_team_memberupdate_team_memberdelete_team_membercreate_pipelineupdate_pipelineget_pipelinedelete_pipelinelist_pipelinesget_pipeline_imagecreate_pipeline_imagetrigger_pipeline_joblist_pipeline_jobsget_pipeline_jobcreate_job_buildcreate_retry_job_buildupdate_job_builddelete_job_buildlist_job_buildsinsert_build_get_versionfind_build_get_versionsget_job_buildcancel_job_buildretry_job_buildstart_pending_buildfind_oldest_pending_buildnotify_serial_group_pending_buildsevaluate_downstream_jobslist_pipeline_resourcesget_pipeline_resourceupdate_pipeline_resourcetrigger_pipeline_resourcecreate_resource_versionlist_resource_versionspin_resource_versionunpin_resource_versiontrigger_resource_versionget_resource_version_pathwebhook_triggerregenerate_webhook_tokencreate_triggerlist_triggers_afterexport_databasepause_pipelineunpause_pipelinepause_jobunpause_jobget_versionworker_heartbeatlist_workersworkers_healthdelete_worker"
 
-var _RouteNameIndex = [...]uint16{0, 10, 23, 34, 44, 52, 63, 74, 89, 103, 114, 124, 132, 143, 154, 172, 190, 208, 223, 238, 250, 265, 279, 297, 318, 338, 356, 372, 388, 410, 426, 442, 457, 481, 504, 517, 533, 548, 567, 592, 626, 650, 673, 694, 718, 743, 766, 788, 808, 830, 854, 869, 893, 907, 926, 941, 955, 971, 980, 991, 1002, 1018, 1030, 1044, 1057}
+var _RouteNameIndex = [...]uint16{0, 10, 23, 34, 44, 52, 63, 74, 89, 103, 114, 124, 132, 143, 154, 172, 190, 208, 223, 238, 250, 265, 279, 297, 318, 338, 356, 372, 388, 410, 426, 442, 457, 481, 504, 517, 533, 548, 567, 592, 626, 650, 673, 694, 718, 743, 766, 788, 808, 830, 854, 879, 894, 918, 932, 951, 966, 980, 996, 1005, 1016, 1027, 1043, 1055, 1069, 1082}
 
-const _RouteNameLowerName = "user_loginrefresh_tokencreate_userlist_usersget_userupdate_userdelete_userchange_passwordupdate_profilecreate_teamlist_teamsget_teamupdate_teamdelete_teamcreate_team_memberupdate_team_memberdelete_team_membercreate_pipelineupdate_pipelineget_pipelinedelete_pipelinelist_pipelinesget_pipeline_imagecreate_pipeline_imagetrigger_pipeline_joblist_pipeline_jobsget_pipeline_jobcreate_job_buildcreate_retry_job_buildupdate_job_builddelete_job_buildlist_job_buildsinsert_build_get_versionfind_build_get_versionsget_job_buildcancel_job_buildretry_job_buildstart_pending_buildfind_oldest_pending_buildnotify_serial_group_pending_buildsevaluate_downstream_jobslist_pipeline_resourcesget_pipeline_resourceupdate_pipeline_resourcetrigger_pipeline_resourcecreate_resource_versionlist_resource_versionspin_resource_versionunpin_resource_versiontrigger_resource_versionwebhook_triggerregenerate_webhook_tokencreate_triggerlist_triggers_afterexport_databasepause_pipelineunpause_pipelinepause_jobunpause_jobget_versionworker_heartbeatlist_workersworkers_healthdelete_worker"
+const _RouteNameLowerName = "user_loginrefresh_tokencreate_userlist_usersget_userupdate_userdelete_userchange_passwordupdate_profilecreate_teamlist_teamsget_teamupdate_teamdelete_teamcreate_team_memberupdate_team_memberdelete_team_membercreate_pipelineupdate_pipelineget_pipelinedelete_pipelinelist_pipelinesget_pipeline_imagecreate_pipeline_imagetrigger_pipeline_joblist_pipeline_jobsget_pipeline_jobcreate_job_buildcreate_retry_job_buildupdate_job_builddelete_job_buildlist_job_buildsinsert_build_get_versionfind_build_get_versionsget_job_buildcancel_job_buildretry_job_buildstart_pending_buildfind_oldest_pending_buildnotify_serial_group_pending_buildsevaluate_downstream_jobslist_pipeline_resourcesget_pipeline_resourceupdate_pipeline_resourcetrigger_pipeline_resourcecreate_resource_versionlist_resource_versionspin_resource_versionunpin_resource_versiontrigger_resource_versionget_resource_version_pathwebhook_triggerregenerate_webhook_tokencreate_triggerlist_triggers_afterexport_databasepause_pipelineunpause_pipelinepause_jobunpause_jobget_versionworker_heartbeatlist_workersworkers_healthdelete_worker"
 
 func (i RouteName) String() string {
 	if i < 0 || i >= RouteName(len(_RouteNameIndex)-1) {
@@ -74,23 +74,24 @@ func _RouteNameNoOp() {
 	_ = x[PinResourceVersion-(47)]
 	_ = x[UnpinResourceVersion-(48)]
 	_ = x[TriggerResourceVersion-(49)]
-	_ = x[WebhookTrigger-(50)]
-	_ = x[RegenerateWebhookToken-(51)]
-	_ = x[CreateTrigger-(52)]
-	_ = x[ListTriggersAfter-(53)]
-	_ = x[ExportDatabase-(54)]
-	_ = x[PausePipeline-(55)]
-	_ = x[UnpausePipeline-(56)]
-	_ = x[PauseJob-(57)]
-	_ = x[UnpauseJob-(58)]
-	_ = x[GetVersion-(59)]
-	_ = x[WorkerHeartbeat-(60)]
-	_ = x[ListWorkers-(61)]
-	_ = x[WorkersHealth-(62)]
-	_ = x[DeleteWorker-(63)]
+	_ = x[GetResourceVersionPath-(50)]
+	_ = x[WebhookTrigger-(51)]
+	_ = x[RegenerateWebhookToken-(52)]
+	_ = x[CreateTrigger-(53)]
+	_ = x[ListTriggersAfter-(54)]
+	_ = x[ExportDatabase-(55)]
+	_ = x[PausePipeline-(56)]
+	_ = x[UnpausePipeline-(57)]
+	_ = x[PauseJob-(58)]
+	_ = x[UnpauseJob-(59)]
+	_ = x[GetVersion-(60)]
+	_ = x[WorkerHeartbeat-(61)]
+	_ = x[ListWorkers-(62)]
+	_ = x[WorkersHealth-(63)]
+	_ = x[DeleteWorker-(64)]
 }
 
-var _RouteNameValues = []RouteName{UserLogin, RefreshToken, CreateUser, ListUsers, GetUser, UpdateUser, DeleteUser, ChangePassword, UpdateProfile, CreateTeam, ListTeams, GetTeam, UpdateTeam, DeleteTeam, CreateTeamMember, UpdateTeamMember, DeleteTeamMember, CreatePipeline, UpdatePipeline, GetPipeline, DeletePipeline, ListPipelines, GetPipelineImage, CreatePipelineImage, TriggerPipelineJob, ListPipelineJobs, GetPipelineJob, CreateJobBuild, CreateRetryJobBuild, UpdateJobBuild, DeleteJobBuild, ListJobBuilds, InsertBuildGetVersion, FindBuildGetVersions, GetJobBuild, CancelJobBuild, RetryJobBuild, StartPendingBuild, FindOldestPendingBuild, NotifySerialGroupPendingBuilds, EvaluateDownstreamJobs, ListPipelineResources, GetPipelineResource, UpdatePipelineResource, TriggerPipelineResource, CreateResourceVersion, ListResourceVersions, PinResourceVersion, UnpinResourceVersion, TriggerResourceVersion, WebhookTrigger, RegenerateWebhookToken, CreateTrigger, ListTriggersAfter, ExportDatabase, PausePipeline, UnpausePipeline, PauseJob, UnpauseJob, GetVersion, WorkerHeartbeat, ListWorkers, WorkersHealth, DeleteWorker}
+var _RouteNameValues = []RouteName{UserLogin, RefreshToken, CreateUser, ListUsers, GetUser, UpdateUser, DeleteUser, ChangePassword, UpdateProfile, CreateTeam, ListTeams, GetTeam, UpdateTeam, DeleteTeam, CreateTeamMember, UpdateTeamMember, DeleteTeamMember, CreatePipeline, UpdatePipeline, GetPipeline, DeletePipeline, ListPipelines, GetPipelineImage, CreatePipelineImage, TriggerPipelineJob, ListPipelineJobs, GetPipelineJob, CreateJobBuild, CreateRetryJobBuild, UpdateJobBuild, DeleteJobBuild, ListJobBuilds, InsertBuildGetVersion, FindBuildGetVersions, GetJobBuild, CancelJobBuild, RetryJobBuild, StartPendingBuild, FindOldestPendingBuild, NotifySerialGroupPendingBuilds, EvaluateDownstreamJobs, ListPipelineResources, GetPipelineResource, UpdatePipelineResource, TriggerPipelineResource, CreateResourceVersion, ListResourceVersions, PinResourceVersion, UnpinResourceVersion, TriggerResourceVersion, GetResourceVersionPath, WebhookTrigger, RegenerateWebhookToken, CreateTrigger, ListTriggersAfter, ExportDatabase, PausePipeline, UnpausePipeline, PauseJob, UnpauseJob, GetVersion, WorkerHeartbeat, ListWorkers, WorkersHealth, DeleteWorker}
 
 var _RouteNameNameToValueMap = map[string]RouteName{
 	_RouteNameName[0:10]:           UserLogin,
@@ -193,34 +194,36 @@ var _RouteNameNameToValueMap = map[string]RouteName{
 	_RouteNameLowerName[808:830]:   UnpinResourceVersion,
 	_RouteNameName[830:854]:        TriggerResourceVersion,
 	_RouteNameLowerName[830:854]:   TriggerResourceVersion,
-	_RouteNameName[854:869]:        WebhookTrigger,
-	_RouteNameLowerName[854:869]:   WebhookTrigger,
-	_RouteNameName[869:893]:        RegenerateWebhookToken,
-	_RouteNameLowerName[869:893]:   RegenerateWebhookToken,
-	_RouteNameName[893:907]:        CreateTrigger,
-	_RouteNameLowerName[893:907]:   CreateTrigger,
-	_RouteNameName[907:926]:        ListTriggersAfter,
-	_RouteNameLowerName[907:926]:   ListTriggersAfter,
-	_RouteNameName[926:941]:        ExportDatabase,
-	_RouteNameLowerName[926:941]:   ExportDatabase,
-	_RouteNameName[941:955]:        PausePipeline,
-	_RouteNameLowerName[941:955]:   PausePipeline,
-	_RouteNameName[955:971]:        UnpausePipeline,
-	_RouteNameLowerName[955:971]:   UnpausePipeline,
-	_RouteNameName[971:980]:        PauseJob,
-	_RouteNameLowerName[971:980]:   PauseJob,
-	_RouteNameName[980:991]:        UnpauseJob,
-	_RouteNameLowerName[980:991]:   UnpauseJob,
-	_RouteNameName[991:1002]:       GetVersion,
-	_RouteNameLowerName[991:1002]:  GetVersion,
-	_RouteNameName[1002:1018]:      WorkerHeartbeat,
-	_RouteNameLowerName[1002:1018]: WorkerHeartbeat,
-	_RouteNameName[1018:1030]:      ListWorkers,
-	_RouteNameLowerName[1018:1030]: ListWorkers,
-	_RouteNameName[1030:1044]:      WorkersHealth,
-	_RouteNameLowerName[1030:1044]: WorkersHealth,
-	_RouteNameName[1044:1057]:      DeleteWorker,
-	_RouteNameLowerName[1044:1057]: DeleteWorker,
+	_RouteNameName[854:879]:        GetResourceVersionPath,
+	_RouteNameLowerName[854:879]:   GetResourceVersionPath,
+	_RouteNameName[879:894]:        WebhookTrigger,
+	_RouteNameLowerName[879:894]:   WebhookTrigger,
+	_RouteNameName[894:918]:        RegenerateWebhookToken,
+	_RouteNameLowerName[894:918]:   RegenerateWebhookToken,
+	_RouteNameName[918:932]:        CreateTrigger,
+	_RouteNameLowerName[918:932]:   CreateTrigger,
+	_RouteNameName[932:951]:        ListTriggersAfter,
+	_RouteNameLowerName[932:951]:   ListTriggersAfter,
+	_RouteNameName[951:966]:        ExportDatabase,
+	_RouteNameLowerName[951:966]:   ExportDatabase,
+	_RouteNameName[966:980]:        PausePipeline,
+	_RouteNameLowerName[966:980]:   PausePipeline,
+	_RouteNameName[980:996]:        UnpausePipeline,
+	_RouteNameLowerName[980:996]:   UnpausePipeline,
+	_RouteNameName[996:1005]:       PauseJob,
+	_RouteNameLowerName[996:1005]:  PauseJob,
+	_RouteNameName[1005:1016]:      UnpauseJob,
+	_RouteNameLowerName[1005:1016]: UnpauseJob,
+	_RouteNameName[1016:1027]:      GetVersion,
+	_RouteNameLowerName[1016:1027]: GetVersion,
+	_RouteNameName[1027:1043]:      WorkerHeartbeat,
+	_RouteNameLowerName[1027:1043]: WorkerHeartbeat,
+	_RouteNameName[1043:1055]:      ListWorkers,
+	_RouteNameLowerName[1043:1055]: ListWorkers,
+	_RouteNameName[1055:1069]:      WorkersHealth,
+	_RouteNameLowerName[1055:1069]: WorkersHealth,
+	_RouteNameName[1069:1082]:      DeleteWorker,
+	_RouteNameLowerName[1069:1082]: DeleteWorker,
 }
 
 var _RouteNameNames = []string{
@@ -274,20 +277,21 @@ var _RouteNameNames = []string{
 	_RouteNameName[788:808],
 	_RouteNameName[808:830],
 	_RouteNameName[830:854],
-	_RouteNameName[854:869],
-	_RouteNameName[869:893],
-	_RouteNameName[893:907],
-	_RouteNameName[907:926],
-	_RouteNameName[926:941],
-	_RouteNameName[941:955],
-	_RouteNameName[955:971],
-	_RouteNameName[971:980],
-	_RouteNameName[980:991],
-	_RouteNameName[991:1002],
-	_RouteNameName[1002:1018],
-	_RouteNameName[1018:1030],
-	_RouteNameName[1030:1044],
-	_RouteNameName[1044:1057],
+	_RouteNameName[854:879],
+	_RouteNameName[879:894],
+	_RouteNameName[894:918],
+	_RouteNameName[918:932],
+	_RouteNameName[932:951],
+	_RouteNameName[951:966],
+	_RouteNameName[966:980],
+	_RouteNameName[980:996],
+	_RouteNameName[996:1005],
+	_RouteNameName[1005:1016],
+	_RouteNameName[1016:1027],
+	_RouteNameName[1027:1043],
+	_RouteNameName[1043:1055],
+	_RouteNameName[1055:1069],
+	_RouteNameName[1069:1082],
 }
 
 // RouteNameString retrieves an enum value from the enum constants string name.
