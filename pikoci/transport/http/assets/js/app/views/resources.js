@@ -13,12 +13,12 @@ export var ResourceVersionsView = Backbone.View.extend({
     'click #unpin-banner': 'clickUnpinBanner',
   },
   initialize: function() {
-    this.listenTo(this.collection, "add", this.addVersion);
+    var that = this;
+    this.listenTo(this.collection, "add", function(m) { that.addVersion(m); });
     this.listenTo(this.collection, "reset", this.resetVersions);
     this.listenTo(this.model, "change", this.render);
     this.listenTo(this.collection.resource, "change:pinned_version_id", this.renderPinnedBanner);
 
-    var that = this;
     this.collection.fetch({
       reset: true,
       success: function() { that.bindScrollListener(); },
@@ -26,7 +26,7 @@ export var ResourceVersionsView = Backbone.View.extend({
 
     this.intervalID = window.setInterval(function() {
       that.model.fetch({isInterval: true});
-      that.collection.fetchNew();
+      that.collection.fetch({remove: false});
     }, fetchInterval);
   },
   render: function () {
@@ -112,6 +112,11 @@ export var ResourceVersionsView = Backbone.View.extend({
       var idx = this.collection.indexOf(m);
       var children = $('#resource-versions').children();
       if (idx === 0 || children.length === 0) {
+        // Remove "latest" badge from previous first version
+        children.first().find('.piko-badge-succeeded').filter(function() {
+          return $(this).text().trim() === 'latest';
+        }).remove();
+        ver.isFirst = true;
         $('#resource-versions').prepend(ver.render().el);
       } else if (idx < children.length) {
         $(children[idx]).before(ver.render().el);
@@ -195,6 +200,15 @@ var ResourceVersionView = Backbone.View.extend({
     this.isFirst = opts.isFirst || false;
     this.resource = opts.resource;
     this.listenTo(this.resource, 'change:pinned_version_id', this.render);
+    this.listenTo(this.model, 'change:status', this.updateStatusDot);
+  },
+  updateStatusDot: function() {
+    var status = this.model.get('status');
+    var dot = this.$('.piko-version-status-dot');
+    if (dot.length && status) {
+      dot.css('background', 'var(--status-' + status + ')');
+      dot.attr('title', status);
+    }
   },
   render: function () {
     var data = this.model.toJSON();
