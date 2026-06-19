@@ -718,13 +718,6 @@ textarea.form-control {
   opacity: 0.4;
   cursor: not-allowed;
 }
-.piko-view-sep {
-  width: 1px;
-  height: 16px;
-  background: var(--border);
-  margin: 0 4px;
-  margin-left: auto;
-}
 /* Gear panel */
 .piko-gear-wrap {
   position: relative;
