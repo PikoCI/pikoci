@@ -313,6 +313,16 @@
           </div>
         </div>
       </div>
+      <div id="version-scope-banner" class="piko-version-banner" style="display:none;">
+        <div class="piko-version-banner-inner">
+          <i class="bi bi-signpost-2 piko-version-banner-icon"></i>
+          <span class="piko-version-banner-label">Tracking version</span>
+          <span class="piko-version-banner-resource" id="version-banner-resource"></span>
+          <span class="piko-version-banner-ref" id="version-banner-ref"></span>
+          <span class="piko-version-banner-progress" id="version-banner-progress"></span>
+          <button class="piko-version-banner-clear" id="clear-version-scope"><i class="bi bi-x-lg"></i> Clear</button>
+        </div>
+      </div>
       <div class="piko-pipeline-body">
       <div id="pipeline-resources-panel" class="piko-resources-panel"></div>
       <div class="piko-view-graph">
@@ -351,7 +361,9 @@
         </div>
       </div>
       <div class="piko-view-list" style="display:none">
-        <div class="piko-list-resource-bar"></div>
+        <div class="piko-list-resource-bar">
+          <div class="piko-rsel-container"></div>
+        </div>
         <div class="piko-list-panels">
           <div class="piko-list-left">
             <div class="piko-job-list"></div>
@@ -378,7 +390,7 @@
           <p class="piko-resource-card-meta small mb-0">No resources in this pipeline.</p>
         <% } else { %>
           <% _.each(resources, function(r) { %>
-            <div class="piko-resource-card">
+            <div class="piko-resource-card" data-canonical="<%- r.canonical %>">
               <div class="piko-resource-card-header">
                 <% if (r.latest_version && r.latest_version.status) { %>
                   <span class="piko-version-status-dot" style="background:var(--status-<%- r.latest_version.status %>);" title="<%- r.latest_version.status %>"></span>
@@ -402,10 +414,16 @@
                 <% } %>
               </div>
               <% if (isMember) { %>
-                <button class="btn btn-sm btn-outline-warning check-resource-now mt-1" data-canonical="<%- r.canonical %>">
-                  <i class="bi bi-arrow-clockwise"></i> Check Now
-                </button>
+                <div class="piko-resource-card-actions mt-1">
+                  <button class="btn btn-sm btn-outline-warning check-resource-now" data-canonical="<%- r.canonical %>">
+                    <i class="bi bi-arrow-clockwise"></i> Check Now
+                  </button>
+                  <button class="piko-resource-expand-toggle" data-canonical="<%- r.canonical %>">
+                    <i class="bi bi-chevron-down"></i> Versions
+                  </button>
+                </div>
               <% } %>
+              <div class="piko-resource-panel-versions" data-canonical="<%- r.canonical %>" style="display:none;"></div>
             </div>
           <% }); %>
         <% } %>
@@ -512,6 +530,15 @@
               <button type="button" id="pause-job" class="btn btn-primary" data-loading-text="Pausing..."><i class="bi bi-pause-circle"></i> Pause Job</button>
             <% } %>
           <% } %>
+        </div>
+      </div>
+      <div id="job-version-banner" class="piko-version-banner" style="display:none;">
+        <div class="piko-version-banner-inner">
+          <i class="bi bi-signpost-2 piko-version-banner-icon"></i>
+          <span class="piko-version-banner-label">Tracking version</span>
+          <span class="piko-version-banner-resource" id="job-version-banner-resource"></span>
+          <span class="piko-version-banner-ref" id="job-version-banner-ref"></span>
+          <a href="#" id="job-version-back" class="piko-version-banner-clear"><i class="bi bi-arrow-left"></i> Back to pipeline</a>
         </div>
       </div>
       <div class="piko-build-tabs" id="builds-tabs">
@@ -778,6 +805,9 @@
             <% if (pinned_version_id === id) { %>
               <span class="piko-badge piko-badge-pending">pinned</span>
             <% } %>
+            <% if (tracked_version_id === id) { %>
+              <span class="piko-badge piko-badge-primary"><i class="bi bi-signpost-2"></i> tracked</span>
+            <% } %>
             <% if (status) { %>
               <span class="piko-version-status-dot" style="background:var(--status-<%- status %>);" title="<%- status %>"></span>
             <% } %>
@@ -789,6 +819,7 @@
           </span>
           <% if (isMember) { %>
             <span class="piko-version-actions">
+              <button class="btn btn-sm btn-outline-primary track-version" title="Track this version through the pipeline"><i class="bi bi-signpost-2"></i></button>
               <button class="btn btn-sm btn-outline-warning trigger-version" title="Trigger downstream jobs with this version" data-loading-text="Triggering..."><i class="bi bi-play-fill"></i></button>
               <button class="btn btn-sm <%= pinned_version_id === id ? 'btn-warning' : 'btn-outline-secondary' %> pin-version" title="<%= pinned_version_id === id ? 'Unpin version' : 'Pin to this version' %>"><i class="bi <%= pinned_version_id === id ? 'bi-pin-fill' : 'bi-pin' %>"></i></button>
             </span>

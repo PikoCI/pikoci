@@ -630,6 +630,96 @@ func (r *BuildRepository) AggregateStatusByVersionIDs(ctx context.Context, versi
 	return result, nil
 }
 
+func (r *BuildRepository) FindByVersionAndJobs(ctx context.Context, tc, pn string, versionID uint32, jobNames []string) (map[string][]*build.Build, error) {
+	if len(jobNames) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(jobNames))
+	args := make([]interface{}, 0, len(jobNames)+3)
+	args = append(args, tc, pn)
+	for i, jn := range jobNames {
+		placeholders[i] = "?"
+		args = append(args, jn)
+	}
+	args = append(args, versionID, versionID)
+
+	// Find builds that consumed this version, plus any retries of those builds.
+	// Retries may not have build_get_versions entries yet (pending/started),
+	// so we also match on retry_source_build_id.
+	query := `
+		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical, b.retry_source_build_id, j.name
+		FROM builds AS b
+		JOIN jobs AS j ON b.job_id = j.id
+		JOIN pipelines AS p ON j.pipeline_id = p.id
+		JOIN teams AS t ON p.team_id = t.id
+		WHERE t.canonical = ? AND p.canonical = ?
+		  AND j.name IN (` + strings.Join(placeholders, ",") + `)
+		  AND (
+			b.id IN (
+				SELECT bgv.build_id
+				FROM build_get_versions bgv
+				WHERE bgv.version_id = ?
+			)
+			OR b.retry_source_build_id IN (
+				SELECT bgv.build_id
+				FROM build_get_versions bgv
+				WHERE bgv.version_id = ?
+			)
+		  )
+		ORDER BY j.name, b.id DESC
+	`
+
+	rows, err := r.querier.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query builds by version and jobs: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string][]*build.Build)
+	for rows.Next() {
+		var dbb dbBuild
+		var jobName string
+		err := rows.Scan(
+			&dbb.ID,
+			&dbb.BuildNumber,
+			&dbb.Steps,
+			&dbb.Job,
+			&dbb.Status,
+			&dbb.Error,
+			&dbb.StartedAt,
+			&dbb.Duration,
+			&dbb.VersionID,
+			&dbb.ResourceCanonical,
+			&dbb.RetrySourceBuildID,
+			&jobName,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan build: %w", err)
+		}
+		result[jobName] = append(result[jobName], dbb.toDomainEntity())
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate builds: %w", err)
+	}
+
+	// Reorder: main builds first (no dot in build number), then retries
+	for jn, builds := range result {
+		var main []*build.Build
+		var retries []*build.Build
+		for _, b := range builds {
+			if strings.Contains(b.BuildNumber, ".") {
+				retries = append(retries, b)
+			} else {
+				main = append(main, b)
+			}
+		}
+		result[jn] = append(main, retries...)
+	}
+
+	return result, nil
+}
+
 func scanBuild(s sqlr.Scanner) (*build.Build, error) {
 	var b dbBuild
 

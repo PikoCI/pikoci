@@ -355,6 +355,40 @@ func triggerResourceVersion(s pikoci.Service) http.HandlerFunc {
 	}
 }
 
+type GetResourceVersionPathResponse struct {
+	Data *resource.VersionPathResponse `json:"data,omitempty"`
+	Err  string                        `json:"error,omitempty"`
+}
+
+func (r GetResourceVersionPathResponse) Error() string { return r.Err }
+
+func getResourceVersionPath(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		rCan := vars["resource_canonical"]
+		versionIDStr := vars["version_id"]
+		versionID, err := strconv.ParseUint(versionIDStr, 10, 32)
+		if err != nil {
+			encodeResponse(GetResourceVersionPathResponse{Err: "invalid version_id"}, w)
+			return
+		}
+		ctx := r.Context()
+		var resp *resource.VersionPathResponse
+		if isPublic, _ := ctx.Value(IsPublicAccessKey).(bool); isPublic {
+			resp, err = s.GetPublicResourceVersionPath(ctx, tc, pc, rCan, uint32(versionID))
+		} else {
+			resp, err = s.GetResourceVersionPath(ctx, tc, pc, rCan, uint32(versionID))
+		}
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(GetResourceVersionPathResponse{Data: resp, Err: errs}, w)
+	}
+}
+
 func triggerPipelineResource(s pikoci.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (

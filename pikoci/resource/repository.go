@@ -36,6 +36,9 @@ type Repository interface {
 	CreateVersion(ctx context.Context, tc, pn, rCan string, v Version) (uint32, error)
 	// FilterVersions returns a paginated list of versions for the given resource.
 	FilterVersions(ctx context.Context, tc, pn, rCan string, before *uint32, after *uint32, limit uint32) ([]*Version, error)
+	// FindVersionByID retrieves a single version by its ID, also returning
+	// the resource canonical it belongs to.
+	FindVersionByID(ctx context.Context, versionID uint32) (*Version, string, error)
 }
 
 // ResourceWithPipeline embeds a Resource along with its owning team and pipeline canonicals.

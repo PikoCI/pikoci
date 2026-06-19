@@ -178,6 +178,22 @@ func (mr *ResourceRepositoryMockRecorder) FindByWebhookToken(ctx, token any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByWebhookToken", reflect.TypeOf((*ResourceRepository)(nil).FindByWebhookToken), ctx, token)
 }
 
+// FindVersionByID mocks base method.
+func (m *ResourceRepository) FindVersionByID(ctx context.Context, versionID uint32) (*resource.Version, string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindVersionByID", ctx, versionID)
+	ret0, _ := ret[0].(*resource.Version)
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// FindVersionByID indicates an expected call of FindVersionByID.
+func (mr *ResourceRepositoryMockRecorder) FindVersionByID(ctx, versionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindVersionByID", reflect.TypeOf((*ResourceRepository)(nil).FindVersionByID), ctx, versionID)
+}
+
 // PinVersion mocks base method.
 func (m *ResourceRepository) PinVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error {
 	m.ctrl.T.Helper()

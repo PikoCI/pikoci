@@ -407,8 +407,8 @@ func (cl *Client) GetPublicPipeline(ctx context.Context, tc, pn string) (*pipeli
 }
 
 // GetPublicPipelineImage retrieves a public pipeline's image. It delegates to GetPipelineImage.
-func (cl *Client) GetPublicPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates, groupParallel bool) ([]byte, error) {
-	return cl.GetPipelineImage(ctx, tc, pn, format, hideIntermediates, groupParallel)
+func (cl *Client) GetPublicPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates, groupParallel bool, versionID *uint32) ([]byte, error) {
+	return cl.GetPipelineImage(ctx, tc, pn, format, hideIntermediates, groupParallel, versionID)
 }
 
 
@@ -436,6 +436,24 @@ func (cl *Client) GetPublicPipelineResource(ctx context.Context, tc, pn, rCan st
 // ListPublicResourceVersions lists versions for a resource on a public pipeline. It delegates to ListResourceVersions.
 func (cl *Client) ListPublicResourceVersions(ctx context.Context, tc, pn, rCan string, before *uint32, after *uint32, limit uint32) ([]*resource.Version, bool, error) {
 	return cl.ListResourceVersions(ctx, tc, pn, rCan, before, after, limit)
+}
+
+// GetResourceVersionPath retrieves the version path for a specific resource version.
+func (cl *Client) GetResourceVersionPath(ctx context.Context, tc, pn, rCan string, versionID uint32) (*resource.VersionPathResponse, error) {
+	var resp thttp.GetResourceVersionPathResponse
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/resources/%s/versions/%d/path", cl.url, tc, pn, rCan, versionID), nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+	return resp.Data, nil
+}
+
+// GetPublicResourceVersionPath retrieves the version path for a public pipeline. It delegates to GetResourceVersionPath.
+func (cl *Client) GetPublicResourceVersionPath(ctx context.Context, tc, pn, rCan string, versionID uint32) (*resource.VersionPathResponse, error) {
+	return cl.GetResourceVersionPath(ctx, tc, pn, rCan, versionID)
 }
 
 // UpdatePipeline updates an existing pipeline's configuration, variables, and optionally its name.
@@ -478,13 +496,16 @@ func (cl *Client) GetPipeline(ctx context.Context, tc, pn string) (*pipeline.Pip
 }
 
 // GetPipelineImage retrieves the rendered image of a pipeline in the given format.
-func (cl *Client) GetPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates, groupParallel bool) ([]byte, error) {
+func (cl *Client) GetPipelineImage(ctx context.Context, tc, pn, format string, hideIntermediates, groupParallel bool, versionID *uint32) ([]byte, error) {
 	var params []string
 	if hideIntermediates {
 		params = append(params, "hide_intermediates=1")
 	}
 	if groupParallel {
 		params = append(params, "group_parallel=1")
+	}
+	if versionID != nil {
+		params = append(params, fmt.Sprintf("version_id=%d", *versionID))
 	}
 	q := ""
 	if len(params) > 0 {

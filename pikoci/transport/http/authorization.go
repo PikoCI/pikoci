@@ -70,6 +70,7 @@ var (
 		PinResourceVersion:     member,
 		UnpinResourceVersion:   member,
 		TriggerResourceVersion: member,
+		GetResourceVersionPath: member,
 
 		WebhookTrigger:         nothing,
 		RegenerateWebhookToken: admin,

@@ -42,4 +42,8 @@ type Repository interface {
 	CountRunningInSerialGroups(ctx context.Context, tc, pn string, serialGroups []string, excludeJobName string) (int, error)
 	// AggregateStatusByVersionIDs returns the aggregate build status for each version ID.
 	AggregateStatusByVersionIDs(ctx context.Context, versionIDs []uint32) (map[uint32]string, error)
+	// FindByVersionAndJobs returns builds for the given version ID across the
+	// specified jobs, including retries of matched builds.
+	// The result maps job name to a slice of builds (main build first, retries after).
+	FindByVersionAndJobs(ctx context.Context, tc, pn string, versionID uint32, jobNames []string) (map[string][]*Build, error)
 }
