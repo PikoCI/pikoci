@@ -435,6 +435,16 @@ job "gen" {
 
 			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#share-panel", "open", true), 5*time.Second)
 
+			// Wait for SVG URL to be populated
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				el, err := wd.FindElement(selenium.ByCSSSelector, "#share-svg-url")
+				if err != nil {
+					return false
+				}
+				val, _ := el.GetAttribute("value")
+				return val != ""
+			}, 5*time.Second)
+
 			svgURL, err := wd.FindElement(selenium.ByCSSSelector, "#share-svg-url")
 			require.NoError(t, err)
 			svgVal, err := svgURL.GetAttribute("value")
@@ -457,6 +467,7 @@ job "gen" {
 			require.NoError(t, err)
 			require.GreaterOrEqual(t, len(copyBtns), 1, "should have copy buttons")
 
+			// Close share panel and verify it's fully closed before next test
 			err = shareToggle.Click()
 			require.NoError(t, err)
 			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#share-panel", "open", false), 5*time.Second)
@@ -1072,6 +1083,16 @@ job "gen" {
 			require.NoError(t, err)
 
 			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#share-panel", "open", true), 5*time.Second)
+
+			// Wait for SVG URL to be populated
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				el, err := wd.FindElement(selenium.ByCSSSelector, "#share-svg-url")
+				if err != nil {
+					return false
+				}
+				val, _ := el.GetAttribute("value")
+				return val != ""
+			}, 5*time.Second)
 
 			svgURL, err := wd.FindElement(selenium.ByCSSSelector, "#share-svg-url")
 			require.NoError(t, err)
