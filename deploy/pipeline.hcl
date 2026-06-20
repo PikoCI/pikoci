@@ -124,6 +124,30 @@ job "test-mock" {
   }
 }
 
+job "test-http" {
+  get "git" "pikoci_pr" {
+    trigger = true
+  }
+  notify "github-check" "ci" { status = "in_progress" }
+  task "make" {
+    run "docker" {
+      image = var.go_image
+      cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH GVBINDIR=/pikoci-tools/graphviz && cd ${var.git_name} && make test-http"
+      args  = [
+        "-v", "pikoci-go-mod:/go/pkg/mod",
+        "-v", "pikoci-build:/root/.cache/go-build",
+        "-v", "pikoci-tools:/pikoci-tools",
+      ]
+    }
+  }
+  on_success {
+    notify "github-check" "ci" { conclusion = "success" }
+  }
+  on_failure {
+    notify "github-check" "ci" { conclusion = "failure" }
+  }
+}
+
 job "test-integration" {
   get "git" "pikoci_pr" {
     trigger = true
@@ -179,7 +203,7 @@ job "test-backends" {
   concurrency = 1
   get "git" "pikoci_pr" {
     trigger = true
-    passed  = ["lint", "test-mock", "test-integration"]
+    passed  = ["lint", "test-mock", "test-http", "test-integration"]
   }
 
   notify "github-check" "ci" { status = "in_progress" }
