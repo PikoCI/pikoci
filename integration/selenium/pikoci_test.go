@@ -435,33 +435,27 @@ job "gen" {
 
 			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#share-panel", "open", true), 5*time.Second)
 
-			// Wait for SVG URL to be populated
+			// Wait for SVG URL to be populated (JS sets .value, not HTML attribute)
 			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
-				el, err := wd.FindElement(selenium.ByCSSSelector, "#share-svg-url")
+				val, err := wd.ExecuteScript("return document.getElementById('share-svg-url').value", nil)
 				if err != nil {
 					return false
 				}
-				val, _ := el.GetAttribute("value")
-				return val != ""
+				s, _ := val.(string)
+				return s != ""
 			}, 5*time.Second)
 
-			svgURL, err := wd.FindElement(selenium.ByCSSSelector, "#share-svg-url")
+			svgVal, err := wd.ExecuteScript("return document.getElementById('share-svg-url').value", nil)
 			require.NoError(t, err)
-			svgVal, err := svgURL.GetAttribute("value")
-			require.NoError(t, err)
-			require.Contains(t, svgVal, ".svg", "SVG URL should contain .svg")
+			require.Contains(t, svgVal.(string), ".svg", "SVG URL should contain .svg")
 
-			pngURL, err := wd.FindElement(selenium.ByCSSSelector, "#share-png-url")
+			pngVal, err := wd.ExecuteScript("return document.getElementById('share-png-url').value", nil)
 			require.NoError(t, err)
-			pngVal, err := pngURL.GetAttribute("value")
-			require.NoError(t, err)
-			require.Contains(t, pngVal, ".png", "PNG URL should contain .png")
+			require.Contains(t, pngVal.(string), ".png", "PNG URL should contain .png")
 
-			mdURL, err := wd.FindElement(selenium.ByCSSSelector, "#share-md-url")
+			mdVal, err := wd.ExecuteScript("return document.getElementById('share-md-url').value", nil)
 			require.NoError(t, err)
-			mdVal, err := mdURL.GetAttribute("value")
-			require.NoError(t, err)
-			require.Contains(t, mdVal, "![", "Markdown URL should contain ![ prefix")
+			require.Contains(t, mdVal.(string), "![", "Markdown URL should contain ![ prefix")
 
 			copyBtns, err := wd.FindElements(selenium.ByCSSSelector, ".piko-share-copy")
 			require.NoError(t, err)
@@ -1084,27 +1078,23 @@ job "gen" {
 
 			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#share-panel", "open", true), 5*time.Second)
 
-			// Wait for SVG URL to be populated
+			// Wait for SVG URL to be populated (JS sets .value, not HTML attribute)
 			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
-				el, err := wd.FindElement(selenium.ByCSSSelector, "#share-svg-url")
+				val, err := wd.ExecuteScript("return document.getElementById('share-svg-url').value", nil)
 				if err != nil {
 					return false
 				}
-				val, _ := el.GetAttribute("value")
-				return val != ""
+				s, _ := val.(string)
+				return s != ""
 			}, 5*time.Second)
 
-			svgURL, err := wd.FindElement(selenium.ByCSSSelector, "#share-svg-url")
+			svgVal, err := wd.ExecuteScript("return document.getElementById('share-svg-url').value", nil)
 			require.NoError(t, err)
-			svgVal, err := svgURL.GetAttribute("value")
-			require.NoError(t, err)
-			require.Contains(t, svgVal, ".svg")
+			require.Contains(t, svgVal.(string), ".svg")
 
-			pngURL, err := wd.FindElement(selenium.ByCSSSelector, "#share-png-url")
+			pngVal, err := wd.ExecuteScript("return document.getElementById('share-png-url').value", nil)
 			require.NoError(t, err)
-			pngVal, err := pngURL.GetAttribute("value")
-			require.NoError(t, err)
-			require.Contains(t, pngVal, ".png")
+			require.Contains(t, pngVal.(string), ".png")
 
 			err = shareToggle.Click()
 			require.NoError(t, err)
