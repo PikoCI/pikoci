@@ -616,15 +616,12 @@ job "gen" {
 			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#pipeline-resources-panel", "open", false), 5*time.Second)
 		})
 		t.Run("Job Builds", func(t *testing.T) {
-			ppBtn, err := wd.FindElement(selenium.ByLinkText, "cron")
-			require.NoError(t, err)
-
-			err = ppBtn.Click()
+			// Navigate to pipeline page (may already be here after Version Scope Banner)
+			err := wd.Get(pikoURL + "/teams/main/pipelines/cron")
 			require.NoError(t, err)
 
 			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
 				_, err := wd.FindElement(selenium.ByCSSSelector, "div#pipeline-graph>svg")
-
 				return err == nil
 			}, 5*time.Second)
 
