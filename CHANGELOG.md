@@ -9,14 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- HTTP API integration tests covering all endpoints with real in-memory DB, organized under `integration/http/` ([#545](https://github.com/PikoCI/pikoci/issues/545))
-- Selenium tests for view switcher, gear/share/resources panels, and version scope banner across admin, member, and public contexts ([#545](https://github.com/PikoCI/pikoci/issues/545))
-- `test-http` CI pipeline job and `make test-http` target ([#545](https://github.com/PikoCI/pikoci/issues/545))
-
-### Changed
-
-- Reorganized `integration/` directory: Selenium tests moved to `integration/selenium/`, HTTP tests in `integration/http/` ([#545](https://github.com/PikoCI/pikoci/issues/545))
-
+- HTTP API integration tests covering all endpoints with real in-memory DB, reorganized `integration/` directory (`integration/selenium/`, `integration/http/`), and new Selenium tests for view switcher, gear/share/resources panels, and version scope banner ([#545](https://github.com/PikoCI/pikoci/issues/545))
 - **Version tracking**: Track a specific resource version through the pipeline to see which jobs it passed through and their build status. Available from the resource versions page (Track button), the Resources panel (expandable version list with Track/Trigger/Pin), and a new version dropdown in the list view. When tracking, both graph and list views scope to only the version's path, a banner shows progress, and the URL is shareable via `?version=ID` ([#432](https://github.com/PikoCI/pikoci/issues/432))
 - New `GetResourceVersionPath` API endpoint (`GET /teams/{tc}/pipelines/{pc}/resources/{rCan}/versions/{vID}/path`) returns the ordered chain of jobs a version passes through, with build status for each job including retries. Follows version propagation through intermediate put/get resources ([#432](https://github.com/PikoCI/pikoci/issues/432))
 - Pipeline graph image endpoint now accepts a `version_id` query parameter to filter the graph to only the tracked version's path with version-specific build colors ([#432](https://github.com/PikoCI/pikoci/issues/432))
