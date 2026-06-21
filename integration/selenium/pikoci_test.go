@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration_test
+package selenium_test
 
 import (
 	"bytes"
@@ -344,6 +344,162 @@ job "gen" {
 
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#a_node1", "cron.my_cron_edit"), 5*time.Second)
 		})
+		t.Run("View Switcher", func(t *testing.T) {
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				_, err := wd.FindElement(selenium.ByCSSSelector, "div#pipeline-graph>svg")
+				return err == nil
+			}, 5*time.Second)
+
+			graphBtn, err := wd.FindElement(selenium.ByCSSSelector, ".piko-view-btn[data-view='graph']")
+			require.NoError(t, err)
+			require.True(t, hasClass(graphBtn, "active"), "graph button should be active by default")
+
+			graphView, err := wd.FindElement(selenium.ByCSSSelector, ".piko-view-graph")
+			require.NoError(t, err)
+			gDisp, err := graphView.IsDisplayed()
+			require.NoError(t, err)
+			require.True(t, gDisp, "graph view should be visible")
+
+			listBtn, err := wd.FindElement(selenium.ByCSSSelector, ".piko-view-btn[data-view='list']")
+			require.NoError(t, err)
+			err = listBtn.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				el, err := wd.FindElement(selenium.ByCSSSelector, ".piko-view-list")
+				if err != nil {
+					return false
+				}
+				d, err := el.IsDisplayed()
+				return err == nil && d
+			}, 5*time.Second)
+
+			jobRows, err := wd.FindElements(selenium.ByCSSSelector, ".piko-job-row")
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, len(jobRows), 1, "should have at least one job row")
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, ".piko-rsel-container")
+			require.NoError(t, err, "resource selector should exist in list view")
+
+			graphBtn, err = wd.FindElement(selenium.ByCSSSelector, ".piko-view-btn[data-view='graph']")
+			require.NoError(t, err)
+			err = graphBtn.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				el, err := wd.FindElement(selenium.ByCSSSelector, ".piko-view-graph")
+				if err != nil {
+					return false
+				}
+				d, err := el.IsDisplayed()
+				return err == nil && d
+			}, 5*time.Second)
+		})
+		t.Run("Gear Panel", func(t *testing.T) {
+			gearPanel, err := wd.FindElement(selenium.ByCSSSelector, "#gear-panel")
+			require.NoError(t, err)
+			require.False(t, hasClass(gearPanel, "open"), "gear panel should be closed initially")
+
+			toggleBtn, err := wd.FindElement(selenium.ByCSSSelector, "#toggle-gear-panel")
+			require.NoError(t, err)
+			err = toggleBtn.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#gear-panel", "open", true), 5*time.Second)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#gear-hide-intermediates")
+			require.NoError(t, err, "hide intermediates checkbox should exist")
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#gear-group-parallel")
+			require.NoError(t, err, "group parallel checkbox should exist")
+
+			hiCheckbox, err := wd.FindElement(selenium.ByCSSSelector, "#gear-hide-intermediates")
+			require.NoError(t, err)
+			err = hiCheckbox.Click()
+			require.NoError(t, err)
+
+			time.Sleep(500 * time.Millisecond)
+
+			err = hiCheckbox.Click()
+			require.NoError(t, err)
+
+			err = toggleBtn.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#gear-panel", "open", false), 5*time.Second)
+		})
+		t.Run("Share Panel", func(t *testing.T) {
+			shareToggle, err := wd.FindElement(selenium.ByCSSSelector, "#toggle-share-panel")
+			require.NoError(t, err)
+			err = shareToggle.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#share-panel", "open", true), 5*time.Second)
+
+			// Wait for SVG URL to be populated (JS sets .value, not HTML attribute)
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				val, err := wd.ExecuteScript("return document.getElementById('share-svg-url').value", nil)
+				if err != nil {
+					return false
+				}
+				s, _ := val.(string)
+				return s != ""
+			}, 5*time.Second)
+
+			svgVal, err := wd.ExecuteScript("return document.getElementById('share-svg-url').value", nil)
+			require.NoError(t, err)
+			require.Contains(t, svgVal.(string), ".svg", "SVG URL should contain .svg")
+
+			pngVal, err := wd.ExecuteScript("return document.getElementById('share-png-url').value", nil)
+			require.NoError(t, err)
+			require.Contains(t, pngVal.(string), ".png", "PNG URL should contain .png")
+
+			mdVal, err := wd.ExecuteScript("return document.getElementById('share-md-url').value", nil)
+			require.NoError(t, err)
+			require.Contains(t, mdVal.(string), "![", "Markdown URL should contain ![ prefix")
+
+			copyBtns, err := wd.FindElements(selenium.ByCSSSelector, ".piko-share-copy")
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, len(copyBtns), 1, "should have copy buttons")
+
+			// Close share panel and verify it's fully closed before next test
+			err = shareToggle.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#share-panel", "open", false), 5*time.Second)
+		})
+		t.Run("Resources Panel", func(t *testing.T) {
+			resToggle, err := wd.FindElement(selenium.ByCSSSelector, "#toggle-resources-panel")
+			require.NoError(t, err)
+			err = resToggle.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#pipeline-resources-panel", "open", true), 5*time.Second)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				_, err := wd.FindElement(selenium.ByCSSSelector, ".piko-resource-card[data-canonical='cron.my_cron_edit']")
+				return err == nil
+			}, 5*time.Second)
+
+			cardName, err := wd.FindElement(selenium.ByCSSSelector, ".piko-resource-card[data-canonical='cron.my_cron_edit'] .piko-resource-card-name")
+			require.NoError(t, err)
+			nameTxt, err := cardName.Text()
+			require.NoError(t, err)
+			require.Contains(t, nameTxt, "cron.my_cron_edit")
+
+			cardType, err := wd.FindElement(selenium.ByCSSSelector, ".piko-resource-card[data-canonical='cron.my_cron_edit'] .piko-resource-card-type")
+			require.NoError(t, err)
+			typeTxt, err := cardType.Text()
+			require.NoError(t, err)
+			require.Contains(t, typeTxt, "cron")
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, ".check-resource-now")
+			require.NoError(t, err, "admin should see check-resource-now button")
+
+			closeBtn, err := wd.FindElement(selenium.ByCSSSelector, "#close-resources-panel")
+			require.NoError(t, err)
+			err = closeBtn.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#pipeline-resources-panel", "open", false), 5*time.Second)
+		})
 		t.Run("Resource Versions", func(t *testing.T) {
 			// TODO: Find a way to click the PP SVG
 			res, err := wd.FindElement(selenium.ByCSSSelector, "#a_node1>a")
@@ -382,16 +538,90 @@ job "gen" {
 				return len(rvs) > 0
 			}, 5*time.Second)
 		})
-		t.Run("Job Builds", func(t *testing.T) {
-			ppBtn, err := wd.FindElement(selenium.ByLinkText, "cron")
-			require.NoError(t, err)
-
-			err = ppBtn.Click()
+		t.Run("Version Scope Banner", func(t *testing.T) {
+			err := wd.Get(pikoURL + "/teams/main/pipelines/cron")
 			require.NoError(t, err)
 
 			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
 				_, err := wd.FindElement(selenium.ByCSSSelector, "div#pipeline-graph>svg")
+				return err == nil
+			}, 5*time.Second)
 
+			resToggle, err := wd.FindElement(selenium.ByCSSSelector, "#toggle-resources-panel")
+			require.NoError(t, err)
+			err = resToggle.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#pipeline-resources-panel", "open", true), 5*time.Second)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				_, err := wd.FindElement(selenium.ByCSSSelector, ".piko-resource-card[data-canonical='cron.my_cron_edit']")
+				return err == nil
+			}, 5*time.Second)
+
+			expandToggle, err := wd.FindElement(selenium.ByCSSSelector, ".piko-resource-expand-toggle[data-canonical='cron.my_cron_edit']")
+			require.NoError(t, err)
+			err = expandToggle.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				_, err := wd.FindElement(selenium.ByCSSSelector, ".piko-panel-track-btn")
+				return err == nil
+			}, 5*time.Second)
+
+			trackBtn, err := wd.FindElement(selenium.ByCSSSelector, ".piko-panel-track-btn")
+			require.NoError(t, err)
+			err = trackBtn.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				el, err := wd.FindElement(selenium.ByCSSSelector, "#version-scope-banner")
+				if err != nil {
+					return false
+				}
+				d, err := el.IsDisplayed()
+				return err == nil && d
+			}, 5*time.Second)
+
+			bannerRes, err := wd.FindElement(selenium.ByCSSSelector, "#version-banner-resource")
+			require.NoError(t, err)
+			resTxt, err := bannerRes.Text()
+			require.NoError(t, err)
+			require.Equal(t, "cron.my_cron_edit", resTxt)
+
+			bannerProgress, err := wd.FindElement(selenium.ByCSSSelector, "#version-banner-progress")
+			require.NoError(t, err)
+			progTxt, err := bannerProgress.Text()
+			require.NoError(t, err)
+			require.Contains(t, progTxt, "completed")
+
+			clearBtn, err := wd.FindElement(selenium.ByCSSSelector, "#clear-version-scope")
+			require.NoError(t, err)
+			err = clearBtn.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				el, err := wd.FindElement(selenium.ByCSSSelector, "#version-scope-banner")
+				if err != nil {
+					return true
+				}
+				d, err := el.IsDisplayed()
+				return err == nil && !d
+			}, 5*time.Second)
+
+			closeBtn, err := wd.FindElement(selenium.ByCSSSelector, "#close-resources-panel")
+			require.NoError(t, err)
+			err = closeBtn.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#pipeline-resources-panel", "open", false), 5*time.Second)
+		})
+		t.Run("Job Builds", func(t *testing.T) {
+			// Navigate to pipeline page (may already be here after Version Scope Banner)
+			err := wd.Get(pikoURL + "/teams/main/pipelines/cron")
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				_, err := wd.FindElement(selenium.ByCSSSelector, "div#pipeline-graph>svg")
 				return err == nil
 			}, 5*time.Second)
 
@@ -781,6 +1011,92 @@ job "gen" {
 			_, err = wd.FindElement(selenium.ByCSSSelector, "#edit-pipeline")
 			require.Error(t, err)
 		})
+		t.Run("View Switcher", func(t *testing.T) {
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				_, err := wd.FindElement(selenium.ByCSSSelector, "div#pipeline-graph>svg")
+				return err == nil
+			}, 5*time.Second)
+
+			listBtn, err := wd.FindElement(selenium.ByCSSSelector, ".piko-view-btn[data-view='list']")
+			require.NoError(t, err)
+			err = listBtn.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				el, err := wd.FindElement(selenium.ByCSSSelector, ".piko-view-list")
+				if err != nil {
+					return false
+				}
+				d, err := el.IsDisplayed()
+				return err == nil && d
+			}, 5*time.Second)
+
+			graphBtn, err := wd.FindElement(selenium.ByCSSSelector, ".piko-view-btn[data-view='graph']")
+			require.NoError(t, err)
+			err = graphBtn.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				el, err := wd.FindElement(selenium.ByCSSSelector, ".piko-view-graph")
+				if err != nil {
+					return false
+				}
+				d, err := el.IsDisplayed()
+				return err == nil && d
+			}, 5*time.Second)
+		})
+		t.Run("Resources Panel", func(t *testing.T) {
+			resToggle, err := wd.FindElement(selenium.ByCSSSelector, "#toggle-resources-panel")
+			require.NoError(t, err)
+			err = resToggle.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#pipeline-resources-panel", "open", true), 5*time.Second)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				cards, err := wd.FindElements(selenium.ByCSSSelector, ".piko-resource-card")
+				return err == nil && len(cards) > 0
+			}, 5*time.Second)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, ".check-resource-now")
+			require.NoError(t, err, "member should see check-resource-now button")
+
+			closeBtn, err := wd.FindElement(selenium.ByCSSSelector, "#close-resources-panel")
+			require.NoError(t, err)
+			err = closeBtn.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#pipeline-resources-panel", "open", false), 5*time.Second)
+		})
+		t.Run("Share Panel", func(t *testing.T) {
+			shareToggle, err := wd.FindElement(selenium.ByCSSSelector, "#toggle-share-panel")
+			require.NoError(t, err)
+			err = shareToggle.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#share-panel", "open", true), 5*time.Second)
+
+			// Wait for SVG URL to be populated (JS sets .value, not HTML attribute)
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				val, err := wd.ExecuteScript("return document.getElementById('share-svg-url').value", nil)
+				if err != nil {
+					return false
+				}
+				s, _ := val.(string)
+				return s != ""
+			}, 5*time.Second)
+
+			svgVal, err := wd.ExecuteScript("return document.getElementById('share-svg-url').value", nil)
+			require.NoError(t, err)
+			require.Contains(t, svgVal.(string), ".svg")
+
+			pngVal, err := wd.ExecuteScript("return document.getElementById('share-png-url').value", nil)
+			require.NoError(t, err)
+			require.Contains(t, pngVal.(string), ".png")
+
+			err = shareToggle.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#share-panel", "open", false), 5*time.Second)
+		})
 		t.Run("Resource Versions", func(t *testing.T) {
 			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
 				_, err := wd.FindElement(selenium.ByCSSSelector, "div#pipeline-graph>svg")
@@ -911,6 +1227,59 @@ job "gen" {
 				_, err := wd.FindElement(selenium.ByCSSSelector, "div#pipeline-graph>svg")
 				return err == nil
 			}, 5*time.Second)
+		})
+
+		t.Run("ViewSwitcherPublic", func(t *testing.T) {
+			listBtn, err := wd.FindElement(selenium.ByCSSSelector, ".piko-view-btn[data-view='list']")
+			require.NoError(t, err)
+			err = listBtn.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				el, err := wd.FindElement(selenium.ByCSSSelector, ".piko-view-list")
+				if err != nil {
+					return false
+				}
+				d, err := el.IsDisplayed()
+				return err == nil && d
+			}, 5*time.Second)
+
+			graphBtn, err := wd.FindElement(selenium.ByCSSSelector, ".piko-view-btn[data-view='graph']")
+			require.NoError(t, err)
+			err = graphBtn.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				el, err := wd.FindElement(selenium.ByCSSSelector, ".piko-view-graph")
+				if err != nil {
+					return false
+				}
+				d, err := el.IsDisplayed()
+				return err == nil && d
+			}, 5*time.Second)
+		})
+
+		t.Run("ResourcesPanelPublicHidden", func(t *testing.T) {
+			resToggle, err := wd.FindElement(selenium.ByCSSSelector, "#toggle-resources-panel")
+			require.NoError(t, err)
+			err = resToggle.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#pipeline-resources-panel", "open", true), 5*time.Second)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				cards, err := wd.FindElements(selenium.ByCSSSelector, ".piko-resource-card")
+				return err == nil && len(cards) > 0
+			}, 5*time.Second)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, ".check-resource-now")
+			require.Error(t, err, "public viewer should not see check-resource-now button")
+
+			closeBtn, err := wd.FindElement(selenium.ByCSSSelector, "#close-resources-panel")
+			require.NoError(t, err)
+			err = closeBtn.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#pipeline-resources-panel", "open", false), 5*time.Second)
 		})
 
 		t.Run("CanViewJobBuilds", func(t *testing.T) {

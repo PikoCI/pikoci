@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration_test
+package selenium_test
 
 import (
 	"context"
@@ -38,6 +38,9 @@ func runTests(m *testing.M) int {
 		ClientFoundRows: true,
 		System:          mysql.Mem,
 	})
+	if err != nil {
+		panic(err)
+	}
 
 	err = migrate.Migrate(db, mysql.Mem)
 	if err != nil {

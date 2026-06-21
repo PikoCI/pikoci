@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration_test
+package selenium_test
 
 import (
 	"fmt"
@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ var geckoDriverPath string
 
 func init() {
 	_, f, _, _ := runtime.Caller(0)
-	geckoDriverPath = filepath.Join(filepath.Dir(f), "vendor", "geckodriver")
+	geckoDriverPath = filepath.Join(filepath.Dir(f), "..", "vendor", "geckodriver")
 }
 
 func getRemote(t *testing.T) selenium.WebDriver {
@@ -68,4 +69,27 @@ func getRemote(t *testing.T) selenium.WebDriver {
 	})
 
 	return wd
+}
+
+func hasClass(el selenium.WebElement, className string) bool {
+	cls, err := el.GetAttribute("class")
+	if err != nil {
+		return false
+	}
+	for _, c := range strings.Split(cls, " ") {
+		if c == className {
+			return true
+		}
+	}
+	return false
+}
+
+func waitForClass(by, value, className string, want bool) waitForFn {
+	return func(t *testing.T, wd selenium.WebDriver) bool {
+		el, err := wd.FindElement(by, value)
+		if err != nil {
+			return false
+		}
+		return hasClass(el, className) == want
+	}
 }

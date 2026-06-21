@@ -63,16 +63,20 @@ lint: ## Runs staticcheck linter
 	GOFLAGS=-buildvcs=false go tool staticcheck ./...
 
 .PHONY: test
-test: test-mock test-integration test-backends ## Runs all tests
+test: test-mock test-http test-integration test-backends ## Runs all tests
 
 .PHONY: test-mock
 test-mock: ## Runs unit/mock tests (no services needed)
 	go test ./... -timeout 120s -coverprofile=coverage.out
 
+.PHONY: test-http
+test-http: ## Runs HTTP API integration tests (no browser needed)
+	go test -tags integration ./integration/http/... -v
+
 .PHONY: test-integration
 test-integration: ## Runs UI and backend integration tests (requires geckodriver + Xvfb + Firefox)
 	@PIKOCI_TEST_DB_SYSTEMS=$${PIKOCI_TEST_DB_SYSTEMS:-mem,sqlite} \
-	go test -tags integration ./integration/
+	go test -tags integration ./integration/selenium/
 
 .PHONY: test-backends
 test-backends: ## Runs integration tests with all backends (requires test-services-up)
