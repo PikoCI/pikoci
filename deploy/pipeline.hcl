@@ -44,6 +44,9 @@ job "lint" {
   on_failure {
     notify "github-check" "ci" { conclusion = "failure" }
   }
+  on_cancel {
+    notify "github-check" "ci" { conclusion = "cancelled" }
+  }
 }
 
 job "test-mock" {
@@ -122,6 +125,9 @@ job "test-mock" {
   on_failure {
     notify "github-check" "ci" { conclusion = "failure" }
   }
+  on_cancel {
+    notify "github-check" "ci" { conclusion = "cancelled" }
+  }
 }
 
 job "test-http" {
@@ -145,6 +151,9 @@ job "test-http" {
   }
   on_failure {
     notify "github-check" "ci" { conclusion = "failure" }
+  }
+  on_cancel {
+    notify "github-check" "ci" { conclusion = "cancelled" }
   }
 }
 
@@ -196,6 +205,9 @@ job "test-integration" {
   }
   on_failure {
     notify "github-check" "ci" { conclusion = "failure" }
+  }
+  on_cancel {
+    notify "github-check" "ci" { conclusion = "cancelled" }
   }
 }
 
@@ -288,6 +300,9 @@ job "test-backends" {
   }
   on_failure {
     notify "github-check" "ci" { conclusion = "failure" }
+  }
+  on_cancel {
+    notify "github-check" "ci" { conclusion = "cancelled" }
   }
 }
 
