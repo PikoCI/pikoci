@@ -148,18 +148,18 @@ function PipelineResourcesPanel({ tc, pn, resources, isMember, onClose, onTrackV
               ${r.check_interval && html`<span>${r.check_interval}</span>`}
               ${r.last_check && !r.last_check.startsWith('0001-01-01') && html`<span>Checked: ${pikoTimeAgo(r.last_check)}</span>`}
             </div>
-            ${isMember && html`
-              <div class="piko-resource-card-actions mt-1">
+            <div class="piko-resource-card-actions mt-1">
+              ${isMember && html`
                 <button class="btn btn-sm btn-outline-warning check-resource-now" data-canonical=${r.canonical}
                   onClick=${e => checkNow(e, r.canonical)}>
                   <i class="bi bi-arrow-clockwise"></i> Check Now
                 </button>
-                <button class="piko-resource-expand-toggle" data-canonical=${r.canonical}
-                  onClick=${e => toggleVersionsList(e, r.canonical)}>
-                  <i class=${'bi ' + (expandedResources[r.canonical] ? 'bi-chevron-up' : 'bi-chevron-down')}></i> Versions
-                </button>
-              </div>
-            `}
+              `}
+              <button class="piko-resource-expand-toggle" data-canonical=${r.canonical}
+                onClick=${e => toggleVersionsList(e, r.canonical)}>
+                <i class=${'bi ' + (expandedResources[r.canonical] ? 'bi-chevron-up' : 'bi-chevron-down')}></i> Versions
+              </button>
+            </div>
             <div class="piko-resource-panel-versions" data-canonical=${r.canonical}
                  style=${expandedResources[r.canonical] ? '' : 'display:none;'}>
               ${(versionLists[r.canonical] || []).map(v => {
@@ -176,13 +176,15 @@ function PipelineResourcesPanel({ tc, pn, resources, isMember, onClose, onTrackV
                       : html`<button class="piko-panel-track-btn" data-canonical=${r.canonical} data-version-id=${v.id} data-version-ref=${ref} title="Track"
                                onClick=${e => handleTrack(e, r.canonical, v.id, ref)}><i class="bi bi-signpost-2"></i></button>`
                     }
-                    <button class="piko-panel-trigger-btn" data-canonical=${r.canonical} data-version-id=${v.id} title="Trigger"
-                      onClick=${e => handleTrigger(e, r.canonical, v.id)}><i class="bi bi-play-fill"></i></button>
-                    <button class=${'piko-panel-pin-btn' + (isPinned ? ' pinned' : '')} data-canonical=${r.canonical} data-version-id=${v.id}
-                      title=${isPinned ? 'Unpin' : 'Pin'}
-                      onClick=${e => handlePin(e, r.canonical, v.id, isPinned)}>
-                      <i class=${'bi ' + (isPinned ? 'bi-pin-fill' : 'bi-pin')}></i>
-                    </button>
+                    ${isMember && html`
+                      <button class="piko-panel-trigger-btn" data-canonical=${r.canonical} data-version-id=${v.id} title="Trigger"
+                        onClick=${e => handleTrigger(e, r.canonical, v.id)}><i class="bi bi-play-fill"></i></button>
+                      <button class=${'piko-panel-pin-btn' + (isPinned ? ' pinned' : '')} data-canonical=${r.canonical} data-version-id=${v.id}
+                        title=${isPinned ? 'Unpin' : 'Pin'}
+                        onClick=${e => handlePin(e, r.canonical, v.id, isPinned)}>
+                        <i class=${'bi ' + (isPinned ? 'bi-pin-fill' : 'bi-pin')}></i>
+                      </button>
+                    `}
                   </div>
                 `;
               })}
