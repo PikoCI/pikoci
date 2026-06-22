@@ -121,7 +121,7 @@ function PipelineResourcesPanel({ tc, pn, resources, isMember, onClose, onTrackV
     <div class="piko-resources-panel-header">
       <span class="fw-bold">Resources</span>
       <button type="button" id="close-resources-panel" onClick=${closePanel}
-        style="background:none;border:none;color:var(--text-secondary);font-size:1.2rem;cursor:pointer;padding:0;line-height:1">&times;</button>
+        style="background:none;border:none;color:var(--text-secondary);font-size:1rem;cursor:pointer;padding:0;line-height:1"><i class="bi bi-x-lg"></i></button>
     </div>
     <div class="piko-resources-panel-body">
       ${resources.length === 0 && html`

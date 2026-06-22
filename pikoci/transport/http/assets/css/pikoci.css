@@ -1798,8 +1798,8 @@ body.piko-fullscreen .btn-primary { display: none; }
    Version Scope Banner
    ============================================================ */
 .piko-version-banner {
-  background: linear-gradient(135deg, #1D2B53 0%, #2a3a65 100%);
-  border-bottom: 3px solid #29ADFF;
+  background: var(--bg-muted);
+  border-bottom: 3px solid var(--primary);
   padding: 8px 16px;
   display: flex;
   align-items: center;
@@ -1810,37 +1810,37 @@ body.piko-fullscreen .btn-primary { display: none; }
   gap: 10px;
   width: 100%;
   font-size: 0.85rem;
-  color: #fff;
+  color: var(--text-primary);
 }
 .piko-version-banner-icon {
-  color: #29ADFF;
+  color: var(--primary);
   font-size: 1rem;
 }
 .piko-version-banner-label {
-  color: #83769C;
+  color: var(--text-muted);
   font-weight: 500;
 }
 .piko-version-banner-resource {
-  color: #29ADFF;
+  color: var(--primary);
   font-weight: 600;
 }
 .piko-version-banner-ref {
-  font-family: 'JetBrains Mono', monospace;
-  background: rgba(41,173,255,0.15);
+  font-family: var(--font-mono);
+  background: var(--primary-light);
   padding: 2px 8px;
   border-radius: 4px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 0.8rem;
 }
 .piko-version-banner-progress {
   margin-left: auto;
-  color: #83769C;
+  color: var(--text-muted);
   font-size: 0.8rem;
 }
 .piko-version-banner-clear {
   background: transparent;
-  border: 1px solid #5F574F;
-  color: #83769C;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   border-radius: 4px;
   padding: 3px 10px;
   font-size: 0.78rem;
@@ -1851,8 +1851,8 @@ body.piko-fullscreen .btn-primary { display: none; }
   transition: all 0.15s;
 }
 .piko-version-banner-clear:hover {
-  border-color: #29ADFF;
-  color: #fff;
+  border-color: var(--primary);
+  color: var(--text-primary);
 }
 
 /* ============================================================
