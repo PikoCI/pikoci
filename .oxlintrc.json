@@ -1,0 +1,38 @@
+{
+  "rules": {
+    "no-unused-vars": "error",
+    "no-undef": "off",
+    "no-console": "off",
+    "eqeqeq": "warn"
+  },
+  "env": {
+    "browser": true,
+    "es2022": true
+  },
+  "globals": {
+    "window": "readonly",
+    "document": "readonly",
+    "localStorage": "readonly",
+    "navigator": "readonly",
+    "fetch": "readonly",
+    "requestAnimationFrame": "readonly",
+    "setTimeout": "readonly",
+    "setInterval": "readonly",
+    "clearInterval": "readonly",
+    "clearTimeout": "readonly",
+    "history": "readonly",
+    "confirm": "readonly",
+    "URL": "readonly",
+    "URLSearchParams": "readonly",
+    "console": "readonly",
+    "bootstrap": "readonly",
+    "Viz": "readonly",
+    "CM": "readonly",
+    "EditorView": "readonly",
+    "btoa": "readonly"
+  },
+  "ignorePatterns": [
+    "js/vendor/**",
+    "js/app/graph-zoom.js"
+  ]
+}

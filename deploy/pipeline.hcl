@@ -1,55 +1,6 @@
 # --- Jobs: CI ---
 
-job "lint" {
-  get "git" "pikoci_pr" {
-    trigger = true
-  }
-  notify "github-check" "ci" { status = "in_progress" }
-  task "install-tools" {
-    run "docker" {
-      image = var.go_image
-      cmd   = <<-EOT
-        apt-get update -qq && apt-get install -qq -y jq
-        cp /usr/bin/jq /pikoci-tools/
-        cp /usr/lib/*/libjq.so* /usr/lib/*/libonig.so* /pikoci-tools/ 2>/dev/null; true
-        if [ ! -f /pikoci-tools/codecov ]; then
-          ARCH=$(dpkg --print-architecture)
-          if [ "$ARCH" = "arm64" ]; then
-            curl -fsSL https://cli.codecov.io/latest/linux-arm64/codecov -o /pikoci-tools/codecov
-          else
-            curl -fsSL https://cli.codecov.io/latest/linux/codecov -o /pikoci-tools/codecov
-          fi
-          chmod +x /pikoci-tools/codecov
-        fi
-      EOT
-      args  = [
-        "-v", "pikoci-tools:/pikoci-tools",
-      ]
-    }
-  }
-  task "make" {
-    run "docker" {
-      image = var.go_image
-      cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH && cd ${var.git_name} && make lint"
-      args  = [
-        "-v", "pikoci-go-mod:/go/pkg/mod",
-        "-v", "pikoci-build:/root/.cache/go-build",
-        "-v", "pikoci-tools:/pikoci-tools",
-      ]
-    }
-  }
-  on_success {
-    notify "github-check" "ci" { conclusion = "success" }
-  }
-  on_failure {
-    notify "github-check" "ci" { conclusion = "failure" }
-  }
-  on_cancel {
-    notify "github-check" "ci" { conclusion = "cancelled" }
-  }
-}
-
-job "test-mock" {
+job "backend" {
   get "git" "pikoci_pr" {
     trigger = true
   }
@@ -86,15 +37,40 @@ job "test-mock" {
       ]
     }
   }
-  task "make" {
-    run "docker" {
-      image = var.go_image
-      cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH GVBINDIR=/pikoci-tools/graphviz && cd ${var.git_name} && make test-mock"
-      args  = [
-        "-v", "pikoci-go-mod:/go/pkg/mod",
-        "-v", "pikoci-build:/root/.cache/go-build",
-        "-v", "pikoci-tools:/pikoci-tools",
-      ]
+  in_parallel {
+    limit = 2
+    task "lint" {
+      run "docker" {
+        image = var.go_image
+        cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH && cd ${var.git_name} && make lint"
+        args  = [
+          "-v", "pikoci-go-mod:/go/pkg/mod",
+          "-v", "pikoci-build:/root/.cache/go-build",
+          "-v", "pikoci-tools:/pikoci-tools",
+        ]
+      }
+    }
+    task "test-mock" {
+      run "docker" {
+        image = var.go_image
+        cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH GVBINDIR=/pikoci-tools/graphviz && cd ${var.git_name} && make test-mock"
+        args  = [
+          "-v", "pikoci-go-mod:/go/pkg/mod",
+          "-v", "pikoci-build:/root/.cache/go-build",
+          "-v", "pikoci-tools:/pikoci-tools",
+        ]
+      }
+    }
+    task "test-http" {
+      run "docker" {
+        image = var.go_image
+        cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH GVBINDIR=/pikoci-tools/graphviz && cd ${var.git_name} && make test-http"
+        args  = [
+          "-v", "pikoci-go-mod:/go/pkg/mod",
+          "-v", "pikoci-build:/root/.cache/go-build",
+          "-v", "pikoci-tools:/pikoci-tools",
+        ]
+      }
     }
   }
   task "upload-coverage" {
@@ -130,20 +106,37 @@ job "test-mock" {
   }
 }
 
-job "test-http" {
+job "frontend" {
   get "git" "pikoci_pr" {
     trigger = true
   }
   notify "github-check" "ci" { status = "in_progress" }
-  task "make" {
+  task "install-tools" {
     run "docker" {
-      image = var.go_image
-      cmd   = "export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH GVBINDIR=/pikoci-tools/graphviz && cd ${var.git_name} && make test-http"
-      args  = [
-        "-v", "pikoci-go-mod:/go/pkg/mod",
-        "-v", "pikoci-build:/root/.cache/go-build",
-        "-v", "pikoci-tools:/pikoci-tools",
-      ]
+      image = "node:20-slim"
+      cmd   = <<-EOT
+        if [ ! -f /pikoci-js-tools/node_modules/.bin/oxlint ]; then
+          cd /pikoci-js-tools && npm install oxlint
+        fi
+      EOT
+      args = ["-v", "pikoci-js-tools:/pikoci-js-tools"]
+    }
+  }
+  in_parallel {
+    limit = 2
+    task "lint" {
+      run "docker" {
+        image = "node:20-slim"
+        cmd   = "export PATH=/pikoci-js-tools/node_modules/.bin:$PATH && cd ${var.git_name} && oxlint --deny-warnings pikoci/transport/http/assets/js/app/"
+        args  = ["-v", "pikoci-js-tools:/pikoci-js-tools"]
+      }
+    }
+    task "test" {
+      run "docker" {
+        image = "node:20-slim"
+        cmd   = "cd ${var.git_name} && node --import ./test/js/setup.mjs --test test/js/utils.test.mjs test/js/state.test.mjs test/js/api.test.mjs test/js/components.test.mjs test/js/hooks.test.mjs test/js/toast.test.mjs"
+        args  = ["-v", "pikoci-js-tools:/pikoci-js-tools"]
+      }
     }
   }
   on_success {
@@ -215,7 +208,7 @@ job "test-backends" {
   concurrency = 1
   get "git" "pikoci_pr" {
     trigger = true
-    passed  = ["lint", "test-mock", "test-http", "test-integration"]
+    passed  = ["backend", "frontend", "test-integration"]
   }
 
   notify "github-check" "ci" { status = "in_progress" }

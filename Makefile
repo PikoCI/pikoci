@@ -62,8 +62,12 @@ gen: ## Runs go generate
 lint: ## Runs staticcheck linter
 	GOFLAGS=-buildvcs=false go tool staticcheck ./...
 
+.PHONY: lint-js
+lint-js: ## Lint JavaScript with oxlint
+	npx oxlint --deny-warnings pikoci/transport/http/assets/js/app/
+
 .PHONY: test
-test: test-mock test-http test-integration test-backends ## Runs all tests
+test: test-mock test-http test-js test-integration test-backends ## Runs all tests
 
 .PHONY: test-mock
 test-mock: ## Runs unit/mock tests (no services needed)
@@ -84,6 +88,10 @@ test-backends: ## Runs integration tests with all backends (requires test-servic
 	PIKOCI_TEST_VAULT=1 \
 	PIKOCI_TEST_VAULT_ADDR=http://127.0.0.1:8200 \
 	go test -tags integration ./integration/backends/... -coverprofile=coverage-backends.out
+
+.PHONY: test-js
+test-js: ## Run JavaScript unit tests
+	node --import ./test/js/setup.mjs --test test/js/utils.test.mjs test/js/state.test.mjs test/js/api.test.mjs test/js/components.test.mjs test/js/hooks.test.mjs test/js/toast.test.mjs
 
 .PHONY: tag
 tag: ## Tag a release: make tag SEMVER=major|minor|patch
