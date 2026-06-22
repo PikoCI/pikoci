@@ -89,128 +89,34 @@ const localEditorHTML = `<!DOCTYPE html>
     <link href="/css/bootstrap-icons.min.css" rel="stylesheet" />
     <link href="/images/favicon.svg" rel="icon" type="image/svg+xml"/>
   </head>
-
   <body>
-    <div id="app">
-    </div>
+    <script>
+      if (localStorage.getItem('piko-theme') === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    </script>
 
-    <script type="text/javascript" src="/js/jquery.min.js"></script>
-    <script type="text/javascript" src="/js/underscorejs.min.js"></script>
-    <script type="text/javascript" src="/js/backbonejs.min.js"></script>
+    <div id="app"></div>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "preact": "/js/vendor/preact.module.js",
+        "preact/": "/js/vendor/preact/",
+        "preact/hooks": "/js/vendor/preact/hooks.module.js",
+        "htm": "/js/vendor/htm.module.js",
+        "htm/preact": "/js/vendor/htm-preact.module.js",
+        "preact-router": "/js/vendor/preact-router.module.js",
+        "preact-router/match": "/js/vendor/preact-router-match.module.js",
+        "@preact/signals": "/js/vendor/signals.module.js",
+        "@preact/signals-core": "/js/vendor/signals-core.module.js"
+      }
+    }
+    </script>
+
     <script type="text/javascript" src="/js/bootstrap.bundle.min.js"></script>
     <script type="text/javascript" src="/js/viz-global.js"></script>
     <script type="text/javascript" src="/js/codemirror-hcl.min.js"></script>
-
-    <script type="text/template" id="main-view">
-      <main class="container">
-        <div id="notice"></div>
-        <div id="main"></div>
-      </main>
-    </script>
-
-    <script type="text/template" id="notice-view">
-      <div></div>
-    </script>
-
-    <script type="text/template" id="pipeline-graph-view">
-      <div id="pipeline-graph"></div>
-    </script>
-
-    <script type="text/template" id="pipelines-new-view">
-      <div class="piko-page-header mb-3">
-        <h1 class="h4 fw-bold mb-0">Local Editor</h1>
-      </div>
-      <form>
-        <div class="piko-settings-row mb-3" style="display:none;">
-          <div class="piko-field">
-            <label class="form-label">Name</label>
-            <input type="text" class="form-control" id="name" value="<%- name %>" style="width:280px">
-          </div>
-          <div class="piko-checkbox-inline">
-            <input type="checkbox" class="form-check-input" id="public">
-            <label class="form-check-label" for="public">Public</label>
-          </div>
-        </div>
-        <div class="piko-editor-card" id="editor-card">
-          <div class="piko-editor-toolbar">
-            <div class="piko-tab active" id="tab-hcl">pipeline.hcl</div>
-            <div class="piko-tab" id="tab-vars">vars.json</div>
-            <div class="piko-toolbar-spacer"></div>
-            <div class="piko-docs-dropdown" id="docs-dropdown">
-              <button type="button" class="piko-tbtn" id="docs-btn" title="Pipeline documentation">
-                <i class="bi bi-book"></i> <span class="piko-tbtn-label">Docs</span> <i class="bi bi-chevron-down" style="font-size:0.6rem;margin-left:2px"></i>
-              </button>
-              <div class="piko-docs-menu" id="docs-menu">
-                <a href="https://docs.pikoci.com/Pipeline" target="_blank" rel="noopener"><i class="bi bi-file-text"></i> Pipeline overview</a>
-                <div class="piko-docs-divider"></div>
-                <div class="piko-docs-label">Blocks</div>
-                <a href="https://docs.pikoci.com/Pipeline#job" target="_blank" rel="noopener"><span class="piko-block-icon jb">J</span> job</a>
-                <a href="https://docs.pikoci.com/Pipeline#resource" target="_blank" rel="noopener"><span class="piko-block-icon rs">R</span> resource</a>
-                <a href="https://docs.pikoci.com/Pipeline#resource_type" target="_blank" rel="noopener"><span class="piko-block-icon rt">R</span> resource_type</a>
-                <a href="https://docs.pikoci.com/Pipeline#runner_type" target="_blank" rel="noopener"><span class="piko-block-icon rn">R</span> runner_type</a>
-                <a href="https://docs.pikoci.com/Pipeline#secret_type" target="_blank" rel="noopener"><span class="piko-block-icon st">S</span> secret_type</a>
-                <a href="https://docs.pikoci.com/Pipeline#service_type" target="_blank" rel="noopener"><span class="piko-block-icon sv">S</span> service_type</a>
-                <a href="https://docs.pikoci.com/Notifications#notification-types" target="_blank" rel="noopener"><span class="piko-block-icon nt">N</span> notification_type</a>
-                <a href="https://docs.pikoci.com/Notifications#notifications" target="_blank" rel="noopener"><span class="piko-block-icon no">N</span> notification</a>
-                <a href="https://docs.pikoci.com/Pipeline#variable" target="_blank" rel="noopener"><span class="piko-block-icon vr">V</span> variable</a>
-              </div>
-            </div>
-            <div class="piko-toolbar-sep"></div>
-            <button type="button" class="piko-tbtn active" id="blocks-btn" title="Toggle blocks panel">
-              <i class="bi bi-list-nested"></i> <span class="piko-tbtn-label">Blocks</span>
-              <span class="piko-error-badge"></span>
-            </button>
-            <div class="piko-toolbar-sep"></div>
-            <button type="button" class="piko-tbtn" id="graph-btn" title="Toggle graph preview">
-              <i class="bi bi-diagram-3"></i>
-            </button>
-            <div class="piko-toolbar-sep"></div>
-            <button type="button" class="piko-tbtn" id="fullscreen-btn" title="Fullscreen (Esc to exit)">
-              <i class="bi bi-arrows-fullscreen"></i>
-            </button>
-          </div>
-          <div class="piko-editor-body">
-            <div class="piko-blocks-panel" id="blocks-panel"></div>
-            <div class="piko-code-area" id="code-area">
-              <div id="pipeline-editor"></div>
-              <textarea id="pipeline" style="display:none"><%- raw %></textarea>
-            </div>
-            <div class="piko-vars-area" id="vars-area">
-              <textarea type="text" rows="10" class="form-control" id="vars" placeholder='{"key": "value"}'></textarea>
-              <div class="piko-vars-hint">JSON object passed as variables to the pipeline definition.</div>
-            </div>
-          </div>
-          <div class="piko-graph-bottom" id="graph-bottom-panel">
-            <div class="piko-graph-bottom-header">
-              <span><i class="bi bi-diagram-3"></i> Graph Preview</span>
-              <button type="button" id="graph-bottom-close" title="Close"><i class="bi bi-x-lg"></i></button>
-            </div>
-            <div class="piko-graph-bottom-body" id="graph-fullscreen"></div>
-          </div>
-        </div>
-        <div class="piko-graph-strip" id="graph-strip">
-          <div class="piko-graph-strip-header" id="graph-strip-header">
-            <span><i class="bi bi-diagram-3"></i> Graph Preview</span>
-            <i class="bi bi-chevron-right piko-graph-chev"></i>
-          </div>
-          <div class="piko-graph-strip-body" id="graph">
-          </div>
-        </div>
-        <button type="submit" class="btn btn-primary mt-2" id="create">Save</button>
-      </form>
-    </script>
-
-    <script type="text/javascript">
-      'use strict';
-      (function() {
-        var saved = localStorage.getItem('piko-theme');
-        if (saved === 'dark') {
-          document.documentElement.setAttribute('data-theme', 'dark');
-        }
-      })();
-    </script>
-
-    <script type="module" src="/js/app/local-init.js"></script>
-
+    <script type="module" src="/js/app/local-app.js"></script>
   </body>
 </html>`
