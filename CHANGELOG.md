@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-22
+
 ### Changed
 
 - **Frontend migrated from BackboneJS to Preact + HTM**. Replaces Backbone, jQuery, and Underscore (~100KB) with Preact, HTM, preact-router, and @preact/signals (~24KB). No build step, no bundler, same no-npm philosophy. Virtual DOM eliminates flickering from full re-renders. All existing features preserved with 70+ Selenium tests passing.
