@@ -7,8 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Frontend migrated from BackboneJS to Preact + HTM**. Replaces Backbone, jQuery, and Underscore (~100KB) with Preact, HTM, preact-router, and @preact/signals (~24KB). No build step, no bundler, same no-npm philosophy. Virtual DOM eliminates flickering from full re-renders. All existing features preserved with 70+ Selenium tests passing.
+- CI pipeline restructured: consolidated Go lint/test-mock/test-http into single `go` job, added new `js` job (node:20-slim) for JS linting and unit tests
+- Polling now pauses when the browser tab is hidden (Visibility API via `usePolling` hook), reducing wasted network requests by ~50%
+
 ### Added
 
+- JavaScript unit tests: 102 tests covering utilities, state management, API layer, hooks, toast system, and component snapshots using Node.js built-in test runner (`node --test`)
+- JavaScript linting with oxlint (833 rules, single binary, no npm required)
+- `make test-js` and `make lint-js` Makefile targets
+- New Selenium tests for build log steps, resource pin/unpin, webhook panel, editor features (vars tab, blocks panel, fullscreen, error diagnostics, graph-node-to-block jump), users CRUD, workers page, pipeline pause/unpause, dark mode persistence, navigation edge cases, and public resource versions access control
 - HTTP API integration tests covering all endpoints with real in-memory DB, reorganized `integration/` directory (`integration/selenium/`, `integration/http/`), and new Selenium tests for view switcher, gear/share/resources panels, and version scope banner ([#545](https://github.com/PikoCI/pikoci/issues/545))
 - **Version tracking**: Track a specific resource version through the pipeline to see which jobs it passed through and their build status. Available from the resource versions page (Track button), the Resources panel (expandable version list with Track/Trigger/Pin), and a new version dropdown in the list view. When tracking, both graph and list views scope to only the version's path, a banner shows progress, and the URL is shareable via `?version=ID` ([#432](https://github.com/PikoCI/pikoci/issues/432))
 - New `GetResourceVersionPath` API endpoint (`GET /teams/{tc}/pipelines/{pc}/resources/{rCan}/versions/{vID}/path`) returns the ordered chain of jobs a version passes through, with build status for each job including retries. Follows version propagation through intermediate put/get resources ([#432](https://github.com/PikoCI/pikoci/issues/432))
