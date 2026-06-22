@@ -206,7 +206,7 @@ function escapeHtml(str) {
 // ================================================================
 // Editor component
 // ================================================================
-export function Editor({ pipeline, teamCanonical, _isLocal, onSave, onSaveSuccess }) {
+export function Editor({ pipeline, teamCanonical, onSave, onSaveSuccess }) {
   const editorRef = useRef(null);       // CodeMirror EditorView
   const editorElRef = useRef(null);     // #pipeline-editor DOM element
   const graphRef = useRef(null);        // #graph container (strip)

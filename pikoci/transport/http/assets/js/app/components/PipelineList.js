@@ -143,11 +143,11 @@ function updateStatusFromSVG(svg, lastBuildAt, setStatusHtml) {
   });
   const timeAgo = lastBuildAt ? ' \u00b7 ' + pikoTimeAgo(lastBuildAt) : '';
   if (hasFailed) {
-    setStatusHtml(html`<span class="piko-card-status-dot" style="background:#FF004D;"></span> Last build failed${timeAgo}`);
+    setStatusHtml(html`<span class="piko-card-status-dot" style="background:var(--status-failed);"></span> Last build failed${timeAgo}`);
   } else if (hasRunning) {
-    setStatusHtml(html`<span class="piko-card-status-dot" style="background:#FFA300;"></span> Running${timeAgo}`);
+    setStatusHtml(html`<span class="piko-card-status-dot" style="background:var(--status-started);"></span> Running${timeAgo}`);
   } else if (hasSucceeded) {
-    setStatusHtml(html`<span class="piko-card-status-dot" style="background:#00A83A;"></span> Last build passed${timeAgo}`);
+    setStatusHtml(html`<span class="piko-card-status-dot" style="background:var(--status-succeeded);"></span> Last build passed${timeAgo}`);
   } else {
     setStatusHtml(html`<span style="color:var(--text-muted);">No builds</span>`);
   }

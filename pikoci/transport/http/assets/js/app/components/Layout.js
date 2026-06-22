@@ -10,7 +10,7 @@ import { registerToastSetter, dismissToast } from '../toast.js';
 
 // --- Notice (toast renderer) ---
 
-const Notice = () => {
+export const Notice = () => {
   const [toasts, setToasts] = useState([]);
 
   useEffect(() => {
@@ -63,7 +63,7 @@ const Header = () => {
 
   useEffect(() => {
     syncThemeSwitch();
-  });
+  }, []);
 
   const navLink = (e, href) => {
     e.preventDefault();

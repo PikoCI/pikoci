@@ -1,7 +1,7 @@
 # Design: Migrate Frontend from BackboneJS to Preact + HTM
 
 **Date:** 2026-06-21
-**Status:** Draft
+**Status:** Implemented
 **Motivation:** BackboneJS full re-renders cause visible flickering on model changes. A virtual DOM framework solves this at the framework level. BackboneJS is also effectively unmaintained with a shrinking ecosystem.
 
 ## Constraints

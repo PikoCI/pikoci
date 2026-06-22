@@ -15,8 +15,6 @@ import { ResourceVersions } from './components/Resources.js';
 import { WorkersList } from './components/Workers.js';
 import { UsersList, UserNew, UserShow, Profile } from './components/Users.js';
 
-// Most component imports above are stubs that return placeholder markup.
-// Each stub will be replaced with the real implementation in subsequent tasks.
 
 function NotFound() {
   useEffect(() => {

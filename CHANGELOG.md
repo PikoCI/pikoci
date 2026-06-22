@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] - 2026-06-22
 
 ### Changed
 
@@ -42,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Retrying a build now reuses the resource versions from the original build instead of fetching the latest version ([#552](https://github.com/PikoCI/pikoci/issues/552))
 - `in_parallel` sub-step durations now display as formatted time (`HH:MM:SS`) instead of raw nanoseconds ([#526](https://github.com/PikoCI/pikoci/issues/526))
 - Webhook triggers now work correctly after the `tags` column was added to resources. `FindByWebhookToken` was missing the `tags` Scan destination, causing all webhook calls to return 400 ([#544](https://github.com/PikoCI/pikoci/issues/544))
+- Version tracking banner now adapts to light/dark mode using CSS variables instead of hardcoded dark blue background
+- Resources panel close button now renders correctly (Bootstrap Icon instead of raw HTML entity)
+- Resources panel version list is now visible to public pipeline viewers (read-only, no trigger/pin buttons)
+- Resource panel version text is no longer invisible in light mode (white-on-white)
 
 ## [0.5.1] - 2026-06-16
 
@@ -264,5 +268,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI `pipelines update` using POST instead of PUT ([#339](https://github.com/PikoCI/pikoci/issues/339))
 - Update handler preserving `team_canonical` from URL after JSON decode
 
-[unreleased]: https://github.com/PikoCI/pikoci/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/PikoCI/pikoci/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/PikoCI/pikoci/compare/v0.5.1...v0.6.0
+[0.5.1]: https://github.com/PikoCI/pikoci/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/PikoCI/pikoci/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/PikoCI/pikoci/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/PikoCI/pikoci/compare/v0.2.2...v0.3.0
+[0.2.2]: https://github.com/PikoCI/pikoci/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/PikoCI/pikoci/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/PikoCI/pikoci/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/PikoCI/pikoci/releases/tag/v0.1.0

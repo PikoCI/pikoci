@@ -645,11 +645,11 @@ export function PipelineShow({ tc, pn }) {
             Cancelled
           </span>
           <span class="piko-graph-legend-item">
-            <span class="piko-graph-legend-swatch" style="background:#83769C;"></span>
+            <span class="piko-graph-legend-swatch" style="background:var(--status-pending);"></span>
             No builds
           </span>
           <span class="piko-graph-legend-item">
-            <span class="piko-graph-legend-swatch" style="background:#29ADFF;"></span>
+            <span class="piko-graph-legend-swatch" style="background:var(--primary);"></span>
             Paused
           </span>
         </div>
