@@ -1987,7 +1987,7 @@ body.piko-fullscreen .btn-primary { display: none; }
 }
 .piko-resource-panel-versions {
   padding: 4px 0 8px 12px;
-  border-left: 2px solid #5F574F;
+  border-left: 2px solid var(--border);
   margin-left: 8px;
 }
 .piko-resource-panel-version-item {
@@ -1996,7 +1996,7 @@ body.piko-fullscreen .btn-primary { display: none; }
   gap: 6px;
   padding: 4px 8px;
   font-size: 0.78rem;
-  color: #fff;
+  color: var(--text-primary);
 }
 .piko-resource-panel-version-item .piko-vsel-ref {
   flex: 1;
