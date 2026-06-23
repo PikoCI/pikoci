@@ -350,7 +350,22 @@ var serverCmd = &cobra.Command{
 
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer shutdownCancel()
-			grpcSrv.GracefulStop()
+
+			// GracefulStop doesn't accept a context, so enforce the
+			// shutdown timeout manually and fall back to a hard Stop.
+			grpcDone := make(chan struct{})
+			go func() {
+				grpcSrv.GracefulStop()
+				close(grpcDone)
+			}()
+			select {
+			case <-grpcDone:
+			case <-shutdownCtx.Done():
+				logger.Warn("gRPC graceful stop timed out, forcing stop")
+				grpcSrv.Stop()
+			}
+
+			// shutdownCtx is shared: HTTP shutdown gets whatever time remains.
 			svr.Shutdown(shutdownCtx)
 
 		case sig := <-stop:
