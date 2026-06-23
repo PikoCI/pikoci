@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Builds stuck in "started" status after server restart (#569). Server now polls DB for running builds during SIGQUIT graceful shutdown (not just embedded workers), recovers orphaned builds on startup, and workers retry build updates with backoff.
+
 ## [0.6.0] - 2026-06-22
 
 ### Changed

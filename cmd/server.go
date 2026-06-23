@@ -129,6 +129,14 @@ var serverCmd = &cobra.Command{
 
 		logger.Info("initializing service")
 		var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, suow, jwtSecret, wn, logger)
+
+		// Recover builds orphaned by a previous crash or unclean shutdown.
+		if n, err := svc.RecoverOrphanedBuilds(ctx); err != nil {
+			logger.Error("failed to recover orphaned builds", "error", err)
+		} else if n > 0 {
+			logger.Warn("failed orphaned builds from previous shutdown", "count", n)
+		}
+
 		svc.StartScheduler(ctx)
 		logger.Info("initialized service")
 
@@ -289,6 +297,9 @@ var serverCmd = &cobra.Command{
 		case sig := <-quit:
 			logger.Info("received signal, starting graceful shutdown", "signal", sig)
 
+			// Single deadline shared across both embedded and separated worker drain.
+			deadline := time.After(drainTimeout)
+
 			if cfg.RunWorker && workers != nil {
 				for _, w := range workers {
 					w.Drain()
@@ -300,11 +311,38 @@ var serverCmd = &cobra.Command{
 
 				select {
 				case <-done:
-					logger.Info("all workers finished")
-				case <-time.After(drainTimeout):
-					logger.Warn("graceful shutdown timed out, forcing exit")
+					logger.Info("all embedded workers finished")
+				case <-deadline:
+					logger.Warn("embedded worker drain timed out")
 				}
 			}
+
+			// Wait for any remaining started builds (from separated workers).
+			for {
+				n, err := svc.CountStartedBuilds(ctx)
+				if err != nil {
+					logger.Error("failed to count started builds during drain", "error", err)
+					break
+				}
+				if n == 0 {
+					logger.Info("no running builds remaining")
+					break
+				}
+				logger.Info("waiting for running builds to finish", "count", n)
+				select {
+				case <-time.After(2 * time.Second):
+					continue
+				case <-deadline:
+					failed, err := svc.RecoverOrphanedBuilds(ctx)
+					if err != nil {
+						logger.Error("failed to recover orphaned builds during drain", "error", err)
+					} else {
+						logger.Warn("drain timeout expired, failed remaining builds", "count", failed)
+					}
+					goto shutdown
+				}
+			}
+		shutdown:
 
 			// Cancel the main context so any blocked Receive() calls
 			// unblock and worker goroutines can exit.

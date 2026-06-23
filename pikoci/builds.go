@@ -410,6 +410,18 @@ func (q *PikoCI) ReEnqueuePendingBuilds(ctx context.Context) error {
 	return nil
 }
 
+// CountStartedBuilds returns the total number of builds with status "started" across all jobs.
+func (q *PikoCI) CountStartedBuilds(ctx context.Context) (int, error) {
+	return q.Builds.CountStarted(ctx)
+}
+
+// RecoverOrphanedBuilds fails all builds stuck in "started" status. This is
+// used on startup to clean up builds orphaned by a previous server crash, and
+// during graceful shutdown when the drain timeout expires.
+func (q *PikoCI) RecoverOrphanedBuilds(ctx context.Context) (int, error) {
+	return q.Builds.FailStartedBuilds(ctx, "server shutdown: build was orphaned")
+}
+
 // resolvePassedJobNames expands for_each group names in a passed list to all
 // instance names. If a name matches a for_each group, it is replaced by all
 // instance names in that group. Non-group names are kept as-is.

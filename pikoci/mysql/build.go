@@ -720,6 +720,27 @@ func (r *BuildRepository) FindByVersionAndJobs(ctx context.Context, tc, pn strin
 	return result, nil
 }
 
+func (r *BuildRepository) CountStarted(ctx context.Context) (int, error) {
+	var count int
+	err := r.querier.QueryRowContext(ctx, `SELECT COUNT(*) FROM builds WHERE status = 'started'`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count started builds: %w", err)
+	}
+	return count, nil
+}
+
+func (r *BuildRepository) FailStartedBuilds(ctx context.Context, reason string) (int, error) {
+	res, err := r.querier.ExecContext(ctx, `UPDATE builds SET status = 'failed', error = ? WHERE status = 'started'`, reason)
+	if err != nil {
+		return 0, fmt.Errorf("failed to fail started builds: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	return int(rows), nil
+}
+
 func scanBuild(s sqlr.Scanner) (*build.Build, error) {
 	var b dbBuild
 

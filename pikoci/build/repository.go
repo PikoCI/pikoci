@@ -46,4 +46,9 @@ type Repository interface {
 	// specified jobs, including retries of matched builds.
 	// The result maps job name to a slice of builds (main build first, retries after).
 	FindByVersionAndJobs(ctx context.Context, tc, pn string, versionID uint32, jobNames []string) (map[string][]*Build, error)
+	// CountStarted returns the total number of builds with status "started" across all jobs.
+	CountStarted(ctx context.Context) (int, error)
+	// FailStartedBuilds transitions all builds with status "started" to "failed" with the given reason.
+	// It returns the number of builds that were updated.
+	FailStartedBuilds(ctx context.Context, reason string) (int, error)
 }

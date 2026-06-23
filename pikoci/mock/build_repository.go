@@ -87,6 +87,21 @@ func (mr *BuildRepositoryMockRecorder) CountRunningInSerialGroups(ctx, tc, pn, s
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRunningInSerialGroups", reflect.TypeOf((*BuildRepository)(nil).CountRunningInSerialGroups), ctx, tc, pn, serialGroups, excludeJobName)
 }
 
+// CountStarted mocks base method.
+func (m *BuildRepository) CountStarted(ctx context.Context) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountStarted", ctx)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountStarted indicates an expected call of CountStarted.
+func (mr *BuildRepositoryMockRecorder) CountStarted(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountStarted", reflect.TypeOf((*BuildRepository)(nil).CountStarted), ctx)
+}
+
 // Create mocks base method.
 func (m *BuildRepository) Create(ctx context.Context, tc, pn, jn string, b build.Build) (uint32, string, error) {
 	m.ctrl.T.Helper()
@@ -131,6 +146,21 @@ func (m *BuildRepository) Delete(ctx context.Context, tc, pn, jn, buildNumber st
 func (mr *BuildRepositoryMockRecorder) Delete(ctx, tc, pn, jn, buildNumber any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*BuildRepository)(nil).Delete), ctx, tc, pn, jn, buildNumber)
+}
+
+// FailStartedBuilds mocks base method.
+func (m *BuildRepository) FailStartedBuilds(ctx context.Context, reason string) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FailStartedBuilds", ctx, reason)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FailStartedBuilds indicates an expected call of FailStartedBuilds.
+func (mr *BuildRepositoryMockRecorder) FailStartedBuilds(ctx, reason any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailStartedBuilds", reflect.TypeOf((*BuildRepository)(nil).FailStartedBuilds), ctx, reason)
 }
 
 // Filter mocks base method.

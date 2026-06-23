@@ -2208,7 +2208,7 @@ func (w *Worker) updateBuild(_ context.Context, m workitem.Body, b build.Build) 
 		return nil
 	}
 	dbCtx := w.dbContext()
-	err := w.pikoci.UpdateJobBuild(dbCtx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b)
+	err := w.updateBuildWithRetry(dbCtx, m, b)
 	if err != nil {
 		w.logger.Error("failed update build", "pipeline", m.PipelineCanonical, "job", m.JobName, "error", err)
 	}
@@ -2225,9 +2225,32 @@ func (w *Worker) failBuild(_ context.Context, m workitem.Body, b build.Build, er
 		return
 	}
 	dbCtx := w.dbContext()
-	if uerr := w.pikoci.UpdateJobBuild(dbCtx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b); uerr != nil {
+	if uerr := w.updateBuildWithRetry(dbCtx, m, b); uerr != nil {
 		w.logger.Error("failed update build", "pipeline", m.PipelineCanonical, "job", m.JobName, "error", uerr)
 	}
+}
+
+// updateBuildWithRetry retries the UpdateJobBuild call with exponential backoff.
+// This gives separated workers the best chance to report results when the server
+// is restarting.
+func (w *Worker) updateBuildWithRetry(ctx context.Context, m workitem.Body, b build.Build) error {
+	var err error
+	delays := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second}
+	for attempt := 0; attempt <= len(delays); attempt++ {
+		err = w.pikoci.UpdateJobBuild(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.BuildNumber, b)
+		if err == nil {
+			return nil
+		}
+		if attempt < len(delays) {
+			w.logger.Warn("retrying build update", "pipeline", m.PipelineCanonical, "job", m.JobName, "attempt", attempt+1, "error", err)
+			select {
+			case <-time.After(delays[attempt]):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+	return err
 }
 
 // dbContext returns the appropriate context for DB operations.
