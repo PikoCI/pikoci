@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `GracefulStop()` hanging indefinitely after SIGQUIT when workers reconnect during drain, leaving the server alive but not accepting connections (502 from reverse proxy) (#572).
+
 ## [0.6.1] - 2026-06-23
 
 ### Fixed
