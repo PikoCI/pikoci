@@ -8808,3 +8808,103 @@ func TestProcessJob_EnsureHook_Fails_BuildStatusUnchanged(t *testing.T) {
 	}
 	assert.True(t, found, "should have found the ensure hook step")
 }
+
+func TestUpdateBuildWithRetry_SucceedsFirstAttempt(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+	ctx := context.Background()
+	w.apiCtx = ctx
+
+	m := workitem.Body{TeamCanonical: "main", PipelineCanonical: "test-pipeline", JobName: "test-job"}
+	b := build.Build{BuildNumber: "1", Status: build.Succeeded, StartedAt: time.Now()}
+
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "1", gomock.Any()).Return(nil)
+
+	err := w.updateBuild(ctx, m, b)
+	assert.NoError(t, err)
+}
+
+func TestUpdateBuildWithRetry_FailsThenSucceeds(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+	ctx := context.Background()
+	w.apiCtx = ctx
+
+	m := workitem.Body{TeamCanonical: "main", PipelineCanonical: "test-pipeline", JobName: "test-job"}
+	b := build.Build{BuildNumber: "1", Status: build.Succeeded, StartedAt: time.Now()}
+
+	gomock.InOrder(
+		svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "1", gomock.Any()).Return(fmt.Errorf("connection refused")),
+		svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "1", gomock.Any()).Return(nil),
+	)
+
+	err := w.updateBuild(ctx, m, b)
+	assert.NoError(t, err)
+}
+
+func TestUpdateBuildWithRetry_ExhaustsRetries(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+	ctx := context.Background()
+	w.apiCtx = ctx
+
+	m := workitem.Body{TeamCanonical: "main", PipelineCanonical: "test-pipeline", JobName: "test-job"}
+	b := build.Build{BuildNumber: "1", Status: build.Succeeded, StartedAt: time.Now()}
+
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "1", gomock.Any()).
+		Return(fmt.Errorf("connection refused")).Times(4) // 1 initial + 3 retries
+
+	err := w.updateBuild(ctx, m, b)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "connection refused")
+}
+
+func TestUpdateBuildWithRetry_ContextCancelled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+	ctx, cancel := context.WithCancel(context.Background())
+	w.apiCtx = ctx
+
+	m := workitem.Body{TeamCanonical: "main", PipelineCanonical: "test-pipeline", JobName: "test-job"}
+	b := build.Build{BuildNumber: "1", Status: build.Succeeded, StartedAt: time.Now()}
+
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "1", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, _ build.Build) error {
+			cancel() // Cancel context on first failure
+			return fmt.Errorf("connection refused")
+		})
+
+	err := w.updateBuild(ctx, m, b)
+	assert.Error(t, err)
+	assert.Equal(t, context.Canceled, err)
+}
+
+func TestFailBuildWithRetry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+	ctx := context.Background()
+	w.apiCtx = ctx
+
+	m := workitem.Body{TeamCanonical: "main", PipelineCanonical: "test-pipeline", JobName: "test-job"}
+	b := build.Build{BuildNumber: "1", Status: build.Started, StartedAt: time.Now()}
+
+	gomock.InOrder(
+		svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "1", gomock.Any()).Return(fmt.Errorf("connection refused")),
+		svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "1", gomock.Any()).Return(nil),
+	)
+
+	w.failBuild(ctx, m, b, fmt.Errorf("step failed"))
+}
+
+func TestUpdateBuild_SuppressUpdates(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _ := newTestWorker(ctrl)
+
+	m := workitem.Body{TeamCanonical: "main", PipelineCanonical: "test-pipeline", JobName: "test-job"}
+	called := false
+	b := build.Build{BuildNumber: "1", SuppressUpdates: true, OnUpdate: func() { called = true }}
+
+	err := w.updateBuild(context.Background(), m, b)
+	assert.NoError(t, err)
+	assert.True(t, called, "OnUpdate should have been called")
+}

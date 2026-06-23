@@ -760,6 +760,103 @@ func TestCountRunningInSerialGroups(t *testing.T) {
 	assert.Equal(t, 0, count)
 }
 
+func TestCountStarted(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Clean up any started builds from other tests (shared in-memory DB)
+	_, _ = db.ExecContext(ctx, `UPDATE builds SET status = 'failed' WHERE status = 'started'`)
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'cs-pipe', 'cs-pipe')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'build')`, ppID)
+	require.NoError(t, err)
+	jobID, _ := res.LastInsertId()
+
+	br := mysql.NewBuildRepository(db, mysql.Mem)
+
+	// Verify no started builds initially
+	count, err := br.CountStarted(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	// Insert builds in various statuses
+	_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'started', '1')`, jobID)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'started', '2')`, jobID)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'pending', '3')`, jobID)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'succeeded', '4')`, jobID)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'failed', '5')`, jobID)
+	require.NoError(t, err)
+
+	count, err = br.CountStarted(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+}
+
+func TestFailStartedBuilds(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// Clean up any started builds from other tests (shared in-memory DB)
+	_, _ = db.ExecContext(ctx, `UPDATE builds SET status = 'failed' WHERE status = 'started'`)
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'fsb-pipe', 'fsb-pipe')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'build')`, ppID)
+	require.NoError(t, err)
+	jobID, _ := res.LastInsertId()
+
+	// Insert builds in various statuses
+	_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'started', '1')`, jobID)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'started', '2')`, jobID)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'pending', '3')`, jobID)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'succeeded', '4')`, jobID)
+	require.NoError(t, err)
+
+	br := mysql.NewBuildRepository(db, mysql.Mem)
+
+	n, err := br.FailStartedBuilds(ctx, "server shutdown")
+	require.NoError(t, err)
+	assert.Equal(t, 2, n)
+
+	// Verify started builds are now failed
+	b1, err := br.Find(ctx, "main", "fsb-pipe", "build", "1")
+	require.NoError(t, err)
+	assert.Equal(t, "failed", b1.Status.String())
+	assert.Equal(t, "server shutdown", b1.Error)
+
+	b2, err := br.Find(ctx, "main", "fsb-pipe", "build", "2")
+	require.NoError(t, err)
+	assert.Equal(t, "failed", b2.Status.String())
+	assert.Equal(t, "server shutdown", b2.Error)
+
+	// Verify pending build is untouched
+	b3, err := br.Find(ctx, "main", "fsb-pipe", "build", "3")
+	require.NoError(t, err)
+	assert.Equal(t, "pending", b3.Status.String())
+
+	// Verify succeeded build is untouched
+	b4, err := br.Find(ctx, "main", "fsb-pipe", "build", "4")
+	require.NoError(t, err)
+	assert.Equal(t, "succeeded", b4.Status.String())
+
+	// No started builds remain
+	count, err := br.CountStarted(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+}
+
 func TestCountRunningInSerialGroups_Empty(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

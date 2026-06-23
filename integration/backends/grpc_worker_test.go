@@ -207,3 +207,283 @@ job "grpc-test" {
 	}
 	assert.True(t, found, "worker should be registered via heartbeat")
 }
+
+// TestStartupRecoveryFailsOrphanedBuilds verifies that RecoverOrphanedBuilds
+// transitions "started" builds to "failed" without affecting other statuses.
+func TestStartupRecoveryFailsOrphanedBuilds(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})).With("test", "startup-recovery")
+
+	// --- Set up DB + service ---
+	dbFile := t.TempDir() + "/test.db"
+	db, err := mysql.New("", 0, "", "", mysql.Options{
+		MultiStatements: true,
+		ClientFoundRows: true,
+		System:          mysql.SQLite,
+		DBName:          dbFile,
+		DBFile:          dbFile,
+	})
+	require.NoError(t, err)
+	require.NoError(t, migrate.Migrate(db, mysql.SQLite))
+
+	ur := mysql.NewUserRepository(db)
+	tr := mysql.NewTeamRepository(db)
+	ppr := mysql.NewPipelineRepository(db)
+	jr := mysql.NewJobRepository(db)
+	rr := mysql.NewResourceRepository(db, mysql.SQLite)
+	rt := mysql.NewResourceTypeRepository(db)
+	br := mysql.NewBuildRepository(db, mysql.SQLite)
+	rur := mysql.NewRunnerRepository(db)
+	str := mysql.NewSecretTypeRepository(db)
+	tgr := mysql.NewTriggerRepository(db)
+	wr := mysql.NewWorkerRepository(db, mysql.SQLite)
+	suow := unitwork.NewStartUnitOfWork(db, mysql.SQLite)
+
+	jwtSecret := []byte("test-secret")
+	wn := notifier.New()
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, suow, jwtSecret, wn, logger)
+
+	// Create a pipeline + job so we can create builds
+	hclConfig := []byte(`
+resource "cron" "trigger" {
+  check_interval = "@every 1h"
+}
+
+job "recovery-test" {
+  get "cron" "trigger" {
+    trigger = true
+  }
+  task "work" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo hello"]
+    }
+  }
+}
+`)
+	_, err = svc.CreatePipeline(ctx, "main", "recovery-test", hclConfig, nil)
+	require.NoError(t, err)
+
+	// Seed a resource version
+	_, err = svc.CreateResourceVersion(ctx, "main", "recovery-test", "cron.trigger", resource.Version{
+		Version: map[string]interface{}{"date": "seed"},
+	})
+	require.NoError(t, err)
+
+	// Create builds in various statuses
+	pendingBuild, err := svc.CreateJobBuild(ctx, "main", "recovery-test", "recovery-test", build.Build{})
+	require.NoError(t, err)
+
+	startedBuild, err := svc.CreateJobBuild(ctx, "main", "recovery-test", "recovery-test", build.Build{})
+	require.NoError(t, err)
+	// Transition to started via StartPending
+	_, err = svc.StartPendingBuild(ctx, "main", "recovery-test", "recovery-test", startedBuild.ID)
+	require.NoError(t, err)
+
+	succeededBuild, err := svc.CreateJobBuild(ctx, "main", "recovery-test", "recovery-test", build.Build{})
+	require.NoError(t, err)
+	_, err = svc.StartPendingBuild(ctx, "main", "recovery-test", "recovery-test", succeededBuild.ID)
+	require.NoError(t, err)
+	err = svc.UpdateJobBuild(ctx, "main", "recovery-test", "recovery-test", succeededBuild.BuildNumber, build.Build{
+		Status:    build.Succeeded,
+		StartedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	// Verify started count before recovery
+	count, err := svc.CountStartedBuilds(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// Run recovery
+	n, err := svc.RecoverOrphanedBuilds(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n, "should have recovered exactly 1 orphaned build")
+
+	// Verify no started builds remain
+	count, err = svc.CountStartedBuilds(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	// Verify the started build is now failed with the right message
+	b, err := svc.GetJobBuild(ctx, "main", "recovery-test", "recovery-test", startedBuild.BuildNumber)
+	require.NoError(t, err)
+	assert.Equal(t, build.Failed, b.Status)
+	assert.Contains(t, b.Error, "server shutdown")
+
+	// Verify pending build is still pending
+	b, err = svc.GetJobBuild(ctx, "main", "recovery-test", "recovery-test", pendingBuild.BuildNumber)
+	require.NoError(t, err)
+	assert.Equal(t, build.Pending, b.Status)
+
+	// Verify succeeded build is still succeeded
+	b, err = svc.GetJobBuild(ctx, "main", "recovery-test", "recovery-test", succeededBuild.BuildNumber)
+	require.NoError(t, err)
+	assert.Equal(t, build.Succeeded, b.Status)
+}
+
+// TestServerDrainWaitsForSeparatedWorkerBuilds verifies that SIGQUIT-style
+// drain waits for started builds to reach a terminal status before shutting down.
+func TestServerDrainWaitsForSeparatedWorkerBuilds(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})).With("test", "drain-wait")
+
+	// --- Set up DB + service ---
+	dbFile := t.TempDir() + "/test.db"
+	db, err := mysql.New("", 0, "", "", mysql.Options{
+		MultiStatements: true,
+		ClientFoundRows: true,
+		System:          mysql.SQLite,
+		DBName:          dbFile,
+		DBFile:          dbFile,
+	})
+	require.NoError(t, err)
+	require.NoError(t, migrate.Migrate(db, mysql.SQLite))
+
+	ur := mysql.NewUserRepository(db)
+	tr := mysql.NewTeamRepository(db)
+	ppr := mysql.NewPipelineRepository(db)
+	jr := mysql.NewJobRepository(db)
+	rr := mysql.NewResourceRepository(db, mysql.SQLite)
+	rt := mysql.NewResourceTypeRepository(db)
+	br := mysql.NewBuildRepository(db, mysql.SQLite)
+	rur := mysql.NewRunnerRepository(db)
+	str := mysql.NewSecretTypeRepository(db)
+	tgr := mysql.NewTriggerRepository(db)
+	wr := mysql.NewWorkerRepository(db, mysql.SQLite)
+	suow := unitwork.NewStartUnitOfWork(db, mysql.SQLite)
+
+	jwtSecret := []byte("test-secret")
+	wn := notifier.New()
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, suow, jwtSecret, wn, logger)
+	svc.StartScheduler(ctx)
+
+	// Create admin user
+	svc.CreateUser(ctx, user.User{
+		FullName: "admin",
+		Username: "admin",
+		Password: "$2a$14$rwQk8Qvc2rij7qhFO4P1W.OiSF6AkgVU1RCrLaY2wawJcpkPEKwbm",
+	}, true)
+
+	// --- Start HTTP + gRPC server ---
+	streamMgr := pikogrpc.NewWorkerStreamManager()
+	grpcServer := pikogrpc.NewServer(svc, wn, streamMgr, jwtSecret, logger.With("component", "gRPC"))
+	grpcSrv := grpc.NewServer()
+	workerv1.RegisterWorkerServiceServer(grpcSrv, grpcServer)
+	svc.GRPCServer = grpcServer
+
+	httpHandler := tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.SQLite, "test", "test")
+	httpSrv := &http.Server{Handler: handlers.CombinedLoggingHandler(os.Stderr, httpHandler)}
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := lis.Addr().String()
+
+	m := cmux.New(lis)
+	grpcLis := m.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
+	httpLis := m.Match(cmux.Any())
+
+	go grpcSrv.Serve(grpcLis)
+	go httpSrv.Serve(httpLis)
+	go m.Serve()
+	t.Cleanup(func() {
+		grpcSrv.Stop()
+		httpSrv.Close()
+	})
+
+	workerToken := generateTestWorkerJWT(jwtSecret)
+	httpClient, err := client.New(fmt.Sprintf("http://%s", addr), workerToken)
+	require.NoError(t, err)
+
+	grpcConn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { grpcConn.Close() })
+	grpcClient := workerv1.NewWorkerServiceClient(grpcConn)
+
+	// Start standalone worker with a slow job
+	w := worker.NewGRPC(httpClient, grpcClient, logger.With("worker", "drain-worker-1"), "drain-worker-1", "test", "", 1, workerToken, addr, nil, false)
+	go w.Run(ctx)
+
+	require.Eventually(t, func() bool {
+		return streamMgr.ConnectedCount() > 0
+	}, 3*time.Second, 50*time.Millisecond, "worker should connect via gRPC")
+
+	// Create pipeline with a slow job (sleeps 3 seconds)
+	hclConfig := []byte(`
+resource "cron" "trigger" {
+  check_interval = "@every 1h"
+}
+
+job "drain-test" {
+  get "cron" "trigger" {
+    trigger = true
+  }
+  task "slow-work" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "sleep 3 && echo done"]
+    }
+  }
+}
+`)
+	_, err = svc.CreatePipeline(ctx, "main", "drain-test", hclConfig, nil)
+	require.NoError(t, err)
+
+	// Seed + trigger
+	_, err = svc.CreateResourceVersion(ctx, "main", "drain-test", "cron.trigger", resource.Version{
+		Version: map[string]interface{}{"date": "seed"},
+	})
+	require.NoError(t, err)
+	_, err = svc.CreateResourceVersion(ctx, "main", "drain-test", "cron.trigger", resource.Version{
+		Version: map[string]interface{}{"date": "v2"},
+	})
+	require.NoError(t, err)
+	err = svc.TriggerPipelineJob(ctx, "main", "drain-test", "drain-test")
+	require.NoError(t, err)
+
+	// Wait until the build is started
+	require.Eventually(t, func() bool {
+		builds, _, err := svc.ListJobBuilds(ctx, "main", "drain-test", "drain-test", nil, nil, 0)
+		if err != nil || len(builds) == 0 {
+			return false
+		}
+		return builds[0].Status == build.Started
+	}, 10*time.Second, 200*time.Millisecond, "build should reach started status")
+
+	// Now simulate drain: poll CountStartedBuilds until 0
+	drainDone := make(chan struct{})
+	go func() {
+		defer close(drainDone)
+		deadline := time.After(15 * time.Second)
+		for {
+			n, err := svc.CountStartedBuilds(ctx)
+			if err != nil || n == 0 {
+				return
+			}
+			select {
+			case <-time.After(500 * time.Millisecond):
+			case <-deadline:
+				return
+			}
+		}
+	}()
+
+	// Drain should complete within the build's runtime (~3s) + buffer
+	select {
+	case <-drainDone:
+		// Drain completed - build should be in terminal status
+	case <-time.After(15 * time.Second):
+		t.Fatal("drain did not complete in time")
+	}
+
+	// Verify build reached terminal status
+	builds, _, err := svc.ListJobBuilds(ctx, "main", "drain-test", "drain-test", nil, nil, 0)
+	require.NoError(t, err)
+	require.NotEmpty(t, builds)
+	b := builds[0]
+	assert.Equal(t, build.Succeeded, b.Status, "build should have succeeded, got: %s (error: %s)", b.Status, b.Error)
+}

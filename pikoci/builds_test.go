@@ -684,6 +684,42 @@ func TestCreateRetryJobBuild_InvalidCanonical(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestCountStartedBuilds(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().CountStarted(ctx).Return(3, nil)
+
+	n, err := s.P.CountStartedBuilds(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 3, n)
+}
+
+func TestRecoverOrphanedBuilds(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().FailStartedBuilds(ctx, "server shutdown: build was orphaned").Return(2, nil)
+
+	n, err := s.P.RecoverOrphanedBuilds(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n)
+}
+
+func TestRecoverOrphanedBuilds_NoneOrphaned(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().FailStartedBuilds(ctx, "server shutdown: build was orphaned").Return(0, nil)
+
+	n, err := s.P.RecoverOrphanedBuilds(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, n)
+}
+
 // --- EvaluateDownstreamJobs tests ---
 
 // makePipelineLintDeploy returns a pipeline with "lint" and "deploy" jobs.
