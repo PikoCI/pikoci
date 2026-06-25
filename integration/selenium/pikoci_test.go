@@ -1808,7 +1808,7 @@ job "gen" {
 		})
 	})
 	t.Run("Viewer", func(t *testing.T) {
-		// Setup: logout pepito, add role-viewer as viewer to main team via HTTP
+		// Setup: logout pepito, create role-viewer user and add as viewer to main team
 		navLink, err := wd.FindElement(selenium.ByCSSSelector, ".navbar .nav-link")
 		require.NoError(t, err)
 		err = navLink.Click()
@@ -1819,26 +1819,7 @@ job "gen" {
 		require.NoError(t, err)
 		waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Log In"), 5*time.Second)
 
-		// Add role-viewer to team via HTTP
-		adminLoginBody, _ := json.Marshal(thttp.UserLoginRequest{Username: "admin", Password: "newadmin123"})
-		adminLoginReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login", bytes.NewReader(adminLoginBody))
-		require.NoError(t, err)
-		adminLoginReq.Header.Set("Content-Type", "application/json")
-		adminLoginResp, err := http.DefaultClient.Do(adminLoginReq)
-		require.NoError(t, err)
-		defer adminLoginResp.Body.Close()
-		var alr thttp.UserLoginResponse
-		json.NewDecoder(adminLoginResp.Body).Decode(&alr)
-		adminJWT := alr.Data.JWT
-
-		addBody := `{"role":"viewer","user":{"username":"role-viewer"}}`
-		addReq, err := http.NewRequest(http.MethodPost, pikoURL+"/teams/main/members", strings.NewReader(addBody))
-		require.NoError(t, err)
-		addReq.Header.Set("Content-Type", "application/json")
-		addReq.Header.Set("Authorization", "Bearer "+adminJWT)
-		addResp, err := http.DefaultClient.Do(addReq)
-		require.NoError(t, err)
-		addResp.Body.Close()
+		setupRoleTestUser(t, "newadmin123", "role-viewer", "viewer")
 
 		t.Run("Login", func(t *testing.T) {
 			username, err := wd.FindElement(selenium.ByCSSSelector, "#username")
@@ -1846,7 +1827,7 @@ job "gen" {
 			password, err := wd.FindElement(selenium.ByCSSSelector, "#password")
 			require.NoError(t, err)
 			username.SendKeys("role-viewer")
-			password.SendKeys("admin123")
+			password.SendKeys("testpass123")
 			login, err := wd.FindElement(selenium.ByCSSSelector, "#login")
 			require.NoError(t, err)
 			err = login.Click()
@@ -1927,26 +1908,8 @@ job "gen" {
 		})
 	})
 	t.Run("Maintainer", func(t *testing.T) {
-		// Add role-maintainer to team via HTTP
-		adminLoginBody, _ := json.Marshal(thttp.UserLoginRequest{Username: "admin", Password: "newadmin123"})
-		adminLoginReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login", bytes.NewReader(adminLoginBody))
-		require.NoError(t, err)
-		adminLoginReq.Header.Set("Content-Type", "application/json")
-		adminLoginResp, err := http.DefaultClient.Do(adminLoginReq)
-		require.NoError(t, err)
-		defer adminLoginResp.Body.Close()
-		var alr thttp.UserLoginResponse
-		json.NewDecoder(adminLoginResp.Body).Decode(&alr)
-		adminJWT := alr.Data.JWT
-
-		addBody := `{"role":"maintainer","user":{"username":"role-maintainer"}}`
-		addReq, err := http.NewRequest(http.MethodPost, pikoURL+"/teams/main/members", strings.NewReader(addBody))
-		require.NoError(t, err)
-		addReq.Header.Set("Content-Type", "application/json")
-		addReq.Header.Set("Authorization", "Bearer "+adminJWT)
-		addResp, err := http.DefaultClient.Do(addReq)
-		require.NoError(t, err)
-		addResp.Body.Close()
+		// Create role-maintainer user and add as maintainer to main team
+		setupRoleTestUser(t, "newadmin123", "role-maintainer", "maintainer")
 
 		t.Run("Login", func(t *testing.T) {
 			username, err := wd.FindElement(selenium.ByCSSSelector, "#username")
@@ -1954,7 +1917,7 @@ job "gen" {
 			password, err := wd.FindElement(selenium.ByCSSSelector, "#password")
 			require.NoError(t, err)
 			username.SendKeys("role-maintainer")
-			password.SendKeys("admin123")
+			password.SendKeys("testpass123")
 			login, err := wd.FindElement(selenium.ByCSSSelector, "#login")
 			require.NoError(t, err)
 			err = login.Click()
@@ -2450,4 +2413,45 @@ func screenshot(t *testing.T, wd selenium.WebDriver) {
 
 	err = png.Encode(f, img)
 	require.NoError(t, err)
+}
+
+// setupRoleTestUser creates a user via the admin HTTP API and adds them to a team with the given role.
+// Returns the admin JWT for further API calls.
+func setupRoleTestUser(t *testing.T, adminPassword, username, teamRole string) string {
+	t.Helper()
+
+	// Get admin JWT
+	loginBody, _ := json.Marshal(thttp.UserLoginRequest{Username: "admin", Password: adminPassword})
+	loginReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login", bytes.NewReader(loginBody))
+	require.NoError(t, err)
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginResp, err := http.DefaultClient.Do(loginReq)
+	require.NoError(t, err)
+	defer loginResp.Body.Close()
+	var lr thttp.UserLoginResponse
+	json.NewDecoder(loginResp.Body).Decode(&lr)
+	require.Empty(t, lr.Err)
+	adminJWT := lr.Data.JWT
+
+	// Create user (ignore error if already exists)
+	createBody := `{"username":"` + username + `","password":"testpass123","full_name":"` + username + `"}`
+	createReq, err := http.NewRequest(http.MethodPost, pikoURL+"/users", strings.NewReader(createBody))
+	require.NoError(t, err)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Authorization", "Bearer "+adminJWT)
+	createResp, err := http.DefaultClient.Do(createReq)
+	require.NoError(t, err)
+	createResp.Body.Close()
+
+	// Add to team with role (ignore error if already member)
+	addBody := `{"role":"` + teamRole + `","user":{"username":"` + username + `"}}`
+	addReq, err := http.NewRequest(http.MethodPost, pikoURL+"/teams/main/members", strings.NewReader(addBody))
+	require.NoError(t, err)
+	addReq.Header.Set("Content-Type", "application/json")
+	addReq.Header.Set("Authorization", "Bearer "+adminJWT)
+	addResp, err := http.DefaultClient.Do(addReq)
+	require.NoError(t, err)
+	addResp.Body.Close()
+
+	return adminJWT
 }
