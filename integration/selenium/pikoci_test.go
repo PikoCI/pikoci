@@ -1428,12 +1428,12 @@ job "gen" {
 					return len(opts) >= 1
 				}, 5*time.Second)
 
-				// Select "viewer" role so the Member section tests restricted access
+				// Select "operator" role: can trigger/pause but can't create pipelines or manage members
 				roleSelect, err := wd.FindElement(selenium.ByCSSSelector, "#role")
 				require.NoError(t, err)
-				viewerOpt, err := roleSelect.FindElement(selenium.ByCSSSelector, "option[value='viewer']")
+				operatorOpt, err := roleSelect.FindElement(selenium.ByCSSSelector, "option[value='operator']")
 				require.NoError(t, err)
-				err = viewerOpt.Click()
+				err = operatorOpt.Click()
 				require.NoError(t, err)
 
 				members, err := wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
@@ -2118,7 +2118,7 @@ job "gen" {
 		adminJWT := lr.Data.JWT
 
 		// Step 2: Change pepito's role on "main" team via HTTP (triggers X-Refresh-Token)
-		updateBody, _ := json.Marshal(thttp.UpdateTeamMemberRequest{Role: "operator"})
+		updateBody, _ := json.Marshal(thttp.UpdateTeamMemberRequest{Role: "maintainer"})
 		updateReq, err := http.NewRequest(http.MethodPut, pikoURL+"/teams/main/members/pepito", bytes.NewReader(updateBody))
 		require.NoError(t, err)
 		updateReq.Header.Set("Content-Type", "application/json")
