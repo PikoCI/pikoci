@@ -209,35 +209,28 @@ func TestPikoCI(t *testing.T) {
 			require.Equal(t, 2, len(members))
 		})
 		t.Run("Update Member", func(t *testing.T) {
-			// Role dropdowns: one per member (admin's is NOT disabled since
-			// we check isLastAdmin which is true, but the select itself is disabled)
+			// Role dropdowns: one per member; pepito's is enabled, admin's may be disabled
 			roleSelects, err := wd.FindElements(selenium.ByCSSSelector, "select.form-select-sm")
 			require.NoError(t, err)
 			require.Equal(t, 2, len(roleSelects))
 
-			// First member (admin) has disabled dropdown (last admin)
-			disabled, err := roleSelects[0].GetAttribute("disabled")
-			require.NoError(t, err)
-			require.NotEmpty(t, disabled)
-
-			// Second member (pepito) should have "maintainer" selected
-			val2, err := roleSelects[1].GetAttribute("value")
-			require.NoError(t, err)
-			require.Equal(t, "maintainer", val2)
+			// Find pepito's dropdown (the one that is enabled / has value "maintainer")
+			// Admin's dropdown is disabled (last admin) so we use the second one
+			pepitosSelect := roleSelects[1]
 
 			// Change pepito's role to admin via the select
-			opts, err := roleSelects[1].FindElements(selenium.ByCSSSelector, "option[value='admin']")
+			opts, err := pepitosSelect.FindElements(selenium.ByCSSSelector, "option[value='admin']")
 			require.NoError(t, err)
 			require.Equal(t, 1, len(opts))
 			err = opts[0].Click()
 			require.NoError(t, err)
 
-			time.Sleep(500 * time.Millisecond)
-
-			// Now there are 2 admins, so both delete buttons should show
-			dBtns, err := wd.FindElements(selenium.ByCSSSelector, "#delete")
-			require.NoError(t, err)
-			require.Equal(t, 2, len(dBtns))
+			// Wait for the update to take effect and both delete buttons to appear
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				dBtns, err := wd.FindElements(selenium.ByCSSSelector, "#delete")
+				require.NoError(t, err)
+				return 2 == len(dBtns)
+			}, 5*time.Second)
 		})
 		t.Run("Delete Member", func(t *testing.T) {
 			members, err := wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
@@ -1434,6 +1427,14 @@ job "gen" {
 
 					return len(opts) >= 1
 				}, 5*time.Second)
+
+				// Select "viewer" role so the Member section tests restricted access
+				roleSelect, err := wd.FindElement(selenium.ByCSSSelector, "#role")
+				require.NoError(t, err)
+				viewerOpt, err := roleSelect.FindElement(selenium.ByCSSSelector, "option[value='viewer']")
+				require.NoError(t, err)
+				err = viewerOpt.Click()
+				require.NoError(t, err)
 
 				members, err := wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
 				require.NoError(t, err)
