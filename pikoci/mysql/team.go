@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/cycloidio/sqlr"
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/team"
 )
 
@@ -26,8 +27,8 @@ type dbTeam struct {
 }
 
 type dbMember struct {
-	Admin sql.NullBool
-	User  dbUser
+	Role sql.NullString
+	User dbUser
 }
 
 func newDBTeam(u team.Team) dbTeam {
@@ -47,8 +48,8 @@ func (dbt *dbTeam) toDomainEntity() *team.Team {
 
 func (dbm *dbMember) toDomainEntity() *team.Member {
 	return &team.Member{
-		Admin: dbm.Admin.Bool,
-		User:  *dbm.User.toDomainEntity(),
+		Role: role.Role(dbm.Role.String),
+		User: *dbm.User.toDomainEntity(),
 	}
 }
 
@@ -92,7 +93,7 @@ func (r *TeamRepository) Update(ctx context.Context, tc string, t team.Team) err
 func (r *TeamRepository) Find(ctx context.Context, tc string) (*team.WithMembers, error) {
 	rows, err := r.querier.QueryContext(ctx, `
 		SELECT t.id, t.name, t.canonical,
-			tu.admin, u.id, u.full_name, u.username, u.password, u.admin
+			tu.role, u.id, u.full_name, u.username, u.password, u.admin
 		FROM teams AS t
 		JOIN teams_users AS tu
 			ON tu.team_id = t.id
@@ -119,7 +120,7 @@ func (r *TeamRepository) Find(ctx context.Context, tc string) (*team.WithMembers
 func (r *TeamRepository) Filter(ctx context.Context, un string) ([]*team.WithMembers, error) {
 	rows, err := r.querier.QueryContext(ctx, `
 		SELECT t.id, t.name, t.canonical,
-			tu.admin, u.id, u.full_name, u.username, u.password, u.admin
+			tu.role, u.id, u.full_name, u.username, u.password, u.admin
 		FROM teams AS t
 		JOIN teams_users AS tu
 			ON tu.team_id = t.id
@@ -169,7 +170,7 @@ func (r *TeamRepository) Delete(ctx context.Context, tc string) error {
 
 func (r *TeamRepository) CreateMember(ctx context.Context, tc string, tm team.Member) error {
 	res, err := r.querier.ExecContext(ctx, `
-		INSERT INTO teams_users(admin, team_id, user_id)
+		INSERT INTO teams_users(role, team_id, user_id)
 		VALUES (?,
 			(
 				SELECT t.id
@@ -182,7 +183,7 @@ func (r *TeamRepository) CreateMember(ctx context.Context, tc string, tm team.Me
 				WHERE u.username = ?
 			)
 		)
-	`, tm.Admin, tc, tm.User.Username)
+	`, string(tm.Role), tc, tm.User.Username)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -198,7 +199,7 @@ func (r *TeamRepository) CreateMember(ctx context.Context, tc string, tm team.Me
 func (r *TeamRepository) UpdateMember(ctx context.Context, tc, mc string, tm team.Member) error {
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE teams_users AS tu
-		SET admin = ?
+		SET role = ?
 		FROM (
 			SELECT tu.id
 			FROM teams_users AS tu
@@ -209,7 +210,7 @@ func (r *TeamRepository) UpdateMember(ctx context.Context, tc, mc string, tm tea
 			WHERE t.canonical = ? AND u.username = ?
 		) AS ptu
 		WHERE tu.id = ptu.id
-	`, tm.Admin, tc, mc)
+	`, string(tm.Role), tc, mc)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -224,7 +225,7 @@ func (r *TeamRepository) UpdateMember(ctx context.Context, tc, mc string, tm tea
 
 func (r *TeamRepository) FindMember(ctx context.Context, tc, mc string) (*team.Member, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT tu.admin, u.id, u.full_name, u.username, u.password, u.admin
+		SELECT tu.role, u.id, u.full_name, u.username, u.password, u.admin
 		FROM teams_users AS tu
 		JOIN teams AS t
 			ON tu.team_id = t.id
@@ -279,7 +280,7 @@ func scanTeamsWithMembers(rows *sql.Rows) ([]*team.WithMembers, error) {
 			&dbt.ID,
 			&dbt.Name,
 			&dbt.Canonical,
-			&dbm.Admin,
+			&dbm.Role,
 			&dbm.User.ID,
 			&dbm.User.FullName,
 			&dbm.User.Username,
@@ -323,7 +324,7 @@ func scanTeamMember(s sqlr.Scanner) (*team.Member, error) {
 	var dbm dbMember
 
 	err := s.Scan(
-		&dbm.Admin,
+		&dbm.Role,
 		&dbm.User.ID,
 		&dbm.User.FullName,
 		&dbm.User.Username,

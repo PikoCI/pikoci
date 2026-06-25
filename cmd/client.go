@@ -12,6 +12,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/spf13/cobra"
 	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/team"
 	"github.com/pikoci/pikoci/pikoci/transport/http/client"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -878,7 +879,7 @@ var teamsMembersCreateCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		username, _ := cmd.Flags().GetString("username")
-		admin, _ := cmd.Flags().GetBool("admin")
+		memberRole, _ := cmd.Flags().GetString("role")
 
 		c, err := newClientWithConfig(url, jwt)
 		if err != nil {
@@ -886,8 +887,8 @@ var teamsMembersCreateCmd = &cobra.Command{
 		}
 
 		m, err := c.CreateTeamMember(cmd.Context(), tc, team.Member{
-			Admin: admin,
-			User:  user.User{Username: username},
+			Role: role.Role(memberRole),
+			User: user.User{Username: username},
 		})
 		if err != nil {
 			return fmt.Errorf("failed to add member %q to team %q: %w", username, tc, err)
@@ -900,7 +901,7 @@ var teamsMembersCreateCmd = &cobra.Command{
 
 func init() {
 	teamsMembersCreateCmd.Flags().String("username", "", "Username of the member to add")
-	teamsMembersCreateCmd.Flags().Bool("admin", false, "Whether the member is a team admin")
+	teamsMembersCreateCmd.Flags().String("role", "maintainer", "Role for the member (viewer, operator, maintainer, admin)")
 	teamsMembersCreateCmd.MarkFlagRequired("username")
 }
 
@@ -912,7 +913,7 @@ var teamsMembersUpdateCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		username, _ := cmd.Flags().GetString("username")
-		admin, _ := cmd.Flags().GetBool("admin")
+		memberRole, _ := cmd.Flags().GetString("role")
 
 		c, err := newClientWithConfig(url, jwt)
 		if err != nil {
@@ -920,7 +921,7 @@ var teamsMembersUpdateCmd = &cobra.Command{
 		}
 
 		m, err := c.UpdateTeamMember(cmd.Context(), tc, username, team.Member{
-			Admin: admin,
+			Role: role.Role(memberRole),
 		})
 		if err != nil {
 			return fmt.Errorf("failed to update member %q in team %q: %w", username, tc, err)
@@ -933,7 +934,7 @@ var teamsMembersUpdateCmd = &cobra.Command{
 
 func init() {
 	teamsMembersUpdateCmd.Flags().String("username", "", "Username of the member to update")
-	teamsMembersUpdateCmd.Flags().Bool("admin", false, "Whether the member is a team admin")
+	teamsMembersUpdateCmd.Flags().String("role", "maintainer", "Role for the member (viewer, operator, maintainer, admin)")
 	teamsMembersUpdateCmd.MarkFlagRequired("username")
 }
 

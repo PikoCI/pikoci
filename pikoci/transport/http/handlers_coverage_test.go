@@ -13,6 +13,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/mock"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/team"
 	"github.com/pikoci/pikoci/pikoci/trigger"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -47,11 +48,11 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	adminUM := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	memberUM := &user.WithMemberships{
 		User:        user.User{Username: "member", Admin: false},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: false}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
 	}
 
 	return &testEnv{
@@ -594,10 +595,10 @@ func TestListTeams_Error(t *testing.T) {
 func TestCreateTeamMember_Success(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectAdminAuth()
-	created := &team.Member{Admin: false, User: user.User{Username: "pepito"}}
+	created := &team.Member{Role: role.Viewer, User: user.User{Username: "pepito"}}
 	e.svc.EXPECT().CreateTeamMember(gomock.Any(), "main", gomock.Any()).Return(created, nil)
 
-	body := `{"admin":false,"user":{"username":"pepito"}}`
+	body := `{"role":"viewer","user":{"username":"pepito"}}`
 	resp := doRequest(t, http.MethodPost, e.server.URL+"/teams/main/members", e.adminJWT(t), body)
 	defer resp.Body.Close()
 
@@ -639,10 +640,10 @@ func TestCreateTeamMember_ServiceError(t *testing.T) {
 func TestUpdateTeamMember_Success(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectAdminAuth()
-	updated := &team.Member{Admin: true, User: user.User{Username: "pepito"}}
+	updated := &team.Member{Role: role.Admin, User: user.User{Username: "pepito"}}
 	e.svc.EXPECT().UpdateTeamMember(gomock.Any(), "main", "pepito", gomock.Any()).Return(updated, nil)
 
-	body := `{"admin":true}`
+	body := `{"role":"admin"}`
 	resp := doRequest(t, http.MethodPut, e.server.URL+"/teams/main/members/pepito", e.adminJWT(t), body)
 	defer resp.Body.Close()
 
@@ -650,7 +651,7 @@ func TestUpdateTeamMember_Success(t *testing.T) {
 	var got UpdateTeamMemberResponse
 	json.NewDecoder(resp.Body).Decode(&got)
 	assert.Empty(t, got.Err)
-	assert.True(t, got.Member.Admin)
+	assert.Equal(t, role.Admin, got.Member.Role)
 }
 
 func TestUpdateTeamMember_BadJSON(t *testing.T) {
@@ -2089,7 +2090,7 @@ func TestNonMember_Forbidden(t *testing.T) {
 	// User is not a member of team "other"
 	nonMemberUM := &user.WithMemberships{
 		User:        user.User{Username: "outsider", Admin: false},
-		Memberships: []user.Member{{TeamCanonical: "different-team", Admin: false}},
+		Memberships: []user.Member{{TeamCanonical: "different-team", Role: role.Viewer}},
 	}
 	jwt := signJWT(t, e.secret, nonMemberUM)
 	e.svc.EXPECT().GetUser(gomock.Any(), "outsider").Return(nonMemberUM, nil).AnyTimes()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/team"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -30,7 +31,7 @@ func (q *PikoCI) CreateTeam(ctx context.Context, un string, t team.Team) (*team.
 		t.ID = id
 
 		err = uow.Teams().CreateMember(ctx, t.Canonical, team.Member{
-			Admin: true,
+			Role: role.Admin,
 			User: user.User{
 				Username: un,
 			},
@@ -125,6 +126,9 @@ func (q *PikoCI) CreateTeamMember(ctx context.Context, tc string, tm team.Member
 	} else if !utils.ValidateCanonical(tm.User.Username) {
 		return nil, fmt.Errorf("invalid Team Member Username format %q", tm.User.Username)
 	}
+	if !tm.Role.Assignable() {
+		return nil, fmt.Errorf("invalid role %q: must be one of viewer, operator, maintainer, admin", tm.Role)
+	}
 
 	err := q.Teams.CreateMember(ctx, tc, tm)
 	if err != nil {
@@ -140,63 +144,87 @@ func (q *PikoCI) CreateTeamMember(ctx context.Context, tc string, tm team.Member
 }
 
 // UpdateTeamMember updates an existing team member's role. It validates that the
-// operation does not leave the team without any admin members.
+// operation does not leave the team without any admin members. The validation
+// and mutation are wrapped in a transaction to prevent race conditions.
 func (q *PikoCI) UpdateTeamMember(ctx context.Context, tc, mu string, tm team.Member) (*team.Member, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, fmt.Errorf("invalid Team Canonical format %q", tc)
 	} else if !utils.ValidateCanonical(mu) {
 		return nil, fmt.Errorf("invalid Team Member Username format %q", mu)
-	} else if err := q.validateTeamAdmins(ctx, tc, mu, &tm); err != nil {
+	}
+	if !tm.Role.Assignable() {
+		return nil, fmt.Errorf("invalid role %q: must be one of viewer, operator, maintainer, admin", tm.Role)
+	}
+
+	var rtm *team.Member
+	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
+		t, err := uow.Teams().Find(ctx, tc)
+		if err != nil {
+			return fmt.Errorf("failed to get Team: %w", err)
+		}
+		if err := checkTeamAdmins(t, mu, &tm); err != nil {
+			return err
+		}
+
+		err = uow.Teams().UpdateMember(ctx, tc, mu, tm)
+		if err != nil {
+			return fmt.Errorf("failed to update member: %w", err)
+		}
+
+		rtm, err = uow.Teams().FindMember(ctx, tc, mu)
+		if err != nil {
+			return fmt.Errorf("failed to find member: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
-	}
-
-	err := q.Teams.UpdateMember(ctx, tc, mu, tm)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update member: %w", err)
-	}
-
-	rtm, err := q.Teams.FindMember(ctx, tc, mu)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find member: %w", err)
 	}
 
 	return rtm, nil
 }
 
 // DeleteTeamMember removes a member from the specified team. It validates that
-// the operation does not leave the team without any admin members.
+// the operation does not leave the team without any admin members. The validation
+// and mutation are wrapped in a transaction to prevent race conditions.
 func (q *PikoCI) DeleteTeamMember(ctx context.Context, tc, mu string) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
 	} else if !utils.ValidateCanonical(mu) {
 		return fmt.Errorf("invalid Team Member Username format %q", mu)
-	} else if err := q.validateTeamAdmins(ctx, tc, mu, nil); err != nil {
-		return err
 	}
 
-	err := q.Teams.DeleteMember(ctx, tc, mu)
-	if err != nil {
-		return fmt.Errorf("failed to delete member: %w", err)
-	}
+	return q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
+		t, err := uow.Teams().Find(ctx, tc)
+		if err != nil {
+			return fmt.Errorf("failed to get Team: %w", err)
+		}
+		if err := checkTeamAdmins(t, mu, nil); err != nil {
+			return err
+		}
 
-	return nil
+		err = uow.Teams().DeleteMember(ctx, tc, mu)
+		if err != nil {
+			return fmt.Errorf("failed to delete member: %w", err)
+		}
+		return nil
+	})
 }
 
-// validateTeamAdmins checks that the team would still have at least one admin
+// checkTeamAdmins checks that the team would still have at least one admin
 // after the proposed change. If m is non-nil, it simulates updating the member;
 // otherwise it simulates removing the member.
-func (q *PikoCI) validateTeamAdmins(ctx context.Context, tc, mu string, m *team.Member) error {
-	t, err := q.Teams.Find(ctx, tc)
-	if err != nil {
-		return fmt.Errorf("failed to get Team: %w", err)
-	}
-
+func checkTeamAdmins(t *team.WithMembers, mu string, m *team.Member) error {
 	var admins int
 	for _, tm := range t.Members {
-		if tm.User.Username == mu && m != nil {
-			tm = *m
+		if tm.User.Username == mu {
+			if m != nil {
+				tm = *m
+			} else {
+				continue
+			}
 		}
-		if tm.Admin {
+		if tm.Role == role.Admin {
 			admins++
 		}
 	}

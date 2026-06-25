@@ -2125,7 +2125,7 @@ job "gen" {
 		adminJWT := lr.Data.JWT
 
 		// Step 2: Promote pepito to admin on "main" team via HTTP
-		updateBody, _ := json.Marshal(thttp.UpdateTeamMemberRequest{Admin: true})
+		updateBody, _ := json.Marshal(thttp.UpdateTeamMemberRequest{Role: "admin"})
 		updateReq, err := http.NewRequest(http.MethodPut, pikoURL+"/teams/main/members/pepito", bytes.NewReader(updateBody))
 		require.NoError(t, err)
 		updateReq.Header.Set("Content-Type", "application/json")

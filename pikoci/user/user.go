@@ -3,6 +3,8 @@
 // global or team-level admin privileges.
 package user
 
+import "github.com/pikoci/pikoci/pikoci/role"
+
 // User represents an authenticated user of the system. The Password field
 // is excluded from JSON serialization for security.
 type User struct {
@@ -25,13 +27,14 @@ type WithMemberships struct {
 // Member represents a user's membership in a specific team, identified by the
 // team's canonical name.
 type Member struct {
-	Admin         bool   `json:"admin"`
-	TeamCanonical string `json:"team_canonical"`
+	Role          role.Role `json:"role"`
+	TeamCanonical string    `json:"team_canonical"`
 }
 
-// IsAdmin reports whether the user is a global admin or an admin of any of
-// the teams identified by the given canonical names.
-func (u *WithMemberships) IsAdmin(tcs ...string) bool {
+// HasRole reports whether the user has at least the required role in any of
+// the teams identified by the given canonical names. Global admins always
+// return true.
+func (u *WithMemberships) HasRole(required role.Role, tcs ...string) bool {
 	if u.Admin {
 		return true
 	}
@@ -40,7 +43,7 @@ func (u *WithMemberships) IsAdmin(tcs ...string) bool {
 			continue
 		}
 		for _, m := range u.Memberships {
-			if m.Admin && m.TeamCanonical == tc {
+			if m.TeamCanonical == tc && m.Role.AtLeast(required) {
 				return true
 			}
 		}
@@ -48,9 +51,17 @@ func (u *WithMemberships) IsAdmin(tcs ...string) bool {
 	return false
 }
 
-// IsMember reports whether the user is a global admin or a member of any of
-// the teams identified by the given canonical names. An empty canonical name
-// is treated as a wildcard match.
+// IsAdmin reports whether the user is a global admin or has the admin role
+// in any of the teams identified by the given canonical names.
+// Deprecated: Use HasRole(role.Admin, tcs...) instead.
+func (u *WithMemberships) IsAdmin(tcs ...string) bool {
+	return u.HasRole(role.Admin, tcs...)
+}
+
+// IsMember reports whether the user is a global admin or a member (viewer+)
+// of any of the teams identified by the given canonical names. An empty
+// canonical name is treated as a wildcard match.
+// Deprecated: Use HasRole(role.Viewer, tcs...) instead.
 func (u *WithMemberships) IsMember(tcs ...string) bool {
 	if u.Admin {
 		return true
@@ -59,15 +70,5 @@ func (u *WithMemberships) IsMember(tcs ...string) bool {
 		// In case it's only an empty one it's member
 		return true
 	}
-	for _, tc := range tcs {
-		if tc == "" {
-			continue
-		}
-		for _, m := range u.Memberships {
-			if m.TeamCanonical == tc {
-				return true
-			}
-		}
-	}
-	return false
+	return u.HasRole(role.Viewer, tcs...)
 }

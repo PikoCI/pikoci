@@ -15,6 +15,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
 	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/transport/http/assets"
 	"github.com/pikoci/pikoci/pikoci/transport/http/templates"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -31,16 +32,18 @@ const (
 	IsPublicAccessKey contextKey = "is_public_access_key"
 )
 
+// publicFallbackRoutes lists routes that can fall back to public pipeline access
+// when authentication/authorization fails.
 var publicFallbackRoutes = map[RouteName]bool{
-	GetPipeline:          true,
-	GetPipelineImage:     true,
-	ListPipelineJobs:     true,
-	GetPipelineJob:       true,
-	ListJobBuilds:        true,
-	ListPipelineResources: true,
-	GetPipelineResource:   true,
-	ListResourceVersions:    true,
-	GetResourceVersionPath:  true,
+	GetPipeline:            true,
+	GetPipelineImage:       true,
+	ListPipelineJobs:       true,
+	GetPipelineJob:         true,
+	ListJobBuilds:          true,
+	ListPipelineResources:  true,
+	GetPipelineResource:    true,
+	ListResourceVersions:   true,
+	GetResourceVersionPath: true,
 }
 
 // Handler creates and returns the main HTTP handler for the PikoCI API.
@@ -351,10 +354,7 @@ func membershipsDiffer(jwtUser map[string]interface{}, dbUser *user.WithMembersh
 
 	dbSet := make(map[string]bool, len(dbUser.Memberships))
 	for _, m := range dbUser.Memberships {
-		key := m.TeamCanonical
-		if m.Admin {
-			key += ":admin"
-		}
+		key := m.TeamCanonical + ":" + string(m.Role)
 		dbSet[key] = true
 	}
 	for _, jm := range jwtMemberships {
@@ -363,10 +363,18 @@ func membershipsDiffer(jwtUser map[string]interface{}, dbUser *user.WithMembersh
 			return true
 		}
 		tc, _ := m["team_canonical"].(string)
-		a, _ := m["admin"].(bool)
-		key := tc
-		if a {
-			key += ":admin"
+		// Support both new "role" field and old "admin" field in JWT
+		var key string
+		if r, ok := m["role"].(string); ok {
+			key = tc + ":" + r
+		} else {
+			// Fallback for old JWT tokens with admin bool
+			a, _ := m["admin"].(bool)
+			if a {
+				key = tc + ":" + string(role.Admin)
+			} else {
+				key = tc + ":" + string(role.Maintainer)
+			}
 		}
 		if !dbSet[key] {
 			return true

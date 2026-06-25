@@ -4,8 +4,75 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/user"
 )
+
+func TestWithMemberships_HasRole(t *testing.T) {
+	t.Run("global admin always passes", func(t *testing.T) {
+		u := &user.WithMemberships{
+			User: user.User{Admin: true},
+		}
+		assert.True(t, u.HasRole(role.Admin))
+		assert.True(t, u.HasRole(role.Admin, "any-team"))
+		assert.True(t, u.HasRole(role.Viewer, "any-team"))
+	})
+
+	t.Run("admin has all roles", func(t *testing.T) {
+		u := &user.WithMemberships{
+			User: user.User{Admin: false},
+			Memberships: []user.Member{
+				{Role: role.Admin, TeamCanonical: "team-a"},
+			},
+		}
+		assert.True(t, u.HasRole(role.Admin, "team-a"))
+		assert.True(t, u.HasRole(role.Maintainer, "team-a"))
+		assert.True(t, u.HasRole(role.Operator, "team-a"))
+		assert.True(t, u.HasRole(role.Viewer, "team-a"))
+		assert.False(t, u.HasRole(role.Admin, "team-b"))
+	})
+
+	t.Run("viewer cannot do operator actions", func(t *testing.T) {
+		u := &user.WithMemberships{
+			User: user.User{Admin: false},
+			Memberships: []user.Member{
+				{Role: role.Viewer, TeamCanonical: "team-a"},
+			},
+		}
+		assert.True(t, u.HasRole(role.Viewer, "team-a"))
+		assert.False(t, u.HasRole(role.Operator, "team-a"))
+	})
+
+	t.Run("empty team canonical is skipped", func(t *testing.T) {
+		u := &user.WithMemberships{
+			User: user.User{Admin: false},
+			Memberships: []user.Member{
+				{Role: role.Admin, TeamCanonical: "team-a"},
+			},
+		}
+		assert.False(t, u.HasRole(role.Viewer, ""))
+	})
+
+	t.Run("no memberships", func(t *testing.T) {
+		u := &user.WithMemberships{
+			User: user.User{Admin: false},
+		}
+		assert.False(t, u.HasRole(role.Viewer, "team-a"))
+	})
+
+	t.Run("multi-team membership", func(t *testing.T) {
+		u := &user.WithMemberships{
+			User: user.User{Admin: false},
+			Memberships: []user.Member{
+				{Role: role.Operator, TeamCanonical: "team-a"},
+				{Role: role.Admin, TeamCanonical: "team-b"},
+			},
+		}
+		assert.True(t, u.HasRole(role.Operator, "team-a"))
+		assert.False(t, u.HasRole(role.Maintainer, "team-a"))
+		assert.True(t, u.HasRole(role.Admin, "team-b"))
+	})
+}
 
 func TestWithMemberships_IsAdmin(t *testing.T) {
 	t.Run("global admin is always admin", func(t *testing.T) {
@@ -20,8 +87,8 @@ func TestWithMemberships_IsAdmin(t *testing.T) {
 		u := &user.WithMemberships{
 			User: user.User{Admin: false},
 			Memberships: []user.Member{
-				{Admin: true, TeamCanonical: "team-a"},
-				{Admin: false, TeamCanonical: "team-b"},
+				{Role: role.Admin, TeamCanonical: "team-a"},
+				{Role: role.Maintainer, TeamCanonical: "team-b"},
 			},
 		}
 		assert.True(t, u.IsAdmin("team-a"))
@@ -41,7 +108,7 @@ func TestWithMemberships_IsAdmin(t *testing.T) {
 		u := &user.WithMemberships{
 			User: user.User{Admin: false},
 			Memberships: []user.Member{
-				{Admin: true, TeamCanonical: "team-a"},
+				{Role: role.Admin, TeamCanonical: "team-a"},
 			},
 		}
 		assert.False(t, u.IsAdmin(""))
@@ -60,7 +127,7 @@ func TestWithMemberships_IsMember(t *testing.T) {
 		u := &user.WithMemberships{
 			User: user.User{Admin: false},
 			Memberships: []user.Member{
-				{Admin: false, TeamCanonical: "team-a"},
+				{Role: role.Viewer, TeamCanonical: "team-a"},
 			},
 		}
 		assert.True(t, u.IsMember("team-a"))

@@ -7,7 +7,7 @@ import { useRequireAuth } from '../hooks.js';
 import { pikoTimeAgo } from '../utils.js';
 
 export function WorkersList() {
-  useRequireAuth();
+  useRequireAuth({ adminOnly: true });
 
   const [workers, setWorkers] = useState([]);
   const [serverVersion, setServerVersion] = useState('');

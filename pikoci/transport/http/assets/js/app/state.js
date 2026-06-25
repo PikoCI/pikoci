@@ -13,11 +13,27 @@ export const isAdmin = computed(() => {
   return u && u.admin;
 });
 
-export function isTeamAdmin(tc) {
+const ROLE_LEVELS = { public: 0, viewer: 1, operator: 2, maintainer: 3, admin: 4 };
+
+export function getTeamRole(tc) {
+  const u = session.value.user;
+  if (!u) return null;
+  if (u.admin) return 'admin';
+  const m = (u.memberships || []).find(m => m.team_canonical === tc);
+  return m ? m.role : null;
+}
+
+export function hasTeamRole(tc, requiredRole) {
   const u = session.value.user;
   if (!u) return false;
   if (u.admin) return true;
-  return (u.memberships || []).some(m => m.admin && m.team_canonical === tc);
+  const r = getTeamRole(tc);
+  if (!r) return false;
+  return (ROLE_LEVELS[r] || 0) >= (ROLE_LEVELS[requiredRole] || 0);
+}
+
+export function isTeamAdmin(tc) {
+  return hasTeamRole(tc, 'admin');
 }
 
 export function isTeamMember(tc) {
@@ -25,7 +41,7 @@ export function isTeamMember(tc) {
   if (!u) return false;
   if (u.admin) return true;
   if (!tc) return true;
-  return (u.memberships || []).some(m => m.team_canonical === tc);
+  return hasTeamRole(tc, 'viewer');
 }
 
 export function login(jwt, user) {

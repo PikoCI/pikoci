@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { route } from 'preact-router';
-import { isLoggedIn, session, isTeamAdmin } from './state.js';
+import { isLoggedIn, session, isTeamAdmin, hasTeamRole } from './state.js';
 
-export function useRequireAuth({ adminOnly = false, teamCanonical = null, redirectTo = null } = {}) {
+export function useRequireAuth({ adminOnly = false, requiredRole = null, teamCanonical = null, redirectTo = null } = {}) {
   useEffect(() => {
     if (!isLoggedIn.value) {
       route('/login', true);
@@ -14,7 +14,10 @@ export function useRequireAuth({ adminOnly = false, teamCanonical = null, redire
       route('/profile', true);
       return;
     }
-    if (adminOnly && !isTeamAdmin(teamCanonical)) {
+    const denied = requiredRole
+      ? !hasTeamRole(teamCanonical, requiredRole)
+      : adminOnly && !isTeamAdmin(teamCanonical);
+    if (denied) {
       if (redirectTo) {
         route(redirectTo, true);
       } else if (teamCanonical) {

@@ -4,6 +4,7 @@
 package team
 
 import (
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/user"
 )
 
@@ -21,10 +22,10 @@ type WithMembers struct {
 	Members []Member `json:"members"`
 }
 
-// Member represents a user's membership in a team, indicating whether the
-// user has admin privileges for that team.
+// Member represents a user's membership in a team, indicating the
+// user's role for that team.
 type Member struct {
-	Admin bool `json:"admin"`
+	Role role.Role `json:"role"`
 
 	User user.User `json:"user"`
 }

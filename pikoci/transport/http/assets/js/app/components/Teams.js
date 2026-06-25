@@ -3,11 +3,13 @@
 import { html } from 'htm/preact';
 import { useState, useEffect } from 'preact/hooks';
 import { route } from 'preact-router';
-import { isAdmin, isTeamAdmin } from '../state.js';
+import { isAdmin, hasTeamRole } from '../state.js';
 import { fetchTeams, createTeam, fetchTeam, updateTeam, deleteTeam, fetchUsers, addTeamMember, updateTeamMember, removeTeamMember } from '../api.js';
 import { useRequireAuth, useLoading } from '../hooks.js';
 import { showToast } from '../toast.js';
 import { Breadcrumb } from './Layout.js';
+
+const ASSIGNABLE_ROLES = ['viewer', 'operator', 'maintainer', 'admin'];
 
 // ---------------------------------------------------------------------------
 // TeamsView – list all teams
@@ -69,7 +71,7 @@ function TeamRow({ team, onDelete }) {
           onClick=${(e) => { e.preventDefault(); route('/teams/' + team.canonical); }}>
           <i class="bi bi-gear"></i> Manage
         </a>
-        ${isAdmin.value && html`
+        ${hasTeamRole(team.canonical, 'admin') && html`
           <button id="delete" type="button" class="btn btn-danger" disabled=${loading} onClick=${handleDelete}>
             ${loading
               ? html`Deleting... <span class="spinner-border spinner-border-sm" role="status"></span>`
@@ -151,15 +153,15 @@ export function TeamShow({ tc }) {
     });
   };
 
-  const onToggleAdmin = (member, checkboxEl) => {
-    updateTeamMember(tc, member.user.username, { admin: !member.admin }).then(() => {
+  const onChangeRole = (member, newRole) => {
+    updateTeamMember(tc, member.user.username, { role: newRole }).then(() => {
       showToast('Member role updated', 'success');
       setMembers(members.map(m =>
-        m.user.username === member.user.username ? { ...m, admin: !m.admin } : m
+        m.user.username === member.user.username ? { ...m, role: newRole } : m
       ));
     }).catch(() => {
-      // Revert checkbox visual state on error (e.g., "cannot have team with no admins")
-      if (checkboxEl) checkboxEl.checked = member.admin;
+      // Force re-render to revert the select to the server-side role
+      setMembers(prev => [...prev]);
     });
   };
 
@@ -181,8 +183,8 @@ export function TeamShow({ tc }) {
     }
   };
 
-  const onAddMember = (username, admin) => {
-    return addTeamMember(tc, { admin, user: { username } }).then(() => {
+  const onAddMember = (username, memberRole) => {
+    return addTeamMember(tc, { role: memberRole, user: { username } }).then(() => {
       showToast('Member added', 'success');
       setShowNewMember(false);
       loadTeam();
@@ -191,7 +193,8 @@ export function TeamShow({ tc }) {
 
   if (!team) return null;
 
-  const admin = isTeamAdmin(tc);
+  const canManageMembers = hasTeamRole(tc, 'admin');
+  const canUpdateTeam = hasTeamRole(tc, 'admin');
 
   return html`
     <${Breadcrumb} team=${team} />
@@ -206,10 +209,10 @@ export function TeamShow({ tc }) {
       <div class="mb-3">
         <label for="name" class="form-label">Name</label>
         <input type="text" class="form-control" id="name" value=${name}
-          disabled=${!admin}
+          disabled=${!canUpdateTeam}
           onInput=${(e) => setName(e.target.value)} />
       </div>
-      ${admin && html`
+      ${canUpdateTeam && html`
         <button type="submit" class="btn btn-primary" disabled=${loading}>
           ${loading ? html`Saving... <span class="spinner-border spinner-border-sm" role="status"></span>` : 'Update'}
         </button>
@@ -218,7 +221,7 @@ export function TeamShow({ tc }) {
     <hr style="border-color: var(--border); margin: 1.5rem 0;" />
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h3 class="h5 fw-bold mb-0">Members</h3>
-      ${admin && html`
+      ${canManageMembers && html`
         <a type="button" id="new-member" class="btn btn-success" onClick=${onClickNewMember}>
           <i class="bi bi-person-plus"></i> New Member
         </a>
@@ -227,15 +230,15 @@ export function TeamShow({ tc }) {
     <table class="table">
       <thead>
         <tr>
-          <th scope="col" class="col-5">Full Name</th>
-          <th scope="col" class="col-5">Admin</th>
-          <th scope="col" class="col-2">Options</th>
+          <th scope="col" class="col-4">Full Name</th>
+          <th scope="col" class="col-4">Role${' '}<a href="https://docs.pikoci.com/Roles" target="_blank" rel="noopener" title="${'Viewer: read-only access\nOperator: trigger, cancel, retry builds; pause/unpause; pin/unpin\nMaintainer: create, edit, delete pipelines and resources\nAdmin: manage members, team settings, delete team\n\nClick to go to docs'}" style="color:var(--text-muted);font-size:0.85em;"><i class="bi bi-info-circle"></i></a></th>
+          <th scope="col" class="col-4">Options</th>
         </tr>
       </thead>
       <tbody>
         ${showNewMember && html`<${NewMemberRow} users=${users} onAdd=${onAddMember} onCancel=${() => setShowNewMember(false)} />`}
         ${members.map(m => html`
-          <${MemberRow} key=${m.user.username} member=${m} tc=${tc} onToggleAdmin=${onToggleAdmin} onDelete=${onDeleteMember} />
+          <${MemberRow} key=${m.user.username} member=${m} tc=${tc} members=${members} onChangeRole=${onChangeRole} onDelete=${onDeleteMember} />
         `)}
       </tbody>
     </table>
@@ -248,12 +251,12 @@ export function TeamShow({ tc }) {
 
 function NewMemberRow({ users, onAdd }) {
   const [username, setUsername] = useState(users.length ? users[0].username : '');
-  const [admin, setAdmin] = useState(false);
+  const [memberRole, setMemberRole] = useState('maintainer');
   const [loading, withLoading] = useLoading();
 
   const handleCreate = (e) => {
     e.preventDefault();
-    withLoading(() => onAdd(username, admin));
+    withLoading(() => onAdd(username, memberRole));
   };
 
   return html`
@@ -265,10 +268,10 @@ function NewMemberRow({ users, onAdd }) {
         </select>
       </td>
       <td>
-        <div class="form-check form-switch">
-          <input class="form-check-input" type="checkbox" role="switch" id="admin"
-            checked=${admin} onChange=${(e) => setAdmin(e.target.checked)} />
-        </div>
+        <select class="form-select" id="role" value=${memberRole}
+          onChange=${(e) => setMemberRole(e.target.value)}>
+          ${ASSIGNABLE_ROLES.map(r => html`<option value=${r}>${r}</option>`)}
+        </select>
       </td>
       <td>
         <div class="btn-group" role="group">
@@ -284,36 +287,41 @@ function NewMemberRow({ users, onAdd }) {
 }
 
 // ---------------------------------------------------------------------------
-// MemberRow – existing member row with admin toggle and delete
+// MemberRow – existing member row with role dropdown and delete
 // ---------------------------------------------------------------------------
 
-function MemberRow({ member, tc, onToggleAdmin, onDelete }) {
+function MemberRow({ member, tc, members, onChangeRole, onDelete }) {
   const [loading, withLoading] = useLoading();
-  const admin = isTeamAdmin(tc);
+  const canManage = hasTeamRole(tc, 'admin');
+  const isLastAdmin = member.role === 'admin' && (members || []).filter(m => m.role === 'admin').length <= 1;
 
   const handleDelete = (e) => {
     e.preventDefault();
     withLoading(() => onDelete(member));
   };
 
-  const handleToggleAdmin = (e) => {
-    onToggleAdmin(member, e.target);
+  const handleRoleChange = (e) => {
+    onChangeRole(member, e.target.value);
   };
 
   return html`
     <tr>
       <td>${member.user.full_name}</td>
       <td>
-        <div class="form-check form-switch">
-          <input class="form-check-input" type="checkbox" role="switch" id="admin"
-            checked=${member.admin}
-            disabled=${!admin}
-            onChange=${handleToggleAdmin} />
-        </div>
+        ${canManage
+          ? html`
+            <select class="form-select form-select-sm" value=${member.role}
+              disabled=${isLastAdmin}
+              onChange=${handleRoleChange}>
+              ${ASSIGNABLE_ROLES.map(r => html`<option value=${r}>${r}</option>`)}
+            </select>
+          `
+          : html`<span>${member.role}</span>`
+        }
       </td>
       <td>
         <div class="btn-group" role="group">
-          ${admin && html`
+          ${canManage && !isLastAdmin && html`
             <button id="delete" type="button" class="btn btn-danger" disabled=${loading} onClick=${handleDelete}>
               ${loading
                 ? html`Removing... <span class="spinner-border spinner-border-sm" role="status"></span>`
