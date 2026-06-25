@@ -2332,6 +2332,124 @@ func TestReplaceSecretPlaceholders_NoResolved(t *testing.T) {
 	assert.Equal(t, "literal-value", params["param_token"])
 }
 
+func TestSecretValuesFromResolved(t *testing.T) {
+	tests := []struct {
+		name     string
+		resolved map[string]string
+		want     []string
+	}{
+		{
+			name:     "nil map",
+			resolved: nil,
+			want:     nil,
+		},
+		{
+			name:     "empty map",
+			resolved: map[string]string{},
+			want:     nil,
+		},
+		{
+			name: "skips empty values",
+			resolved: map[string]string{
+				"__pikoci_secret:vault:path:key__": "",
+			},
+			want: nil,
+		},
+		{
+			name: "skips short values under 3 chars",
+			resolved: map[string]string{
+				"__pikoci_secret:vault:path:a__": "ab",
+				"__pikoci_secret:vault:path:b__": "x",
+			},
+			want: nil,
+		},
+		{
+			name: "extracts and deduplicates",
+			resolved: map[string]string{
+				"__pikoci_secret:vault:path:token__":    "s3cret-token",
+				"__pikoci_secret:vault:path:token2__":   "s3cret-token",
+				"__pikoci_secret:vault:path:password__": "hunter2",
+			},
+			want: []string{"s3cret-token", "hunter2"},
+		},
+		{
+			name: "sorts longest first",
+			resolved: map[string]string{
+				"__pikoci_secret:vault:path:short__": "abc",
+				"__pikoci_secret:vault:path:long__":  "abcdefghij",
+				"__pikoci_secret:vault:path:mid__":   "abcdef",
+			},
+			want: []string{"abcdefghij", "abcdef", "abc"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := secretValuesFromResolved(tt.resolved)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestMaskSecrets(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		vals  []string
+		want  string
+	}{
+		{
+			name:  "nil vals is no-op",
+			input: "hello world",
+			vals:  nil,
+			want:  "hello world",
+		},
+		{
+			name:  "empty vals is no-op",
+			input: "hello world",
+			vals:  []string{},
+			want:  "hello world",
+		},
+		{
+			name:  "masks single value",
+			input: "token is s3cret-token here",
+			vals:  []string{"s3cret-token"},
+			want:  "token is *** here",
+		},
+		{
+			name:  "masks multiple occurrences",
+			input: "s3cret-token and s3cret-token again",
+			vals:  []string{"s3cret-token"},
+			want:  "*** and *** again",
+		},
+		{
+			name:  "masks multiple different values",
+			input: "user=admin pass=hunter2",
+			vals:  []string{"admin", "hunter2"},
+			want:  "user=*** pass=***",
+		},
+		{
+			name:  "longest first prevents partial masking",
+			input: "the value is supersecret",
+			vals:  []string{"supersecret", "secret"},
+			want:  "the value is ***",
+		},
+		{
+			name:  "no match leaves string unchanged",
+			input: "nothing to see here",
+			vals:  []string{"s3cret-token"},
+			want:  "nothing to see here",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := maskSecrets(tt.input, tt.vals)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestProcessResourceCheck_WithSecretVars(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc := newTestWorker(ctrl)

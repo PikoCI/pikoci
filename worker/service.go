@@ -3109,6 +3109,40 @@ func replaceSecretPlaceholdersInSlice(ss []string, resolved map[string]string) {
 	}
 }
 
+// secretValuesFromResolved extracts unique non-empty secret values from a
+// resolved placeholder map, sorted longest-first so longer secrets are
+// masked before shorter substrings. Values shorter than 3 characters are
+// skipped to avoid false positives.
+func secretValuesFromResolved(resolved map[string]string) []string {
+	seen := make(map[string]struct{}, len(resolved))
+	var vals []string
+	for _, v := range resolved {
+		if v == "" || len(v) < 3 {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		vals = append(vals, v)
+	}
+	if len(vals) == 0 {
+		return nil
+	}
+	sort.Slice(vals, func(i, j int) bool {
+		return len(vals[i]) > len(vals[j])
+	})
+	return vals
+}
+
+// maskSecrets replaces all secret values in s with "***".
+func maskSecrets(s string, secretValues []string) string {
+	for _, v := range secretValues {
+		s = strings.ReplaceAll(s, v, "***")
+	}
+	return s
+}
+
 // parseEnvFormat parses KEY=VALUE lines (e.g. .env files) into a map.
 // Comment lines (#), blank lines, and lines without a valid variable name are ignored.
 // Values optionally wrapped in single or double quotes are stripped.
