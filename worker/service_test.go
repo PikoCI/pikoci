@@ -2435,6 +2435,18 @@ func TestMaskSecrets(t *testing.T) {
 			want:  "the value is ***",
 		},
 		{
+			name:  "masks multi-line secret",
+			input: "begin\nline1\nline2\nend",
+			vals:  []string{"line1\nline2"},
+			want:  "begin\n***\nend",
+		},
+		{
+			name:  "regex-special chars in secret treated literally",
+			input: "price is $100.00 (USD)",
+			vals:  []string{"$100.00 (USD)"},
+			want:  "price is ***",
+		},
+		{
 			name:  "no match leaves string unchanged",
 			input: "nothing to see here",
 			vals:  []string{"s3cret-token"},
@@ -3050,11 +3062,10 @@ func TestRunRunner_MasksSecretInPartialLog(t *testing.T) {
 	assert.Contains(t, out, "***")
 	assert.NotContains(t, out, "my-s3cret-token")
 	// At least one partial log should have been emitted (sleep 3 > 2s ticker)
-	if len(partialLogs) > 0 {
-		for _, pl := range partialLogs {
-			assert.NotContains(t, pl, "my-s3cret-token", "partial log should be masked")
-			assert.Contains(t, pl, "***", "partial log should contain masked value")
-		}
+	require.NotEmpty(t, partialLogs, "expected at least one partial log from 3s sleep with 2s ticker")
+	for _, pl := range partialLogs {
+		assert.NotContains(t, pl, "my-s3cret-token", "partial log should be masked")
+		assert.Contains(t, pl, "***", "partial log should contain masked value")
 	}
 }
 

@@ -2340,7 +2340,7 @@ func prepareShellRunner(ru *runner.Runner, rc *utils.RunnerCommand, cwd string) 
 func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc utils.RunnerCommand, secretVals []string, onPartialLog ...func(string)) (string, time.Duration, error) {
 	if ru.Name == "shell" {
 		if err := prepareShellRunner(&ru, &rc, cwd); err != nil {
-			return err.Error(), 0, err
+			return maskSecrets(err.Error(), secretVals), 0, err
 		}
 	}
 
@@ -2422,7 +2422,7 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 
 	start := time.Now()
 	if err := cmd.Start(); err != nil {
-		out := err.Error()
+		out := maskSecrets(err.Error(), secretVals)
 		return out, time.Since(start), err
 	}
 
