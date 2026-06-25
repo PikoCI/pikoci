@@ -1072,7 +1072,7 @@ func (w *Worker) runGetStep(ctx context.Context, m workitem.Body, b *build.Build
 		}
 
 		var attemptOut string
-		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, onPartialLog)
+		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, nil, onPartialLog)
 		out += attemptOut
 
 		if cancel != nil {
@@ -1265,7 +1265,7 @@ func (w *Worker) runTaskStep(ctx context.Context, m workitem.Body, b *build.Buil
 		}
 
 		var attemptOut string
-		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, t.Run, onPartialLog)
+		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, t.Run, nil, onPartialLog)
 		out += attemptOut
 
 		if cancel != nil {
@@ -1431,7 +1431,7 @@ func (w *Worker) runPutStep(ctx context.Context, m workitem.Body, b *build.Build
 		}
 
 		var attemptOut string
-		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, onPartialLog)
+		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, nil, onPartialLog)
 		out += attemptOut
 
 		if cancel != nil {
@@ -1638,7 +1638,7 @@ func (w *Worker) runNotifyStep(ctx context.Context, m workitem.Body, b *build.Bu
 		}
 
 		var attemptOut string
-		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, onPartialLog)
+		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, nil, onPartialLog)
 		out += attemptOut
 
 		if cancel != nil {
@@ -1868,7 +1868,7 @@ func (w *Worker) runHooks(ctx context.Context, m workitem.Body, b *build.Build, 
 			}
 
 			var runErr error
-			out, d, runErr = w.runRunner(ctx, ru, cwd, rc, onPartialLog)
+			out, d, runErr = w.runRunner(ctx, ru, cwd, rc, nil, onPartialLog)
 			hookStatus := build.Succeeded
 			if runErr != nil {
 				hookStatus = build.Failed
@@ -1979,7 +1979,7 @@ func (w *Worker) processResourceCheck(ctx context.Context, m workitem.Body, cwd 
 	replaceSecretPlaceholdersInSlice(rc.Args, resolved)
 
 	checkWarnStr := formatParamWarnings(checkWarnings)
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 	if err != nil {
 		r.Logs = checkWarnStr + out
 		if nerr := w.pikoci.UpdatePipelineResource(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, r); nerr != nil {
@@ -2330,7 +2330,7 @@ func prepareShellRunner(ru *runner.Runner, rc *utils.RunnerCommand, cwd string) 
 	return nil
 }
 
-func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc utils.RunnerCommand, onPartialLog ...func(string)) (string, time.Duration, error) {
+func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc utils.RunnerCommand, secretVals []string, onPartialLog ...func(string)) (string, time.Duration, error) {
 	if ru.Name == "shell" {
 		if err := prepareShellRunner(&ru, &rc, cwd); err != nil {
 			return err.Error(), 0, err
@@ -2433,7 +2433,7 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 					if ctx.Err() != nil {
 						return
 					}
-					partialCb(sw.String())
+					partialCb(maskSecrets(sw.String(), secretVals))
 				case <-ctx.Done():
 					return
 				case <-done:
@@ -2467,6 +2467,7 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 			out += n + "\n"
 		}
 	}
+	out = maskSecrets(out, secretVals)
 	w.logger.Debug("finished running command", "out", out)
 
 	return out, duration, err
@@ -2515,7 +2516,7 @@ func (w *Worker) fetchSecrets(ctx context.Context, cwd string, pp *pipeline.Pipe
 			rc.Params[k] = v
 		}
 
-		out, _, err := w.runRunner(ctx, ru, cwd, rc)
+		out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch secret from %q at %q: %s\n%w", stName, path, out, err)
 		}
@@ -2606,7 +2607,7 @@ func (w *Worker) startServices(ctx context.Context, m workitem.Body, b *build.Bu
 			w.updateBuild(ctx, m, *b)
 		}
 
-		out, d, err := w.runRunner(ctx, ru, cwd, rc, onPartialLog)
+		out, d, err := w.runRunner(ctx, ru, cwd, rc, nil, onPartialLog)
 		out = svcWarnStr + out
 		if err != nil {
 			b.Steps[stepIdx] = build.Step{Type: "service", Name: ss.Name + ":start", Logs: out, Duration: d, Status: build.Failed}
@@ -2958,7 +2959,7 @@ func (w *Worker) waitForServices(ctx context.Context, m workitem.Body, b *build.
 				default:
 				}
 
-				lastOut, _, lastErr = w.runRunner(ctx, ru, cwd, runCmd)
+				lastOut, _, lastErr = w.runRunner(ctx, ru, cwd, runCmd, nil)
 				if lastErr == nil {
 					results <- readyResult{
 						name: svcName,
@@ -3035,7 +3036,7 @@ func (w *Worker) stopServices(m workitem.Body, b *build.Build, cwd string, pp *p
 			w.updateBuild(stopCtx, m, *b)
 		}
 
-		out, d, err := w.runRunner(stopCtx, ru, cwd, rc, onPartialLog)
+		out, d, err := w.runRunner(stopCtx, ru, cwd, rc, nil, onPartialLog)
 		out = stopWarnStr + out
 		stepStatus := build.Succeeded
 		if err != nil {

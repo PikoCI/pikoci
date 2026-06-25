@@ -2700,7 +2700,7 @@ func TestRunRunner_ShellVariablesNotDestroyed(t *testing.T) {
 		Params: map[string]string{"path": "/bin/sh"},
 	}
 
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 	require.NoError(t, err)
 	assert.Contains(t, out, "hello_from_shell", "shell variable should survive and be echoed")
 }
@@ -2724,7 +2724,7 @@ func TestRunRunner_AwkPositionalArgsWork(t *testing.T) {
 		Params: map[string]string{"path": "/bin/sh"},
 	}
 
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 	require.NoError(t, err)
 	assert.Contains(t, out, "foo", "awk $1 should extract first field")
 	assert.NotContains(t, out, "bar", "awk $1 should not include second field")
@@ -2752,7 +2752,7 @@ func TestRunRunner_ParamVarsExpandedByShell(t *testing.T) {
 		},
 	}
 
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 	require.NoError(t, err)
 	assert.Contains(t, out, "url=https://example.com", "param_url should be expanded by shell from env")
 }
@@ -2796,7 +2796,7 @@ func TestRunRunner_EnvPlaceholder(t *testing.T) {
 	// The -e flags come before the -ec arg. Since /bin/sh doesn't understand
 	// -e KEY=VALUE as positional args, the command will fail. But we can verify
 	// the behavior via the isRunnerInternalParam function directly.
-	w.runRunner(ctx, ru, cwd, rc)
+	w.runRunner(ctx, ru, cwd, rc, nil)
 }
 
 func TestIsRunnerInternalParam(t *testing.T) {
@@ -2900,7 +2900,7 @@ func TestRunRunner_EnvPlaceholder_RemapsPIKOCIOutput(t *testing.T) {
 		},
 	}
 
-	out, _, _ := w.runRunner(ctx, ru, cwd, rc)
+	out, _, _ := w.runRunner(ctx, ru, cwd, rc, nil)
 
 	// The output should contain the remapped PIKOCI_OUTPUT path
 	assert.Contains(t, out, "PIKOCI_OUTPUT=/workdir/.pikoci-output-12345",
@@ -2947,7 +2947,7 @@ func TestRunRunner_EnvPlaceholder_DockerTemplate(t *testing.T) {
 		},
 	}
 
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 	require.NoError(t, err)
 
 	// Verify volume mount expanded
@@ -2990,12 +2990,58 @@ func TestRunRunner_EnvPlaceholder_PIKOCIOutputNoWorkdir(t *testing.T) {
 		},
 	}
 
-	out, _, _ := w.runRunner(ctx, ru, cwd, rc)
+	out, _, _ := w.runRunner(ctx, ru, cwd, rc, nil)
 
 	// Without -w, the original host path should be used
 	assert.Contains(t, out, "PIKOCI_OUTPUT="+hostPath,
 		"PIKOCI_OUTPUT should use original host path when no -w flag")
 	assert.Contains(t, out, "GET_REPO_REF=abc123")
+}
+
+func TestRunRunner_MasksSecretInOutput(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	cwd := t.TempDir()
+
+	ru := runner.Runner{
+		Name: "exec",
+		Run:  utils.RunCommand{Path: "$path", Args: []string{"$args"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "exec",
+		Args:   []string{"-ec", `echo "my-s3cret-token"`},
+		Params: map[string]string{"path": "/bin/sh"},
+	}
+
+	secretVals := []string{"my-s3cret-token"}
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, secretVals)
+	require.NoError(t, err)
+	assert.Contains(t, out, "***")
+	assert.NotContains(t, out, "my-s3cret-token")
+}
+
+func TestRunRunner_NilSecretVals_NoMasking(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	cwd := t.TempDir()
+
+	ru := runner.Runner{
+		Name: "exec",
+		Run:  utils.RunCommand{Path: "$path", Args: []string{"$args"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "exec",
+		Args:   []string{"-ec", `echo "visible-output"`},
+		Params: map[string]string{"path": "/bin/sh"},
+	}
+
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
+	require.NoError(t, err)
+	assert.Contains(t, out, "visible-output")
 }
 
 func TestProcessResourceCheck_RawSecretFormat(t *testing.T) {
@@ -4695,7 +4741,7 @@ func TestRunRunner_ShellCmdMode(t *testing.T) {
 		Params: map[string]string{"cmd": "echo shell_works"},
 	}
 
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 	require.NoError(t, err)
 	assert.Contains(t, out, "shell_works")
 }
@@ -4719,7 +4765,7 @@ func TestRunRunner_ShellFileMode(t *testing.T) {
 		Params: map[string]string{"file": "hello.sh"},
 	}
 
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 	require.NoError(t, err)
 	assert.Contains(t, out, "file_works")
 }
