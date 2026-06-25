@@ -3,7 +3,7 @@
 import { html } from 'htm/preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { route } from 'preact-router';
-import { isLoggedIn, isTeamMember } from '../state.js';
+import { isLoggedIn, hasTeamRole } from '../state.js';
 import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
 import { useLoading, usePolling } from '../hooks.js';
 import { sortBuilds, selectActiveBuild, durationToString, processLogs, pikoTimeAgo, fetchInterval } from '../utils.js';
@@ -179,6 +179,7 @@ function ParallelGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoF
 
 function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
   const build = prepareBuild(rawBuild);
+  const isOperator = hasTeamRole(tc, 'operator');
   const [autoFollow, setAutoFollow] = useState(true);
   const [expandedSteps, setExpandedSteps] = useState({});
   const [elapsed, setElapsed] = useState('');
@@ -286,13 +287,13 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
                 <i class="bi ${autoFollow ? 'bi-arrow-down-circle-fill' : 'bi-arrow-down-circle'}"></i> ${autoFollow ? 'Following' : 'Follow'}
               </button>
             ` : null}
-            ${isLoggedIn.value ? html`
+            ${isOperator ? html`
               <button type="button" class="btn btn-sm btn-outline-danger piko-cancel-build" onClick=${onCancel} disabled=${cancelLoading}>
                 <i class="bi bi-x-circle"></i> ${cancelLoading ? 'Cancelling...' : 'Cancel'}
               </button>
             ` : null}
           </span>
-        ` : isLoggedIn.value ? html`
+        ` : isOperator ? html`
           <button type="button" class="btn btn-sm btn-outline-warning piko-retry-build" style="margin-left:auto;" onClick=${handleRetry} disabled=${retryLoading}>
             <i class="bi bi-arrow-clockwise"></i> ${retryLoading ? 'Retrying...' : 'Retry'}
           </button>
@@ -638,7 +639,7 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
     route(pipelinePath + versionParam);
   }, [tc, pn, trackedVersionID]);
 
-  const isMember = isTeamMember(tc);
+  const isMember = hasTeamRole(tc, 'operator');
 
   return html`
     <div>

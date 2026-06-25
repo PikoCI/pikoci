@@ -9,7 +9,7 @@ import {
   triggerResource, fetchResourceVersions, fetchVersionPath,
   triggerVersion, pinResource, unpinResource, fetchTeam,
 } from '../api.js';
-import { isTeamAdmin, isTeamMember, isLoggedIn } from '../state.js';
+import { hasTeamRole, isLoggedIn } from '../state.js';
 import { usePolling } from '../hooks.js';
 import { showToast } from '../toast.js';
 import { fetchInterval, pikoTimeAgo, versionRef } from '../utils.js';
@@ -520,8 +520,8 @@ export function PipelineShow({ tc, pn }) {
 
   if (!pipeline) return null;
 
-  const isMember = isTeamMember(tc);
-  const admin = isTeamAdmin(tc);
+  const isOperator = hasTeamRole(tc, 'operator');
+  const isMaintainer = hasTeamRole(tc, 'maintainer');
   const hasPaused = pipeline.jobs && pipeline.jobs.some(j => j.paused);
   const shareUrls = getShareUrls();
   const showGraphView = currentView === 'graph';
@@ -534,13 +534,13 @@ export function PipelineShow({ tc, pn }) {
         ${pipeline.public && html`<span class="badge bg-info fs-6 ms-2">Public</span>`}
       </h1>
       <div class="d-flex gap-2">
-        ${isMember && pipeline.jobs && pipeline.jobs.length > 0 && html`
+        ${isOperator && pipeline.jobs && pipeline.jobs.length > 0 && html`
           ${hasPaused
             ? html`<button type="button" id="unpause-pipeline" class="btn btn-primary" onClick=${clickUnpause}><i class="bi bi-play-circle"></i> Unpause</button>`
             : html`<button type="button" id="pause-pipeline" class="btn btn-primary" onClick=${clickPause}><i class="bi bi-pause-circle"></i> Pause</button>`
           }
         `}
-        ${admin && html`
+        ${isMaintainer && html`
           <button type="button" id="edit-pipeline" class="btn btn-info" onClick=${clickEdit}><i class="bi bi-pencil"></i> Edit</button>
           <button type="button" id="delete-pipeline" class="btn btn-danger" onClick=${clickDelete}><i class="bi bi-trash"></i> Delete</button>
         `}
@@ -608,7 +608,7 @@ export function PipelineShow({ tc, pn }) {
           <${PipelineResourcesPanel}
             tc=${tc} pn=${pn}
             resources=${resources}
-            isMember=${isMember}
+            isMember=${isOperator}
             onClose=${() => setResourcesPanelOpen(false)}
             onTrackVersion=${trackVersion}
             trackedVersion=${trackedVersion}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/cycloidio/sqlr"
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/user"
 )
 
@@ -101,7 +102,7 @@ func (r *UserRepository) Find(ctx context.Context, un string) (*user.User, error
 func (r *UserRepository) FindWithMemberships(ctx context.Context, un string) (*user.WithMemberships, error) {
 	rows, err := r.querier.QueryContext(ctx, `
 		SELECT u.id, u.full_name, u.username, u.password, u.admin,
-			tu.admin, t.id, t.name, t.canonical
+			tu.role, t.id, t.name, t.canonical
 		FROM users AS u
 		LEFT JOIN teams_users AS tu
 			ON tu.user_id = u.id
@@ -198,9 +199,9 @@ func scanUserWithMemberships(rows *sql.Rows) (*user.WithMemberships, error) {
 
 	for rows.Next() {
 		var (
-			du    dbUser
-			dt    dbTeam
-			admin sql.NullBool
+			du       dbUser
+			dt       dbTeam
+			roleStr  sql.NullString
 		)
 		err := rows.Scan(
 			&du.ID,
@@ -208,7 +209,7 @@ func scanUserWithMemberships(rows *sql.Rows) (*user.WithMemberships, error) {
 			&du.Username,
 			&du.Password,
 			&du.Admin,
-			&admin,
+			&roleStr,
 			&dt.ID,
 			&dt.Name,
 			&dt.Canonical,
@@ -228,10 +229,12 @@ func scanUserWithMemberships(rows *sql.Rows) (*user.WithMemberships, error) {
 		if um.Memberships == nil {
 			um.Memberships = make([]user.Member, 0)
 		}
-		um.Memberships = append(um.Memberships, user.Member{
-			Admin:         admin.Bool,
-			TeamCanonical: t.Canonical,
-		})
+		if roleStr.Valid && t.Canonical != "" {
+			um.Memberships = append(um.Memberships, user.Member{
+				Role:          role.Role(roleStr.String),
+				TeamCanonical: t.Canonical,
+			})
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to scan user: %w", err)

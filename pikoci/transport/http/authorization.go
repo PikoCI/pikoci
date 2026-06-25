@@ -5,113 +5,143 @@ import (
 	"fmt"
 
 	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/role"
 )
 
 type authorizationFn func(ctx context.Context, s pikoci.Service, un, tc string) error
 
 var (
 	routeAuthorization = map[RouteName]authorizationFn{
-		UserLogin:    nothing,
-		RefreshToken: nothing,
-
-		CreateUser: admin,
-		ListUsers:  admin,
-		GetUser:    admin,
-		UpdateUser: admin,
-		DeleteUser: admin,
-		ChangePassword: member,
-		UpdateProfile:  member,
-
-		CreateTeam: admin,
-		ListTeams:  member,
-		GetTeam:    member,
-		UpdateTeam: admin,
-		DeleteTeam: admin,
-
-		CreateTeamMember: admin,
-		UpdateTeamMember: admin,
-		DeleteTeamMember: admin,
-
-		CreatePipeline: admin,
-		UpdatePipeline: admin,
-		GetPipeline:    member,
-		DeletePipeline: admin,
-		ListPipelines:  member,
-
-		GetPipelineImage:    member,
-		CreatePipelineImage: admin,
-
-		ListPipelineJobs:   member,
-		TriggerPipelineJob: member,
-		GetPipelineJob:     member,
-
-		CreateJobBuild:       admin,
-		CreateRetryJobBuild:  admin,
-		UpdateJobBuild:       admin,
-		DeleteJobBuild:       admin,
-		ListJobBuilds:        member,
-		GetJobBuild:          member,
-		CancelJobBuild:         member,
-		RetryJobBuild:          member,
-		StartPendingBuild:              admin,
-		FindOldestPendingBuild:         admin,
-		NotifySerialGroupPendingBuilds: admin,
-		EvaluateDownstreamJobs:         admin,
-		InsertBuildGetVersion:          admin,
-		FindBuildGetVersions:   admin,
-
-		ListPipelineResources:   member,
-		GetPipelineResource:     member,
-		UpdatePipelineResource:  admin,
-		TriggerPipelineResource: member,
-		CreateResourceVersion:   admin,
-		ListResourceVersions:    member,
-
-		PinResourceVersion:     member,
-		UnpinResourceVersion:   member,
-		TriggerResourceVersion: member,
-		GetResourceVersionPath: member,
-
-		WebhookTrigger:         nothing,
-		RegenerateWebhookToken: admin,
-
-		CreateTrigger:     admin,
-		ListTriggersAfter: member,
-
-		ExportDatabase: admin,
-
-		PausePipeline:   member,
-		UnpausePipeline: member,
-		PauseJob:        member,
-		UnpauseJob:      member,
-
+		// No auth required
+		UserLogin:       nothing,
+		RefreshToken:    nothing,
+		WebhookTrigger:  nothing,
 		WorkerHeartbeat: nothing,
-		ListWorkers:     admin,
-		WorkersHealth:   admin,
-		DeleteWorker:    admin,
+		GetVersion:      nothing,
+
+		// Public-level routes: unauthenticated access to public pipelines
+		GetPipeline:          requirePublicOrRole(role.Viewer),
+		GetPipelineImage:     requirePublicOrRole(role.Viewer),
+		ListPipelineJobs:     requirePublicOrRole(role.Viewer),
+		GetPipelineJob:       requirePublicOrRole(role.Viewer),
+		ListJobBuilds:        requirePublicOrRole(role.Viewer),
+		ListPipelineResources: requirePublicOrRole(role.Viewer),
+		GetPipelineResource:   requirePublicOrRole(role.Viewer),
+		ListResourceVersions:    requirePublicOrRole(role.Viewer),
+		GetResourceVersionPath:  requirePublicOrRole(role.Viewer),
+
+		// Viewer routes
+		ListPipelines:    requireRole(role.Viewer),
+		ListTeams:        requireRole(role.Viewer),
+		GetTeam:          requireRole(role.Viewer),
+		GetJobBuild:      requireRole(role.Viewer),
+		ChangePassword:   requireRole(role.Viewer),
+		UpdateProfile:    requireRole(role.Viewer),
+		ListTriggersAfter: requireRole(role.Viewer),
+
+		// Operator routes
+		TriggerPipelineJob:     requireRole(role.Operator),
+		CancelJobBuild:        requireRole(role.Operator),
+		RetryJobBuild:         requireRole(role.Operator),
+		PausePipeline:         requireRole(role.Operator),
+		UnpausePipeline:       requireRole(role.Operator),
+		PauseJob:              requireRole(role.Operator),
+		UnpauseJob:            requireRole(role.Operator),
+		PinResourceVersion:    requireRole(role.Operator),
+		UnpinResourceVersion:  requireRole(role.Operator),
+		TriggerResourceVersion: requireRole(role.Operator),
+		TriggerPipelineResource: requireRole(role.Operator),
+
+		// Maintainer routes
+		CreatePipeline:         requireRole(role.Maintainer),
+		UpdatePipeline:         requireRole(role.Maintainer),
+		DeletePipeline:         requireRole(role.Maintainer),
+		CreatePipelineImage:    requireRole(role.Maintainer),
+		UpdatePipelineResource: requireRole(role.Maintainer),
+		CreateResourceVersion:  requireRole(role.Maintainer),
+		RegenerateWebhookToken: requireRole(role.Maintainer),
+		CreateTrigger:          requireRole(role.Maintainer),
+
+		// Worker-internal routes (bypassed by isFromWorker JWT)
+		CreateJobBuild:                 requireRole(role.Maintainer),
+		CreateRetryJobBuild:            requireRole(role.Maintainer),
+		UpdateJobBuild:                 requireRole(role.Maintainer),
+		DeleteJobBuild:                 requireRole(role.Maintainer),
+		StartPendingBuild:              requireRole(role.Maintainer),
+		FindOldestPendingBuild:         requireRole(role.Maintainer),
+		NotifySerialGroupPendingBuilds: requireRole(role.Maintainer),
+		EvaluateDownstreamJobs:         requireRole(role.Maintainer),
+		InsertBuildGetVersion:          requireRole(role.Maintainer),
+		FindBuildGetVersions:           requireRole(role.Maintainer),
+
+		// Admin routes
+		CreateTeamMember: requireRole(role.Admin),
+		UpdateTeamMember: requireRole(role.Admin),
+		DeleteTeamMember: requireRole(role.Admin),
+		UpdateTeam: requireRole(role.Admin),
+		DeleteTeam: requireRole(role.Admin),
+
+		// Global admin routes
+		CreateUser:     globalAdmin,
+		ListUsers:      globalAdmin,
+		GetUser:        globalAdmin,
+		UpdateUser:     globalAdmin,
+		DeleteUser:     globalAdmin,
+		CreateTeam:     globalAdmin,
+		ListWorkers:    globalAdmin,
+		WorkersHealth:  globalAdmin,
+		DeleteWorker:   globalAdmin,
+		ExportDatabase: globalAdmin,
 	}
 )
 
 func nothing(ctx context.Context, s pikoci.Service, un, tc string) error { return nil }
 
-func admin(ctx context.Context, s pikoci.Service, un, tc string) error {
-	um, err := s.GetUser(ctx, un)
-	if err != nil {
-		return fmt.Errorf("failed to GetUser: %w", err)
+func requireRole(r role.Role) authorizationFn {
+	return func(ctx context.Context, s pikoci.Service, un, tc string) error {
+		um, err := s.GetUser(ctx, un)
+		if err != nil {
+			return fmt.Errorf("failed to GetUser: %w", err)
+		}
+		// For routes without a team scope (e.g. ChangePassword, UpdateProfile),
+		// any authenticated user is allowed
+		if tc == "" {
+			return nil
+		}
+		if !um.HasRole(r, tc) {
+			return fmt.Errorf("requires %s role", r)
+		}
+		return nil
 	}
-	if !um.IsAdmin(tc) {
-		return fmt.Errorf("needs to be admin")
-	}
-	return nil
 }
 
-func member(ctx context.Context, s pikoci.Service, un, tc string) error {
+// requirePublicOrRole returns an authorization function that allows authenticated
+// users with at least the given role, or marks the request for public pipeline
+// fallback (handled in the auth middleware).
+func requirePublicOrRole(r role.Role) authorizationFn {
+	return func(ctx context.Context, s pikoci.Service, un, tc string) error {
+		if un == "" {
+			// Unauthenticated: let the middleware handle public fallback
+			return fmt.Errorf("requires authentication or public pipeline")
+		}
+		um, err := s.GetUser(ctx, un)
+		if err != nil {
+			return fmt.Errorf("failed to GetUser: %w", err)
+		}
+		if !um.HasRole(r, tc) {
+			return fmt.Errorf("requires %s role", r)
+		}
+		return nil
+	}
+}
+
+func globalAdmin(ctx context.Context, s pikoci.Service, un, tc string) error {
 	um, err := s.GetUser(ctx, un)
 	if err != nil {
 		return fmt.Errorf("failed to GetUser: %w", err)
 	}
-	if !um.IsMember(tc) {
-		return fmt.Errorf("needs to be member")
+	if !um.Admin {
+		return fmt.Errorf("requires global admin")
 	}
 	return nil
 }

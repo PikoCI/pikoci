@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/pikoci/pikoci/pikoci/role"
 	thttp "github.com/pikoci/pikoci/pikoci/transport/http"
 )
 
@@ -200,7 +201,7 @@ func TestHTTPEndpoints(t *testing.T) {
 
 		t.Run("Members", func(t *testing.T) {
 			t.Run("Create", func(t *testing.T) {
-				body := `{"user":{"username":"pepito"},"admin":false}`
+				body := `{"user":{"username":"pepito"},"role":"viewer"}`
 				resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/members", adminJWT, body)
 				defer resp.Body.Close()
 				requireOK(t, resp)
@@ -210,13 +211,13 @@ func TestHTTPEndpoints(t *testing.T) {
 			})
 
 			t.Run("Update", func(t *testing.T) {
-				resp := doJSONRequest(t, http.MethodPut, pikoURL+"/teams/main/members/pepito", adminJWT, `{"admin":true}`)
+				resp := doJSONRequest(t, http.MethodPut, pikoURL+"/teams/main/members/pepito", adminJWT, `{"role":"admin"}`)
 				defer resp.Body.Close()
 				requireOK(t, resp)
 				var ur thttp.UpdateTeamMemberResponse
 				decodeBody(t, resp, &ur)
 				assert.Empty(t, ur.Err)
-				assert.True(t, ur.Member.Admin)
+				assert.Equal(t, role.Admin, ur.Member.Role)
 			})
 
 			t.Run("Delete", func(t *testing.T) {

@@ -18,6 +18,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/team"
 	thttp "github.com/pikoci/pikoci/pikoci/transport/http"
 	"github.com/pikoci/pikoci/pikoci/transport/http/client"
@@ -296,7 +297,7 @@ func TestCreateTeamMember(t *testing.T) {
 func TestUpdateTeamMember(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/teams/{tc}/members/{mu}", func(w http.ResponseWriter, req *http.Request) {
-		jsonHandler(w, thttp.UpdateTeamMemberResponse{Member: &team.Member{Admin: true, User: user.User{Username: "alice"}}})
+		jsonHandler(w, thttp.UpdateTeamMemberResponse{Member: &team.Member{Role: role.Admin, User: user.User{Username: "alice"}}})
 	}).Methods("PUT")
 	ts := httptest.NewServer(r)
 	defer ts.Close()
@@ -304,9 +305,9 @@ func TestUpdateTeamMember(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	m, err := c.UpdateTeamMember(context.Background(), "myteam", "alice", team.Member{Admin: true})
+	m, err := c.UpdateTeamMember(context.Background(), "myteam", "alice", team.Member{Role: role.Admin})
 	require.NoError(t, err)
-	assert.True(t, m.Admin)
+	assert.Equal(t, role.Admin, m.Role)
 }
 
 func TestDeleteTeamMember(t *testing.T) {
@@ -1568,7 +1569,7 @@ func TestUpdateTeamMember_Error(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	_, err = c.UpdateTeamMember(context.Background(), "team1", "bob", team.Member{Admin: true})
+	_, err = c.UpdateTeamMember(context.Background(), "team1", "bob", team.Member{Role: role.Admin})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not member")
 }

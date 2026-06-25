@@ -36,6 +36,7 @@ nav:
   - Notifications: Notifications.md
   - Variables: Variables.md
   - Functions: Functions.md
+  - Roles & Permissions: Roles.md
   - CLI Reference: CLI.md
   - Server Configuration: Server.md
   - Database Backends: Database.md

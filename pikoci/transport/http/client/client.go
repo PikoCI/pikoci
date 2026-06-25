@@ -334,7 +334,7 @@ func (cl *Client) UpdateTeamMember(ctx context.Context, tc, mu string, tm team.M
 	var resp thttp.UpdateTeamMemberResponse
 
 	err := cl.Request(ctx, http.MethodPut, fmt.Sprintf("%s/teams/%s/members/%s", cl.url, tc, mu), thttp.UpdateTeamMemberRequest{
-		Admin: tm.Admin,
+		Role: string(tm.Role),
 	}, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)

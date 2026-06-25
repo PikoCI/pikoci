@@ -6,6 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/team"
 	"github.com/pikoci/pikoci/pikoci/user"
 )
@@ -205,7 +206,7 @@ func createTeamMember(s pikoci.Service) http.HandlerFunc {
 type UpdateTeamMemberRequest struct {
 	TeamCanonical  string `json:"team_canonical"`
 	MemberUsername string `json:"member_username"`
-	Admin          bool   `json:"admin"`
+	Role           string `json:"role"`
 }
 type UpdateTeamMemberResponse struct {
 	Member *team.Member `json:"data,omitempty"`
@@ -229,8 +230,8 @@ func updateTeamMember(s pikoci.Service) http.HandlerFunc {
 		req.TeamCanonical = vars["team_canonical"]
 		req.MemberUsername = vars["member_username"]
 		tm, err := s.UpdateTeamMember(ctx, req.TeamCanonical, req.MemberUsername, team.Member{
-			Admin: req.Admin,
-			User:  user.User{Username: req.MemberUsername},
+			Role: role.Role(req.Role),
+			User: user.User{Username: req.MemberUsername},
 		})
 		var errs string
 		if err != nil {

@@ -34,7 +34,7 @@ export function UsersList() {
         <tr>
           <th>Username</th>
           <th>Full Name</th>
-          <th>Role</th>
+          <th>Global Admin</th>
         </tr>
       </thead>
       <tbody id="users-table-body">
@@ -43,8 +43,8 @@ export function UsersList() {
             <td><a href="/users/${u.username}" data-native onClick=${(e) => { e.preventDefault(); route('/users/' + u.username); }}>${u.username}</a></td>
             <td>${u.full_name}</td>
             <td>${u.admin
-              ? html`<span class="badge bg-primary">Admin</span>`
-              : html`<span class="badge bg-secondary">Member</span>`
+              ? html`<span class="badge bg-primary">Yes</span>`
+              : html`<span class="badge bg-secondary">No</span>`
             }</td>
           </tr>
         `)}
@@ -100,7 +100,7 @@ export function UserNew() {
       <div class="mb-3 form-check">
         <input type="checkbox" class="form-check-input" id="admin"
           checked=${admin} onChange=${(e) => setAdmin(e.target.checked)} />
-        <label class="form-check-label" for="admin">Admin</label>
+        <label class="form-check-label" for="admin">Global Admin</label>
       </div>
       <button type="submit" class="btn btn-primary" disabled=${loading}>
         ${loading ? 'Creating...' : 'Create User'}
@@ -208,7 +208,7 @@ export function UserShow({ username: usernameParam }) {
       <div class="mb-3 form-check">
         <input type="checkbox" class="form-check-input" id="admin"
           checked=${adminChecked} onChange=${(e) => setAdminChecked(e.target.checked)} />
-        <label class="form-check-label" for="admin">Admin</label>
+        <label class="form-check-label" for="admin">Global Admin</label>
       </div>
       <button type="submit" class="btn btn-primary" disabled=${loading}>
         ${loading ? 'Saving...' : 'Save Changes'}

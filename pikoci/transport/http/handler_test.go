@@ -16,6 +16,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/mock"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/user"
 	"github.com/pikoci/pikoci/pikoci/wkr"
 	"go.uber.org/mock/gomock"
@@ -124,12 +125,12 @@ func TestMembershipsDiffer(t *testing.T) {
 			jwtUser: map[string]interface{}{
 				"admin": false,
 				"memberships": []interface{}{
-					map[string]interface{}{"team_canonical": "main", "admin": false},
+					map[string]interface{}{"team_canonical": "main", "role": "operator"},
 				},
 			},
 			dbUser: &user.WithMemberships{
 				User:        user.User{Admin: false},
-				Memberships: []user.Member{{TeamCanonical: "main", Admin: false}},
+				Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
 			},
 			expected: false,
 		},
@@ -152,7 +153,7 @@ func TestMembershipsDiffer(t *testing.T) {
 			},
 			dbUser: &user.WithMemberships{
 				User:        user.User{Admin: false},
-				Memberships: []user.Member{{TeamCanonical: "main", Admin: false}},
+				Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
 			},
 			expected: true,
 		},
@@ -161,7 +162,7 @@ func TestMembershipsDiffer(t *testing.T) {
 			jwtUser: map[string]interface{}{
 				"admin": false,
 				"memberships": []interface{}{
-					map[string]interface{}{"team_canonical": "main", "admin": false},
+					map[string]interface{}{"team_canonical": "main", "role": "operator"},
 				},
 			},
 			dbUser: &user.WithMemberships{
@@ -170,7 +171,35 @@ func TestMembershipsDiffer(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "membership admin changed",
+			name: "membership role changed",
+			jwtUser: map[string]interface{}{
+				"admin": false,
+				"memberships": []interface{}{
+					map[string]interface{}{"team_canonical": "main", "role": "operator"},
+				},
+			},
+			dbUser: &user.WithMemberships{
+				User:        user.User{Admin: false},
+				Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
+			},
+			expected: true,
+		},
+		{
+			name: "old JWT admin bool fallback - admin true maps to admin",
+			jwtUser: map[string]interface{}{
+				"admin": false,
+				"memberships": []interface{}{
+					map[string]interface{}{"team_canonical": "main", "admin": true},
+				},
+			},
+			dbUser: &user.WithMemberships{
+				User:        user.User{Admin: false},
+				Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
+			},
+			expected: false,
+		},
+		{
+			name: "old JWT admin bool fallback - admin false maps to maintainer",
 			jwtUser: map[string]interface{}{
 				"admin": false,
 				"memberships": []interface{}{
@@ -179,9 +208,9 @@ func TestMembershipsDiffer(t *testing.T) {
 			},
 			dbUser: &user.WithMemberships{
 				User:        user.User{Admin: false},
-				Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+				Memberships: []user.Member{{TeamCanonical: "main", Role: role.Maintainer}},
 			},
-			expected: true,
+			expected: false,
 		},
 	}
 
@@ -215,7 +244,7 @@ func TestUpdatePipeline_TeamCanonicalFromURL(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -261,7 +290,7 @@ func TestRefreshTokenEndpoint(t *testing.T) {
 
 	updatedUM := &user.WithMemberships{
 		User:        user.User{Username: "pepito"},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: false}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
 	}
 
 	// Stale-check in middleware calls GetUser; RefreshToken is the handler
@@ -332,7 +361,7 @@ func TestExportDatabase_AdminAllowed(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -363,7 +392,7 @@ func TestExportDatabase_NonAdminForbidden(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "pepito", Admin: false},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: false}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -417,7 +446,7 @@ func TestExportDatabase_ResponseHeaders(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -458,7 +487,7 @@ func TestXRefreshTokenHeader(t *testing.T) {
 
 		updatedUM := &user.WithMemberships{
 			User:        user.User{Username: "pepito"},
-			Memberships: []user.Member{{TeamCanonical: "main", Admin: false}},
+			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
 		}
 
 		// member() authz calls GetUser, then middleware stale-check calls GetUser again
@@ -486,7 +515,7 @@ func TestXRefreshTokenHeader(t *testing.T) {
 
 		um := &user.WithMemberships{
 			User:        user.User{Username: "pepito"},
-			Memberships: []user.Member{{TeamCanonical: "main", Admin: false}},
+			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
 		}
 		jwtToken := signJWT(t, secret, um)
 
@@ -546,7 +575,7 @@ func TestGetPipelineImage_DOT_ReturnsJSON(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -584,7 +613,7 @@ func TestGetPipelineImage_SVG_ReturnsRawSVG(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -620,7 +649,7 @@ func TestGetPipelineImage_PNG_ReturnsRawPNG(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -656,7 +685,7 @@ func TestGetPipelineImage_SVG_NoJSONHeaderRequired(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -721,7 +750,7 @@ func TestGetPipelineImage_Error_ReturnsJSON(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -801,7 +830,7 @@ func TestListWorkers_AdminAllowed(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -832,7 +861,7 @@ func TestListWorkers_NonAdminForbidden(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "pepito", Admin: false},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: false}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -862,7 +891,7 @@ func TestWorkersHealth_AdminAllowed(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -898,7 +927,7 @@ func TestDeleteWorker_AdminAllowed(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -933,7 +962,7 @@ func TestDeleteWorker_NonAdminForbidden(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "pepito", Admin: false},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: false}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -963,7 +992,7 @@ func TestGetResourceVersionPath_Success(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -1013,7 +1042,7 @@ func TestGetResourceVersionPath_InvalidVersionID(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -1093,7 +1122,7 @@ func TestGetResourceVersionPath_Error(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "admin", Admin: true},
-		Memberships: []user.Member{{TeamCanonical: "main", Admin: true}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
 	}
 	jwtToken := signJWT(t, secret, um)
 

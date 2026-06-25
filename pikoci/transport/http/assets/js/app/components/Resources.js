@@ -9,7 +9,7 @@ import {
   fetchTeam, fetchPipeline,
 } from '../api.js';
 import { apiInterval } from '../api.js';
-import { isLoggedIn, isTeamMember, isTeamAdmin } from '../state.js';
+import { isLoggedIn, hasTeamRole } from '../state.js';
 import { useLoading, usePolling } from '../hooks.js';
 import { fetchInterval, pikoTimeAgo } from '../utils.js';
 import { showToast } from '../toast.js';
@@ -29,8 +29,8 @@ export function ResourceVersions({ tc, pn, rCan }) {
   const [loading, withLoading] = useLoading();
   const fetchingMore = useRef(false);
 
-  const isMember = isTeamMember(tc);
-  const isAdm = isTeamAdmin(tc);
+  const isMember = hasTeamRole(tc, 'operator');
+  const isAdm = hasTeamRole(tc, 'maintainer');
 
   // Initial fetch
   useEffect(() => {
