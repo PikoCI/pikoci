@@ -67,8 +67,12 @@ func runTests(m *testing.M) int {
 	defer server.Close()
 
 	isHash := true
+	// admin123
 	_, _ = svc.CreateUser(ctx, user.User{FullName: "pepito", Username: "pepito", Password: "$2a$14$rwQk8Qvc2rij7qhFO4P1W.OiSF6AkgVU1RCrLaY2wawJcpkPEKwbm"}, isHash)
 	_, _ = svc.CreateUser(ctx, user.User{FullName: "grillo", Username: "grillo", Password: "$2a$14$SvWir17.jlXxiZfe0pJuDedznetc/HWKv43YPsQQNo6MJiuypS2q6"}, isHash)
+	// role-test users (password: admin123)
+	_, _ = svc.CreateUser(ctx, user.User{FullName: "role-viewer", Username: "role-viewer", Password: "$2a$14$rwQk8Qvc2rij7qhFO4P1W.OiSF6AkgVU1RCrLaY2wawJcpkPEKwbm"}, isHash)
+	_, _ = svc.CreateUser(ctx, user.User{FullName: "role-maintainer", Username: "role-maintainer", Password: "$2a$14$rwQk8Qvc2rij7qhFO4P1W.OiSF6AkgVU1RCrLaY2wawJcpkPEKwbm"}, isHash)
 	go func() {
 		runWorker(ctx, svc, 1, "DEBUG")
 	}()

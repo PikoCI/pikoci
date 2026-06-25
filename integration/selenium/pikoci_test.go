@@ -1807,8 +1807,8 @@ job "gen" {
 			}, 5*time.Second)
 		})
 	})
-	t.Run("PublicPipeline", func(t *testing.T) {
-		// Pepito is logged in. Log out first.
+	t.Run("Viewer", func(t *testing.T) {
+		// Setup: logout pepito, add role-viewer as viewer to main team via HTTP
 		navLink, err := wd.FindElement(selenium.ByCSSSelector, ".navbar .nav-link")
 		require.NoError(t, err)
 		err = navLink.Click()
@@ -1818,6 +1818,209 @@ job "gen" {
 		err = logoutBtn.Click()
 		require.NoError(t, err)
 		waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Log In"), 5*time.Second)
+
+		// Add role-viewer to team via HTTP
+		adminLoginBody, _ := json.Marshal(thttp.UserLoginRequest{Username: "admin", Password: "newadmin123"})
+		adminLoginReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login", bytes.NewReader(adminLoginBody))
+		require.NoError(t, err)
+		adminLoginReq.Header.Set("Content-Type", "application/json")
+		adminLoginResp, err := http.DefaultClient.Do(adminLoginReq)
+		require.NoError(t, err)
+		defer adminLoginResp.Body.Close()
+		var alr thttp.UserLoginResponse
+		json.NewDecoder(adminLoginResp.Body).Decode(&alr)
+		adminJWT := alr.Data.JWT
+
+		addBody := `{"role":"viewer","user":{"username":"role-viewer"}}`
+		addReq, err := http.NewRequest(http.MethodPost, pikoURL+"/teams/main/members", strings.NewReader(addBody))
+		require.NoError(t, err)
+		addReq.Header.Set("Content-Type", "application/json")
+		addReq.Header.Set("Authorization", "Bearer "+adminJWT)
+		addResp, err := http.DefaultClient.Do(addReq)
+		require.NoError(t, err)
+		addResp.Body.Close()
+
+		t.Run("Login", func(t *testing.T) {
+			username, err := wd.FindElement(selenium.ByCSSSelector, "#username")
+			require.NoError(t, err)
+			password, err := wd.FindElement(selenium.ByCSSSelector, "#password")
+			require.NoError(t, err)
+			username.SendKeys("role-viewer")
+			password.SendKeys("admin123")
+			login, err := wd.FindElement(selenium.ByCSSSelector, "#login")
+			require.NoError(t, err)
+			err = login.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 5*time.Second)
+		})
+		t.Run("No New Pipeline button", func(t *testing.T) {
+			pipelines, err := wd.FindElement(selenium.ByCSSSelector, "#pipelines")
+			require.NoError(t, err)
+			err = pipelines.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain\nPipelines"), 5*time.Second)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#pipelines-new")
+			require.Error(t, err, "viewer should not see New Pipeline button")
+		})
+		t.Run("No edit/delete pipeline buttons", func(t *testing.T) {
+			ppBtn, err := wd.FindElement(selenium.ByCSSSelector, ".card")
+			require.NoError(t, err)
+			err = ppBtn.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain\nPipelines\ncron"), 5*time.Second)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#edit-pipeline")
+			require.Error(t, err, "viewer should not see Edit button")
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#delete-pipeline")
+			require.Error(t, err, "viewer should not see Delete button")
+		})
+		t.Run("No pause button", func(t *testing.T) {
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#pause-pipeline")
+			require.Error(t, err, "viewer should not see Pause button")
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#unpause-pipeline")
+			require.Error(t, err, "viewer should not see Unpause button")
+		})
+		t.Run("No trigger/cancel on job builds", func(t *testing.T) {
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				_, err := wd.FindElement(selenium.ByCSSSelector, "div#pipeline-graph>svg")
+				return err == nil
+			}, 5*time.Second)
+
+			res, err := wd.FindElement(selenium.ByCSSSelector, "#a_node2>a")
+			require.NoError(t, err)
+			url, err := res.GetAttribute("xlink:href")
+			require.NoError(t, err)
+			err = wd.Get(pikoURL + url)
+			require.NoError(t, err)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain\nPipelines\ncron\nJobs\ngen\nBuilds"), 5*time.Second)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#trigger-job")
+			require.Error(t, err, "viewer should not see Trigger Job button")
+			_, err = wd.FindElement(selenium.ByCSSSelector, ".piko-cancel-build")
+			require.Error(t, err, "viewer should not see Cancel button")
+			_, err = wd.FindElement(selenium.ByCSSSelector, ".piko-retry-build")
+			require.Error(t, err, "viewer should not see Retry button")
+		})
+		t.Run("No member management", func(t *testing.T) {
+			err := wd.Get(pikoURL + "/teams/main")
+			require.NoError(t, err)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain"), 5*time.Second)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#new-member")
+			require.Error(t, err, "viewer should not see New Member button")
+
+			roleSelects, err := wd.FindElements(selenium.ByCSSSelector, "select.form-select-sm")
+			require.NoError(t, err)
+			require.Equal(t, 0, len(roleSelects), "viewer should not see role dropdowns")
+		})
+		t.Run("Logout", func(t *testing.T) {
+			navLink, err := wd.FindElement(selenium.ByCSSSelector, ".navbar .nav-link")
+			require.NoError(t, err)
+			err = navLink.Click()
+			require.NoError(t, err)
+			logoutBtn, err := wd.FindElement(selenium.ByCSSSelector, "#logout")
+			require.NoError(t, err)
+			err = logoutBtn.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Log In"), 5*time.Second)
+		})
+	})
+	t.Run("Maintainer", func(t *testing.T) {
+		// Add role-maintainer to team via HTTP
+		adminLoginBody, _ := json.Marshal(thttp.UserLoginRequest{Username: "admin", Password: "newadmin123"})
+		adminLoginReq, err := http.NewRequest(http.MethodPost, pikoURL+"/login", bytes.NewReader(adminLoginBody))
+		require.NoError(t, err)
+		adminLoginReq.Header.Set("Content-Type", "application/json")
+		adminLoginResp, err := http.DefaultClient.Do(adminLoginReq)
+		require.NoError(t, err)
+		defer adminLoginResp.Body.Close()
+		var alr thttp.UserLoginResponse
+		json.NewDecoder(adminLoginResp.Body).Decode(&alr)
+		adminJWT := alr.Data.JWT
+
+		addBody := `{"role":"maintainer","user":{"username":"role-maintainer"}}`
+		addReq, err := http.NewRequest(http.MethodPost, pikoURL+"/teams/main/members", strings.NewReader(addBody))
+		require.NoError(t, err)
+		addReq.Header.Set("Content-Type", "application/json")
+		addReq.Header.Set("Authorization", "Bearer "+adminJWT)
+		addResp, err := http.DefaultClient.Do(addReq)
+		require.NoError(t, err)
+		addResp.Body.Close()
+
+		t.Run("Login", func(t *testing.T) {
+			username, err := wd.FindElement(selenium.ByCSSSelector, "#username")
+			require.NoError(t, err)
+			password, err := wd.FindElement(selenium.ByCSSSelector, "#password")
+			require.NoError(t, err)
+			username.SendKeys("role-maintainer")
+			password.SendKeys("admin123")
+			login, err := wd.FindElement(selenium.ByCSSSelector, "#login")
+			require.NoError(t, err)
+			err = login.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 5*time.Second)
+		})
+		t.Run("Has New Pipeline button", func(t *testing.T) {
+			pipelines, err := wd.FindElement(selenium.ByCSSSelector, "#pipelines")
+			require.NoError(t, err)
+			err = pipelines.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain\nPipelines"), 5*time.Second)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#pipelines-new")
+			require.NoError(t, err, "maintainer should see New Pipeline button")
+		})
+		t.Run("Has edit/delete pipeline buttons", func(t *testing.T) {
+			ppBtn, err := wd.FindElement(selenium.ByCSSSelector, ".card")
+			require.NoError(t, err)
+			err = ppBtn.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain\nPipelines\ncron"), 5*time.Second)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#edit-pipeline")
+			require.NoError(t, err, "maintainer should see Edit button")
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#delete-pipeline")
+			require.NoError(t, err, "maintainer should see Delete button")
+		})
+		t.Run("Has pause button (inherits operator)", func(t *testing.T) {
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#pause-pipeline")
+			require.NoError(t, err, "maintainer should see Pause button (inherits operator)")
+		})
+		t.Run("No member management", func(t *testing.T) {
+			err := wd.Get(pikoURL + "/teams/main")
+			require.NoError(t, err)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain"), 5*time.Second)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#new-member")
+			require.Error(t, err, "maintainer should not see New Member button")
+
+			roleSelects, err := wd.FindElements(selenium.ByCSSSelector, "select.form-select-sm")
+			require.NoError(t, err)
+			require.Equal(t, 0, len(roleSelects), "maintainer should not see role dropdowns")
+		})
+		t.Run("No delete team button", func(t *testing.T) {
+			err := wd.Get(pikoURL + "/")
+			require.NoError(t, err)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 5*time.Second)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#delete")
+			require.Error(t, err, "maintainer should not see Delete Team button")
+		})
+		t.Run("Logout", func(t *testing.T) {
+			navLink, err := wd.FindElement(selenium.ByCSSSelector, ".navbar .nav-link")
+			require.NoError(t, err)
+			err = navLink.Click()
+			require.NoError(t, err)
+			logoutBtn, err := wd.FindElement(selenium.ByCSSSelector, "#logout")
+			require.NoError(t, err)
+			err = logoutBtn.Click()
+			require.NoError(t, err)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Log In"), 5*time.Second)
+		})
+	})
+	t.Run("PublicPipeline", func(t *testing.T) {
+		// Already logged out from Maintainer section.
 
 		// Set pipeline public via admin HTTP API
 		loginBody, _ := json.Marshal(thttp.UserLoginRequest{
