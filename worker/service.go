@@ -695,9 +695,10 @@ func (w *Worker) checkVersionAvailability(ctx context.Context, m workitem.Body, 
 func (w *Worker) runPlan(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, j *job.Job, resolvedVersions map[string]uint32) (bool, map[string]string, map[string]string) {
 	// Track all started services so we can stop them at the end.
 	var allStartedServices []job.ServiceStep
+	var secretVals []string
 	defer func() {
 		if len(allStartedServices) > 0 {
-			w.stopServices(m, b, cwd, pp, allStartedServices)
+			w.stopServices(m, b, cwd, pp, allStartedServices, secretVals)
 		}
 	}()
 
@@ -708,7 +709,7 @@ func (w *Worker) runPlan(ctx context.Context, m workitem.Body, b *build.Build, c
 		return true, nil, nil
 	}
 
-	secretVals := secretValuesFromResolved(resolved)
+	secretVals = secretValuesFromResolved(resolved)
 
 	// exportedVars accumulates key-value pairs exported by get and task steps
 	// so that subsequent steps can consume them as environment variables.
@@ -723,12 +724,12 @@ func (w *Worker) runPlan(ctx context.Context, m workitem.Body, b *build.Build, c
 			}
 			// Collect consecutive service steps and start them as a batch
 			batch := []job.ServiceStep{*ps.Service}
-			startedServices := w.startServices(ctx, m, b, cwd, pp, batch)
+			startedServices := w.startServices(ctx, m, b, cwd, pp, batch, secretVals)
 			allStartedServices = append(allStartedServices, startedServices...)
 			if len(startedServices) != len(batch) {
 				return true, resolved, exportedVars
 			}
-			if !w.waitForServices(ctx, m, b, cwd, pp, startedServices) {
+			if !w.waitForServices(ctx, m, b, cwd, pp, startedServices, secretVals) {
 				return true, resolved, exportedVars
 			}
 		case job.StepTypeGet:
@@ -1980,9 +1981,10 @@ func (w *Worker) processResourceCheck(ctx context.Context, m workitem.Body, cwd 
 
 	replaceSecretPlaceholders(rc.Params, resolved)
 	replaceSecretPlaceholdersInSlice(rc.Args, resolved)
+	secretVals := secretValuesFromResolved(resolved)
 
 	checkWarnStr := formatParamWarnings(checkWarnings)
-	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, secretVals)
 	if err != nil {
 		r.Logs = checkWarnStr + out
 		if nerr := w.pikoci.UpdatePipelineResource(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, r); nerr != nil {
@@ -2572,7 +2574,7 @@ func (w *Worker) fetchSecrets(ctx context.Context, cwd string, pp *pipeline.Pipe
 }
 
 // startServices starts all service steps and returns the successfully started service steps.
-func (w *Worker) startServices(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, serviceSteps []job.ServiceStep) []job.ServiceStep {
+func (w *Worker) startServices(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, serviceSteps []job.ServiceStep, secretVals []string) []job.ServiceStep {
 	var started []job.ServiceStep
 	for _, ss := range serviceSteps {
 		svc, ok := pp.Service(ss.Name)
@@ -2610,7 +2612,7 @@ func (w *Worker) startServices(ctx context.Context, m workitem.Body, b *build.Bu
 			w.updateBuild(ctx, m, *b)
 		}
 
-		out, d, err := w.runRunner(ctx, ru, cwd, rc, nil, onPartialLog)
+		out, d, err := w.runRunner(ctx, ru, cwd, rc, secretVals, onPartialLog)
 		out = svcWarnStr + out
 		if err != nil {
 			b.Steps[stepIdx] = build.Step{Type: "service", Name: ss.Name + ":start", Logs: out, Duration: d, Status: build.Failed}
@@ -2853,7 +2855,7 @@ func (w *Worker) serviceParams(b *build.Build, m workitem.Body, cmdParams map[st
 
 // waitForServices runs ready_check for all started services that have one.
 // Returns false if any ready_check times out.
-func (w *Worker) waitForServices(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, startedServices []job.ServiceStep) bool {
+func (w *Worker) waitForServices(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, startedServices []job.ServiceStep, secretVals []string) bool {
 	type readyResult struct {
 		name string
 		out  string
@@ -2962,7 +2964,7 @@ func (w *Worker) waitForServices(ctx context.Context, m workitem.Body, b *build.
 				default:
 				}
 
-				lastOut, _, lastErr = w.runRunner(ctx, ru, cwd, runCmd, nil)
+				lastOut, _, lastErr = w.runRunner(ctx, ru, cwd, runCmd, secretVals)
 				if lastErr == nil {
 					results <- readyResult{
 						name: svcName,
@@ -3004,7 +3006,7 @@ func (w *Worker) waitForServices(ctx context.Context, m workitem.Body, b *build.
 
 // stopServices stops all started services unconditionally.
 // Uses a fresh context to ensure cleanup runs even if the parent context is cancelled.
-func (w *Worker) stopServices(m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, startedServices []job.ServiceStep) {
+func (w *Worker) stopServices(m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, startedServices []job.ServiceStep, secretVals []string) {
 	stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -3039,7 +3041,7 @@ func (w *Worker) stopServices(m workitem.Body, b *build.Build, cwd string, pp *p
 			w.updateBuild(stopCtx, m, *b)
 		}
 
-		out, d, err := w.runRunner(stopCtx, ru, cwd, rc, nil, onPartialLog)
+		out, d, err := w.runRunner(stopCtx, ru, cwd, rc, secretVals, onPartialLog)
 		out = stopWarnStr + out
 		stepStatus := build.Succeeded
 		if err != nil {
