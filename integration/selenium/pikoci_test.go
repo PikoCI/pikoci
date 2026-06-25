@@ -1835,6 +1835,12 @@ job "gen" {
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 5*time.Second)
 		})
 		t.Run("No New Pipeline button", func(t *testing.T) {
+			// Wait for team rows to load
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				rows, err := wd.FindElements(selenium.ByCSSSelector, ".piko-team-row")
+				return err == nil && len(rows) > 0
+			}, 5*time.Second)
+
 			pipelines, err := wd.FindElement(selenium.ByCSSSelector, "#pipelines")
 			require.NoError(t, err)
 			err = pipelines.Click()
@@ -1845,6 +1851,11 @@ job "gen" {
 			require.Error(t, err, "viewer should not see New Pipeline button")
 		})
 		t.Run("No edit/delete pipeline buttons", func(t *testing.T) {
+			// Wait for pipeline cards to load
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				cards, err := wd.FindElements(selenium.ByCSSSelector, ".card")
+				return err == nil && len(cards) > 0
+			}, 5*time.Second)
 			ppBtn, err := wd.FindElement(selenium.ByCSSSelector, ".card")
 			require.NoError(t, err)
 			err = ppBtn.Click()
@@ -1925,6 +1936,12 @@ job "gen" {
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 5*time.Second)
 		})
 		t.Run("Has New Pipeline button", func(t *testing.T) {
+			// Wait for team rows to load
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				rows, err := wd.FindElements(selenium.ByCSSSelector, ".piko-team-row")
+				return err == nil && len(rows) > 0
+			}, 5*time.Second)
+
 			pipelines, err := wd.FindElement(selenium.ByCSSSelector, "#pipelines")
 			require.NoError(t, err)
 			err = pipelines.Click()
@@ -1935,6 +1952,11 @@ job "gen" {
 			require.NoError(t, err, "maintainer should see New Pipeline button")
 		})
 		t.Run("Has edit/delete pipeline buttons", func(t *testing.T) {
+			// Wait for pipeline cards to load
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				cards, err := wd.FindElements(selenium.ByCSSSelector, ".card")
+				return err == nil && len(cards) > 0
+			}, 5*time.Second)
 			ppBtn, err := wd.FindElement(selenium.ByCSSSelector, ".card")
 			require.NoError(t, err)
 			err = ppBtn.Click()
