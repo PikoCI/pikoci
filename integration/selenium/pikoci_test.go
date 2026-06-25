@@ -177,12 +177,12 @@ func TestPikoCI(t *testing.T) {
 			err = nmBtn.Click()
 			require.NoError(t, err)
 
-			// As we fetch the users to fill in we have to wait
+			// Wait for user select to load (NewMemberRow has user + role selects)
 			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
-				opts, err := wd.FindElements(selenium.ByCSSSelector, "option")
+				opts, err := wd.FindElements(selenium.ByCSSSelector, "#username option")
 				require.NoError(t, err)
 
-				return 2 == len(opts)
+				return len(opts) >= 1
 			}, 5*time.Second)
 
 			members, err = wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
@@ -207,35 +207,36 @@ func TestPikoCI(t *testing.T) {
 			require.Equal(t, 2, len(members))
 		})
 		t.Run("Update Member", func(t *testing.T) {
-			aBtns, err := wd.FindElements(selenium.ByCSSSelector, "#admin")
+			// Role dropdowns: admin has one for each member
+			roleSelects, err := wd.FindElements(selenium.ByCSSSelector, "select.form-select-sm")
 			require.NoError(t, err)
-			require.Equal(t, 2, len(aBtns))
+			require.Equal(t, 2, len(roleSelects))
 
-			as1, err := aBtns[0].IsSelected()
+			// First member (admin) should have "admin" selected
+			val1, err := roleSelects[0].GetAttribute("value")
 			require.NoError(t, err)
-			ae1, err := aBtns[0].IsEnabled()
-			require.NoError(t, err)
-			as2, err := aBtns[1].IsSelected()
-			require.NoError(t, err)
-			ae2, err := aBtns[1].IsEnabled()
-			require.NoError(t, err)
-			require.True(t, as1)
-			require.True(t, ae1)
-			require.False(t, as2)
-			require.True(t, ae2)
+			require.Equal(t, "admin", val1)
 
-			err = aBtns[1].Click()
+			// Second member (pepito) should have "maintainer" selected (default from migration)
+			val2, err := roleSelects[1].GetAttribute("value")
 			require.NoError(t, err)
+			require.Equal(t, "maintainer", val2)
 
-			aBtns, err = wd.FindElements(selenium.ByCSSSelector, "#admin")
+			// Change pepito's role to admin via the select
+			opts, err := roleSelects[1].FindElements(selenium.ByCSSSelector, "option[value='admin']")
+			require.NoError(t, err)
+			require.Equal(t, 1, len(opts))
+			err = opts[0].Click()
 			require.NoError(t, err)
 
-			as1, err = aBtns[0].IsSelected()
+			time.Sleep(500 * time.Millisecond)
+
+			// Verify the role was updated
+			roleSelects, err = wd.FindElements(selenium.ByCSSSelector, "select.form-select-sm")
 			require.NoError(t, err)
-			as2, err = aBtns[1].IsSelected()
+			val2, err = roleSelects[1].GetAttribute("value")
 			require.NoError(t, err)
-			require.True(t, as1)
-			require.True(t, as2)
+			require.Equal(t, "admin", val2)
 		})
 		t.Run("Delete Member", func(t *testing.T) {
 			members, err := wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
@@ -1424,12 +1425,12 @@ job "gen" {
 				err = nmBtn.Click()
 				require.NoError(t, err)
 
-				// As we fetch the users to fill in we have to wait
+				// Wait for user select to load (NewMemberRow has user + role selects)
 				waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
-					opts, err := wd.FindElements(selenium.ByCSSSelector, "option")
+					opts, err := wd.FindElements(selenium.ByCSSSelector, "#username option")
 					require.NoError(t, err)
 
-					return 2 == len(opts)
+					return len(opts) >= 1
 				}, 5*time.Second)
 
 				members, err := wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
@@ -1581,22 +1582,10 @@ job "gen" {
 			require.NoError(t, err)
 			require.False(t, nameEnabled)
 
-			aBtns, err := wd.FindElements(selenium.ByCSSSelector, "#admin")
+			// Non-admin members see roles as plain text, not dropdowns
+			roleSelects, err := wd.FindElements(selenium.ByCSSSelector, "select.form-select-sm")
 			require.NoError(t, err)
-			require.Equal(t, 2, len(aBtns))
-
-			as1, err := aBtns[0].IsSelected()
-			require.NoError(t, err)
-			ae1, err := aBtns[0].IsEnabled()
-			require.NoError(t, err)
-			as2, err := aBtns[1].IsSelected()
-			require.NoError(t, err)
-			ae2, err := aBtns[1].IsEnabled()
-			require.NoError(t, err)
-			require.True(t, as1)
-			require.False(t, ae1)
-			require.False(t, as2)
-			require.False(t, ae2)
+			require.Equal(t, 0, len(roleSelects), "non-admin should not see role dropdowns")
 		})
 		t.Run("Pipelines", func(t *testing.T) {
 			tmsBtn, err := wd.FindElement(selenium.ByLinkText, "Teams")
