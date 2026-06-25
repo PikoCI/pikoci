@@ -708,6 +708,8 @@ func (w *Worker) runPlan(ctx context.Context, m workitem.Body, b *build.Build, c
 		return true, nil, nil
 	}
 
+	secretVals := secretValuesFromResolved(resolved)
+
 	// exportedVars accumulates key-value pairs exported by get and task steps
 	// so that subsequent steps can consume them as environment variables.
 	exportedVars := make(map[string]string)
@@ -733,35 +735,35 @@ func (w *Worker) runPlan(ctx context.Context, m workitem.Body, b *build.Build, c
 			if ps.Get == nil {
 				continue
 			}
-			if w.runGetStep(ctx, m, b, cwd, pp, *ps.Get, ps, resolvedVersions, exportedVars, resolved) {
+			if w.runGetStep(ctx, m, b, cwd, pp, *ps.Get, ps, resolvedVersions, exportedVars, secretVals, resolved) {
 				return true, resolved, exportedVars
 			}
 		case job.StepTypeTask:
 			if ps.Task == nil {
 				continue
 			}
-			if w.runTaskStep(ctx, m, b, cwd, pp, *ps.Task, ps, exportedVars, resolved) {
+			if w.runTaskStep(ctx, m, b, cwd, pp, *ps.Task, ps, exportedVars, secretVals, resolved) {
 				return true, resolved, exportedVars
 			}
 		case job.StepTypePut:
 			if ps.Put == nil {
 				continue
 			}
-			if w.runPutStep(ctx, m, b, cwd, pp, *ps.Put, ps, exportedVars, resolved) {
+			if w.runPutStep(ctx, m, b, cwd, pp, *ps.Put, ps, exportedVars, secretVals, resolved) {
 				return true, resolved, exportedVars
 			}
 		case job.StepTypeNotify:
 			if ps.Notify == nil {
 				continue
 			}
-			if w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, exportedVars, resolved) {
+			if w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, exportedVars, secretVals, resolved) {
 				return true, resolved, exportedVars
 			}
 		case job.StepTypeInParallel:
 			if ps.InParallel == nil {
 				continue
 			}
-			if w.runInParallelStep(ctx, m, b, cwd, pp, *ps.InParallel, ps, resolvedVersions, exportedVars, resolved) {
+			if w.runInParallelStep(ctx, m, b, cwd, pp, *ps.InParallel, ps, resolvedVersions, exportedVars, secretVals, resolved) {
 				return true, resolved, exportedVars
 			}
 		}
@@ -775,7 +777,7 @@ func (w *Worker) runInParallelStep(
 	ctx context.Context, m workitem.Body, b *build.Build,
 	cwd string, pp *pipeline.Pipeline, ip job.InParallelStep,
 	ps job.PlanStep, resolvedVersions map[string]uint32,
-	exportedVars map[string]string, resolved map[string]string,
+	exportedVars map[string]string, secretVals []string, resolved map[string]string,
 ) bool {
 	start := time.Now()
 
@@ -902,19 +904,19 @@ func (w *Worker) runInParallelStep(
 			switch ps.Type {
 			case job.StepTypeGet:
 				if ps.Get != nil {
-					failed = w.runGetStep(parallelCtx, m, localBuild, cwd, pp, *ps.Get, ps, resolvedVersions, localVars, resolved)
+					failed = w.runGetStep(parallelCtx, m, localBuild, cwd, pp, *ps.Get, ps, resolvedVersions, localVars, secretVals, resolved)
 				}
 			case job.StepTypeTask:
 				if ps.Task != nil {
-					failed = w.runTaskStep(parallelCtx, m, localBuild, cwd, pp, *ps.Task, ps, localVars, resolved)
+					failed = w.runTaskStep(parallelCtx, m, localBuild, cwd, pp, *ps.Task, ps, localVars, secretVals, resolved)
 				}
 			case job.StepTypePut:
 				if ps.Put != nil {
-					failed = w.runPutStep(parallelCtx, m, localBuild, cwd, pp, *ps.Put, ps, localVars, resolved)
+					failed = w.runPutStep(parallelCtx, m, localBuild, cwd, pp, *ps.Put, ps, localVars, secretVals, resolved)
 				}
 			case job.StepTypeNotify:
 				if ps.Notify != nil {
-					failed = w.runNotifyStep(parallelCtx, m, localBuild, cwd, pp, *ps.Notify, ps, localVars, resolved)
+					failed = w.runNotifyStep(parallelCtx, m, localBuild, cwd, pp, *ps.Notify, ps, localVars, secretVals, resolved)
 				}
 			}
 
@@ -975,7 +977,7 @@ func (w *Worker) runInParallelStep(
 
 // runGetStep runs a single get step (resource pull).
 // Returns true if the step failed.
-func (w *Worker) runGetStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, g job.GetStep, ps job.PlanStep, resolvedVersions map[string]uint32, exportedVars map[string]string, resolved ...map[string]string) bool {
+func (w *Worker) runGetStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, g job.GetStep, ps job.PlanStep, resolvedVersions map[string]uint32, exportedVars map[string]string, secretVals []string, resolved ...map[string]string) bool {
 	var secretResolved map[string]string
 	if len(resolved) > 0 {
 		secretResolved = resolved[0]
@@ -1072,7 +1074,7 @@ func (w *Worker) runGetStep(ctx context.Context, m workitem.Body, b *build.Build
 		}
 
 		var attemptOut string
-		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, nil, onPartialLog)
+		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, secretVals, onPartialLog)
 		out += attemptOut
 
 		if cancel != nil {
@@ -1185,7 +1187,7 @@ func (w *Worker) runGetStepLocal(ctx context.Context, m workitem.Body, b *build.
 
 // runTaskStep runs a single task step.
 // Returns true if the step failed.
-func (w *Worker) runTaskStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, t job.TaskStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
+func (w *Worker) runTaskStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, t job.TaskStep, ps job.PlanStep, exportedVars map[string]string, secretVals []string, resolved ...map[string]string) bool {
 	var secretResolved map[string]string
 	if len(resolved) > 0 {
 		secretResolved = resolved[0]
@@ -1265,7 +1267,7 @@ func (w *Worker) runTaskStep(ctx context.Context, m workitem.Body, b *build.Buil
 		}
 
 		var attemptOut string
-		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, t.Run, nil, onPartialLog)
+		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, t.Run, secretVals, onPartialLog)
 		out += attemptOut
 
 		if cancel != nil {
@@ -1324,7 +1326,7 @@ func (w *Worker) runTaskStep(ctx context.Context, m workitem.Body, b *build.Buil
 
 // runPutStep runs a single put step (resource push).
 // Returns true if the step failed.
-func (w *Worker) runPutStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, p job.PutStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
+func (w *Worker) runPutStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, p job.PutStep, ps job.PlanStep, exportedVars map[string]string, secretVals []string, resolved ...map[string]string) bool {
 	if w.LocalMode {
 		rCan := utils.ResourceCanonical(p.Type, p.Name)
 		logMsg := fmt.Sprintf("skipping put step (local execution): %s", rCan)
@@ -1431,7 +1433,7 @@ func (w *Worker) runPutStep(ctx context.Context, m workitem.Body, b *build.Build
 		}
 
 		var attemptOut string
-		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, nil, onPartialLog)
+		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, secretVals, onPartialLog)
 		out += attemptOut
 
 		if cancel != nil {
@@ -1524,7 +1526,7 @@ func (w *Worker) implicitGetAfterPut(ctx context.Context, m workitem.Body, b *bu
 
 // runNotifyStep runs a single notify step (fire-and-forget notification).
 // Returns true if the step failed.
-func (w *Worker) runNotifyStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, n job.NotifyStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
+func (w *Worker) runNotifyStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, n job.NotifyStep, ps job.PlanStep, exportedVars map[string]string, secretVals []string, resolved ...map[string]string) bool {
 	if w.LocalMode {
 		nCan := utils.NotificationCanonical(n.Type, n.Name)
 		logMsg := fmt.Sprintf("skipping notify step (local execution): %s", nCan)
@@ -1638,7 +1640,7 @@ func (w *Worker) runNotifyStep(ctx context.Context, m workitem.Body, b *build.Bu
 		}
 
 		var attemptOut string
-		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, nil, onPartialLog)
+		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, secretVals, onPartialLog)
 		out += attemptOut
 
 		if cancel != nil {
@@ -1747,7 +1749,7 @@ func (w *Worker) runAutoNotifications(ctx context.Context, m workitem.Body, b *b
 				Message: n.Message,
 			},
 		}
-		w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, nil, resolved)
+		w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, nil, secretValuesFromResolved(resolved), resolved)
 	}
 }
 
@@ -1816,6 +1818,7 @@ func (w *Worker) buildPullParams(ctx context.Context, m workitem.Body, b *build.
 // runHooks runs a list of hooks (on_success, on_failure, on_cancel, ensure) and appends
 // the results as build steps.
 func (w *Worker) runHooks(ctx context.Context, m workitem.Body, b *build.Build, steps *[]build.Step, cwd string, pp *pipeline.Pipeline, stepName string, hooks []job.HookStep, hookType string, resolved map[string]string, exportedVars map[string]string, buildStatus ...string) {
+	secretVals := secretValuesFromResolved(resolved)
 	for i, h := range hooks {
 		// Compute step name early so we can use it for the running step
 		name := hookType
@@ -1868,7 +1871,7 @@ func (w *Worker) runHooks(ctx context.Context, m workitem.Body, b *build.Build, 
 			}
 
 			var runErr error
-			out, d, runErr = w.runRunner(ctx, ru, cwd, rc, nil, onPartialLog)
+			out, d, runErr = w.runRunner(ctx, ru, cwd, rc, secretVals, onPartialLog)
 			hookStatus := build.Succeeded
 			if runErr != nil {
 				hookStatus = build.Failed
@@ -1886,7 +1889,7 @@ func (w *Worker) runHooks(ctx context.Context, m workitem.Body, b *build.Build, 
 				Type: job.StepTypePut,
 				Put:  h.Put,
 			}
-			w.runPutStep(ctx, m, b, cwd, pp, *h.Put, ps, nil, resolved)
+			w.runPutStep(ctx, m, b, cwd, pp, *h.Put, ps, nil, secretVals, resolved)
 			continue
 		case job.StepTypeNotify:
 			if h.Notify == nil {
@@ -1896,7 +1899,7 @@ func (w *Worker) runHooks(ctx context.Context, m workitem.Body, b *build.Build, 
 				Type:   job.StepTypeNotify,
 				Notify: h.Notify,
 			}
-			w.runNotifyStep(ctx, m, b, cwd, pp, *h.Notify, ps, exportedVars, resolved)
+			w.runNotifyStep(ctx, m, b, cwd, pp, *h.Notify, ps, exportedVars, secretVals, resolved)
 			continue
 		default:
 			continue
