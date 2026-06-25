@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Secrets masking in build logs**: Resolved secret values are automatically replaced with `***` in command stdout/stderr as a safety net against accidental leaks. Masking applies to real-time partial log streaming and final stored output. Values shorter than 3 characters are skipped to avoid false positives, and longer secrets are masked before shorter substrings to prevent partial masking ([#147](https://github.com/PikoCI/pikoci/issues/147)).
+
 ### Fixed
 
 - `GracefulStop()` hanging indefinitely after SIGQUIT when workers reconnect during drain, leaving the server alive but not accepting connections (502 from reverse proxy) (#572).

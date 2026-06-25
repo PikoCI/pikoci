@@ -695,9 +695,10 @@ func (w *Worker) checkVersionAvailability(ctx context.Context, m workitem.Body, 
 func (w *Worker) runPlan(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, j *job.Job, resolvedVersions map[string]uint32) (bool, map[string]string, map[string]string) {
 	// Track all started services so we can stop them at the end.
 	var allStartedServices []job.ServiceStep
+	var secretVals []string
 	defer func() {
 		if len(allStartedServices) > 0 {
-			w.stopServices(m, b, cwd, pp, allStartedServices)
+			w.stopServices(m, b, cwd, pp, allStartedServices, secretVals)
 		}
 	}()
 
@@ -707,6 +708,8 @@ func (w *Worker) runPlan(ctx context.Context, m workitem.Body, b *build.Build, c
 		w.failBuild(ctx, m, *b, fmt.Errorf("failed to resolve secret vars: %w", err))
 		return true, nil, nil
 	}
+
+	secretVals = secretValuesFromResolved(resolved)
 
 	// exportedVars accumulates key-value pairs exported by get and task steps
 	// so that subsequent steps can consume them as environment variables.
@@ -721,47 +724,47 @@ func (w *Worker) runPlan(ctx context.Context, m workitem.Body, b *build.Build, c
 			}
 			// Collect consecutive service steps and start them as a batch
 			batch := []job.ServiceStep{*ps.Service}
-			startedServices := w.startServices(ctx, m, b, cwd, pp, batch)
+			startedServices := w.startServices(ctx, m, b, cwd, pp, batch, secretVals)
 			allStartedServices = append(allStartedServices, startedServices...)
 			if len(startedServices) != len(batch) {
 				return true, resolved, exportedVars
 			}
-			if !w.waitForServices(ctx, m, b, cwd, pp, startedServices) {
+			if !w.waitForServices(ctx, m, b, cwd, pp, startedServices, secretVals) {
 				return true, resolved, exportedVars
 			}
 		case job.StepTypeGet:
 			if ps.Get == nil {
 				continue
 			}
-			if w.runGetStep(ctx, m, b, cwd, pp, *ps.Get, ps, resolvedVersions, exportedVars, resolved) {
+			if w.runGetStep(ctx, m, b, cwd, pp, *ps.Get, ps, resolvedVersions, exportedVars, secretVals, resolved) {
 				return true, resolved, exportedVars
 			}
 		case job.StepTypeTask:
 			if ps.Task == nil {
 				continue
 			}
-			if w.runTaskStep(ctx, m, b, cwd, pp, *ps.Task, ps, exportedVars, resolved) {
+			if w.runTaskStep(ctx, m, b, cwd, pp, *ps.Task, ps, exportedVars, secretVals, resolved) {
 				return true, resolved, exportedVars
 			}
 		case job.StepTypePut:
 			if ps.Put == nil {
 				continue
 			}
-			if w.runPutStep(ctx, m, b, cwd, pp, *ps.Put, ps, exportedVars, resolved) {
+			if w.runPutStep(ctx, m, b, cwd, pp, *ps.Put, ps, exportedVars, secretVals, resolved) {
 				return true, resolved, exportedVars
 			}
 		case job.StepTypeNotify:
 			if ps.Notify == nil {
 				continue
 			}
-			if w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, exportedVars, resolved) {
+			if w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, exportedVars, secretVals, resolved) {
 				return true, resolved, exportedVars
 			}
 		case job.StepTypeInParallel:
 			if ps.InParallel == nil {
 				continue
 			}
-			if w.runInParallelStep(ctx, m, b, cwd, pp, *ps.InParallel, ps, resolvedVersions, exportedVars, resolved) {
+			if w.runInParallelStep(ctx, m, b, cwd, pp, *ps.InParallel, ps, resolvedVersions, exportedVars, secretVals, resolved) {
 				return true, resolved, exportedVars
 			}
 		}
@@ -775,7 +778,7 @@ func (w *Worker) runInParallelStep(
 	ctx context.Context, m workitem.Body, b *build.Build,
 	cwd string, pp *pipeline.Pipeline, ip job.InParallelStep,
 	ps job.PlanStep, resolvedVersions map[string]uint32,
-	exportedVars map[string]string, resolved map[string]string,
+	exportedVars map[string]string, secretVals []string, resolved map[string]string,
 ) bool {
 	start := time.Now()
 
@@ -902,19 +905,19 @@ func (w *Worker) runInParallelStep(
 			switch ps.Type {
 			case job.StepTypeGet:
 				if ps.Get != nil {
-					failed = w.runGetStep(parallelCtx, m, localBuild, cwd, pp, *ps.Get, ps, resolvedVersions, localVars, resolved)
+					failed = w.runGetStep(parallelCtx, m, localBuild, cwd, pp, *ps.Get, ps, resolvedVersions, localVars, secretVals, resolved)
 				}
 			case job.StepTypeTask:
 				if ps.Task != nil {
-					failed = w.runTaskStep(parallelCtx, m, localBuild, cwd, pp, *ps.Task, ps, localVars, resolved)
+					failed = w.runTaskStep(parallelCtx, m, localBuild, cwd, pp, *ps.Task, ps, localVars, secretVals, resolved)
 				}
 			case job.StepTypePut:
 				if ps.Put != nil {
-					failed = w.runPutStep(parallelCtx, m, localBuild, cwd, pp, *ps.Put, ps, localVars, resolved)
+					failed = w.runPutStep(parallelCtx, m, localBuild, cwd, pp, *ps.Put, ps, localVars, secretVals, resolved)
 				}
 			case job.StepTypeNotify:
 				if ps.Notify != nil {
-					failed = w.runNotifyStep(parallelCtx, m, localBuild, cwd, pp, *ps.Notify, ps, localVars, resolved)
+					failed = w.runNotifyStep(parallelCtx, m, localBuild, cwd, pp, *ps.Notify, ps, localVars, secretVals, resolved)
 				}
 			}
 
@@ -975,7 +978,7 @@ func (w *Worker) runInParallelStep(
 
 // runGetStep runs a single get step (resource pull).
 // Returns true if the step failed.
-func (w *Worker) runGetStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, g job.GetStep, ps job.PlanStep, resolvedVersions map[string]uint32, exportedVars map[string]string, resolved ...map[string]string) bool {
+func (w *Worker) runGetStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, g job.GetStep, ps job.PlanStep, resolvedVersions map[string]uint32, exportedVars map[string]string, secretVals []string, resolved ...map[string]string) bool {
 	var secretResolved map[string]string
 	if len(resolved) > 0 {
 		secretResolved = resolved[0]
@@ -1072,7 +1075,7 @@ func (w *Worker) runGetStep(ctx context.Context, m workitem.Body, b *build.Build
 		}
 
 		var attemptOut string
-		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, onPartialLog)
+		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, secretVals, onPartialLog)
 		out += attemptOut
 
 		if cancel != nil {
@@ -1185,7 +1188,7 @@ func (w *Worker) runGetStepLocal(ctx context.Context, m workitem.Body, b *build.
 
 // runTaskStep runs a single task step.
 // Returns true if the step failed.
-func (w *Worker) runTaskStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, t job.TaskStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
+func (w *Worker) runTaskStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, t job.TaskStep, ps job.PlanStep, exportedVars map[string]string, secretVals []string, resolved ...map[string]string) bool {
 	var secretResolved map[string]string
 	if len(resolved) > 0 {
 		secretResolved = resolved[0]
@@ -1265,7 +1268,7 @@ func (w *Worker) runTaskStep(ctx context.Context, m workitem.Body, b *build.Buil
 		}
 
 		var attemptOut string
-		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, t.Run, onPartialLog)
+		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, t.Run, secretVals, onPartialLog)
 		out += attemptOut
 
 		if cancel != nil {
@@ -1324,7 +1327,7 @@ func (w *Worker) runTaskStep(ctx context.Context, m workitem.Body, b *build.Buil
 
 // runPutStep runs a single put step (resource push).
 // Returns true if the step failed.
-func (w *Worker) runPutStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, p job.PutStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
+func (w *Worker) runPutStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, p job.PutStep, ps job.PlanStep, exportedVars map[string]string, secretVals []string, resolved ...map[string]string) bool {
 	if w.LocalMode {
 		rCan := utils.ResourceCanonical(p.Type, p.Name)
 		logMsg := fmt.Sprintf("skipping put step (local execution): %s", rCan)
@@ -1431,7 +1434,7 @@ func (w *Worker) runPutStep(ctx context.Context, m workitem.Body, b *build.Build
 		}
 
 		var attemptOut string
-		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, onPartialLog)
+		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, secretVals, onPartialLog)
 		out += attemptOut
 
 		if cancel != nil {
@@ -1524,7 +1527,7 @@ func (w *Worker) implicitGetAfterPut(ctx context.Context, m workitem.Body, b *bu
 
 // runNotifyStep runs a single notify step (fire-and-forget notification).
 // Returns true if the step failed.
-func (w *Worker) runNotifyStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, n job.NotifyStep, ps job.PlanStep, exportedVars map[string]string, resolved ...map[string]string) bool {
+func (w *Worker) runNotifyStep(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, n job.NotifyStep, ps job.PlanStep, exportedVars map[string]string, secretVals []string, resolved ...map[string]string) bool {
 	if w.LocalMode {
 		nCan := utils.NotificationCanonical(n.Type, n.Name)
 		logMsg := fmt.Sprintf("skipping notify step (local execution): %s", nCan)
@@ -1638,7 +1641,7 @@ func (w *Worker) runNotifyStep(ctx context.Context, m workitem.Body, b *build.Bu
 		}
 
 		var attemptOut string
-		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, onPartialLog)
+		attemptOut, d, err = w.runRunner(runCtx, ru, cwd, rc, secretVals, onPartialLog)
 		out += attemptOut
 
 		if cancel != nil {
@@ -1679,6 +1682,8 @@ func (w *Worker) runAutoNotifications(ctx context.Context, m workitem.Body, b *b
 	if len(pp.Notifications) == 0 {
 		return
 	}
+
+	secretVals := secretValuesFromResolved(resolved)
 
 	// Map build status to event name
 	var event string
@@ -1747,7 +1752,7 @@ func (w *Worker) runAutoNotifications(ctx context.Context, m workitem.Body, b *b
 				Message: n.Message,
 			},
 		}
-		w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, nil, resolved)
+		w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, nil, secretVals, resolved)
 	}
 }
 
@@ -1816,6 +1821,7 @@ func (w *Worker) buildPullParams(ctx context.Context, m workitem.Body, b *build.
 // runHooks runs a list of hooks (on_success, on_failure, on_cancel, ensure) and appends
 // the results as build steps.
 func (w *Worker) runHooks(ctx context.Context, m workitem.Body, b *build.Build, steps *[]build.Step, cwd string, pp *pipeline.Pipeline, stepName string, hooks []job.HookStep, hookType string, resolved map[string]string, exportedVars map[string]string, buildStatus ...string) {
+	secretVals := secretValuesFromResolved(resolved)
 	for i, h := range hooks {
 		// Compute step name early so we can use it for the running step
 		name := hookType
@@ -1868,7 +1874,7 @@ func (w *Worker) runHooks(ctx context.Context, m workitem.Body, b *build.Build, 
 			}
 
 			var runErr error
-			out, d, runErr = w.runRunner(ctx, ru, cwd, rc, onPartialLog)
+			out, d, runErr = w.runRunner(ctx, ru, cwd, rc, secretVals, onPartialLog)
 			hookStatus := build.Succeeded
 			if runErr != nil {
 				hookStatus = build.Failed
@@ -1886,7 +1892,7 @@ func (w *Worker) runHooks(ctx context.Context, m workitem.Body, b *build.Build, 
 				Type: job.StepTypePut,
 				Put:  h.Put,
 			}
-			w.runPutStep(ctx, m, b, cwd, pp, *h.Put, ps, nil, resolved)
+			w.runPutStep(ctx, m, b, cwd, pp, *h.Put, ps, nil, secretVals, resolved)
 			continue
 		case job.StepTypeNotify:
 			if h.Notify == nil {
@@ -1896,7 +1902,7 @@ func (w *Worker) runHooks(ctx context.Context, m workitem.Body, b *build.Build, 
 				Type:   job.StepTypeNotify,
 				Notify: h.Notify,
 			}
-			w.runNotifyStep(ctx, m, b, cwd, pp, *h.Notify, ps, exportedVars, resolved)
+			w.runNotifyStep(ctx, m, b, cwd, pp, *h.Notify, ps, exportedVars, secretVals, resolved)
 			continue
 		default:
 			continue
@@ -1977,9 +1983,10 @@ func (w *Worker) processResourceCheck(ctx context.Context, m workitem.Body, cwd 
 
 	replaceSecretPlaceholders(rc.Params, resolved)
 	replaceSecretPlaceholdersInSlice(rc.Args, resolved)
+	secretVals := secretValuesFromResolved(resolved)
 
 	checkWarnStr := formatParamWarnings(checkWarnings)
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, secretVals)
 	if err != nil {
 		r.Logs = checkWarnStr + out
 		if nerr := w.pikoci.UpdatePipelineResource(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, r); nerr != nil {
@@ -2330,10 +2337,10 @@ func prepareShellRunner(ru *runner.Runner, rc *utils.RunnerCommand, cwd string) 
 	return nil
 }
 
-func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc utils.RunnerCommand, onPartialLog ...func(string)) (string, time.Duration, error) {
+func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc utils.RunnerCommand, secretVals []string, onPartialLog ...func(string)) (string, time.Duration, error) {
 	if ru.Name == "shell" {
 		if err := prepareShellRunner(&ru, &rc, cwd); err != nil {
-			return err.Error(), 0, err
+			return maskSecrets(err.Error(), secretVals), 0, err
 		}
 	}
 
@@ -2415,7 +2422,7 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 
 	start := time.Now()
 	if err := cmd.Start(); err != nil {
-		out := err.Error()
+		out := maskSecrets(err.Error(), secretVals)
 		return out, time.Since(start), err
 	}
 
@@ -2433,7 +2440,7 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 					if ctx.Err() != nil {
 						return
 					}
-					partialCb(sw.String())
+					partialCb(maskSecrets(sw.String(), secretVals))
 				case <-ctx.Done():
 					return
 				case <-done:
@@ -2467,6 +2474,7 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 			out += n + "\n"
 		}
 	}
+	out = maskSecrets(out, secretVals)
 	w.logger.Debug("finished running command", "out", out)
 
 	return out, duration, err
@@ -2515,7 +2523,7 @@ func (w *Worker) fetchSecrets(ctx context.Context, cwd string, pp *pipeline.Pipe
 			rc.Params[k] = v
 		}
 
-		out, _, err := w.runRunner(ctx, ru, cwd, rc)
+		out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch secret from %q at %q: %s\n%w", stName, path, out, err)
 		}
@@ -2568,7 +2576,7 @@ func (w *Worker) fetchSecrets(ctx context.Context, cwd string, pp *pipeline.Pipe
 }
 
 // startServices starts all service steps and returns the successfully started service steps.
-func (w *Worker) startServices(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, serviceSteps []job.ServiceStep) []job.ServiceStep {
+func (w *Worker) startServices(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, serviceSteps []job.ServiceStep, secretVals []string) []job.ServiceStep {
 	var started []job.ServiceStep
 	for _, ss := range serviceSteps {
 		svc, ok := pp.Service(ss.Name)
@@ -2606,7 +2614,7 @@ func (w *Worker) startServices(ctx context.Context, m workitem.Body, b *build.Bu
 			w.updateBuild(ctx, m, *b)
 		}
 
-		out, d, err := w.runRunner(ctx, ru, cwd, rc, onPartialLog)
+		out, d, err := w.runRunner(ctx, ru, cwd, rc, secretVals, onPartialLog)
 		out = svcWarnStr + out
 		if err != nil {
 			b.Steps[stepIdx] = build.Step{Type: "service", Name: ss.Name + ":start", Logs: out, Duration: d, Status: build.Failed}
@@ -2849,7 +2857,7 @@ func (w *Worker) serviceParams(b *build.Build, m workitem.Body, cmdParams map[st
 
 // waitForServices runs ready_check for all started services that have one.
 // Returns false if any ready_check times out.
-func (w *Worker) waitForServices(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, startedServices []job.ServiceStep) bool {
+func (w *Worker) waitForServices(ctx context.Context, m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, startedServices []job.ServiceStep, secretVals []string) bool {
 	type readyResult struct {
 		name string
 		out  string
@@ -2958,7 +2966,7 @@ func (w *Worker) waitForServices(ctx context.Context, m workitem.Body, b *build.
 				default:
 				}
 
-				lastOut, _, lastErr = w.runRunner(ctx, ru, cwd, runCmd)
+				lastOut, _, lastErr = w.runRunner(ctx, ru, cwd, runCmd, secretVals)
 				if lastErr == nil {
 					results <- readyResult{
 						name: svcName,
@@ -3000,7 +3008,7 @@ func (w *Worker) waitForServices(ctx context.Context, m workitem.Body, b *build.
 
 // stopServices stops all started services unconditionally.
 // Uses a fresh context to ensure cleanup runs even if the parent context is cancelled.
-func (w *Worker) stopServices(m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, startedServices []job.ServiceStep) {
+func (w *Worker) stopServices(m workitem.Body, b *build.Build, cwd string, pp *pipeline.Pipeline, startedServices []job.ServiceStep, secretVals []string) {
 	stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -3035,7 +3043,7 @@ func (w *Worker) stopServices(m workitem.Body, b *build.Build, cwd string, pp *p
 			w.updateBuild(stopCtx, m, *b)
 		}
 
-		out, d, err := w.runRunner(stopCtx, ru, cwd, rc, onPartialLog)
+		out, d, err := w.runRunner(stopCtx, ru, cwd, rc, secretVals, onPartialLog)
 		out = stopWarnStr + out
 		stepStatus := build.Succeeded
 		if err != nil {
@@ -3107,6 +3115,40 @@ func replaceSecretPlaceholdersInSlice(ss []string, resolved map[string]string) {
 			}
 		}
 	}
+}
+
+// secretValuesFromResolved extracts unique non-empty secret values from a
+// resolved placeholder map, sorted longest-first so longer secrets are
+// masked before shorter substrings. Values shorter than 3 characters are
+// skipped to avoid false positives.
+func secretValuesFromResolved(resolved map[string]string) []string {
+	seen := make(map[string]struct{}, len(resolved))
+	var vals []string
+	for _, v := range resolved {
+		if v == "" || len(v) < 3 {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		vals = append(vals, v)
+	}
+	if len(vals) == 0 {
+		return nil
+	}
+	sort.Slice(vals, func(i, j int) bool {
+		return len(vals[i]) > len(vals[j])
+	})
+	return vals
+}
+
+// maskSecrets replaces all secret values in s with "***".
+func maskSecrets(s string, secretValues []string) string {
+	for _, v := range secretValues {
+		s = strings.ReplaceAll(s, v, "***")
+	}
+	return s
 }
 
 // parseEnvFormat parses KEY=VALUE lines (e.g. .env files) into a map.

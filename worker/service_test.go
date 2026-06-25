@@ -2332,6 +2332,136 @@ func TestReplaceSecretPlaceholders_NoResolved(t *testing.T) {
 	assert.Equal(t, "literal-value", params["param_token"])
 }
 
+func TestSecretValuesFromResolved(t *testing.T) {
+	tests := []struct {
+		name     string
+		resolved map[string]string
+		want     []string
+	}{
+		{
+			name:     "nil map",
+			resolved: nil,
+			want:     nil,
+		},
+		{
+			name:     "empty map",
+			resolved: map[string]string{},
+			want:     nil,
+		},
+		{
+			name: "skips empty values",
+			resolved: map[string]string{
+				"__pikoci_secret:vault:path:key__": "",
+			},
+			want: nil,
+		},
+		{
+			name: "skips short values under 3 chars",
+			resolved: map[string]string{
+				"__pikoci_secret:vault:path:a__": "ab",
+				"__pikoci_secret:vault:path:b__": "x",
+			},
+			want: nil,
+		},
+		{
+			name: "extracts and deduplicates",
+			resolved: map[string]string{
+				"__pikoci_secret:vault:path:token__":    "s3cret-token",
+				"__pikoci_secret:vault:path:token2__":   "s3cret-token",
+				"__pikoci_secret:vault:path:password__": "hunter2",
+			},
+			want: []string{"s3cret-token", "hunter2"},
+		},
+		{
+			name: "sorts longest first",
+			resolved: map[string]string{
+				"__pikoci_secret:vault:path:short__": "abc",
+				"__pikoci_secret:vault:path:long__":  "abcdefghij",
+				"__pikoci_secret:vault:path:mid__":   "abcdef",
+			},
+			want: []string{"abcdefghij", "abcdef", "abc"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := secretValuesFromResolved(tt.resolved)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestMaskSecrets(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		vals  []string
+		want  string
+	}{
+		{
+			name:  "nil vals is no-op",
+			input: "hello world",
+			vals:  nil,
+			want:  "hello world",
+		},
+		{
+			name:  "empty vals is no-op",
+			input: "hello world",
+			vals:  []string{},
+			want:  "hello world",
+		},
+		{
+			name:  "masks single value",
+			input: "token is s3cret-token here",
+			vals:  []string{"s3cret-token"},
+			want:  "token is *** here",
+		},
+		{
+			name:  "masks multiple occurrences",
+			input: "s3cret-token and s3cret-token again",
+			vals:  []string{"s3cret-token"},
+			want:  "*** and *** again",
+		},
+		{
+			name:  "masks multiple different values",
+			input: "user=admin pass=hunter2",
+			vals:  []string{"admin", "hunter2"},
+			want:  "user=*** pass=***",
+		},
+		{
+			name:  "longest first prevents partial masking",
+			input: "the value is supersecret",
+			vals:  []string{"supersecret", "secret"},
+			want:  "the value is ***",
+		},
+		{
+			name:  "masks multi-line secret",
+			input: "begin\nline1\nline2\nend",
+			vals:  []string{"line1\nline2"},
+			want:  "begin\n***\nend",
+		},
+		{
+			name:  "regex-special chars in secret treated literally",
+			input: "price is $100.00 (USD)",
+			vals:  []string{"$100.00 (USD)"},
+			want:  "price is ***",
+		},
+		{
+			name:  "no match leaves string unchanged",
+			input: "nothing to see here",
+			vals:  []string{"s3cret-token"},
+			want:  "nothing to see here",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := maskSecrets(tt.input, tt.vals)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestProcessResourceCheck_WithSecretVars(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc := newTestWorker(ctrl)
@@ -2582,7 +2712,7 @@ func TestRunRunner_ShellVariablesNotDestroyed(t *testing.T) {
 		Params: map[string]string{"path": "/bin/sh"},
 	}
 
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 	require.NoError(t, err)
 	assert.Contains(t, out, "hello_from_shell", "shell variable should survive and be echoed")
 }
@@ -2606,7 +2736,7 @@ func TestRunRunner_AwkPositionalArgsWork(t *testing.T) {
 		Params: map[string]string{"path": "/bin/sh"},
 	}
 
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 	require.NoError(t, err)
 	assert.Contains(t, out, "foo", "awk $1 should extract first field")
 	assert.NotContains(t, out, "bar", "awk $1 should not include second field")
@@ -2634,7 +2764,7 @@ func TestRunRunner_ParamVarsExpandedByShell(t *testing.T) {
 		},
 	}
 
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 	require.NoError(t, err)
 	assert.Contains(t, out, "url=https://example.com", "param_url should be expanded by shell from env")
 }
@@ -2678,7 +2808,7 @@ func TestRunRunner_EnvPlaceholder(t *testing.T) {
 	// The -e flags come before the -ec arg. Since /bin/sh doesn't understand
 	// -e KEY=VALUE as positional args, the command will fail. But we can verify
 	// the behavior via the isRunnerInternalParam function directly.
-	w.runRunner(ctx, ru, cwd, rc)
+	w.runRunner(ctx, ru, cwd, rc, nil)
 }
 
 func TestIsRunnerInternalParam(t *testing.T) {
@@ -2782,7 +2912,7 @@ func TestRunRunner_EnvPlaceholder_RemapsPIKOCIOutput(t *testing.T) {
 		},
 	}
 
-	out, _, _ := w.runRunner(ctx, ru, cwd, rc)
+	out, _, _ := w.runRunner(ctx, ru, cwd, rc, nil)
 
 	// The output should contain the remapped PIKOCI_OUTPUT path
 	assert.Contains(t, out, "PIKOCI_OUTPUT=/workdir/.pikoci-output-12345",
@@ -2829,7 +2959,7 @@ func TestRunRunner_EnvPlaceholder_DockerTemplate(t *testing.T) {
 		},
 	}
 
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 	require.NoError(t, err)
 
 	// Verify volume mount expanded
@@ -2872,12 +3002,93 @@ func TestRunRunner_EnvPlaceholder_PIKOCIOutputNoWorkdir(t *testing.T) {
 		},
 	}
 
-	out, _, _ := w.runRunner(ctx, ru, cwd, rc)
+	out, _, _ := w.runRunner(ctx, ru, cwd, rc, nil)
 
 	// Without -w, the original host path should be used
 	assert.Contains(t, out, "PIKOCI_OUTPUT="+hostPath,
 		"PIKOCI_OUTPUT should use original host path when no -w flag")
 	assert.Contains(t, out, "GET_REPO_REF=abc123")
+}
+
+func TestRunRunner_MasksSecretInOutput(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	cwd := t.TempDir()
+
+	ru := runner.Runner{
+		Name: "exec",
+		Run:  utils.RunCommand{Path: "$path", Args: []string{"$args"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "exec",
+		Args:   []string{"-ec", `echo "my-s3cret-token"`},
+		Params: map[string]string{"path": "/bin/sh"},
+	}
+
+	secretVals := []string{"my-s3cret-token"}
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, secretVals)
+	require.NoError(t, err)
+	assert.Contains(t, out, "***")
+	assert.NotContains(t, out, "my-s3cret-token")
+}
+
+func TestRunRunner_MasksSecretInPartialLog(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	cwd := t.TempDir()
+
+	ru := runner.Runner{
+		Name: "exec",
+		Run:  utils.RunCommand{Path: "$path", Args: []string{"$args"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "exec",
+		Args:   []string{"-ec", `echo "my-s3cret-token"; sleep 3`},
+		Params: map[string]string{"path": "/bin/sh"},
+	}
+
+	var partialLogs []string
+	onPartial := func(partial string) {
+		partialLogs = append(partialLogs, partial)
+	}
+
+	secretVals := []string{"my-s3cret-token"}
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, secretVals, onPartial)
+	require.NoError(t, err)
+	assert.Contains(t, out, "***")
+	assert.NotContains(t, out, "my-s3cret-token")
+	// At least one partial log should have been emitted (sleep 3 > 2s ticker)
+	require.NotEmpty(t, partialLogs, "expected at least one partial log from 3s sleep with 2s ticker")
+	for _, pl := range partialLogs {
+		assert.NotContains(t, pl, "my-s3cret-token", "partial log should be masked")
+		assert.Contains(t, pl, "***", "partial log should contain masked value")
+	}
+}
+
+func TestRunRunner_NilSecretVals_NoMasking(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	cwd := t.TempDir()
+
+	ru := runner.Runner{
+		Name: "exec",
+		Run:  utils.RunCommand{Path: "$path", Args: []string{"$args"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "exec",
+		Args:   []string{"-ec", `echo "visible-output"`},
+		Params: map[string]string{"path": "/bin/sh"},
+	}
+
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
+	require.NoError(t, err)
+	assert.Contains(t, out, "visible-output")
 }
 
 func TestProcessResourceCheck_RawSecretFormat(t *testing.T) {
@@ -4577,7 +4788,7 @@ func TestRunRunner_ShellCmdMode(t *testing.T) {
 		Params: map[string]string{"cmd": "echo shell_works"},
 	}
 
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 	require.NoError(t, err)
 	assert.Contains(t, out, "shell_works")
 }
@@ -4601,7 +4812,7 @@ func TestRunRunner_ShellFileMode(t *testing.T) {
 		Params: map[string]string{"file": "hello.sh"},
 	}
 
-	out, _, err := w.runRunner(ctx, ru, cwd, rc)
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, nil)
 	require.NoError(t, err)
 	assert.Contains(t, out, "file_works")
 }

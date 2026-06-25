@@ -165,8 +165,10 @@ job "deploy" {
 		}
 
 		require.NotNil(t, taskStep, "task step 'use-secrets' should exist in build steps")
-		assert.True(t, strings.Contains(taskStep.Logs, "db_username=admin"), "logs should contain db_username=admin, got: %s", taskStep.Logs)
-		assert.True(t, strings.Contains(taskStep.Logs, "db_password=s3cret"), "logs should contain db_password=s3cret, got: %s", taskStep.Logs)
+		assert.True(t, strings.Contains(taskStep.Logs, "db_username=***"), "logs should mask db_username value, got: %s", taskStep.Logs)
+		assert.True(t, strings.Contains(taskStep.Logs, "db_password=***"), "logs should mask db_password value, got: %s", taskStep.Logs)
+		assert.False(t, strings.Contains(taskStep.Logs, "admin"), "logs should not contain raw secret 'admin', got: %s", taskStep.Logs)
+		assert.False(t, strings.Contains(taskStep.Logs, "s3cret"), "logs should not contain raw secret 's3cret', got: %s", taskStep.Logs)
 	})
 
 	t.Run("SecretBackedVariableWithFileSource", func(t *testing.T) {
@@ -262,8 +264,10 @@ job "deploy" {
 			}
 		}
 		require.NotNil(t, taskStep, "task step 'use-file-secrets' should exist in build steps")
-		assert.True(t, strings.Contains(taskStep.Logs, "api_key=abc123"), "logs should contain api_key=abc123, got: %s", taskStep.Logs)
-		assert.True(t, strings.Contains(taskStep.Logs, "api_secret=xyz789"), "logs should contain api_secret=xyz789, got: %s", taskStep.Logs)
+		assert.True(t, strings.Contains(taskStep.Logs, "api_key=***"), "logs should mask api_key value, got: %s", taskStep.Logs)
+		assert.True(t, strings.Contains(taskStep.Logs, "api_secret=***"), "logs should mask api_secret value, got: %s", taskStep.Logs)
+		assert.False(t, strings.Contains(taskStep.Logs, "abc123"), "logs should not contain raw secret 'abc123', got: %s", taskStep.Logs)
+		assert.False(t, strings.Contains(taskStep.Logs, "xyz789"), "logs should not contain raw secret 'xyz789', got: %s", taskStep.Logs)
 	})
 
 	t.Run("SecretBackedVariableWithFileSourceEnvFormat", func(t *testing.T) {
@@ -376,10 +380,12 @@ job "deploy" {
 			}
 		}
 		require.NotNil(t, taskStep, "task step 'use-env-secrets' should exist in build steps")
-		assert.True(t, strings.Contains(taskStep.Logs, "db_host=db.example.com"), "logs should contain db_host=db.example.com, got: %s", taskStep.Logs)
-		assert.True(t, strings.Contains(taskStep.Logs, "db_password=s3cret"), "logs should contain db_password=s3cret, got: %s", taskStep.Logs)
-		assert.True(t, strings.Contains(taskStep.Logs, "db_user=admin"), "logs should contain db_user=admin (quotes stripped), got: %s", taskStep.Logs)
-		assert.True(t, strings.Contains(taskStep.Logs, "db_conn=host=db;port=5432"), "logs should contain db_conn=host=db;port=5432 (value with = sign), got: %s", taskStep.Logs)
+		assert.True(t, strings.Contains(taskStep.Logs, "db_host=***"), "logs should mask db_host value, got: %s", taskStep.Logs)
+		assert.True(t, strings.Contains(taskStep.Logs, "db_password=***"), "logs should mask db_password value, got: %s", taskStep.Logs)
+		assert.True(t, strings.Contains(taskStep.Logs, "db_user=***"), "logs should mask db_user value, got: %s", taskStep.Logs)
+		assert.True(t, strings.Contains(taskStep.Logs, "db_conn=***"), "logs should mask db_conn value, got: %s", taskStep.Logs)
+		assert.False(t, strings.Contains(taskStep.Logs, "db.example.com"), "logs should not contain raw secret 'db.example.com', got: %s", taskStep.Logs)
+		assert.False(t, strings.Contains(taskStep.Logs, "s3cret"), "logs should not contain raw secret 's3cret', got: %s", taskStep.Logs)
 	})
 
 	cancel()
