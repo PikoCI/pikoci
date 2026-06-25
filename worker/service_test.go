@@ -3022,6 +3022,42 @@ func TestRunRunner_MasksSecretInOutput(t *testing.T) {
 	assert.NotContains(t, out, "my-s3cret-token")
 }
 
+func TestRunRunner_MasksSecretInPartialLog(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, _ := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	cwd := t.TempDir()
+
+	ru := runner.Runner{
+		Name: "exec",
+		Run:  utils.RunCommand{Path: "$path", Args: []string{"$args"}},
+	}
+	rc := utils.RunnerCommand{
+		Runner: "exec",
+		Args:   []string{"-ec", `echo "my-s3cret-token"; sleep 3`},
+		Params: map[string]string{"path": "/bin/sh"},
+	}
+
+	var partialLogs []string
+	onPartial := func(partial string) {
+		partialLogs = append(partialLogs, partial)
+	}
+
+	secretVals := []string{"my-s3cret-token"}
+	out, _, err := w.runRunner(ctx, ru, cwd, rc, secretVals, onPartial)
+	require.NoError(t, err)
+	assert.Contains(t, out, "***")
+	assert.NotContains(t, out, "my-s3cret-token")
+	// At least one partial log should have been emitted (sleep 3 > 2s ticker)
+	if len(partialLogs) > 0 {
+		for _, pl := range partialLogs {
+			assert.NotContains(t, pl, "my-s3cret-token", "partial log should be masked")
+			assert.Contains(t, pl, "***", "partial log should contain masked value")
+		}
+	}
+}
+
 func TestRunRunner_NilSecretVals_NoMasking(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, _ := newTestWorker(ctrl)

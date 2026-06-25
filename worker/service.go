@@ -1683,6 +1683,8 @@ func (w *Worker) runAutoNotifications(ctx context.Context, m workitem.Body, b *b
 		return
 	}
 
+	secretVals := secretValuesFromResolved(resolved)
+
 	// Map build status to event name
 	var event string
 	switch b.Status {
@@ -1750,7 +1752,7 @@ func (w *Worker) runAutoNotifications(ctx context.Context, m workitem.Body, b *b
 				Message: n.Message,
 			},
 		}
-		w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, nil, secretValuesFromResolved(resolved), resolved)
+		w.runNotifyStep(ctx, m, b, cwd, pp, *ps.Notify, ps, nil, secretVals, resolved)
 	}
 }
 
