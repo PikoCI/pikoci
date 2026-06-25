@@ -195,11 +195,13 @@ func TestPikoCI(t *testing.T) {
 			err = cmBtn.Click()
 			require.NoError(t, err)
 
+			// After adding pepito (maintainer), admin is the last admin so their
+			// delete button is hidden. Only pepito's delete button shows.
 			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
 				dBtns, err := wd.FindElements(selenium.ByCSSSelector, "#delete")
 				require.NoError(t, err)
 
-				return 2 == len(dBtns)
+				return 1 == len(dBtns)
 			}, 5*time.Second)
 
 			members, err = wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
@@ -207,17 +209,18 @@ func TestPikoCI(t *testing.T) {
 			require.Equal(t, 2, len(members))
 		})
 		t.Run("Update Member", func(t *testing.T) {
-			// Role dropdowns: admin has one for each member
+			// Role dropdowns: one per member (admin's is NOT disabled since
+			// we check isLastAdmin which is true, but the select itself is disabled)
 			roleSelects, err := wd.FindElements(selenium.ByCSSSelector, "select.form-select-sm")
 			require.NoError(t, err)
 			require.Equal(t, 2, len(roleSelects))
 
-			// First member (admin) should have "admin" selected
-			val1, err := roleSelects[0].GetAttribute("value")
+			// First member (admin) has disabled dropdown (last admin)
+			disabled, err := roleSelects[0].GetAttribute("disabled")
 			require.NoError(t, err)
-			require.Equal(t, "admin", val1)
+			require.NotEmpty(t, disabled)
 
-			// Second member (pepito) should have "maintainer" selected (default from migration)
+			// Second member (pepito) should have "maintainer" selected
 			val2, err := roleSelects[1].GetAttribute("value")
 			require.NoError(t, err)
 			require.Equal(t, "maintainer", val2)
@@ -231,18 +234,17 @@ func TestPikoCI(t *testing.T) {
 
 			time.Sleep(500 * time.Millisecond)
 
-			// Verify the role was updated
-			roleSelects, err = wd.FindElements(selenium.ByCSSSelector, "select.form-select-sm")
+			// Now there are 2 admins, so both delete buttons should show
+			dBtns, err := wd.FindElements(selenium.ByCSSSelector, "#delete")
 			require.NoError(t, err)
-			val2, err = roleSelects[1].GetAttribute("value")
-			require.NoError(t, err)
-			require.Equal(t, "admin", val2)
+			require.Equal(t, 2, len(dBtns))
 		})
 		t.Run("Delete Member", func(t *testing.T) {
 			members, err := wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
 			require.NoError(t, err)
 			require.Equal(t, 2, len(members))
 
+			// Both are admins, so both have delete buttons
 			dBtns, err := wd.FindElements(selenium.ByCSSSelector, "#delete")
 			require.NoError(t, err)
 			require.Equal(t, 2, len(dBtns))
@@ -1443,11 +1445,12 @@ job "gen" {
 				err = cmBtn.Click()
 				require.NoError(t, err)
 
+				// Admin is last admin so their delete is hidden; only pepito's shows
 				waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
 					dBtns, err := wd.FindElements(selenium.ByCSSSelector, "#delete")
 					require.NoError(t, err)
 
-					return 2 == len(dBtns)
+					return 1 == len(dBtns)
 				}, 5*time.Second)
 
 				members, err = wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
@@ -2113,8 +2116,8 @@ job "gen" {
 		require.Empty(t, lr.Err)
 		adminJWT := lr.Data.JWT
 
-		// Step 2: Promote pepito to admin on "main" team via HTTP
-		updateBody, _ := json.Marshal(thttp.UpdateTeamMemberRequest{Role: "admin"})
+		// Step 2: Change pepito's role on "main" team via HTTP (triggers X-Refresh-Token)
+		updateBody, _ := json.Marshal(thttp.UpdateTeamMemberRequest{Role: "operator"})
 		updateReq, err := http.NewRequest(http.MethodPut, pikoURL+"/teams/main/members/pepito", bytes.NewReader(updateBody))
 		require.NoError(t, err)
 		updateReq.Header.Set("Content-Type", "application/json")
