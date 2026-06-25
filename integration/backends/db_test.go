@@ -13,6 +13,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/sectype"
 	"github.com/pikoci/pikoci/pikoci/team"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -84,8 +85,8 @@ func TestDBBackends(t *testing.T) {
 
 				// Add member to team
 				err = tr.CreateMember(ctx, "backend-test", team.Member{
-					Admin: true,
-					User:  user.User{Username: "admin"},
+					Role: role.Admin,
+					User: user.User{Username: "admin"},
 				})
 				require.NoError(t, err)
 
@@ -98,7 +99,7 @@ func TestDBBackends(t *testing.T) {
 				// FindMember
 				member, err := tr.FindMember(ctx, "backend-test", "admin")
 				require.NoError(t, err)
-				assert.True(t, member.Admin)
+				assert.Equal(t, role.Admin, member.Role)
 			})
 
 			t.Run("PipelineRepository", func(t *testing.T) {
