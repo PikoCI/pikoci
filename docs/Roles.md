@@ -6,12 +6,25 @@ PikoCI uses role-based access control (RBAC) to manage what team members can do.
 
 | Role | Level | Description |
 |------|-------|-------------|
+| **Public** | 0 | Unauthenticated access to public pipelines. Not assignable to users. |
 | **Viewer** | 1 | Read-only access. Can view pipelines, jobs, builds, resources, and team info. |
 | **Operator** | 2 | Can trigger, cancel, and retry builds. Can pause/unpause pipelines and jobs. Can pin/unpin resource versions. |
 | **Maintainer** | 3 | Can create, update, and delete pipelines. Can manage resources and regenerate webhook tokens. |
 | **Admin** | 4 | Full team control. Can add, remove, and change members. Can update team settings and delete the team. Every team must have at least one admin. |
 
 ## What Each Role Can Do
+
+### Public
+
+The public role is **not assignable to users**. It represents unauthenticated access and only applies to pipelines marked as public. Public users can:
+
+- View the pipeline graph and configuration
+- View pipeline jobs and their status
+- View build lists and build logs
+- View resources and resource versions
+- Access the pipeline image (SVG/PNG)
+
+Public users **cannot** list pipelines, view team info, trigger jobs, or perform any write operations.
 
 ### Viewer
 
