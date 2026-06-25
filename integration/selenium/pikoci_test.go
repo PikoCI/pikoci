@@ -99,6 +99,11 @@ func TestPikoCI(t *testing.T) {
 		})
 
 		t.Run("New Team", func(t *testing.T) {
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				rows, err := wd.FindElements(selenium.ByCSSSelector, ".piko-team-row")
+				return err == nil && len(rows) >= 1
+			}, 5*time.Second)
+
 			teams, err := wd.FindElements(selenium.ByCSSSelector, ".piko-team-row")
 			require.NoError(t, err)
 			require.Equal(t, 1, len(teams))
@@ -131,6 +136,11 @@ func TestPikoCI(t *testing.T) {
 			require.NoError(t, err)
 
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 5*time.Second)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				rows, err := wd.FindElements(selenium.ByCSSSelector, ".piko-team-row")
+				return err == nil && len(rows) >= 2
+			}, 5*time.Second)
 
 			teams, err := wd.FindElements(selenium.ByCSSSelector, ".piko-team-row")
 			require.NoError(t, err)
@@ -257,6 +267,11 @@ func TestPikoCI(t *testing.T) {
 			require.NoError(t, err)
 
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 5*time.Second)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				rows, err := wd.FindElements(selenium.ByCSSSelector, ".piko-team-row")
+				return err == nil && len(rows) >= 2
+			}, 5*time.Second)
 
 			teams, err := wd.FindElements(selenium.ByCSSSelector, ".piko-team-row")
 			require.NoError(t, err)
