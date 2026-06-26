@@ -6,8 +6,10 @@ import { route } from 'preact-router';
 import {
   fetchUsers, fetchUser, createUser, updateUser, deleteUser,
   updateProfile, changePassword, postRefreshToken,
+  fetchApiTokens, createApiToken, deleteApiToken,
+  fetchTeams,
 } from '../api.js';
-import { session, login, setNoticeError } from '../state.js';
+import { session, login, setNoticeError, isAdmin } from '../state.js';
 import { useLoading, useRequireAuth } from '../hooks.js';
 import { showToast } from '../toast.js';
 
@@ -240,66 +242,16 @@ export function Profile() {
 
   const s = session.value;
   const u = s.user || {};
-  const [fullName, setFullName] = useState(u.full_name || '');
-  const [username, setUsername] = useState(u.username || '');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [mustChange, setMustChange] = useState(!!u.must_change_password);
-  const [profileLoading, withProfileLoading] = useLoading();
-  const [pwLoading, withPwLoading] = useLoading();
+  const mustChange = !!u.must_change_password;
 
-  const onSubmitProfile = (e) => {
-    e.preventDefault();
-    withProfileLoading(async () => {
-      const resp = await updateProfile({ full_name: fullName, username });
-      if (resp.error) {
-        setNoticeError(resp.error);
-        showToast(resp.error, 'error');
-        return;
-      }
-      // Refresh token to get updated JWT with new username/name
-      try {
-        const refreshResp = await postRefreshToken();
-        if (refreshResp.data && refreshResp.data.jwt) {
-          login(refreshResp.data.jwt, refreshResp.data.user);
-        }
-      } catch {}
-      showToast('Profile updated successfully', 'success');
-    });
-  };
+  const params = new URLSearchParams(window.location.search);
+  const defaultTab = mustChange ? 'password' : (params.get('tab') || 'profile');
+  const [activeTab, setActiveTab] = useState(defaultTab);
 
-  const onChangePassword = (e) => {
-    e.preventDefault();
-    if (newPassword !== confirmPassword) {
-      setNoticeError('New passwords do not match');
-      showToast('New passwords do not match', 'error');
-      return;
-    }
-    withPwLoading(async () => {
-      try {
-        await changePassword({ old_password: currentPassword, new_password: newPassword });
-      } catch {
-        // Error already handled by api()
-        return;
-      }
-      const wasForcedChange = mustChange;
-      setMustChange(false);
-      // Update session to clear must_change_password
-      const currentUser = session.value.user;
-      if (currentUser) {
-        const updatedUser = { ...currentUser, must_change_password: false };
-        login(session.value.jwt, updatedUser);
-      }
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      showToast('Password changed successfully', 'success');
-      if (wasForcedChange) {
-        // Delay route to let the toast render before navigating
-        setTimeout(() => route('/'), 100);
-      }
-    });
+  const switchTab = (tab) => {
+    setActiveTab(tab);
+    const url = tab === 'profile' ? '/profile' : '/profile?tab=' + tab;
+    window.history.replaceState(null, '', url);
   };
 
   return html`
@@ -311,6 +263,53 @@ export function Profile() {
         <i class="bi bi-exclamation-triangle"></i> Please change your default password before continuing.
       </div>
     ` : null}
+    <ul class="nav nav-tabs mb-3">
+      <li class="nav-item">
+        <button class="nav-link ${activeTab === 'profile' ? 'active' : ''}"
+          onClick=${() => switchTab('profile')}>Profile</button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link ${activeTab === 'password' ? 'active' : ''}"
+          onClick=${() => switchTab('password')}>Password</button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link ${activeTab === 'tokens' ? 'active' : ''}"
+          onClick=${() => switchTab('tokens')}>API Tokens</button>
+      </li>
+    </ul>
+    ${activeTab === 'profile' ? html`<${ProfileTab} />` : null}
+    ${activeTab === 'password' ? html`<${PasswordTab} mustChange=${mustChange} />` : null}
+    ${activeTab === 'tokens' ? html`<${ApiTokensTab} />` : null}
+  `;
+}
+
+function ProfileTab() {
+  const s = session.value;
+  const u = s.user || {};
+  const [fullName, setFullName] = useState(u.full_name || '');
+  const [username, setUsername] = useState(u.username || '');
+  const [profileLoading, withProfileLoading] = useLoading();
+
+  const onSubmitProfile = (e) => {
+    e.preventDefault();
+    withProfileLoading(async () => {
+      const resp = await updateProfile({ full_name: fullName, username });
+      if (resp.error) {
+        setNoticeError(resp.error);
+        showToast(resp.error, 'error');
+        return;
+      }
+      try {
+        const refreshResp = await postRefreshToken();
+        if (refreshResp.data && refreshResp.data.jwt) {
+          login(refreshResp.data.jwt, refreshResp.data.user);
+        }
+      } catch {}
+      showToast('Profile updated successfully', 'success');
+    });
+  };
+
+  return html`
     <form id="profile-form" onSubmit=${onSubmitProfile}>
       <div class="mb-3">
         <label for="full_name" class="form-label">Full Name</label>
@@ -326,8 +325,44 @@ export function Profile() {
         ${profileLoading ? 'Saving...' : 'Save Changes'}
       </button>
     </form>
-    <hr style="border-color: var(--border); margin: 1.5rem 0;" />
-    <h3 class="h5 fw-bold mb-3">Change Password</h3>
+  `;
+}
+
+function PasswordTab({ mustChange }) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwLoading, withPwLoading] = useLoading();
+
+  const onChangePassword = (e) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setNoticeError('New passwords do not match');
+      showToast('New passwords do not match', 'error');
+      return;
+    }
+    withPwLoading(async () => {
+      try {
+        await changePassword({ old_password: currentPassword, new_password: newPassword });
+      } catch {
+        return;
+      }
+      const currentUser = session.value.user;
+      if (currentUser) {
+        const updatedUser = { ...currentUser, must_change_password: false };
+        login(session.value.jwt, updatedUser);
+      }
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      showToast('Password changed successfully', 'success');
+      if (mustChange) {
+        setTimeout(() => route('/'), 100);
+      }
+    });
+  };
+
+  return html`
     <form id="change-password-form" onSubmit=${onChangePassword}>
       <div class="mb-3">
         <label for="current_password" class="form-label">Current Password</label>
@@ -348,5 +383,230 @@ export function Profile() {
         ${pwLoading ? 'Changing...' : 'Change Password'}
       </button>
     </form>
+  `;
+}
+
+function ApiTokensTab() {
+  const [tokens, setTokens] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [createdToken, setCreatedToken] = useState(null);
+  const [name, setName] = useState('');
+  const [personal, setPersonal] = useState(true);
+  const [teamCanonical, setTeamCanonical] = useState('');
+  const [tokenRole, setTokenRole] = useState('viewer');
+  const [useExpiration, setUseExpiration] = useState(false);
+  const [expiresAt, setExpiresAt] = useState('');
+  const [teams, setTeams] = useState([]);
+  const [createLoading, withCreateLoading] = useLoading();
+
+  const userMemberships = (session.value.user && session.value.user.memberships) || [];
+
+  useEffect(() => {
+    fetchApiTokens().then(data => setTokens(data || [])).catch(() => {});
+    fetchTeams().then(data => {
+      setTeams(data || []);
+    }).catch(() => {});
+  }, []);
+
+  const onCreateToken = (e) => {
+    e.preventDefault();
+    if (!personal && !teamCanonical) {
+      showToast('Please select a team', 'error');
+      return;
+    }
+    withCreateLoading(async () => {
+      const req = { name, personal };
+      if (!personal) {
+        req.team_canonical = teamCanonical;
+        req.role = tokenRole;
+      }
+      if (useExpiration && expiresAt) {
+        req.expires_at = new Date(expiresAt).toISOString();
+      }
+      try {
+        const result = await createApiToken(req);
+        setCreatedToken(result.data || result);
+        setName('');
+        setUseExpiration(false);
+        setExpiresAt('');
+        setShowForm(false);
+        fetchApiTokens().then(data => setTokens(data || [])).catch(() => {});
+      } catch {
+        // api() already showed the error toast
+      }
+    });
+  };
+
+  const onDeleteToken = async (id) => {
+    if (!confirm('Are you sure you want to delete this token?')) return;
+    try {
+      await deleteApiToken(id);
+      setTokens(tokens.filter(t => t.id !== id));
+      showToast('Token deleted', 'success');
+    } catch {
+      // api() already showed the error toast
+    }
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('Token copied to clipboard', 'success');
+    }).catch(() => {
+      showToast('Failed to copy token', 'error');
+    });
+  };
+
+  const roleOptions = ['viewer', 'operator', 'maintainer', 'admin'];
+
+  const teamMembership = userMemberships.find(m => m.team_canonical === teamCanonical);
+  const maxRoleLevel = teamMembership ? roleOptions.indexOf(teamMembership.role) : -1;
+  // Global admins can assign any role; non-members see an empty list
+  const filteredRoles = maxRoleLevel >= 0 ? roleOptions.slice(0, maxRoleLevel + 1)
+    : (isAdmin.value ? roleOptions : []);
+
+  const fmtDate = (d) => {
+    if (!d) return '\u2014';
+    const dt = new Date(d);
+    return isNaN(dt) ? '\u2014' : dt.toLocaleDateString();
+  };
+
+  return html`
+    ${createdToken ? html`
+      <div class="alert alert-success alert-dismissible" role="alert">
+        <strong>Token created!</strong> Copy it now — you won't be able to see it again.
+        <div class="input-group mt-2">
+          <input type="text" class="form-control font-monospace" value=${createdToken.token} readonly autocomplete="off" />
+          <button class="btn btn-outline-secondary" type="button" onClick=${() => copyToClipboard(createdToken.token)}>
+            <i class="bi bi-clipboard"></i> Copy
+          </button>
+        </div>
+        <button type="button" class="btn-close" onClick=${() => setCreatedToken(null)}></button>
+      </div>
+    ` : null}
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <span></span>
+      <button class="btn btn-success btn-sm" onClick=${() => setShowForm(!showForm)}>
+        <i class="bi bi-plus"></i> New Token
+      </button>
+    </div>
+
+    ${showForm ? html`
+      <div class="card mb-3">
+        <div class="card-body">
+          <form onSubmit=${onCreateToken}>
+            <div class="mb-3">
+              <label class="form-label">Token Name</label>
+              <input type="text" class="form-control" value=${name} required
+                onInput=${(e) => setName(e.target.value)} placeholder="e.g. ci-deploy" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Scope</label>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" id="scope-personal" name="scope"
+                  checked=${personal} onChange=${() => setPersonal(true)} />
+                <label class="form-check-label" for="scope-personal">
+                  Personal <small class="text-muted">— full user access across all teams</small>
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" id="scope-team" name="scope"
+                  checked=${!personal} onChange=${() => setPersonal(false)} />
+                <label class="form-check-label" for="scope-team">
+                  Team-scoped <small class="text-muted">— limited to one team with a role cap</small>
+                </label>
+              </div>
+            </div>
+            ${!personal ? html`
+              <div class="row mb-3">
+                <div class="col">
+                  <label class="form-label">Team</label>
+                  <select class="form-select" value=${teamCanonical}
+                    onChange=${(e) => { setTeamCanonical(e.target.value); setTokenRole('viewer'); }}>
+                    <option value="">Select a team</option>
+                    ${teams.map(t => html`
+                      <option value=${t.canonical}>${t.name}</option>
+                    `)}
+                  </select>
+                </div>
+                <div class="col">
+                  <label class="form-label">Max Role</label>
+                  <select class="form-select" value=${tokenRole}
+                    onChange=${(e) => setTokenRole(e.target.value)}>
+                    ${filteredRoles.map(r => html`
+                      <option value=${r}>${r}</option>
+                    `)}
+                  </select>
+                </div>
+              </div>
+            ` : null}
+            <div class="mb-3">
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="use-expiration"
+                  checked=${useExpiration} onChange=${(e) => {
+                    setUseExpiration(e.target.checked);
+                    if (!e.target.checked) setExpiresAt('');
+                  }} />
+                <label class="form-check-label" for="use-expiration">Set expiration date</label>
+              </div>
+              ${useExpiration ? html`
+                <input type="date" class="form-control" value=${expiresAt}
+                  min=${new Date().toISOString().split('T')[0]}
+                  onInput=${(e) => setExpiresAt(e.target.value)} />
+              ` : null}
+            </div>
+            <button type="submit" class="btn btn-primary" disabled=${createLoading}>
+              ${createLoading ? 'Creating...' : 'Create Token'}
+            </button>
+            <button type="button" class="btn btn-secondary ms-2" onClick=${() => setShowForm(false)}>Cancel</button>
+          </form>
+        </div>
+      </div>
+    ` : null}
+
+    ${tokens.length === 0 && !showForm ? html`
+      <div class="text-muted text-center py-4">
+        No API tokens yet. Create one to authenticate API requests.
+      </div>
+    ` : null}
+
+    ${tokens.length > 0 ? html`
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Prefix</th>
+              <th>Type</th>
+              <th>Team</th>
+              <th>Role</th>
+              <th>Created</th>
+              <th>Last Used</th>
+              <th>Expires</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tokens.map(t => html`
+              <tr key=${t.id}>
+                <td>${t.name}</td>
+                <td><code>${t.token_prefix}...</code></td>
+                <td><span class="badge ${t.personal ? 'bg-primary' : 'bg-info'}">${t.personal ? 'Personal' : 'Team'}</span></td>
+                <td>${t.team_canonical || '—'}</td>
+                <td>${t.role || '—'}</td>
+                <td>${fmtDate(t.created_at)}</td>
+                <td>${fmtDate(t.last_used_at)}</td>
+                <td>${t.expires_at ? fmtDate(t.expires_at) : 'Never'}</td>
+                <td>
+                  <button class="btn btn-outline-danger btn-sm" aria-label="Delete token" onClick=${() => onDeleteToken(t.id)}>
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            `)}
+          </tbody>
+        </table>
+      </div>
+    ` : null}
   `;
 }

@@ -207,6 +207,12 @@ func (q *PikoCI) DeleteTeamMember(ctx context.Context, tc, mu string) error {
 		if err != nil {
 			return fmt.Errorf("failed to delete member: %w", err)
 		}
+
+		err = uow.ApiTokens().DeleteByTeamMember(ctx, mu, tc)
+		if err != nil {
+			return fmt.Errorf("failed to delete API tokens for removed member: %w", err)
+		}
+
 		return nil
 	})
 }

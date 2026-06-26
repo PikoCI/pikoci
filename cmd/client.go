@@ -66,6 +66,7 @@ func init() {
 	clientCmd.AddCommand(resourcesCmd)
 	clientCmd.AddCommand(triggersCmd)
 	clientCmd.AddCommand(exportCmd)
+	clientCmd.AddCommand(apiTokensCmd)
 }
 
 // login

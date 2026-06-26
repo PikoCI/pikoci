@@ -12,10 +12,12 @@ import (
 	"time"
 
 	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/team"
 	thttp "github.com/pikoci/pikoci/pikoci/transport/http"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -1181,4 +1183,71 @@ func (cl *Client) DeleteWorker(ctx context.Context, name string) error {
 	}
 
 	return nil
+}
+
+// CreateApiToken creates a new API token.
+func (cl *Client) CreateApiToken(ctx context.Context, username, name string, personal bool, teamCanonical string, tokenRole role.Role, expiresAt *time.Time) (*apitoken.WithPlaintext, error) {
+	var resp thttp.CreateApiTokenResponse
+
+	req := thttp.CreateApiTokenRequest{
+		Name:          name,
+		Personal:      personal,
+		TeamCanonical: teamCanonical,
+		Role:          tokenRole,
+	}
+	if expiresAt != nil {
+		req.ExpiresAt = expiresAt.Format(time.RFC3339)
+	}
+
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/api-tokens", cl.url), req, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return resp.Token, nil
+}
+
+// ListApiTokens returns all API tokens for the authenticated user.
+func (cl *Client) ListApiTokens(ctx context.Context, username string) ([]*apitoken.Token, error) {
+	var resp thttp.ListApiTokensResponse
+
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/api-tokens", cl.url), nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return resp.Tokens, nil
+}
+
+// DeleteApiToken deletes an API token by ID.
+func (cl *Client) DeleteApiToken(ctx context.Context, username string, tokenID uint32) error {
+	var resp thttp.DeleteApiTokenResponse
+
+	err := cl.Request(ctx, http.MethodDelete, fmt.Sprintf("%s/api-tokens/%d", cl.url, tokenID), nil, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return nil
+}
+
+// FindApiTokenByHash is not implemented on the client (server-side only).
+func (cl *Client) FindApiTokenByHash(ctx context.Context, tokenHash string) (*apitoken.AuthResult, error) {
+	return nil, fmt.Errorf("FindApiTokenByHash is not available on the client")
+}
+
+// UpdateApiTokenLastUsed is not implemented on the client (server-side only).
+func (cl *Client) UpdateApiTokenLastUsed(ctx context.Context, tokenID uint32) {
 }

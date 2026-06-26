@@ -1,6 +1,8 @@
 package http
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -8,10 +10,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/mock"
 	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -202,4 +206,659 @@ func TestWorkerJWTBypassesAuthorization(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "worker JWT should bypass authorization")
+}
+
+// apiTokenHash returns the SHA-256 hex hash of a plaintext API token.
+func apiTokenHash(plaintext string) string {
+	h := sha256.Sum256([]byte(plaintext))
+	return hex.EncodeToString(h[:])
+}
+
+// TestApiTokenAuth verifies that API tokens authenticate and authorize correctly.
+func TestApiTokenAuth(t *testing.T) {
+	plainToken := "pko_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	hash := apiTokenHash(plainToken)
+
+	t.Run("personal token can access viewer route", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+			Username:  "admin",
+			UserID:    1,
+			UserAdmin: false,
+			Personal:  true,
+			TokenID:   1,
+		}, nil)
+		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(1)).AnyTimes()
+		svc.EXPECT().GetUser(gomock.Any(), "admin").Return(&user.WithMemberships{
+			User:        user.User{Username: "admin"},
+			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Viewer}},
+		}, nil)
+		svc.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("team-scoped token can access route on its team", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+			Username:      "admin",
+			UserID:        1,
+			Personal:      false,
+			TeamCanonical: "main",
+			TokenRole:     role.Operator,
+			TokenID:       2,
+		}, nil)
+		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(2)).AnyTimes()
+		svc.EXPECT().GetUser(gomock.Any(), "admin").Return(&user.WithMemberships{
+			User:        user.User{Username: "admin"},
+			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
+		}, nil)
+		svc.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("team-scoped token denied on different team", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+			Username:      "admin",
+			UserID:        1,
+			Personal:      false,
+			TeamCanonical: "other-team",
+			TokenRole:     role.Admin,
+			TokenID:       3,
+		}, nil)
+		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(3)).AnyTimes()
+		svc.EXPECT().GetUser(gomock.Any(), "admin").Return(&user.WithMemberships{
+			User: user.User{Username: "admin"},
+			Memberships: []user.Member{
+				{TeamCanonical: "main", Role: role.Admin},
+				{TeamCanonical: "other-team", Role: role.Admin},
+			},
+		}, nil)
+
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("team-scoped token effective role is min of user and token role", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		// Token has operator role, user has admin — effective = operator
+		// Creating a pipeline requires maintainer, so this should fail
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+			Username:      "admin",
+			UserID:        1,
+			Personal:      false,
+			TeamCanonical: "main",
+			TokenRole:     role.Operator,
+			TokenID:       4,
+		}, nil)
+		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(4)).AnyTimes()
+		svc.EXPECT().GetUser(gomock.Any(), "admin").Return(&user.WithMemberships{
+			User:        user.User{Username: "admin"},
+			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
+		}, nil)
+
+		req, _ := http.NewRequest(http.MethodPost, server.URL+"/teams/main/pipelines", strings.NewReader("{}"))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("user role downgraded — effective role follows user", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		// Token has maintainer role, but user has been downgraded to viewer
+		// Effective = min(viewer, maintainer) = viewer — cannot create pipeline
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+			Username:      "admin",
+			UserID:        1,
+			Personal:      false,
+			TeamCanonical: "main",
+			TokenRole:     role.Maintainer,
+			TokenID:       5,
+		}, nil)
+		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(5)).AnyTimes()
+		svc.EXPECT().GetUser(gomock.Any(), "admin").Return(&user.WithMemberships{
+			User:        user.User{Username: "admin"},
+			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Viewer}},
+		}, nil)
+
+		req, _ := http.NewRequest(http.MethodPost, server.URL+"/teams/main/pipelines", strings.NewReader("{}"))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("team-scoped token denied on global admin route", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+			Username:      "admin",
+			UserID:        1,
+			UserAdmin:     true,
+			Personal:      false,
+			TeamCanonical: "main",
+			TokenRole:     role.Admin,
+			TokenID:       6,
+		}, nil)
+		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(6)).AnyTimes()
+
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/users", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("personal token of global admin can access global admin route", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+			Username:  "admin",
+			UserID:    1,
+			UserAdmin: true,
+			Personal:  true,
+			TokenID:   7,
+		}, nil)
+		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(7)).AnyTimes()
+		svc.EXPECT().GetUser(gomock.Any(), "admin").Return(&user.WithMemberships{
+			User: user.User{Username: "admin", Admin: true},
+		}, nil)
+		svc.EXPECT().ListUsers(gomock.Any()).Return(nil, nil).AnyTimes()
+
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/users", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("API token cannot manage tokens (jwtOnly)", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+			Username:  "admin",
+			UserID:    1,
+			UserAdmin: true,
+			Personal:  true,
+			TokenID:   8,
+		}, nil)
+		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(8)).AnyTimes()
+
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/api-tokens", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("expired token is rejected", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		pastTime := time.Now().Add(-1 * time.Hour)
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+			Username:  "admin",
+			UserID:    1,
+			Personal:  true,
+			TokenID:   9,
+			ExpiresAt: &pastTime,
+		}, nil)
+
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("invalid token is rejected", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("invalid API token"))
+
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("team-scoped token denied on non-team route", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+			Username:      "admin",
+			UserID:        1,
+			Personal:      false,
+			TeamCanonical: "main",
+			TokenRole:     role.Admin,
+			TokenID:       10,
+		}, nil)
+		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(10)).AnyTimes()
+		svc.EXPECT().GetUser(gomock.Any(), "admin").Return(&user.WithMemberships{
+			User:        user.User{Username: "admin"},
+			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
+		}, nil)
+
+		// ChangePassword is a non-team route (tc=""), team-scoped tokens should be denied
+		req, _ := http.NewRequest(http.MethodPost, server.URL+"/users/change-password", strings.NewReader("{}"))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("no X-Refresh-Token header for API token requests", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+			Username:  "admin",
+			UserID:    1,
+			Personal:  true,
+			TokenID:   11,
+		}, nil)
+		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(11)).AnyTimes()
+		svc.EXPECT().GetUser(gomock.Any(), "admin").Return(&user.WithMemberships{
+			User:        user.User{Username: "admin"},
+			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Viewer}},
+		}, nil)
+		svc.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Empty(t, resp.Header.Get("X-Refresh-Token"), "API token requests should not set X-Refresh-Token")
+	})
+
+	t.Run("team-scoped token on public-fallback route with wrong team is denied", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+			Username:      "admin",
+			UserID:        1,
+			Personal:      false,
+			TeamCanonical: "other-team",
+			TokenRole:     role.Admin,
+			TokenID:       12,
+		}, nil)
+		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(12)).AnyTimes()
+		svc.EXPECT().GetUser(gomock.Any(), "admin").Return(&user.WithMemberships{
+			User: user.User{Username: "admin"},
+			Memberships: []user.Member{
+				{TeamCanonical: "main", Role: role.Admin},
+				{TeamCanonical: "other-team", Role: role.Admin},
+			},
+		}, nil)
+		// requirePublicOrRole will fail, then middleware tries public fallback
+		svc.EXPECT().GetPublicPipeline(gomock.Any(), "main", "some-pipe").Return(nil, fmt.Errorf("not public")).AnyTimes()
+
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/some-pipe", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+}
+
+// TestMinRole verifies the minRole helper returns the lesser of two roles.
+func TestMinRole(t *testing.T) {
+	tests := []struct {
+		a, b     role.Role
+		expected role.Role
+	}{
+		{role.Admin, role.Viewer, role.Viewer},
+		{role.Viewer, role.Admin, role.Viewer},
+		{role.Operator, role.Operator, role.Operator},
+		{role.Maintainer, role.Operator, role.Operator},
+		{role.Viewer, role.Maintainer, role.Viewer},
+		{role.Admin, role.Admin, role.Admin},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.a)+"_"+string(tt.b), func(t *testing.T) {
+			assert.Equal(t, tt.expected, minRole(tt.a, tt.b))
+		})
+	}
+}
+
+// TestRoleOnTeam verifies the roleOnTeam helper.
+func TestRoleOnTeam(t *testing.T) {
+	um := &user.WithMemberships{
+		User: user.User{Username: "testuser"},
+		Memberships: []user.Member{
+			{TeamCanonical: "team-a", Role: role.Admin},
+			{TeamCanonical: "team-b", Role: role.Viewer},
+		},
+	}
+
+	assert.Equal(t, role.Admin, roleOnTeam(um, "team-a"))
+	assert.Equal(t, role.Viewer, roleOnTeam(um, "team-b"))
+	assert.Equal(t, role.Role(""), roleOnTeam(um, "team-c")) // no membership
+}
+
+// TestApiTokenAuth_PersonalTokenMultiTeam verifies a personal token can access
+// any team the user is a member of.
+func TestApiTokenAuth_PersonalTokenMultiTeam(t *testing.T) {
+	plainToken := "pko_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	hash := apiTokenHash(plainToken)
+
+	setupPersonalToken := func(t *testing.T, svc *mock.Service) {
+		svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+			Username:  "multi-user",
+			UserID:    5,
+			Personal:  true,
+			TokenID:   20,
+		}, nil)
+		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(20)).AnyTimes()
+		svc.EXPECT().GetUser(gomock.Any(), "multi-user").Return(&user.WithMemberships{
+			User: user.User{Username: "multi-user"},
+			Memberships: []user.Member{
+				{TeamCanonical: "team-a", Role: role.Admin},
+				{TeamCanonical: "team-b", Role: role.Viewer},
+			},
+		}, nil)
+	}
+
+	t.Run("personal token accesses team-a", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		setupPersonalToken(t, svc)
+		svc.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/teams/team-a/pipelines", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode, "personal token should access team-a")
+	})
+
+	t.Run("personal token accesses team-b", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		setupPersonalToken(t, svc)
+		svc.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/teams/team-b/pipelines", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode, "personal token should access team-b")
+	})
+
+	t.Run("personal token denied on team user is not a member of", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		setupPersonalToken(t, svc)
+
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/teams/team-c/pipelines", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "personal token should be denied on non-member team")
+	})
+
+	t.Run("personal token respects user role per team", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		svc := mock.NewService(ctrl)
+		secret := []byte("test-secret")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		// User is viewer on team-b — cannot create pipeline (requires maintainer)
+		setupPersonalToken(t, svc)
+
+		req, _ := http.NewRequest(http.MethodPost, server.URL+"/teams/team-b/pipelines", strings.NewReader("{}"))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+plainToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "personal token should respect user's viewer role on team-b")
+	})
+}
+
+// TestApiTokenAuth_UserRemovedFromTeam verifies that when a user is removed
+// from a team, their personal token can no longer access that team.
+func TestApiTokenAuth_UserRemovedFromTeam(t *testing.T) {
+	plainToken := "pko_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	hash := apiTokenHash(plainToken)
+
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	// User WAS on team-a but has been removed — memberships no longer include team-a
+	svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+		Username: "ex-member",
+		UserID:   6,
+		Personal: true,
+		TokenID:  30,
+	}, nil)
+	svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(30)).AnyTimes()
+	svc.EXPECT().GetUser(gomock.Any(), "ex-member").Return(&user.WithMemberships{
+		User:        user.User{Username: "ex-member"},
+		Memberships: []user.Member{}, // removed from all teams
+	}, nil)
+
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/teams/team-a/pipelines", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+plainToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "personal token should be denied after user removed from team")
+}
+
+// TestApiTokenAuth_TeamScopedTokenVariousRoutes verifies that a team-scoped
+// token is consistently denied across different route types when targeting
+// the wrong team.
+func TestApiTokenAuth_TeamScopedTokenVariousRoutes(t *testing.T) {
+	plainToken := "pko_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	hash := apiTokenHash(plainToken)
+
+	routes := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{"list pipelines", http.MethodGet, "/teams/wrong-team/pipelines"},
+		{"trigger job", http.MethodPost, "/teams/wrong-team/pipelines/p/jobs/j/trigger"},
+		{"create pipeline", http.MethodPost, "/teams/wrong-team/pipelines"},
+		{"create member", http.MethodPost, "/teams/wrong-team/members"},
+	}
+
+	for _, rt := range routes {
+		t.Run(rt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			svc := mock.NewService(ctrl)
+			secret := []byte("test-secret")
+			handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+			server := httptest.NewServer(handler)
+			defer server.Close()
+
+			// Token scoped to "my-team", trying to access "wrong-team"
+			svc.EXPECT().FindApiTokenByHash(gomock.Any(), hash).Return(&apitoken.AuthResult{
+				Username:      "admin",
+				UserID:        1,
+				Personal:      false,
+				TeamCanonical: "my-team",
+				TokenRole:     role.Admin,
+				TokenID:       40,
+			}, nil)
+			svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(40)).AnyTimes()
+			svc.EXPECT().GetUser(gomock.Any(), "admin").Return(&user.WithMemberships{
+				User: user.User{Username: "admin"},
+				Memberships: []user.Member{
+					{TeamCanonical: "my-team", Role: role.Admin},
+					{TeamCanonical: "wrong-team", Role: role.Admin},
+				},
+			}, nil).AnyTimes()
+			// For public fallback routes
+			svc.EXPECT().GetPublicPipeline(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("not public")).AnyTimes()
+
+			req, _ := http.NewRequest(rt.method, server.URL+rt.path, strings.NewReader("{}"))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+plainToken)
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode,
+				"team-scoped token for my-team should be denied on %s to wrong-team", rt.name)
+		})
+	}
 }

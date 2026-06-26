@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/mysql"
@@ -37,6 +38,7 @@ type unitOfWork struct {
 	secretTypes       sectype.Repository
 	notificationTypes notiftype.Repository
 	notifications     notification.Repository
+	apiTokens         apitoken.Repository
 }
 
 // NewStartUnitOfWork returns a StartUnitOfWork backed by a real SQL database.
@@ -142,4 +144,11 @@ func (u *unitOfWork) Notifications() notification.Repository {
 		u.notifications = mysql.NewNotificationRepository(u.tx)
 	}
 	return u.notifications
+}
+
+func (u *unitOfWork) ApiTokens() apitoken.Repository {
+	if u.apiTokens == nil {
+		u.apiTokens = mysql.NewApiTokenRepository(u.tx)
+	}
+	return u.apiTokens
 }

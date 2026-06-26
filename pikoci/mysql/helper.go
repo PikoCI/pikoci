@@ -57,6 +57,14 @@ func toNullTime(t time.Time) sql.NullTime {
 	return sql.NullTime{Time: t, Valid: !t.IsZero()}
 }
 
+// toNullTimePtr returns sql.NullTime from a *time.Time pointer. Valid when non-nil.
+func toNullTimePtr(t *time.Time) sql.NullTime {
+	if t == nil {
+		return sql.NullTime{}
+	}
+	return sql.NullTime{Time: *t, Valid: true}
+}
+
 // isUniqueViolation checks if an error is a unique constraint violation
 // across SQLite, MySQL, and PostgreSQL.
 func isUniqueViolation(err error) bool {

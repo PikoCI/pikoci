@@ -7,6 +7,7 @@ package unitwork
 import (
 	"context"
 
+	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/notification"
@@ -51,6 +52,8 @@ type UnitOfWork interface {
 	NotificationTypes() notiftype.Repository
 	// Notifications returns the notification repository for this transaction.
 	Notifications() notification.Repository
+	// ApiTokens returns the API token repository for this transaction.
+	ApiTokens() apitoken.Repository
 }
 
 // Repositories holds all repository interfaces, used to construct a noop UoW for testing.
@@ -66,4 +69,5 @@ type Repositories struct {
 	SecretTypesRepo        sectype.Repository
 	NotificationTypesRepo notiftype.Repository
 	NotificationsRepo     notification.Repository
+	ApiTokensRepo         apitoken.Repository
 }

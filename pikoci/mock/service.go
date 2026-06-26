@@ -12,11 +12,14 @@ package mock
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
+	apitoken "github.com/pikoci/pikoci/pikoci/apitoken"
 	build "github.com/pikoci/pikoci/pikoci/build"
 	job "github.com/pikoci/pikoci/pikoci/job"
 	pipeline "github.com/pikoci/pikoci/pikoci/pipeline"
 	resource "github.com/pikoci/pikoci/pikoci/resource"
+	role "github.com/pikoci/pikoci/pikoci/role"
 	team "github.com/pikoci/pikoci/pikoci/team"
 	trigger "github.com/pikoci/pikoci/pikoci/trigger"
 	user "github.com/pikoci/pikoci/pikoci/user"
@@ -74,6 +77,21 @@ func (m *Service) ChangePassword(ctx context.Context, un, oldPassword, newPasswo
 func (mr *ServiceMockRecorder) ChangePassword(ctx, un, oldPassword, newPassword any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChangePassword", reflect.TypeOf((*Service)(nil).ChangePassword), ctx, un, oldPassword, newPassword)
+}
+
+// CreateApiToken mocks base method.
+func (m *Service) CreateApiToken(ctx context.Context, username, name string, personal bool, teamCanonical string, tokenRole role.Role, expiresAt *time.Time) (*apitoken.WithPlaintext, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateApiToken", ctx, username, name, personal, teamCanonical, tokenRole, expiresAt)
+	ret0, _ := ret[0].(*apitoken.WithPlaintext)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateApiToken indicates an expected call of CreateApiToken.
+func (mr *ServiceMockRecorder) CreateApiToken(ctx, username, name, personal, teamCanonical, tokenRole, expiresAt any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateApiToken", reflect.TypeOf((*Service)(nil).CreateApiToken), ctx, username, name, personal, teamCanonical, tokenRole, expiresAt)
 }
 
 // CreateJobBuild mocks base method.
@@ -211,6 +229,20 @@ func (mr *ServiceMockRecorder) CreateUser(ctx, u, isHash any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUser", reflect.TypeOf((*Service)(nil).CreateUser), ctx, u, isHash)
 }
 
+// DeleteApiToken mocks base method.
+func (m *Service) DeleteApiToken(ctx context.Context, username string, tokenID uint32) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteApiToken", ctx, username, tokenID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteApiToken indicates an expected call of DeleteApiToken.
+func (mr *ServiceMockRecorder) DeleteApiToken(ctx, username, tokenID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteApiToken", reflect.TypeOf((*Service)(nil).DeleteApiToken), ctx, username, tokenID)
+}
+
 // DeleteJobBuild mocks base method.
 func (m *Service) DeleteJobBuild(ctx context.Context, tc, pn, jn, buildNumber string) error {
 	m.ctrl.T.Helper()
@@ -307,6 +339,21 @@ func (m *Service) EvaluateDownstreamJobs(ctx context.Context, tc, pn, completedJ
 func (mr *ServiceMockRecorder) EvaluateDownstreamJobs(ctx, tc, pn, completedJobName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvaluateDownstreamJobs", reflect.TypeOf((*Service)(nil).EvaluateDownstreamJobs), ctx, tc, pn, completedJobName)
+}
+
+// FindApiTokenByHash mocks base method.
+func (m *Service) FindApiTokenByHash(ctx context.Context, tokenHash string) (*apitoken.AuthResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindApiTokenByHash", ctx, tokenHash)
+	ret0, _ := ret[0].(*apitoken.AuthResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindApiTokenByHash indicates an expected call of FindApiTokenByHash.
+func (mr *ServiceMockRecorder) FindApiTokenByHash(ctx, tokenHash any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindApiTokenByHash", reflect.TypeOf((*Service)(nil).FindApiTokenByHash), ctx, tokenHash)
 }
 
 // FindBuildGetVersions mocks base method.
@@ -546,6 +593,21 @@ func (m *Service) InsertBuildGetVersion(ctx context.Context, tc, pn, jn string, 
 func (mr *ServiceMockRecorder) InsertBuildGetVersion(ctx, tc, pn, jn, buildID, stepName, versionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertBuildGetVersion", reflect.TypeOf((*Service)(nil).InsertBuildGetVersion), ctx, tc, pn, jn, buildID, stepName, versionID)
+}
+
+// ListApiTokens mocks base method.
+func (m *Service) ListApiTokens(ctx context.Context, username string) ([]*apitoken.Token, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListApiTokens", ctx, username)
+	ret0, _ := ret[0].([]*apitoken.Token)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListApiTokens indicates an expected call of ListApiTokens.
+func (mr *ServiceMockRecorder) ListApiTokens(ctx, username any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListApiTokens", reflect.TypeOf((*Service)(nil).ListApiTokens), ctx, username)
 }
 
 // ListJobBuilds mocks base method.
@@ -957,6 +1019,18 @@ func (m *Service) UnpinResourceVersion(ctx context.Context, tc, pn, rCan string)
 func (mr *ServiceMockRecorder) UnpinResourceVersion(ctx, tc, pn, rCan any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpinResourceVersion", reflect.TypeOf((*Service)(nil).UnpinResourceVersion), ctx, tc, pn, rCan)
+}
+
+// UpdateApiTokenLastUsed mocks base method.
+func (m *Service) UpdateApiTokenLastUsed(ctx context.Context, tokenID uint32) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateApiTokenLastUsed", ctx, tokenID)
+}
+
+// UpdateApiTokenLastUsed indicates an expected call of UpdateApiTokenLastUsed.
+func (mr *ServiceMockRecorder) UpdateApiTokenLastUsed(ctx, tokenID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateApiTokenLastUsed", reflect.TypeOf((*Service)(nil).UpdateApiTokenLastUsed), ctx, tokenID)
 }
 
 // UpdateJobBuild mocks base method.

@@ -154,4 +154,11 @@ const (
 	// DeleteWorker is the route for deleting a worker by name.
 	DeleteWorker
 
+	// CreateApiToken is the route for creating a new API token.
+	CreateApiToken
+	// ListApiTokens is the route for listing the current user's API tokens.
+	ListApiTokens
+	// DeleteApiToken is the route for deleting an API token.
+	DeleteApiToken
+
 )

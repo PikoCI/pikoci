@@ -7,13 +7,16 @@ package pikoci
 
 import (
 	"context"
+	"time"
 
+	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
-	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/notifier"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
+	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/runner"
 	"github.com/pikoci/pikoci/pikoci/scheduler"
 	"github.com/pikoci/pikoci/pikoci/sectype"
@@ -234,6 +237,18 @@ type Service interface {
 	// DeleteWorker removes a worker by name.
 	DeleteWorker(ctx context.Context, name string) error
 
+	// CreateApiToken creates a new API token for the given user.
+	// If personal is true, teamCanonical and tokenRole are ignored.
+	CreateApiToken(ctx context.Context, username, name string, personal bool, teamCanonical string, tokenRole role.Role, expiresAt *time.Time) (*apitoken.WithPlaintext, error)
+	// ListApiTokens returns all API tokens for the given user.
+	ListApiTokens(ctx context.Context, username string) ([]*apitoken.Token, error)
+	// DeleteApiToken deletes an API token by ID, scoped to the given user.
+	DeleteApiToken(ctx context.Context, username string, tokenID uint32) error
+	// FindApiTokenByHash looks up an API token by its SHA-256 hash.
+	FindApiTokenByHash(ctx context.Context, tokenHash string) (*apitoken.AuthResult, error)
+	// UpdateApiTokenLastUsed updates the last_used_at timestamp for a token.
+	UpdateApiTokenLastUsed(ctx context.Context, tokenID uint32)
+
 }
 
 // PikoCI is the primary implementation of the Service interface. It coordinates
@@ -265,6 +280,8 @@ type PikoCI struct {
 	Triggers      trigger.Repository
 	// Workers is the repository for worker persistence.
 	Workers       wkr.Repository
+	// ApiTokens is the repository for API token persistence.
+	ApiTokens     apitoken.Repository
 	// StartUoW begins a new unit of work for transactional operations.
 	StartUoW      unitwork.StartUnitOfWork
 	// Ctx is the root context for the service.
@@ -286,7 +303,7 @@ type PikoCI struct {
 // New creates a new PikoCI service instance with all required dependencies. It
 // initializes the internal scheduler for periodic resource checks and returns
 // the configured service ready for use.
-func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, wr wkr.Repository, suow unitwork.StartUnitOfWork, js []byte, wn *notifier.WorkNotifier, l *slog.Logger) *PikoCI {
+func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, wr wkr.Repository, atr apitoken.Repository, suow unitwork.StartUnitOfWork, js []byte, wn *notifier.WorkNotifier, l *slog.Logger) *PikoCI {
 	if l == nil {
 		l = slog.Default()
 	}
@@ -305,6 +322,7 @@ func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipelin
 		SecretTypes:   str,
 		Triggers:      tgr,
 		Workers:       wr,
+		ApiTokens:     atr,
 		StartUoW:      suow,
 		JWTSecret:     js,
 		logger:        l,

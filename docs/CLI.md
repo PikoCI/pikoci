@@ -401,6 +401,64 @@ pikoci client triggers list --team-canonical main --name my-trigger --after 0
 | `--name` | **yes** | Name of the Trigger |
 | `--after` | no | List triggers after this ID (default: 0) |
 
+### api-tokens
+
+Manage API tokens for non-interactive authenticated access. See [API Tokens](API-Tokens.md) for full documentation.
+
+#### api-tokens create
+
+Create a personal token (full user access):
+
+```bash
+pikoci client api-tokens create --name "my-script" --personal
+```
+
+Create a team-scoped token:
+
+```bash
+pikoci client api-tokens create --name "ci-deploy" --team-canonical main --role operator
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--name` | **yes** | Name for the token (unique per user) |
+| `--personal` | one of | Create a personal token with full user access |
+| `--team-canonical` | one of | Team canonical for a team-scoped token |
+| `--role` | with team | Role cap: `viewer`, `operator`, `maintainer`, `admin` |
+| `--expires-at` | no | Expiration in RFC3339 format |
+
+`--personal` and `--team-canonical`/`--role` are mutually exclusive.
+
+#### api-tokens list
+
+```bash
+pikoci client api-tokens list
+```
+
+#### api-tokens delete
+
+```bash
+pikoci client api-tokens delete --id 42
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--id` | **yes** | ID of the token to delete |
+
+#### api-tokens use
+
+Store an API token locally for subsequent commands (replaces the login JWT).
+
+```bash
+pikoci client api-tokens use --token "pko_a1b2c3d4..."
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--token` | **yes** | The API token (`pko_...`) |
+
+To switch back to interactive login, run `pikoci client login` again.
+
 ### export
 
 Export the full database as a portable SQLite file. Requires admin credentials.

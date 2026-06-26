@@ -167,6 +167,11 @@ export const deleteUser = (username) => api('/users/' + username, { method: 'DEL
 export const updateProfile = (data) => api('/profile', { method: 'PUT', body: JSON.stringify(data) });
 export const changePassword = (data) => api('/users/change-password', { method: 'POST', body: JSON.stringify(data) });
 
+// --- API Tokens ---
+export const fetchApiTokens = () => api('/api-tokens').then(r => r.data);
+export const createApiToken = (data) => api('/api-tokens', { method: 'POST', body: JSON.stringify(data) });
+export const deleteApiToken = (id) => api('/api-tokens/' + id, { method: 'DELETE' });
+
 // --- Workers ---
 export const fetchWorkers = () => api('/workers').then(r => r.data);
 export const fetchWorkersHealth = () => api('/workers/health');

@@ -5,12 +5,15 @@ package http
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
@@ -30,6 +33,8 @@ const (
 	// IsPublicAccessKey is the context key used to indicate that the request
 	// is accessing a public pipeline without authentication.
 	IsPublicAccessKey contextKey = "is_public_access_key"
+	// ApiTokenContextKey is the context key used to store the API token auth result.
+	ApiTokenContextKey contextKey = "api_token_context_key"
 )
 
 // publicFallbackRoutes lists routes that can fall back to public pipeline access
@@ -83,33 +88,53 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 
 			if !authFailed {
 				tokenString := splitToken[1]
-				token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
-					return ts, nil
-				}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
-				if err != nil {
-					l.Error("authentication error", "error", err)
-					authFailed = true
-				} else {
-					claims, ok := token.Claims.(jwt.MapClaims)
-					if !ok {
-						l.Error("invalid token claims")
+				if strings.HasPrefix(tokenString, "pko_") {
+					// API token auth
+					h := sha256.Sum256([]byte(tokenString))
+					hash := hex.EncodeToString(h[:])
+					authResult, err := s.FindApiTokenByHash(rr.Context(), hash)
+					if err != nil {
+						l.Error("API token authentication error", "error", err)
+						authFailed = true
+					} else if authResult.ExpiresAt != nil && authResult.ExpiresAt.Before(time.Now()) {
+						l.Error("API token expired")
 						authFailed = true
 					} else {
-						userClaim, ok = claims["user"].(map[string]interface{})
+						un = authResult.Username
+						rr = rr.WithContext(context.WithValue(rr.Context(), UsernameContextKey, un))
+						rr = rr.WithContext(context.WithValue(rr.Context(), ApiTokenContextKey, authResult))
+						go s.UpdateApiTokenLastUsed(context.Background(), authResult.TokenID)
+					}
+				} else {
+					// JWT auth
+					token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
+						return ts, nil
+					}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+					if err != nil {
+						l.Error("authentication error", "error", err)
+						authFailed = true
+					} else {
+						claims, ok := token.Claims.(jwt.MapClaims)
 						if !ok {
-							isFromWorker, _ = claims["is_from_worker"].(bool)
-							if !isFromWorker {
-								l.Error("missing user claim in token")
-								authFailed = true
-							}
+							l.Error("invalid token claims")
+							authFailed = true
 						} else {
-							un, ok = userClaim["username"].(string)
+							userClaim, ok = claims["user"].(map[string]interface{})
 							if !ok {
-								l.Error("missing username in token")
-								authFailed = true
-							} else {
-								rr = rr.WithContext(context.WithValue(rr.Context(), UsernameContextKey, un))
 								isFromWorker, _ = claims["is_from_worker"].(bool)
+								if !isFromWorker {
+									l.Error("missing user claim in token")
+									authFailed = true
+								}
+							} else {
+								un, ok = userClaim["username"].(string)
+								if !ok {
+									l.Error("missing username in token")
+									authFailed = true
+								} else {
+									rr = rr.WithContext(context.WithValue(rr.Context(), UsernameContextKey, un))
+									isFromWorker, _ = claims["is_from_worker"].(bool)
+								}
 							}
 						}
 					}
@@ -183,8 +208,8 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 					return
 				}
 
-				// Check if JWT claims are stale compared to DB
-				if un != "" {
+				// Check if JWT claims are stale compared to DB (skip for API tokens)
+				if un != "" && userClaim != nil {
 					um, err := s.GetUser(rr.Context(), un)
 					if err == nil && membershipsDiffer(userClaim, um) {
 						rw.Header().Set("X-Refresh-Token", "true")
@@ -223,6 +248,11 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodPut).Path("/users/{username}").Name(UpdateUser.String()).Handler(updateUser(s))
 	api.Methods(http.MethodDelete).Path("/users/{username}").Name(DeleteUser.String()).Handler(deleteUser(s))
 	api.Methods(http.MethodPut).Path("/profile").Name(UpdateProfile.String()).Handler(updateProfile(s))
+
+	api.Methods(http.MethodPost).Path("/api-tokens").Name(CreateApiToken.String()).Handler(createApiToken(s))
+	api.Methods(http.MethodGet).Path("/api-tokens").Name(ListApiTokens.String()).Handler(listApiTokens(s))
+	api.Methods(http.MethodDelete).Path("/api-tokens/{token_id}").Name(DeleteApiToken.String()).Handler(deleteApiToken(s))
+
 	api.Methods(http.MethodPost).Path("/teams").Name(CreateTeam.String()).Handler(createTeam(s))
 
 	api.Methods(http.MethodGet).Path("/teams").Name(ListTeams.String()).Handler(listTeams(s))

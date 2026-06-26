@@ -3,6 +3,7 @@ package unitwork
 import (
 	"context"
 
+	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/notification"
@@ -49,4 +50,7 @@ func (u *noopUnitOfWork) NotificationTypes() notiftype.Repository {
 }
 func (u *noopUnitOfWork) Notifications() notification.Repository {
 	return u.repos.NotificationsRepo
+}
+func (u *noopUnitOfWork) ApiTokens() apitoken.Repository {
+	return u.repos.ApiTokensRepo
 }

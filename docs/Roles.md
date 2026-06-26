@@ -107,6 +107,12 @@ Available roles: `viewer`, `operator`, `maintainer`, `admin`.
 - When you **add a member** via the CLI, the default role is **maintainer**.
 - When you **add a member** via the UI, you choose the role from a dropdown (default: **maintainer**).
 
+## API Tokens and Roles
+
+[API tokens](API-Tokens.md) can be scoped to a team with a maximum role. The effective role of a team-scoped token is always `min(user_role, token_role)` — if a user is demoted, the token's effective permissions are reduced immediately without any action needed. Personal tokens inherit all of the user's roles across all teams.
+
+When a user is removed from a team, all their team-scoped tokens for that team are automatically deleted.
+
 ## Public Pipelines
 
 Pipelines marked as public can be viewed by anyone without authentication. This includes the pipeline graph, jobs, builds, resources, and resource versions. Public access is read-only and does not require any role.
