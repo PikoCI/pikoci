@@ -9,11 +9,13 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
@@ -2707,4 +2709,153 @@ func TestGetPipelineImage_WithVersionID(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []byte("digraph {}"), img)
 	assert.Contains(t, capturedURL, "version_id=99")
+}
+
+func TestCreateApiToken(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/api-tokens", func(w http.ResponseWriter, req *http.Request) {
+		var cr thttp.CreateApiTokenRequest
+		json.NewDecoder(req.Body).Decode(&cr)
+		jsonHandler(w, thttp.CreateApiTokenResponse{
+			Token: &apitoken.WithPlaintext{
+				Token:     apitoken.Token{ID: 1, Name: cr.Name, Personal: cr.Personal, TeamCanonical: cr.TeamCanonical, Role: cr.Role},
+				Plaintext: "pko_abc123",
+			},
+		})
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	tok, err := c.CreateApiToken(context.Background(), "admin", "my-token", true, "", "", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "my-token", tok.Name)
+	assert.True(t, tok.Personal)
+	assert.Equal(t, "pko_abc123", tok.Plaintext)
+}
+
+func TestCreateApiToken_WithExpiration(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/api-tokens", func(w http.ResponseWriter, req *http.Request) {
+		var cr thttp.CreateApiTokenRequest
+		json.NewDecoder(req.Body).Decode(&cr)
+		assert.NotEmpty(t, cr.ExpiresAt)
+		jsonHandler(w, thttp.CreateApiTokenResponse{
+			Token: &apitoken.WithPlaintext{
+				Token:     apitoken.Token{ID: 2, Name: cr.Name, Personal: true},
+				Plaintext: "pko_xyz789",
+			},
+		})
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	exp := time.Now().Add(24 * time.Hour)
+	tok, err := c.CreateApiToken(context.Background(), "admin", "expiring", true, "", "", &exp)
+	require.NoError(t, err)
+	assert.Equal(t, "expiring", tok.Name)
+}
+
+func TestCreateApiToken_TeamScoped(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/api-tokens", func(w http.ResponseWriter, req *http.Request) {
+		var cr thttp.CreateApiTokenRequest
+		json.NewDecoder(req.Body).Decode(&cr)
+		assert.False(t, cr.Personal)
+		assert.Equal(t, "main", cr.TeamCanonical)
+		assert.Equal(t, role.Operator, cr.Role)
+		jsonHandler(w, thttp.CreateApiTokenResponse{
+			Token: &apitoken.WithPlaintext{
+				Token:     apitoken.Token{ID: 3, Name: cr.Name, Personal: false, TeamCanonical: "main", Role: role.Operator},
+				Plaintext: "pko_team123",
+			},
+		})
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	tok, err := c.CreateApiToken(context.Background(), "admin", "ci-deploy", false, "main", role.Operator, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "main", tok.TeamCanonical)
+	assert.Equal(t, role.Operator, tok.Role)
+}
+
+func TestListApiTokens(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/api-tokens", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.ListApiTokensResponse{
+			Tokens: []*apitoken.Token{
+				{ID: 1, Name: "tok1", Personal: true},
+				{ID: 2, Name: "tok2", Personal: false, TeamCanonical: "main"},
+			},
+		})
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	tokens, err := c.ListApiTokens(context.Background(), "admin")
+	require.NoError(t, err)
+	assert.Len(t, tokens, 2)
+	assert.Equal(t, "tok1", tokens[0].Name)
+}
+
+func TestDeleteApiToken(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/api-tokens/{id}", func(w http.ResponseWriter, req *http.Request) {
+		vars := mux.Vars(req)
+		assert.Equal(t, "42", vars["id"])
+		jsonHandler(w, thttp.DeleteApiTokenResponse{})
+	}).Methods("DELETE")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	err = c.DeleteApiToken(context.Background(), "admin", 42)
+	require.NoError(t, err)
+}
+
+func TestDeleteApiToken_Error(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/api-tokens/{id}", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.DeleteApiTokenResponse{Err: "entity not found"})
+	}).Methods("DELETE")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	err = c.DeleteApiToken(context.Background(), "admin", 999)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestFindApiTokenByHash_ClientStub(t *testing.T) {
+	c, err := client.New("http://localhost", "jwt")
+	require.NoError(t, err)
+
+	_, err = c.FindApiTokenByHash(context.Background(), "hash")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not available on the client")
+}
+
+func TestUpdateApiTokenLastUsed_ClientStub(t *testing.T) {
+	c, err := client.New("http://localhost", "jwt")
+	require.NoError(t, err)
+
+	// Should not panic — it's a no-op
+	c.UpdateApiTokenLastUsed(context.Background(), 1)
 }

@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/mock"
@@ -2356,4 +2358,194 @@ func TestListPipelineJobs_PublicFallback(t *testing.T) {
 	assert.Empty(t, got.Err)
 	assert.Len(t, got.Jobs, 1)
 	assert.Equal(t, "build", got.Jobs[0].Name)
+}
+
+// ===== API Token Handler Tests =====
+
+func TestCreateApiToken_Handler_Success(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+
+	expires := time.Now().Add(24 * time.Hour)
+	e.svc.EXPECT().CreateApiToken(gomock.Any(), "admin", "my-token", true, "", role.Role(""), gomock.Any()).
+		Return(&apitoken.WithPlaintext{
+			Token: apitoken.Token{
+				ID:          1,
+				Name:        "my-token",
+				TokenPrefix: "pko_abcd1234",
+				Personal:    true,
+				Username:    "admin",
+				CreatedAt:   time.Now(),
+				ExpiresAt:   &expires,
+			},
+			Plaintext: "pko_abcdef1234567890abcdef1234567890abcdef1234567890abcdef12345678",
+		}, nil)
+
+	body := `{"name":"my-token","personal":true,"expires_at":"` + expires.Format(time.RFC3339) + `"}`
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/api-tokens", e.adminJWT(t), body)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got CreateApiTokenResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	require.NotNil(t, got.Token)
+	assert.Equal(t, "my-token", got.Token.Name)
+	assert.Contains(t, got.Token.Plaintext, "pko_")
+}
+
+func TestCreateApiToken_Handler_TeamScoped(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+
+	e.svc.EXPECT().CreateApiToken(gomock.Any(), "admin", "team-tok", false, "main", role.Operator, gomock.Nil()).
+		Return(&apitoken.WithPlaintext{
+			Token: apitoken.Token{
+				ID:            2,
+				Name:          "team-tok",
+				TokenPrefix:   "pko_11223344",
+				Personal:      false,
+				TeamCanonical: "main",
+				Role:          role.Operator,
+				Username:      "admin",
+				CreatedAt:     time.Now(),
+			},
+			Plaintext: "pko_1122334455667788aabbccddeeff00112233445566778899aabbccddeeff00",
+		}, nil)
+
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/api-tokens", e.adminJWT(t),
+		`{"name":"team-tok","personal":false,"team_canonical":"main","role":"operator"}`)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got CreateApiTokenResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	require.NotNil(t, got.Token)
+	assert.False(t, got.Token.Personal)
+	assert.Equal(t, "main", got.Token.TeamCanonical)
+}
+
+func TestCreateApiToken_Handler_BadJSON(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/api-tokens", e.adminJWT(t), `{invalid`)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	var got CreateApiTokenResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.NotEmpty(t, got.Err)
+}
+
+func TestCreateApiToken_Handler_InvalidExpiresAt(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/api-tokens", e.adminJWT(t),
+		`{"name":"tok","personal":true,"expires_at":"not-a-date"}`)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	var got CreateApiTokenResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Contains(t, got.Err, "RFC3339")
+}
+
+func TestCreateApiToken_Handler_ServiceError(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+
+	e.svc.EXPECT().CreateApiToken(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, fmt.Errorf("you already have a token named \"dup\""))
+
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/api-tokens", e.adminJWT(t),
+		`{"name":"dup","personal":true}`)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	var got CreateApiTokenResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Contains(t, got.Err, "dup")
+}
+
+func TestListApiTokens_Handler_Success(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+
+	e.svc.EXPECT().ListApiTokens(gomock.Any(), "admin").Return([]*apitoken.Token{
+		{ID: 1, Name: "tok1", TokenPrefix: "pko_aaaa1111", Personal: true, Username: "admin"},
+		{ID: 2, Name: "tok2", TokenPrefix: "pko_bbbb2222", Personal: false, TeamCanonical: "main", Role: role.Viewer, Username: "admin"},
+	}, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/api-tokens", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got ListApiTokensResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Len(t, got.Tokens, 2)
+	assert.Equal(t, "tok1", got.Tokens[0].Name)
+}
+
+func TestListApiTokens_Handler_Empty(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+
+	e.svc.EXPECT().ListApiTokens(gomock.Any(), "admin").Return(nil, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/api-tokens", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got ListApiTokensResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.NotNil(t, got.Tokens)
+	assert.Len(t, got.Tokens, 0)
+}
+
+func TestDeleteApiToken_Handler_Success(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+
+	e.svc.EXPECT().DeleteApiToken(gomock.Any(), "admin", uint32(42)).Return(nil)
+
+	resp := doRequest(t, http.MethodDelete, e.server.URL+"/api-tokens/42", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got DeleteApiTokenResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+}
+
+func TestDeleteApiToken_Handler_InvalidID(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+
+	resp := doRequest(t, http.MethodDelete, e.server.URL+"/api-tokens/notanumber", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	var got DeleteApiTokenResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Contains(t, got.Err, "invalid token_id")
+}
+
+func TestDeleteApiToken_Handler_NotFound(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+
+	e.svc.EXPECT().DeleteApiToken(gomock.Any(), "admin", uint32(999)).Return(fmt.Errorf("entity not found"))
+
+	resp := doRequest(t, http.MethodDelete, e.server.URL+"/api-tokens/999", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	var got DeleteApiTokenResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Contains(t, got.Err, "not found")
 }

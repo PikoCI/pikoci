@@ -23,6 +23,7 @@ type MockService struct {
 	NotificationTypes *mock.NotificationTypeRepository
 	Notifications     *mock.NotificationRepository
 	Workers           *mock.WorkerRepository
+	ApiTokens         *mock.ApiTokenRepository
 
 	S pikoci.Service
 	P *pikoci.PikoCI
@@ -42,6 +43,7 @@ func newService(ctrl *gomock.Controller) MockService {
 	ntr := mock.NewNotificationTypeRepository(ctrl)
 	nr := mock.NewNotificationRepository(ctrl)
 	wr := mock.NewWorkerRepository(ctrl)
+	atr := mock.NewApiTokenRepository(ctrl)
 
 	suow := unitwork.NewNoopStartUnitOfWork(unitwork.Repositories{
 		UsersRepo:             ur,
@@ -55,9 +57,10 @@ func newService(ctrl *gomock.Controller) MockService {
 		SecretTypesRepo:       str,
 		NotificationTypesRepo: ntr,
 		NotificationsRepo:     nr,
+		ApiTokensRepo:         atr,
 	})
 
-	p := pikoci.New(context.TODO(), ur, tr, pr, jr, rr, rtr, br, rur, str, tgr, wr, suow, []byte("test-secret"), nil, nil)
+	p := pikoci.New(context.TODO(), ur, tr, pr, jr, rr, rtr, br, rur, str, tgr, wr, atr, suow, []byte("test-secret"), nil, nil)
 	return MockService{
 		Users:             ur,
 		Teams:             tr,
@@ -72,6 +75,7 @@ func newService(ctrl *gomock.Controller) MockService {
 		NotificationTypes: ntr,
 		Notifications:     nr,
 		Workers:           wr,
+		ApiTokens:         atr,
 
 		S: p,
 		P: p,

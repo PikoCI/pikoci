@@ -217,6 +217,7 @@ func TestDeleteTeamMember(t *testing.T) {
 		},
 	}, nil)
 	s.Teams.EXPECT().DeleteMember(ctx, "main", "pepito").Return(nil)
+	s.ApiTokens.EXPECT().DeleteByTeamMember(ctx, "pepito", "main").Return(nil)
 
 	err := s.S.DeleteTeamMember(ctx, "main", "pepito")
 	require.NoError(t, err)
@@ -333,6 +334,7 @@ func TestDeleteTeamMember_NonAdmin_AdminRemains(t *testing.T) {
 		},
 	}, nil)
 	s.Teams.EXPECT().DeleteMember(ctx, "main", "pepito").Return(nil)
+	s.ApiTokens.EXPECT().DeleteByTeamMember(ctx, "pepito", "main").Return(nil)
 
 	err := s.S.DeleteTeamMember(ctx, "main", "pepito")
 	require.NoError(t, err)

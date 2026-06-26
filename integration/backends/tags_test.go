@@ -48,7 +48,7 @@ func newTagsTestService(t *testing.T, ctx context.Context, logger *slog.Logger) 
 	tgr := mysql.NewTriggerRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.SQLite)
 
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, []byte("test"), notifier.New(), logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, suow, []byte("test"), notifier.New(), logger)
 	svc.StartScheduler(ctx)
 
 	_, _ = svc.CreateUser(ctx, user.User{

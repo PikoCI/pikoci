@@ -74,11 +74,12 @@ func TestGRPCWorkerFullFlow(t *testing.T) {
 	str := mysql.NewSecretTypeRepository(db)
 	tgr := mysql.NewTriggerRepository(db)
 	wr := mysql.NewWorkerRepository(db, mysql.SQLite)
+	atr := mysql.NewApiTokenRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.SQLite)
 
 	jwtSecret := []byte("test-secret")
 	wn := notifier.New()
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, suow, jwtSecret, wn, logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, suow, jwtSecret, wn, logger)
 	svc.StartScheduler(ctx)
 
 	// Create admin user (ignore error if already exists from migrations)
@@ -239,11 +240,12 @@ func TestStartupRecoveryFailsOrphanedBuilds(t *testing.T) {
 	str := mysql.NewSecretTypeRepository(db)
 	tgr := mysql.NewTriggerRepository(db)
 	wr := mysql.NewWorkerRepository(db, mysql.SQLite)
+	atr := mysql.NewApiTokenRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.SQLite)
 
 	jwtSecret := []byte("test-secret")
 	wn := notifier.New()
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, suow, jwtSecret, wn, logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, suow, jwtSecret, wn, logger)
 
 	// Create a pipeline + job so we can create builds
 	hclConfig := []byte(`
@@ -355,11 +357,12 @@ func TestServerDrainWaitsForSeparatedWorkerBuilds(t *testing.T) {
 	str := mysql.NewSecretTypeRepository(db)
 	tgr := mysql.NewTriggerRepository(db)
 	wr := mysql.NewWorkerRepository(db, mysql.SQLite)
+	atr := mysql.NewApiTokenRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.SQLite)
 
 	jwtSecret := []byte("test-secret")
 	wn := notifier.New()
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, suow, jwtSecret, wn, logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, suow, jwtSecret, wn, logger)
 	svc.StartScheduler(ctx)
 
 	// Create admin user

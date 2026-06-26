@@ -61,10 +61,11 @@ func runTests(m *testing.M) int {
 	str := mysql.NewSecretTypeRepository(db)
 	tgr := mysql.NewTriggerRepository(db)
 	wr := mysql.NewWorkerRepository(db, mysql.Mem)
+	atr := mysql.NewApiTokenRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 	wn := notifier.New()
 
-	var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, suow, jwtSecret, wn, logger)
+	var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, suow, jwtSecret, wn, logger)
 	svc.StartScheduler(ctx)
 
 	var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.Mem, "test", "abc1234")

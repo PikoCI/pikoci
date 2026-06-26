@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/role"
+	"github.com/pikoci/pikoci/pikoci/user"
 )
 
 type authorizationFn func(ctx context.Context, s pikoci.Service, un, tc string) error
@@ -92,6 +94,11 @@ var (
 		WorkersHealth:  globalAdmin,
 		DeleteWorker:   globalAdmin,
 		ExportDatabase: globalAdmin,
+
+		// API token management routes (JWT only — tokens cannot manage tokens)
+		CreateApiToken: jwtOnly(requireRole(role.Viewer)),
+		ListApiTokens:  jwtOnly(requireRole(role.Viewer)),
+		DeleteApiToken: jwtOnly(requireRole(role.Viewer)),
 	}
 )
 
@@ -103,14 +110,32 @@ func requireRole(r role.Role) authorizationFn {
 		if err != nil {
 			return fmt.Errorf("failed to GetUser: %w", err)
 		}
+
 		// For routes without a team scope (e.g. ChangePassword, UpdateProfile),
 		// any authenticated user is allowed
 		if tc == "" {
+			// Block team-scoped API tokens on non-team routes
+			if ar, ok := ctx.Value(ApiTokenContextKey).(*apitoken.AuthResult); ok && !ar.Personal {
+				return fmt.Errorf("team-scoped API tokens require a team-scoped route")
+			}
 			return nil
 		}
+
 		if !um.HasRole(r, tc) {
 			return fmt.Errorf("requires %s role", r)
 		}
+
+		// If team-scoped API token, also check token scope and role cap
+		if ar, ok := ctx.Value(ApiTokenContextKey).(*apitoken.AuthResult); ok && !ar.Personal {
+			if ar.TeamCanonical != tc {
+				return fmt.Errorf("API token not scoped to team %q", tc)
+			}
+			effectiveRole := minRole(roleOnTeam(um, tc), ar.TokenRole)
+			if !effectiveRole.AtLeast(r) {
+				return fmt.Errorf("API token effective role insufficient")
+			}
+		}
+
 		return nil
 	}
 }
@@ -131,11 +156,28 @@ func requirePublicOrRole(r role.Role) authorizationFn {
 		if !um.HasRole(r, tc) {
 			return fmt.Errorf("requires %s role", r)
 		}
+
+		// If team-scoped API token, also check token scope and role cap
+		if ar, ok := ctx.Value(ApiTokenContextKey).(*apitoken.AuthResult); ok && !ar.Personal {
+			if ar.TeamCanonical != tc {
+				return fmt.Errorf("API token not scoped to team %q", tc)
+			}
+			effectiveRole := minRole(roleOnTeam(um, tc), ar.TokenRole)
+			if !effectiveRole.AtLeast(r) {
+				return fmt.Errorf("API token effective role insufficient")
+			}
+		}
+
 		return nil
 	}
 }
 
 func globalAdmin(ctx context.Context, s pikoci.Service, un, tc string) error {
+	// Reject team-scoped API tokens on global admin routes.
+	// Personal tokens of global admins are intentionally allowed.
+	if ar, ok := ctx.Value(ApiTokenContextKey).(*apitoken.AuthResult); ok && !ar.Personal {
+		return fmt.Errorf("team-scoped API tokens cannot access global admin routes")
+	}
 	um, err := s.GetUser(ctx, un)
 	if err != nil {
 		return fmt.Errorf("failed to GetUser: %w", err)
@@ -144,4 +186,32 @@ func globalAdmin(ctx context.Context, s pikoci.Service, un, tc string) error {
 		return fmt.Errorf("requires global admin")
 	}
 	return nil
+}
+
+// jwtOnly rejects all API token auth, requiring a JWT session.
+func jwtOnly(inner authorizationFn) authorizationFn {
+	return func(ctx context.Context, s pikoci.Service, un, tc string) error {
+		if _, ok := ctx.Value(ApiTokenContextKey).(*apitoken.AuthResult); ok {
+			return fmt.Errorf("API tokens cannot manage API tokens; use JWT authentication")
+		}
+		return inner(ctx, s, un, tc)
+	}
+}
+
+// roleOnTeam returns the user's role on the given team.
+func roleOnTeam(um *user.WithMemberships, tc string) role.Role {
+	for _, m := range um.Memberships {
+		if m.TeamCanonical == tc {
+			return m.Role
+		}
+	}
+	return ""
+}
+
+// minRole returns the lesser of two roles by level.
+func minRole(a, b role.Role) role.Role {
+	if a.Level() <= b.Level() {
+		return a
+	}
+	return b
 }

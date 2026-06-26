@@ -138,7 +138,7 @@ func TestSecretsVaultE2E(t *testing.T) {
 	tgr := mysql.NewTriggerRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, suow, []byte("jwt"), notifier.New(), logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, suow, []byte("jwt"), notifier.New(), logger)
 	svc.StartScheduler(ctx)
 
 	_, _ = svc.CreateUser(ctx, user.User{
