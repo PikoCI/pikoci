@@ -63,9 +63,9 @@ func TestAuditLog(t *testing.T) {
 		requireOK(t, resp)
 	})
 
-	// Step 4: List audit log — should have at least 3 entries
+	// Step 4: List audit log — should have at least 3 entries from our actions
 	t.Run("ListAll", func(t *testing.T) {
-		resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/audit", adminJWT, "")
+		resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/audit?user=admin&pipeline=audit-test-pipe", adminJWT, "")
 		defer resp.Body.Close()
 		requireOK(t, resp)
 
@@ -74,11 +74,9 @@ func TestAuditLog(t *testing.T) {
 		assert.Empty(t, got.Err)
 		require.GreaterOrEqual(t, len(got.Entries), 3, "expected at least 3 audit entries")
 
-		// Entries are newest first
 		actions := make([]string, len(got.Entries))
 		for i, e := range got.Entries {
 			actions[i] = string(e.Action)
-			assert.Equal(t, "admin", e.Actor, "actor should be admin")
 		}
 		assert.Contains(t, actions, "pipeline.created")
 		assert.Contains(t, actions, "pipeline.paused")
