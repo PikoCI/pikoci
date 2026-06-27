@@ -2631,3 +2631,29 @@ func TestListAuditLog_WithFilters(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
+
+func TestListAuditLog_WithDateAndMultiFilters(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+	e.svc.EXPECT().ListAuditLog(gomock.Any(), "main", gomock.Any()).DoAndReturn(
+		func(_ interface{}, _ string, opts auditlog.FilterOpts) ([]*auditlog.Entry, bool, error) {
+			assert.NotNil(t, opts.Since)
+			assert.NotNil(t, opts.Until)
+			assert.Equal(t, []string{"alice", "bob"}, opts.Actors)
+			assert.Equal(t, []string{"system"}, opts.ExcludeActors)
+			assert.Equal(t, []auditlog.Action{auditlog.PipelineCreated, auditlog.PipelineDeleted}, opts.Actions)
+			assert.Equal(t, []auditlog.Action{auditlog.JobTriggered}, opts.ExcludeActions)
+			assert.Equal(t, []string{"deploy", "staging"}, opts.Pipelines)
+			return nil, false, nil
+		})
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+
+		"/teams/main/audit?user=alice&user=bob&exclude_user=system"+
+		"&action=pipeline.created&action=pipeline.deleted&exclude_action=job.triggered"+
+		"&pipeline=deploy&pipeline=staging"+
+		"&since=2026-01-01T00:00:00Z&until=2026-12-31T23:59:59Z",
+		e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
