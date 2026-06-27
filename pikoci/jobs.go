@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/utils"
@@ -58,6 +59,7 @@ func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) erro
 
 	q.Notifier.Notify()
 
+	q.audit(ctx, tc, auditlog.JobTriggered, "job", pc+"/"+jn, map[string]interface{}{"pipeline": pc})
 	return nil
 }
 
@@ -70,7 +72,12 @@ func (q *PikoCI) PauseJob(ctx context.Context, tc, pc, jn string) error {
 	} else if !utils.ValidateCanonical(jn) {
 		return fmt.Errorf("invalid Job Name format %q", jn)
 	}
-	return q.Jobs.SetPaused(ctx, tc, pc, jn, true)
+	err := q.Jobs.SetPaused(ctx, tc, pc, jn, true)
+	if err != nil {
+		return err
+	}
+	q.audit(ctx, tc, auditlog.JobPaused, "job", pc+"/"+jn, map[string]interface{}{"pipeline": pc})
+	return nil
 }
 
 // UnpauseJob unpauses a specific job within a pipeline.
@@ -82,7 +89,12 @@ func (q *PikoCI) UnpauseJob(ctx context.Context, tc, pc, jn string) error {
 	} else if !utils.ValidateCanonical(jn) {
 		return fmt.Errorf("invalid Job Name format %q", jn)
 	}
-	return q.Jobs.SetPaused(ctx, tc, pc, jn, false)
+	err := q.Jobs.SetPaused(ctx, tc, pc, jn, false)
+	if err != nil {
+		return err
+	}
+	q.audit(ctx, tc, auditlog.JobUnpaused, "job", pc+"/"+jn, map[string]interface{}{"pipeline": pc})
+	return nil
 }
 
 // ListPipelineJobs returns all jobs for the given pipeline enriched with

@@ -53,7 +53,7 @@ func TestServicesE2E(t *testing.T) {
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 
 	jwtSecret := []byte("test-secret")
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, suow, jwtSecret, notifier.New(), logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, nil, suow, jwtSecret, notifier.New(), logger)
 	svc.StartScheduler(ctx)
 
 	_, _ = svc.CreateUser(ctx, user.User{

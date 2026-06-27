@@ -65,7 +65,8 @@ func runTests(m *testing.M) int {
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 	wn := notifier.New()
 
-	var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, suow, jwtSecret, wn, logger)
+	alr := mysql.NewAuditLogRepository(db)
+	var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, alr, suow, jwtSecret, wn, logger)
 	svc.StartScheduler(ctx)
 
 	var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.Mem, "test", "abc1234")

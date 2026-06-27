@@ -170,6 +170,18 @@ func TestPikoCI(t *testing.T) {
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMy New Updated Team"), 5*time.Second)
 		})
 		t.Run("Add Member", func(t *testing.T) {
+			// Navigate to Members tab
+			membersTab, err := wd.FindElement(selenium.ByCSSSelector, "#tab-members")
+			require.NoError(t, err)
+			err = membersTab.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				rows, err := wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
+				require.NoError(t, err)
+				return len(rows) >= 1
+			}, 5*time.Second)
+
 			members, err := wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
 			require.NoError(t, err)
 			require.Equal(t, 1, len(members))
@@ -258,6 +270,42 @@ func TestPikoCI(t *testing.T) {
 			members, err = wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
 			require.NoError(t, err)
 			require.Equal(t, 1, len(members))
+		})
+		t.Run("Audit Log Tab", func(t *testing.T) {
+			// Navigate to Audit Log tab via URL
+			err := wd.Get(pikoURL + "/teams/main/audit")
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				tab, err := wd.FindElement(selenium.ByCSSSelector, "#tab-audit")
+				if err != nil {
+					return false
+				}
+				cls, _ := tab.GetAttribute("class")
+				return strings.Contains(cls, "active")
+			}, 5*time.Second)
+
+			// Verify audit log table is visible with entries
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				rows, err := wd.FindElements(selenium.ByCSSSelector, "#audit-log-body tr")
+				return err == nil && len(rows) >= 1
+			}, 5*time.Second)
+
+			rows, err := wd.FindElements(selenium.ByCSSSelector, "#audit-log-body tr")
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, len(rows), 1, "audit log should have entries")
+
+			// Verify tabs are shareable: Settings tab URL should work
+			err = wd.Get(pikoURL + "/teams/main")
+			require.NoError(t, err)
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				tab, err := wd.FindElement(selenium.ByCSSSelector, "#tab-settings")
+				if err != nil {
+					return false
+				}
+				cls, _ := tab.GetAttribute("class")
+				return strings.Contains(cls, "active")
+			}, 5*time.Second)
 		})
 		t.Run("Delete Team", func(t *testing.T) {
 			tmsBtn, err := wd.FindElement(selenium.ByLinkText, "Teams")
@@ -1422,6 +1470,18 @@ job "gen" {
 				err = mtBtn.Click()
 				require.NoError(t, err)
 
+				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain"), 5*time.Second)
+
+				membersTab, err := wd.FindElement(selenium.ByCSSSelector, "#tab-members")
+				require.NoError(t, err)
+				err = membersTab.Click()
+				require.NoError(t, err)
+
+				waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+					_, err := wd.FindElement(selenium.ByCSSSelector, "#new-member")
+					return err == nil
+				}, 5*time.Second)
+
 				nmBtn, err := wd.FindElement(selenium.ByCSSSelector, "#new-member")
 				require.NoError(t, err)
 
@@ -1585,13 +1645,8 @@ job "gen" {
 
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain"), 5*time.Second)
 
+			// Settings tab: update button hidden for non-admin
 			_, err = wd.FindElement(selenium.ByCSSSelector, "form>button")
-			require.Error(t, err)
-
-			_, err = wd.FindElement(selenium.ByCSSSelector, "#new-member")
-			require.Error(t, err)
-
-			_, err = wd.FindElement(selenium.ByCSSSelector, "#delete")
 			require.Error(t, err)
 
 			// Name input should be disabled for members
@@ -1600,6 +1655,24 @@ job "gen" {
 			nameEnabled, err := nameInput.IsEnabled()
 			require.NoError(t, err)
 			require.False(t, nameEnabled)
+
+			// Members tab: new member button hidden, no role dropdowns
+			membersTab, err := wd.FindElement(selenium.ByCSSSelector, "#tab-members")
+			require.NoError(t, err)
+			err = membersTab.Click()
+			require.NoError(t, err)
+
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				rows, err := wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
+				require.NoError(t, err)
+				return len(rows) >= 1
+			}, 5*time.Second)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#new-member")
+			require.Error(t, err)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#delete")
+			require.Error(t, err)
 
 			// Non-admin members see roles as plain text, not dropdowns
 			roleSelects, err := wd.FindElements(selenium.ByCSSSelector, "select.form-select-sm")
@@ -1910,9 +1983,13 @@ job "gen" {
 			require.Error(t, err, "viewer should not see Retry button")
 		})
 		t.Run("No member management", func(t *testing.T) {
-			err := wd.Get(pikoURL + "/teams/main")
+			err := wd.Get(pikoURL + "/teams/main/members")
 			require.NoError(t, err)
-			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain"), 5*time.Second)
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				rows, err := wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
+				require.NoError(t, err)
+				return len(rows) >= 1
+			}, 5*time.Second)
 
 			_, err = wd.FindElement(selenium.ByCSSSelector, "#new-member")
 			require.Error(t, err, "viewer should not see New Member button")
@@ -1988,9 +2065,13 @@ job "gen" {
 			require.NoError(t, err, "maintainer should see Pause button (inherits operator)")
 		})
 		t.Run("No member management", func(t *testing.T) {
-			err := wd.Get(pikoURL + "/teams/main")
+			err := wd.Get(pikoURL + "/teams/main/members")
 			require.NoError(t, err)
-			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain"), 5*time.Second)
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				rows, err := wd.FindElements(selenium.ByCSSSelector, "tbody>tr")
+				require.NoError(t, err)
+				return len(rows) >= 1
+			}, 5*time.Second)
 
 			_, err = wd.FindElement(selenium.ByCSSSelector, "#new-member")
 			require.Error(t, err, "maintainer should not see New Member button")

@@ -181,6 +181,12 @@ export const deleteWorker = (name) => api('/workers/' + name, { method: 'DELETE'
 export const regenerateWebhookToken = (tc, pn, rCan) =>
   api('/teams/' + tc + '/pipelines/' + pn + '/resources/' + rCan + '/webhook_token', { method: 'POST' });
 
+// --- Audit Log ---
+export const fetchAuditLog = (tc, params) => {
+  const qs = params ? params.toString() : '';
+  return api('/teams/' + tc + '/audit' + (qs ? '?' + qs : ''));
+};
+
 // --- Local Editor Mode ---
 export const fetchLocalConfig = () => fetch('/local/config').then(r => r.json());
 export const saveLocalConfig = (data) => api('/local/save', { method: 'POST', body: JSON.stringify(data) });

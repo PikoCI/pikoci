@@ -41,6 +41,8 @@ var (
 		UpdateProfile:    requireRole(role.Viewer),
 		ListTriggersAfter: requireRole(role.Viewer),
 
+		ListAuditLog:     requireRole(role.Viewer),
+
 		// Operator routes
 		TriggerPipelineJob:     requireRole(role.Operator),
 		CancelJobBuild:        requireRole(role.Operator),

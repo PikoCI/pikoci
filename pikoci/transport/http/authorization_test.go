@@ -38,6 +38,7 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 		// --- Viewer routes: viewer+ allowed ---
 		{"viewer can list pipelines", http.MethodGet, "/teams/main/pipelines", role.Viewer, false, true},
 		{"viewer can get team", http.MethodGet, "/teams/main", role.Viewer, false, true},
+		{"viewer can list audit log", http.MethodGet, "/teams/main/audit", role.Viewer, false, true},
 
 		// --- Operator routes: operator+ allowed, viewer denied ---
 		{"operator can trigger job", http.MethodPost, "/teams/main/pipelines/p/jobs/j/trigger", role.Operator, false, true},
@@ -105,6 +106,7 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 			svc.EXPECT().ListWorkers(gomock.Any()).Return(nil, nil).AnyTimes()
 			svc.EXPECT().PinResourceVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			svc.EXPECT().TriggerPipelineResource(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		svc.EXPECT().ListAuditLog(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, false, nil).AnyTimes()
 
 			// Sign JWT
 			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user": um})

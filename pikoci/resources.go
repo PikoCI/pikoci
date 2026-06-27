@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/resource"
@@ -191,6 +192,8 @@ func (q *PikoCI) PinResourceVersion(ctx context.Context, tc, pc, rCan string, ve
 	// Cancel pending builds that reference a different version of this resource.
 	q.cancelMismatchedPendingBuilds(ctx, tc, pc, rCan, versionID)
 
+	q.audit(ctx, tc, auditlog.ResourcePinned, "resource", pc+"/"+rCan,
+		map[string]interface{}{"pipeline": pc, "version_id": versionID})
 	return nil
 }
 
@@ -205,7 +208,13 @@ func (q *PikoCI) UnpinResourceVersion(ctx context.Context, tc, pc, rCan string) 
 		return fmt.Errorf("invalid Resource Canonical format %q", rCan)
 	}
 
-	return q.Resources.UnpinVersion(ctx, tc, pc, rCan)
+	err := q.Resources.UnpinVersion(ctx, tc, pc, rCan)
+	if err != nil {
+		return err
+	}
+	q.audit(ctx, tc, auditlog.ResourceUnpinned, "resource", pc+"/"+rCan,
+		map[string]interface{}{"pipeline": pc})
+	return nil
 }
 
 // TriggerResourceVersion triggers immediate downstream jobs (those with get
@@ -284,6 +293,8 @@ func (q *PikoCI) TriggerPipelineResource(ctx context.Context, tc, pc, rCan strin
 
 	q.Notifier.Notify()
 
+	q.audit(ctx, tc, auditlog.ResourceChecked, "resource", pc+"/"+rCan,
+		map[string]interface{}{"pipeline": pc})
 	return nil
 }
 

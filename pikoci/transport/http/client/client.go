@@ -13,6 +13,7 @@ import (
 
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/apitoken"
+	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
@@ -1250,4 +1251,61 @@ func (cl *Client) FindApiTokenByHash(ctx context.Context, tokenHash string) (*ap
 
 // UpdateApiTokenLastUsed is not implemented on the client (server-side only).
 func (cl *Client) UpdateApiTokenLastUsed(ctx context.Context, tokenID uint32) {
+}
+
+// ListAuditLog retrieves audit log entries for the given team with optional filters.
+func (cl *Client) ListAuditLog(ctx context.Context, tc string, opts auditlog.FilterOpts) ([]*auditlog.Entry, bool, error) {
+	params := url.Values{}
+	for _, a := range opts.Actors {
+		params.Add("user", a)
+	}
+	for _, a := range opts.ExcludeActors {
+		params.Add("exclude_user", a)
+	}
+	for _, a := range opts.Actions {
+		params.Add("action", string(a))
+	}
+	for _, a := range opts.ExcludeActions {
+		params.Add("exclude_action", string(a))
+	}
+	for _, p := range opts.Pipelines {
+		params.Add("pipeline", p)
+	}
+	if opts.Since != nil {
+		params.Set("since", opts.Since.Format(time.RFC3339))
+	}
+	if opts.Until != nil {
+		params.Set("until", opts.Until.Format(time.RFC3339))
+	}
+	if opts.Before != nil {
+		params.Set("before", fmt.Sprintf("%d", *opts.Before))
+	}
+	if opts.After != nil {
+		params.Set("after", fmt.Sprintf("%d", *opts.After))
+	}
+	if opts.Limit > 0 {
+		params.Set("limit", fmt.Sprintf("%d", opts.Limit))
+	}
+
+	u := fmt.Sprintf("%s/teams/%s/audit", cl.url, tc)
+	if qs := params.Encode(); qs != "" {
+		u += "?" + qs
+	}
+
+	var resp thttp.ListAuditLogResponse
+	err := cl.Request(ctx, http.MethodGet, u, nil, &resp)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, false, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	hasMore := false
+	if resp.Meta != nil {
+		hasMore = resp.Meta.HasMore
+	}
+
+	return resp.Entries, hasMore, nil
 }

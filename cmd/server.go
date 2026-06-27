@@ -123,13 +123,14 @@ var serverCmd = &cobra.Command{
 		tgr := mysql.NewTriggerRepository(querier)
 		wr := mysql.NewWorkerRepository(querier, cfg.DBSystem)
 		atr := mysql.NewApiTokenRepository(querier)
+		alr := mysql.NewAuditLogRepository(querier)
 
 		suow := unitwork.NewStartUnitOfWork(db, cfg.DBSystem)
 
 		wn := notifier.New()
 
 		logger.Info("initializing service")
-		var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, suow, jwtSecret, wn, logger)
+		var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, alr, suow, jwtSecret, wn, logger)
 
 		// Recover builds orphaned by a previous crash or unclean shutdown.
 		if n, err := svc.RecoverOrphanedBuilds(ctx); err != nil {

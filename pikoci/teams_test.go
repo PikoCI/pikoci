@@ -144,6 +144,10 @@ func TestUpdateTeamMember(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
+	// Pre-UoW FindMember to capture old role for audit
+	s.Teams.EXPECT().FindMember(ctx, "main", "pepito").Return(&team.Member{
+		Role: role.Viewer, User: user.User{Username: "pepito"},
+	}, nil)
 	// validateTeamAdmins will call Find
 	s.Teams.EXPECT().Find(ctx, "main").Return(&team.WithMembers{
 		Team: team.Team{ID: 1, Canonical: "main"},
@@ -167,6 +171,10 @@ func TestUpdateTeamMember_DemoteOneOfTwoAdmins(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
+	// Pre-UoW FindMember to capture old role for audit
+	s.Teams.EXPECT().FindMember(ctx, "main", "pepito").Return(&team.Member{
+		Role: role.Admin, User: user.User{Username: "pepito"},
+	}, nil)
 	// Two admins — demoting one should succeed
 	s.Teams.EXPECT().Find(ctx, "main").Return(&team.WithMembers{
 		Team: team.Team{ID: 1, Canonical: "main"},
@@ -190,6 +198,10 @@ func TestUpdateTeamMember_WouldRemoveLastAdmin(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
+	// Pre-UoW FindMember to capture old role for audit
+	s.Teams.EXPECT().FindMember(ctx, "main", "admin").Return(&team.Member{
+		Role: role.Admin, User: user.User{Username: "admin"},
+	}, nil)
 	// Only one admin, trying to demote them
 	s.Teams.EXPECT().Find(ctx, "main").Return(&team.WithMembers{
 		Team: team.Team{ID: 1, Canonical: "main"},
