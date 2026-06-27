@@ -161,4 +161,6 @@ const (
 	// DeleteApiToken is the route for deleting an API token.
 	DeleteApiToken
 
+	// ListAuditLog is the route for listing audit log entries for a team.
+	ListAuditLog
 )

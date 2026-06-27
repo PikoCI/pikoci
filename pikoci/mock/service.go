@@ -15,6 +15,7 @@ import (
 	time "time"
 
 	apitoken "github.com/pikoci/pikoci/pikoci/apitoken"
+	auditlog "github.com/pikoci/pikoci/pikoci/auditlog"
 	build "github.com/pikoci/pikoci/pikoci/build"
 	job "github.com/pikoci/pikoci/pikoci/job"
 	pipeline "github.com/pikoci/pikoci/pikoci/pipeline"
@@ -608,6 +609,22 @@ func (m *Service) ListApiTokens(ctx context.Context, username string) ([]*apitok
 func (mr *ServiceMockRecorder) ListApiTokens(ctx, username any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListApiTokens", reflect.TypeOf((*Service)(nil).ListApiTokens), ctx, username)
+}
+
+// ListAuditLog mocks base method.
+func (m *Service) ListAuditLog(ctx context.Context, tc string, opts auditlog.FilterOpts) ([]*auditlog.Entry, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListAuditLog", ctx, tc, opts)
+	ret0, _ := ret[0].([]*auditlog.Entry)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ListAuditLog indicates an expected call of ListAuditLog.
+func (mr *ServiceMockRecorder) ListAuditLog(ctx, tc, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListAuditLog", reflect.TypeOf((*Service)(nil).ListAuditLog), ctx, tc, opts)
 }
 
 // ListJobBuilds mocks base method.

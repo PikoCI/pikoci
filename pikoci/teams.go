@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/team"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
@@ -140,6 +141,8 @@ func (q *PikoCI) CreateTeamMember(ctx context.Context, tc string, tm team.Member
 		return nil, fmt.Errorf("failed to find member: %w", err)
 	}
 
+	q.audit(ctx, tc, auditlog.MemberAdded, "team_member", tm.User.Username,
+		map[string]interface{}{"role": string(tm.Role)})
 	return rtm, nil
 }
 
@@ -156,8 +159,15 @@ func (q *PikoCI) UpdateTeamMember(ctx context.Context, tc, mu string, tm team.Me
 		return nil, fmt.Errorf("invalid role %q: must be one of viewer, operator, maintainer, admin", tm.Role)
 	}
 
+	// Capture old role before the transaction for audit logging.
+	oldMember, err := q.Teams.FindMember(ctx, tc, mu)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find existing member: %w", err)
+	}
+	oldRole := oldMember.Role
+
 	var rtm *team.Member
-	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
+	err = q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
 		t, err := uow.Teams().Find(ctx, tc)
 		if err != nil {
 			return fmt.Errorf("failed to get Team: %w", err)
@@ -181,6 +191,8 @@ func (q *PikoCI) UpdateTeamMember(ctx context.Context, tc, mu string, tm team.Me
 		return nil, err
 	}
 
+	q.audit(ctx, tc, auditlog.MemberRoleChanged, "team_member", mu,
+		map[string]interface{}{"old_role": string(oldRole), "new_role": string(tm.Role)})
 	return rtm, nil
 }
 
@@ -194,7 +206,7 @@ func (q *PikoCI) DeleteTeamMember(ctx context.Context, tc, mu string) error {
 		return fmt.Errorf("invalid Team Member Username format %q", mu)
 	}
 
-	return q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
+	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
 		t, err := uow.Teams().Find(ctx, tc)
 		if err != nil {
 			return fmt.Errorf("failed to get Team: %w", err)
@@ -215,6 +227,11 @@ func (q *PikoCI) DeleteTeamMember(ctx context.Context, tc, mu string) error {
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	q.audit(ctx, tc, auditlog.MemberRemoved, "team_member", mu, nil)
+	return nil
 }
 
 // checkTeamAdmins checks that the team would still have at least one admin

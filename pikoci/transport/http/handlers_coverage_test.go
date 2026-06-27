@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pikoci/pikoci/pikoci/apitoken"
+	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/mock"
@@ -2548,4 +2549,85 @@ func TestDeleteApiToken_Handler_NotFound(t *testing.T) {
 	var got DeleteApiTokenResponse
 	json.NewDecoder(resp.Body).Decode(&got)
 	assert.Contains(t, got.Err, "not found")
+}
+
+// ===== Audit Log Handler Tests =====
+
+func TestListAuditLog_Success(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+	entries := []*auditlog.Entry{
+		{ID: 2, Actor: "admin", Action: auditlog.PipelineCreated, TargetType: "pipeline", TargetName: "deploy"},
+		{ID: 1, Actor: "admin", Action: auditlog.PipelineDeleted, TargetType: "pipeline", TargetName: "old"},
+	}
+	e.svc.EXPECT().ListAuditLog(gomock.Any(), "main", gomock.Any()).Return(entries, false, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/audit", e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got ListAuditLogResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Len(t, got.Entries, 2)
+	assert.NotNil(t, got.Meta)
+	assert.False(t, got.Meta.HasMore)
+	assert.Equal(t, uint32(2), got.Meta.NewestID)
+	assert.Equal(t, uint32(1), got.Meta.OldestID)
+}
+
+func TestListAuditLog_Empty(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+	e.svc.EXPECT().ListAuditLog(gomock.Any(), "main", gomock.Any()).Return(nil, false, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/audit", e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got ListAuditLogResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Nil(t, got.Meta)
+}
+
+func TestListAuditLog_Error(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+	e.svc.EXPECT().ListAuditLog(gomock.Any(), "main", gomock.Any()).Return(nil, false, fmt.Errorf("db error"))
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/audit", e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	var got ListAuditLogResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Equal(t, "db error", got.Err)
+}
+
+func TestListAuditLog_WithPagination(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+	entries := []*auditlog.Entry{{ID: 5, Actor: "admin", Action: auditlog.PipelineCreated}}
+	e.svc.EXPECT().ListAuditLog(gomock.Any(), "main", gomock.Any()).Return(entries, true, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/audit?limit=10&before=6", e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got ListAuditLogResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.True(t, got.Meta.HasMore)
+}
+
+func TestListAuditLog_WithFilters(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+	e.svc.EXPECT().ListAuditLog(gomock.Any(), "main", gomock.Any()).Return(nil, false, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/audit?user=alice&action=pipeline.created&pipeline=deploy&exclude_user=system&exclude_action=job.triggered", e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }

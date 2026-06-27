@@ -102,6 +102,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 					} else {
 						un = authResult.Username
 						rr = rr.WithContext(context.WithValue(rr.Context(), UsernameContextKey, un))
+						rr = rr.WithContext(context.WithValue(rr.Context(), pikoci.ActorContextKey, un))
 						rr = rr.WithContext(context.WithValue(rr.Context(), ApiTokenContextKey, authResult))
 						go s.UpdateApiTokenLastUsed(context.Background(), authResult.TokenID)
 					}
@@ -133,6 +134,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 									authFailed = true
 								} else {
 									rr = rr.WithContext(context.WithValue(rr.Context(), UsernameContextKey, un))
+									rr = rr.WithContext(context.WithValue(rr.Context(), pikoci.ActorContextKey, un))
 									isFromWorker, _ = claims["is_from_worker"].(bool)
 								}
 							}
@@ -303,6 +305,8 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/versions/{version_id}/trigger").Name(TriggerResourceVersion.String()).Handler(triggerResourceVersion(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/versions/{version_id}/path").Name(GetResourceVersionPath.String()).Handler(getResourceVersionPath(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/webhook_token").Name(RegenerateWebhookToken.String()).Handler(regenerateWebhookToken(s))
+
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/audit").Name(ListAuditLog.String()).Handler(listAuditLog(s))
 
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/triggers/{trigger_name}").Name(CreateTrigger.String()).Handler(createTrigger(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/triggers/{trigger_name}").Name(ListTriggersAfter.String()).Handler(listTriggersAfter(s))

@@ -18,6 +18,7 @@ PikoCI is a portable, self-hosted CI/CD system. One binary, any database, runs a
 - [Variables](Variables.md) - Pipeline variables
 - [Roles & Permissions](Roles.md) - Team roles and what each role can do
 - [API Tokens](API-Tokens.md) - Non-interactive authenticated access for scripts and CI/CD
+- [Audit Log](Audit-Log.md) - Track who did what within a team
 - [CLI Reference](CLI.md) - Client commands and flags
 - [Pause / Unpause](Pause.md) - Temporarily stop pipelines or jobs
 - [Resource Pinning](Resource-Pinning.md) - Pin resources to a version and trigger with specific versions

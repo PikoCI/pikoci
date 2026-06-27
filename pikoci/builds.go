@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
@@ -153,6 +154,8 @@ func (q *PikoCI) CancelJobBuild(ctx context.Context, tc, pc, jn string, buildNum
 	// Notify the next pending build so it can start (whether we cancelled
 	// a running or a pending build, a concurrency slot may have opened).
 	q.notifyNextPendingBuild(ctx, tc, pc, jn)
+	q.audit(ctx, tc, auditlog.JobCancelled, "job", pc+"/"+jn,
+		map[string]interface{}{"pipeline": pc, "build_number": buildNumber})
 	return nil
 }
 
@@ -253,6 +256,8 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 
 	q.Notifier.Notify()
 
+	q.audit(ctx, tc, auditlog.JobRetried, "job", pc+"/"+jn,
+		map[string]interface{}{"pipeline": pc, "build_number": buildNumber})
 	return nil
 }
 

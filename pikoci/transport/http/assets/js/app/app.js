@@ -31,7 +31,7 @@ function App() {
         <${TeamsView} path="/" />
         <${TeamsView} path="/teams" />
         <${TeamNew} path="/teams/new" />
-        <${TeamShow} path="/teams/:tc" />
+        <${TeamShow} path="/teams/:tc/:tab?" />
         <${PipelineList} path="/teams/:tc/pipelines" />
         <${PipelineNew} path="/teams/:tc/pipelines/new" />
         <${PipelineShow} path="/teams/:tc/pipelines/:pn" />

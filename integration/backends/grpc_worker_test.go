@@ -79,7 +79,7 @@ func TestGRPCWorkerFullFlow(t *testing.T) {
 
 	jwtSecret := []byte("test-secret")
 	wn := notifier.New()
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, suow, jwtSecret, wn, logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, nil, suow, jwtSecret, wn, logger)
 	svc.StartScheduler(ctx)
 
 	// Create admin user (ignore error if already exists from migrations)
@@ -245,7 +245,7 @@ func TestStartupRecoveryFailsOrphanedBuilds(t *testing.T) {
 
 	jwtSecret := []byte("test-secret")
 	wn := notifier.New()
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, suow, jwtSecret, wn, logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, nil, suow, jwtSecret, wn, logger)
 
 	// Create a pipeline + job so we can create builds
 	hclConfig := []byte(`
@@ -362,7 +362,7 @@ func TestServerDrainWaitsForSeparatedWorkerBuilds(t *testing.T) {
 
 	jwtSecret := []byte("test-secret")
 	wn := notifier.New()
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, suow, jwtSecret, wn, logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, nil, suow, jwtSecret, wn, logger)
 	svc.StartScheduler(ctx)
 
 	// Create admin user

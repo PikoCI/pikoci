@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pikoci/pikoci/pikoci/apitoken"
+	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/notifier"
@@ -249,6 +250,9 @@ type Service interface {
 	// UpdateApiTokenLastUsed updates the last_used_at timestamp for a token.
 	UpdateApiTokenLastUsed(ctx context.Context, tokenID uint32)
 
+	// ListAuditLog returns audit log entries for the given team matching the
+	// filter options. The boolean return value indicates whether more results exist.
+	ListAuditLog(ctx context.Context, tc string, opts auditlog.FilterOpts) ([]*auditlog.Entry, bool, error)
 }
 
 // PikoCI is the primary implementation of the Service interface. It coordinates
@@ -282,6 +286,8 @@ type PikoCI struct {
 	Workers       wkr.Repository
 	// ApiTokens is the repository for API token persistence.
 	ApiTokens     apitoken.Repository
+	// AuditLogs is the repository for audit log persistence.
+	AuditLogs     auditlog.Repository
 	// StartUoW begins a new unit of work for transactional operations.
 	StartUoW      unitwork.StartUnitOfWork
 	// Ctx is the root context for the service.
@@ -303,7 +309,7 @@ type PikoCI struct {
 // New creates a new PikoCI service instance with all required dependencies. It
 // initializes the internal scheduler for periodic resource checks and returns
 // the configured service ready for use.
-func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, wr wkr.Repository, atr apitoken.Repository, suow unitwork.StartUnitOfWork, js []byte, wn *notifier.WorkNotifier, l *slog.Logger) *PikoCI {
+func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, wr wkr.Repository, atr apitoken.Repository, alr auditlog.Repository, suow unitwork.StartUnitOfWork, js []byte, wn *notifier.WorkNotifier, l *slog.Logger) *PikoCI {
 	if l == nil {
 		l = slog.Default()
 	}
@@ -323,6 +329,7 @@ func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipelin
 		Triggers:      tgr,
 		Workers:       wr,
 		ApiTokens:     atr,
+		AuditLogs:     alr,
 		StartUoW:      suow,
 		JWTSecret:     js,
 		logger:        l,

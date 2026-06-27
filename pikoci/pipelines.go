@@ -14,6 +14,7 @@ import (
 
 	"github.com/awalterschulze/gographviz"
 
+	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/notification"
@@ -151,6 +152,7 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 	if err != nil {
 		return nil, err
 	}
+	q.audit(ctx, tc, auditlog.PipelineCreated, "pipeline", cp.Canonical, nil)
 	return cp, nil
 }
 
@@ -437,6 +439,11 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pCan string, rpp []byte
 		return nil, err
 	}
 
+	var details map[string]interface{}
+	if up.Canonical != pCan {
+		details = map[string]interface{}{"renamed_from": pCan}
+	}
+	q.audit(ctx, tc, auditlog.PipelineUpdated, "pipeline", up.Canonical, details)
 	return up, nil
 }
 
@@ -1587,7 +1594,12 @@ func (q *PikoCI) PausePipeline(ctx context.Context, tc, pCan string) error {
 	} else if !utils.ValidateCanonical(pCan) {
 		return fmt.Errorf("invalid Pipeline Canonical format %q", pCan)
 	}
-	return q.Jobs.PauseAll(ctx, tc, pCan)
+	err := q.Jobs.PauseAll(ctx, tc, pCan)
+	if err != nil {
+		return err
+	}
+	q.audit(ctx, tc, auditlog.PipelinePaused, "pipeline", pCan, nil)
+	return nil
 }
 
 // UnpausePipeline unpauses all jobs in a pipeline.
@@ -1597,7 +1609,12 @@ func (q *PikoCI) UnpausePipeline(ctx context.Context, tc, pCan string) error {
 	} else if !utils.ValidateCanonical(pCan) {
 		return fmt.Errorf("invalid Pipeline Canonical format %q", pCan)
 	}
-	return q.Jobs.UnpauseAll(ctx, tc, pCan)
+	err := q.Jobs.UnpauseAll(ctx, tc, pCan)
+	if err != nil {
+		return err
+	}
+	q.audit(ctx, tc, auditlog.PipelineUnpaused, "pipeline", pCan, nil)
+	return nil
 }
 
 // GetPublicPipeline retrieves a public pipeline with sensitive fields sanitized.
@@ -1732,7 +1749,7 @@ func (q *PikoCI) DeletePipeline(ctx context.Context, tc, pCan string) error {
 		return fmt.Errorf("invalid Pipeline Canonical format %q", pCan)
 	}
 
-	return q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
+	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
 		err := uow.Pipelines().Delete(ctx, tc, pCan)
 		if err != nil {
 			return fmt.Errorf("failed to delete Pipeline %q: %w", pCan, err)
@@ -1740,4 +1757,9 @@ func (q *PikoCI) DeletePipeline(ctx context.Context, tc, pCan string) error {
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	q.audit(ctx, tc, auditlog.PipelineDeleted, "pipeline", pCan, nil)
+	return nil
 }

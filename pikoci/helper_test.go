@@ -24,6 +24,7 @@ type MockService struct {
 	Notifications     *mock.NotificationRepository
 	Workers           *mock.WorkerRepository
 	ApiTokens         *mock.ApiTokenRepository
+	AuditLogs         *mock.AuditLogRepository
 
 	S pikoci.Service
 	P *pikoci.PikoCI
@@ -60,7 +61,10 @@ func newService(ctrl *gomock.Controller) MockService {
 		ApiTokensRepo:         atr,
 	})
 
-	p := pikoci.New(context.TODO(), ur, tr, pr, jr, rr, rtr, br, rur, str, tgr, wr, atr, suow, []byte("test-secret"), nil, nil)
+	alr := mock.NewAuditLogRepository(ctrl)
+	alr.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	p := pikoci.New(context.TODO(), ur, tr, pr, jr, rr, rtr, br, rur, str, tgr, wr, atr, alr, suow, []byte("test-secret"), nil, nil)
 	return MockService{
 		Users:             ur,
 		Teams:             tr,
@@ -76,6 +80,7 @@ func newService(ctrl *gomock.Controller) MockService {
 		Notifications:     nr,
 		Workers:           wr,
 		ApiTokens:         atr,
+		AuditLogs:         alr,
 
 		S: p,
 		P: p,
