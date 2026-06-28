@@ -543,7 +543,7 @@ func (r *BuildRepository) FindOldestPending(ctx context.Context, tc, pn, jn stri
 			ON j.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ? AND b.status IN ('pending', 'waiting_for_approval')
+		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ? AND b.status = 'pending'
 		ORDER BY b.id ASC
 		LIMIT 1
 	`, tc, pn, jn)

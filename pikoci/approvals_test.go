@@ -132,4 +132,19 @@ func TestApproveBuild_InvalidCanonical(t *testing.T) {
 
 	err := s.S.ApproveBuild(ctx, "INVALID", "pp", "jn", "1", "alice", "")
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid")
+}
+
+func TestRejectBuild_NotWaiting(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().Find(ctx, "main", "pp", "jn", "1").Return(&build.Build{
+		ID: 1, BuildNumber: "1", Status: build.Pending,
+	}, nil)
+
+	err := s.S.RejectBuild(ctx, "main", "pp", "jn", "1", "bob", "reason")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not waiting for approval")
 }

@@ -540,7 +540,7 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
     // Also refresh other non-terminal builds
     for (const b of buildList) {
       if (b.id === active?.id) continue;
-      if (b.status === 'started' || b.status === 'pending') {
+      if (b.status === 'started' || b.status === 'pending' || b.status === 'waiting_for_approval') {
         try {
           const fresh = await fetchBuild(tc, pn, jn, b.build_number);
           setBuilds(prev => sortBuilds(prev.map(x => x.id === fresh.id ? fresh : x)));
