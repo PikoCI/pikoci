@@ -37,7 +37,7 @@ func (q *PikoCI) CreateApiToken(ctx context.Context, username, name string, pers
 			return nil, fmt.Errorf("team canonical is required for team-scoped tokens")
 		}
 		if !tokenRole.Assignable() {
-			return nil, fmt.Errorf("invalid role %q: must be one of viewer, operator, maintainer, admin", tokenRole)
+			return nil, fmt.Errorf("invalid role %q: must be one of read, write, maintain, admin", tokenRole)
 		}
 		uwm, err := q.GetUser(ctx, username)
 		if err != nil {

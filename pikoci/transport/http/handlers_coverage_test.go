@@ -55,7 +55,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 	memberUM := &user.WithMemberships{
 		User:        user.User{Username: "member", Admin: false},
-		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
 	}
 
 	return &testEnv{
@@ -598,10 +598,10 @@ func TestListTeams_Error(t *testing.T) {
 func TestCreateTeamMember_Success(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectAdminAuth()
-	created := &team.Member{Role: role.Viewer, User: user.User{Username: "pepito"}}
+	created := &team.Member{Role: role.Read, User: user.User{Username: "pepito"}}
 	e.svc.EXPECT().CreateTeamMember(gomock.Any(), "main", gomock.Any()).Return(created, nil)
 
-	body := `{"role":"viewer","user":{"username":"pepito"}}`
+	body := `{"role":"read","user":{"username":"pepito"}}`
 	resp := doRequest(t, http.MethodPost, e.server.URL+"/teams/main/members", e.adminJWT(t), body)
 	defer resp.Body.Close()
 
@@ -2093,7 +2093,7 @@ func TestNonMember_Forbidden(t *testing.T) {
 	// User is not a member of team "other"
 	nonMemberUM := &user.WithMemberships{
 		User:        user.User{Username: "outsider", Admin: false},
-		Memberships: []user.Member{{TeamCanonical: "different-team", Role: role.Viewer}},
+		Memberships: []user.Member{{TeamCanonical: "different-team", Role: role.Read}},
 	}
 	jwt := signJWT(t, e.secret, nonMemberUM)
 	e.svc.EXPECT().GetUser(gomock.Any(), "outsider").Return(nonMemberUM, nil).AnyTimes()
@@ -2399,7 +2399,7 @@ func TestCreateApiToken_Handler_TeamScoped(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectAdminAuth()
 
-	e.svc.EXPECT().CreateApiToken(gomock.Any(), "admin", "team-tok", false, "main", role.Operator, gomock.Nil()).
+	e.svc.EXPECT().CreateApiToken(gomock.Any(), "admin", "team-tok", false, "main", role.Write, gomock.Nil()).
 		Return(&apitoken.WithPlaintext{
 			Token: apitoken.Token{
 				ID:            2,
@@ -2407,7 +2407,7 @@ func TestCreateApiToken_Handler_TeamScoped(t *testing.T) {
 				TokenPrefix:   "pko_11223344",
 				Personal:      false,
 				TeamCanonical: "main",
-				Role:          role.Operator,
+				Role:          role.Write,
 				Username:      "admin",
 				CreatedAt:     time.Now(),
 			},
@@ -2415,7 +2415,7 @@ func TestCreateApiToken_Handler_TeamScoped(t *testing.T) {
 		}, nil)
 
 	resp := doRequest(t, http.MethodPost, e.server.URL+"/api-tokens", e.adminJWT(t),
-		`{"name":"team-tok","personal":false,"team_canonical":"main","role":"operator"}`)
+		`{"name":"team-tok","personal":false,"team_canonical":"main","role":"write"}`)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -2477,7 +2477,7 @@ func TestListApiTokens_Handler_Success(t *testing.T) {
 
 	e.svc.EXPECT().ListApiTokens(gomock.Any(), "admin").Return([]*apitoken.Token{
 		{ID: 1, Name: "tok1", TokenPrefix: "pko_aaaa1111", Personal: true, Username: "admin"},
-		{ID: 2, Name: "tok2", TokenPrefix: "pko_bbbb2222", Personal: false, TeamCanonical: "main", Role: role.Viewer, Username: "admin"},
+		{ID: 2, Name: "tok2", TokenPrefix: "pko_bbbb2222", Personal: false, TeamCanonical: "main", Role: role.Read, Username: "admin"},
 	}, nil)
 
 	resp := doRequest(t, http.MethodGet, e.server.URL+"/api-tokens", e.adminJWT(t), "")

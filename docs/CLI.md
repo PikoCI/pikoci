@@ -416,7 +416,7 @@ pikoci client api-tokens create --name "my-script" --personal
 Create a team-scoped token:
 
 ```bash
-pikoci client api-tokens create --name "ci-deploy" --team-canonical main --role operator
+pikoci client api-tokens create --name "ci-deploy" --team-canonical main --role write
 ```
 
 | Flag | Required | Description |
@@ -424,7 +424,7 @@ pikoci client api-tokens create --name "ci-deploy" --team-canonical main --role 
 | `--name` | **yes** | Name for the token (unique per user) |
 | `--personal` | one of | Create a personal token with full user access |
 | `--team-canonical` | one of | Team canonical for a team-scoped token |
-| `--role` | with team | Role cap: `viewer`, `operator`, `maintainer`, `admin` |
+| `--role` | with team | Role cap: `read`, `write`, `maintain`, `admin` |
 | `--expires-at` | no | Expiration in RFC3339 format |
 
 `--personal` and `--team-canonical`/`--role` are mutually exclusive.

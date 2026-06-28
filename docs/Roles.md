@@ -7,9 +7,9 @@ PikoCI uses role-based access control (RBAC) to manage what team members can do.
 | Role | Level | Description |
 |------|-------|-------------|
 | **Public** | 0 | Unauthenticated access to public pipelines. Not assignable to users. |
-| **Viewer** | 1 | Read-only access. Can view pipelines, jobs, builds, resources, and team info. |
-| **Operator** | 2 | Can trigger, cancel, and retry builds. Can pause/unpause pipelines and jobs. Can pin/unpin resource versions. |
-| **Maintainer** | 3 | Can create, update, and delete pipelines. Can manage resources and regenerate webhook tokens. |
+| **Read** | 1 | Read-only access. Can view pipelines, jobs, builds, resources, and team info. |
+| **Write** | 2 | Can trigger, cancel, and retry builds. Can pause/unpause pipelines and jobs. Can pin/unpin resource versions. |
+| **Maintain** | 3 | Can create, update, and delete pipelines. Can manage resources and regenerate webhook tokens. |
 | **Admin** | 4 | Full team control. Can add, remove, and change members. Can update team settings and delete the team. Every team must have at least one admin. |
 
 ## What Each Role Can Do
@@ -26,16 +26,16 @@ The public role is **not assignable to users**. It represents unauthenticated ac
 
 Public users **cannot** list pipelines, view team info, trigger jobs, or perform any write operations.
 
-### Viewer
+### Read
 
 - View pipelines, jobs, builds, and build logs
 - View resources and resource versions
 - View team information and members
 - Change own password and update own profile
 
-### Operator
+### Write
 
-Everything a Viewer can do, plus:
+Everything a Read user can do, plus:
 
 - Trigger jobs manually
 - Cancel running builds
@@ -44,9 +44,9 @@ Everything a Viewer can do, plus:
 - Pin and unpin resource versions
 - Trigger resource checks
 
-### Maintainer
+### Maintain
 
-Everything an Operator can do, plus:
+Everything a Write user can do, plus:
 
 - Create, edit, and delete pipelines
 - Upload pipeline configuration
@@ -57,7 +57,7 @@ Everything an Operator can do, plus:
 
 ### Admin
 
-Everything a Maintainer can do, plus:
+Everything a Maintain user can do, plus:
 
 - Add new members to the team
 - Change member roles
@@ -90,22 +90,22 @@ Navigate to your team page and use the **Role** dropdown next to each member to 
 pikoci client teams members create \
   --team-canonical my-team \
   --username alice \
-  --role operator
+  --role write
 
 # Change a member's role
 pikoci client teams members update \
   --team-canonical my-team \
   --username alice \
-  --role maintainer
+  --role maintain
 ```
 
-Available roles: `viewer`, `operator`, `maintainer`, `admin`.
+Available roles: `read`, `write`, `maintain`, `admin`.
 
 ## Default Roles
 
 - When you **create a team**, you become the **admin**.
-- When you **add a member** via the CLI, the default role is **maintainer**.
-- When you **add a member** via the UI, you choose the role from a dropdown (default: **maintainer**).
+- When you **add a member** via the CLI, the default role is **maintain**.
+- When you **add a member** via the UI, you choose the role from a dropdown (default: **maintain**).
 
 ## API Tokens and Roles
 

@@ -903,7 +903,7 @@ var teamsMembersCreateCmd = &cobra.Command{
 
 func init() {
 	teamsMembersCreateCmd.Flags().String("username", "", "Username of the member to add")
-	teamsMembersCreateCmd.Flags().String("role", "maintainer", "Role for the member (viewer, operator, maintainer, admin)")
+	teamsMembersCreateCmd.Flags().String("role", "maintain", "Role for the member (read, write, maintain, admin)")
 	teamsMembersCreateCmd.MarkFlagRequired("username")
 }
 
@@ -936,7 +936,7 @@ var teamsMembersUpdateCmd = &cobra.Command{
 
 func init() {
 	teamsMembersUpdateCmd.Flags().String("username", "", "Username of the member to update")
-	teamsMembersUpdateCmd.Flags().String("role", "maintainer", "Role for the member (viewer, operator, maintainer, admin)")
+	teamsMembersUpdateCmd.Flags().String("role", "maintain", "Role for the member (read, write, maintain, admin)")
 	teamsMembersUpdateCmd.MarkFlagRequired("username")
 }
 

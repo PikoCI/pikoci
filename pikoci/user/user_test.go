@@ -15,7 +15,7 @@ func TestWithMemberships_HasRole(t *testing.T) {
 		}
 		assert.True(t, u.HasRole(role.Admin))
 		assert.True(t, u.HasRole(role.Admin, "any-team"))
-		assert.True(t, u.HasRole(role.Viewer, "any-team"))
+		assert.True(t, u.HasRole(role.Read, "any-team"))
 	})
 
 	t.Run("admin has all roles", func(t *testing.T) {
@@ -26,9 +26,9 @@ func TestWithMemberships_HasRole(t *testing.T) {
 			},
 		}
 		assert.True(t, u.HasRole(role.Admin, "team-a"))
-		assert.True(t, u.HasRole(role.Maintainer, "team-a"))
-		assert.True(t, u.HasRole(role.Operator, "team-a"))
-		assert.True(t, u.HasRole(role.Viewer, "team-a"))
+		assert.True(t, u.HasRole(role.Maintain, "team-a"))
+		assert.True(t, u.HasRole(role.Write, "team-a"))
+		assert.True(t, u.HasRole(role.Read, "team-a"))
 		assert.False(t, u.HasRole(role.Admin, "team-b"))
 	})
 
@@ -36,11 +36,11 @@ func TestWithMemberships_HasRole(t *testing.T) {
 		u := &user.WithMemberships{
 			User: user.User{Admin: false},
 			Memberships: []user.Member{
-				{Role: role.Viewer, TeamCanonical: "team-a"},
+				{Role: role.Read, TeamCanonical: "team-a"},
 			},
 		}
-		assert.True(t, u.HasRole(role.Viewer, "team-a"))
-		assert.False(t, u.HasRole(role.Operator, "team-a"))
+		assert.True(t, u.HasRole(role.Read, "team-a"))
+		assert.False(t, u.HasRole(role.Write, "team-a"))
 	})
 
 	t.Run("empty team canonical is skipped", func(t *testing.T) {
@@ -50,26 +50,26 @@ func TestWithMemberships_HasRole(t *testing.T) {
 				{Role: role.Admin, TeamCanonical: "team-a"},
 			},
 		}
-		assert.False(t, u.HasRole(role.Viewer, ""))
+		assert.False(t, u.HasRole(role.Read, ""))
 	})
 
 	t.Run("no memberships", func(t *testing.T) {
 		u := &user.WithMemberships{
 			User: user.User{Admin: false},
 		}
-		assert.False(t, u.HasRole(role.Viewer, "team-a"))
+		assert.False(t, u.HasRole(role.Read, "team-a"))
 	})
 
 	t.Run("multi-team membership", func(t *testing.T) {
 		u := &user.WithMemberships{
 			User: user.User{Admin: false},
 			Memberships: []user.Member{
-				{Role: role.Operator, TeamCanonical: "team-a"},
+				{Role: role.Write, TeamCanonical: "team-a"},
 				{Role: role.Admin, TeamCanonical: "team-b"},
 			},
 		}
-		assert.True(t, u.HasRole(role.Operator, "team-a"))
-		assert.False(t, u.HasRole(role.Maintainer, "team-a"))
+		assert.True(t, u.HasRole(role.Write, "team-a"))
+		assert.False(t, u.HasRole(role.Maintain, "team-a"))
 		assert.True(t, u.HasRole(role.Admin, "team-b"))
 	})
 }
@@ -88,7 +88,7 @@ func TestWithMemberships_IsAdmin(t *testing.T) {
 			User: user.User{Admin: false},
 			Memberships: []user.Member{
 				{Role: role.Admin, TeamCanonical: "team-a"},
-				{Role: role.Maintainer, TeamCanonical: "team-b"},
+				{Role: role.Maintain, TeamCanonical: "team-b"},
 			},
 		}
 		assert.True(t, u.IsAdmin("team-a"))
@@ -127,7 +127,7 @@ func TestWithMemberships_IsMember(t *testing.T) {
 		u := &user.WithMemberships{
 			User: user.User{Admin: false},
 			Memberships: []user.Member{
-				{Role: role.Viewer, TeamCanonical: "team-a"},
+				{Role: role.Read, TeamCanonical: "team-a"},
 			},
 		}
 		assert.True(t, u.IsMember("team-a"))

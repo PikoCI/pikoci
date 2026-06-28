@@ -2768,10 +2768,10 @@ func TestCreateApiToken_TeamScoped(t *testing.T) {
 		json.NewDecoder(req.Body).Decode(&cr)
 		assert.False(t, cr.Personal)
 		assert.Equal(t, "main", cr.TeamCanonical)
-		assert.Equal(t, role.Operator, cr.Role)
+		assert.Equal(t, role.Write, cr.Role)
 		jsonHandler(w, thttp.CreateApiTokenResponse{
 			Token: &apitoken.WithPlaintext{
-				Token:     apitoken.Token{ID: 3, Name: cr.Name, Personal: false, TeamCanonical: "main", Role: role.Operator},
+				Token:     apitoken.Token{ID: 3, Name: cr.Name, Personal: false, TeamCanonical: "main", Role: role.Write},
 				Plaintext: "pko_team123",
 			},
 		})
@@ -2782,10 +2782,10 @@ func TestCreateApiToken_TeamScoped(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	tok, err := c.CreateApiToken(context.Background(), "admin", "ci-deploy", false, "main", role.Operator, nil)
+	tok, err := c.CreateApiToken(context.Background(), "admin", "ci-deploy", false, "main", role.Write, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "main", tok.TeamCanonical)
-	assert.Equal(t, role.Operator, tok.Role)
+	assert.Equal(t, role.Write, tok.Role)
 }
 
 func TestListApiTokens(t *testing.T) {

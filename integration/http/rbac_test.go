@@ -24,9 +24,9 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 		password string
 		role     string
 	}{
-		{"rbac-viewer", "pass123", "viewer"},
-		{"rbac-operator", "pass123", "operator"},
-		{"rbac-maintainer", "pass123", "maintainer"},
+		{"rbac-viewer", "pass123", "read"},
+		{"rbac-operator", "pass123", "write"},
+		{"rbac-maintainer", "pass123", "maintain"},
 		{"rbac-admin", "pass123", "admin"},
 	}
 
@@ -58,7 +58,7 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 
 	// --- Viewer tests ---
 	t.Run("Viewer", func(t *testing.T) {
-		jwt := jwts["viewer"]
+		jwt := jwts["read"]
 
 		t.Run("can GET pipeline", func(t *testing.T) {
 			resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/pipelines", jwt, "")
@@ -85,7 +85,7 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 		})
 
 		t.Run("denied add team member", func(t *testing.T) {
-			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/members", jwt, `{"role":"viewer","user":{"username":"admin"}}`)
+			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/members", jwt, `{"role":"read","user":{"username":"admin"}}`)
 			defer resp.Body.Close()
 			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		})
@@ -99,7 +99,7 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 
 	// --- Operator tests ---
 	t.Run("Operator", func(t *testing.T) {
-		jwt := jwts["operator"]
+		jwt := jwts["write"]
 
 		t.Run("can pause pipeline", func(t *testing.T) {
 			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/pipelines/rbac-pipe/pause", jwt, "")
@@ -120,7 +120,7 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 		})
 
 		t.Run("denied add team member", func(t *testing.T) {
-			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/members", jwt, `{"role":"viewer","user":{"username":"admin"}}`)
+			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/members", jwt, `{"role":"read","user":{"username":"admin"}}`)
 			defer resp.Body.Close()
 			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		})
@@ -128,7 +128,7 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 
 	// --- Maintainer tests ---
 	t.Run("Maintainer", func(t *testing.T) {
-		jwt := jwts["maintainer"]
+		jwt := jwts["maintain"]
 
 		t.Run("can pause pipeline (inherits operator)", func(t *testing.T) {
 			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/pipelines/rbac-pipe/pause", jwt, "")
@@ -140,7 +140,7 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 		})
 
 		t.Run("denied add team member", func(t *testing.T) {
-			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/members", jwt, `{"role":"viewer","user":{"username":"admin"}}`)
+			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/members", jwt, `{"role":"read","user":{"username":"admin"}}`)
 			defer resp.Body.Close()
 			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		})
@@ -186,7 +186,7 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 	// --- Role upgrade test ---
 	t.Run("RoleUpgrade", func(t *testing.T) {
 		// Upgrade viewer to operator
-		resp := doJSONRequest(t, http.MethodPut, pikoURL+"/teams/main/members/rbac-viewer", adminJWT, `{"role":"operator"}`)
+		resp := doJSONRequest(t, http.MethodPut, pikoURL+"/teams/main/members/rbac-viewer", adminJWT, `{"role":"write"}`)
 		defer resp.Body.Close()
 		requireOK(t, resp)
 		var ur thttp.UpdateTeamMemberResponse
@@ -223,7 +223,7 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 		})
 
 		t.Run("cannot demote last admin", func(t *testing.T) {
-			resp := doJSONRequest(t, http.MethodPut, pikoURL+"/teams/admin-test/members/admin", adminJWT, `{"role":"viewer"}`)
+			resp := doJSONRequest(t, http.MethodPut, pikoURL+"/teams/admin-test/members/admin", adminJWT, `{"role":"read"}`)
 			defer resp.Body.Close()
 			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 			var ur thttp.UpdateTeamMemberResponse
@@ -234,7 +234,7 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 		t.Run("can delete non-admin when admin remains", func(t *testing.T) {
 			// Add a viewer
 			addResp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/admin-test/members", adminJWT,
-				`{"role":"viewer","user":{"username":"rbac-viewer"}}`)
+				`{"role":"read","user":{"username":"rbac-viewer"}}`)
 			addResp.Body.Close()
 			requireOK(t, addResp)
 

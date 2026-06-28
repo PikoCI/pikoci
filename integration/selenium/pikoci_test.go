@@ -236,7 +236,7 @@ func TestPikoCI(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, 2, len(roleSelects))
 
-			// Find pepito's dropdown (the one that is enabled / has value "maintainer")
+			// Find pepito's dropdown (the one that is enabled / has value "maintain")
 			// Admin's dropdown is disabled (last admin) so we use the second one
 			pepitosSelect := roleSelects[1]
 
@@ -1503,10 +1503,10 @@ job "gen" {
 					return len(opts) >= 1
 				}, 5*time.Second)
 
-				// Select "operator" role: can trigger/pause but can't create pipelines or manage members
+				// Select "write" role: can trigger/pause but can't create pipelines or manage members
 				roleSelect, err := wd.FindElement(selenium.ByCSSSelector, "#role")
 				require.NoError(t, err)
-				operatorOpt, err := roleSelect.FindElement(selenium.ByCSSSelector, "option[value='operator']")
+				operatorOpt, err := roleSelect.FindElement(selenium.ByCSSSelector, "option[value='write']")
 				require.NoError(t, err)
 				err = operatorOpt.Click()
 				require.NoError(t, err)
@@ -1907,7 +1907,7 @@ job "gen" {
 		require.NoError(t, err)
 		waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Log In"), 5*time.Second)
 
-		setupRoleTestUser(t, "newadmin123", "role-viewer", "viewer")
+		setupRoleTestUser(t, "newadmin123", "role-viewer", "read")
 
 		t.Run("Login", func(t *testing.T) {
 			username, err := wd.FindElement(selenium.ByCSSSelector, "#username")
@@ -2012,7 +2012,7 @@ job "gen" {
 	})
 	t.Run("Maintainer", func(t *testing.T) {
 		// Create role-maintainer user and add as maintainer to main team
-		setupRoleTestUser(t, "newadmin123", "role-maintainer", "maintainer")
+		setupRoleTestUser(t, "newadmin123", "role-maintainer", "maintain")
 
 		t.Run("Login", func(t *testing.T) {
 			username, err := wd.FindElement(selenium.ByCSSSelector, "#username")
@@ -2402,7 +2402,7 @@ job "gen" {
 		adminJWT := lr.Data.JWT
 
 		// Step 2: Change pepito's role on "main" team via HTTP (triggers X-Refresh-Token)
-		updateBody, _ := json.Marshal(thttp.UpdateTeamMemberRequest{Role: "maintainer"})
+		updateBody, _ := json.Marshal(thttp.UpdateTeamMemberRequest{Role: "maintain"})
 		updateReq, err := http.NewRequest(http.MethodPut, pikoURL+"/teams/main/members/pepito", bytes.NewReader(updateBody))
 		require.NoError(t, err)
 		updateReq.Header.Set("Content-Type", "application/json")

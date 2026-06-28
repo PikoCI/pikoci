@@ -117,7 +117,7 @@ func TestCreateTeamMember(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	member := team.Member{Role: role.Viewer, User: user.User{Username: "pepito"}}
+	member := team.Member{Role: role.Read, User: user.User{Username: "pepito"}}
 	s.Teams.EXPECT().CreateMember(ctx, "main", member).Return(nil)
 	s.Teams.EXPECT().FindMember(ctx, "main", "pepito").Return(&member, nil)
 
@@ -146,14 +146,14 @@ func TestUpdateTeamMember(t *testing.T) {
 
 	// Pre-UoW FindMember to capture old role for audit
 	s.Teams.EXPECT().FindMember(ctx, "main", "pepito").Return(&team.Member{
-		Role: role.Viewer, User: user.User{Username: "pepito"},
+		Role: role.Read, User: user.User{Username: "pepito"},
 	}, nil)
 	// validateTeamAdmins will call Find
 	s.Teams.EXPECT().Find(ctx, "main").Return(&team.WithMembers{
 		Team: team.Team{ID: 1, Canonical: "main"},
 		Members: []team.Member{
 			{Role: role.Admin, User: user.User{Username: "admin"}},
-			{Role: role.Viewer, User: user.User{Username: "pepito"}},
+			{Role: role.Read, User: user.User{Username: "pepito"}},
 		},
 	}, nil)
 	s.Teams.EXPECT().UpdateMember(ctx, "main", "pepito", gomock.Any()).Return(nil)
@@ -185,12 +185,12 @@ func TestUpdateTeamMember_DemoteOneOfTwoAdmins(t *testing.T) {
 	}, nil)
 	s.Teams.EXPECT().UpdateMember(ctx, "main", "pepito", gomock.Any()).Return(nil)
 	s.Teams.EXPECT().FindMember(ctx, "main", "pepito").Return(&team.Member{
-		Role: role.Viewer, User: user.User{Username: "pepito"},
+		Role: role.Read, User: user.User{Username: "pepito"},
 	}, nil)
 
-	m, err := s.S.UpdateTeamMember(ctx, "main", "pepito", team.Member{Role: role.Viewer})
+	m, err := s.S.UpdateTeamMember(ctx, "main", "pepito", team.Member{Role: role.Read})
 	require.NoError(t, err)
-	assert.Equal(t, role.Viewer, m.Role)
+	assert.Equal(t, role.Read, m.Role)
 }
 
 func TestUpdateTeamMember_WouldRemoveLastAdmin(t *testing.T) {
@@ -210,7 +210,7 @@ func TestUpdateTeamMember_WouldRemoveLastAdmin(t *testing.T) {
 		},
 	}, nil)
 
-	_, err := s.S.UpdateTeamMember(ctx, "main", "admin", team.Member{Role: role.Viewer})
+	_, err := s.S.UpdateTeamMember(ctx, "main", "admin", team.Member{Role: role.Read})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no admins")
 }
@@ -225,7 +225,7 @@ func TestDeleteTeamMember(t *testing.T) {
 		Team: team.Team{ID: 1, Canonical: "main"},
 		Members: []team.Member{
 			{Role: role.Admin, User: user.User{Username: "admin"}},
-			{Role: role.Viewer, User: user.User{Username: "pepito"}},
+			{Role: role.Read, User: user.User{Username: "pepito"}},
 		},
 	}, nil)
 	s.Teams.EXPECT().DeleteMember(ctx, "main", "pepito").Return(nil)
@@ -277,10 +277,10 @@ func TestUpdateTeamMember_InvalidCanonical(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	_, err := s.S.UpdateTeamMember(ctx, "INVALID", "pepito", team.Member{Role: role.Viewer})
+	_, err := s.S.UpdateTeamMember(ctx, "INVALID", "pepito", team.Member{Role: role.Read})
 	require.Error(t, err)
 
-	_, err = s.S.UpdateTeamMember(ctx, "main", "INVALID", team.Member{Role: role.Viewer})
+	_, err = s.S.UpdateTeamMember(ctx, "main", "INVALID", team.Member{Role: role.Read})
 	require.Error(t, err)
 }
 
@@ -323,7 +323,7 @@ func TestDeleteTeamMember_LastAdmin_OtherMembersRemain(t *testing.T) {
 		Team: team.Team{ID: 1, Canonical: "main"},
 		Members: []team.Member{
 			{Role: role.Admin, User: user.User{Username: "admin"}},
-			{Role: role.Viewer, User: user.User{Username: "pepito"}},
+			{Role: role.Read, User: user.User{Username: "pepito"}},
 		},
 	}, nil)
 
@@ -342,7 +342,7 @@ func TestDeleteTeamMember_NonAdmin_AdminRemains(t *testing.T) {
 		Team: team.Team{ID: 1, Canonical: "main"},
 		Members: []team.Member{
 			{Role: role.Admin, User: user.User{Username: "admin"}},
-			{Role: role.Viewer, User: user.User{Username: "pepito"}},
+			{Role: role.Read, User: user.User{Username: "pepito"}},
 		},
 	}, nil)
 	s.Teams.EXPECT().DeleteMember(ctx, "main", "pepito").Return(nil)

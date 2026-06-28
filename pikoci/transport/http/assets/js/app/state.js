@@ -13,7 +13,7 @@ export const isAdmin = computed(() => {
   return u && u.admin;
 });
 
-const ROLE_LEVELS = { public: 0, viewer: 1, operator: 2, maintainer: 3, admin: 4 };
+const ROLE_LEVELS = { public: 0, read: 1, write: 2, maintain: 3, admin: 4 };
 
 export function getTeamRole(tc) {
   const u = session.value.user;
@@ -41,7 +41,7 @@ export function isTeamMember(tc) {
   if (!u) return false;
   if (u.admin) return true;
   if (!tc) return true;
-  return hasTeamRole(tc, 'viewer');
+  return hasTeamRole(tc, 'read');
 }
 
 export function login(jwt, user) {

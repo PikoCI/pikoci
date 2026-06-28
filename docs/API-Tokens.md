@@ -41,11 +41,11 @@ pikoci client api-tokens create --name "my-script" --personal
 
 ### Team-Scoped Tokens
 
-A team-scoped token is restricted to one team and capped at a specific role. The effective role is always `min(user_role, token_role)` — if the user is later downgraded to `viewer` but the token was created with `maintainer`, the effective role becomes `viewer`.
+A team-scoped token is restricted to one team and capped at a specific role. The effective role is always `min(user_role, token_role)` — if the user is later downgraded to `read` but the token was created with `maintain`, the effective role becomes `read`.
 
 ```bash
 pikoci client api-tokens create --name "ci-deploy" \
-  --team-canonical main --role operator
+  --team-canonical main --role write
 ```
 
 **Constraints:**
@@ -94,7 +94,7 @@ pikoci client api-tokens create --name "my-script" --personal
 
 ```bash
 pikoci client api-tokens create --name "ci-deploy" \
-  --team-canonical main --role operator
+  --team-canonical main --role write
 ```
 
 #### Create a token with expiration
@@ -135,7 +135,7 @@ All subsequent `pikoci client` commands will use this token. To switch back to i
 | `--name` | **yes** | Name for the token (unique per user) |
 | `--personal` | one of | Create a personal token with full user access |
 | `--team-canonical` | one of | Team canonical for a team-scoped token |
-| `--role` | with team | Role cap: `viewer`, `operator`, `maintainer`, `admin` |
+| `--role` | with team | Role cap: `read`, `write`, `maintain`, `admin` |
 | `--expires-at` | no | Expiration in RFC3339 format (e.g. `2026-12-31T23:59:59Z`) |
 
 `--personal` and `--team-canonical`/`--role` are mutually exclusive. One mode is required.
@@ -177,7 +177,7 @@ Or for team-scoped:
   "name": "ci-deploy",
   "personal": false,
   "team_canonical": "main",
-  "role": "operator"
+  "role": "write"
 }
 ```
 

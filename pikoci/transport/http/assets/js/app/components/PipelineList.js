@@ -46,7 +46,7 @@ export function PipelineList({ tc }) {
         </span>
         <label for="live-status-toggle" class="form-label mb-0" style="font-size:0.85rem;cursor:pointer;" onClick=${toggleLive}>Live</label>
       </div>
-      ${hasTeamRole(tc, 'maintainer') && html`
+      ${hasTeamRole(tc, 'maintain') && html`
         <a type="button" id="pipelines-new" class="btn btn-success" href=${'/teams/' + tc + '/pipelines/new'} data-native
            onClick=${e => { e.preventDefault(); route('/teams/' + tc + '/pipelines/new'); }}>
           <i class="bi bi-plus"></i> New

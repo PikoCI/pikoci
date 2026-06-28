@@ -201,7 +201,7 @@ func TestHTTPEndpoints(t *testing.T) {
 
 		t.Run("Members", func(t *testing.T) {
 			t.Run("Create", func(t *testing.T) {
-				body := `{"user":{"username":"pepito"},"role":"viewer"}`
+				body := `{"user":{"username":"pepito"},"role":"read"}`
 				resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/members", adminJWT, body)
 				defer resp.Body.Close()
 				requireOK(t, resp)

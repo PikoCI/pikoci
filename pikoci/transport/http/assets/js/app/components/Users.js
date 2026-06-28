@@ -393,7 +393,7 @@ function ApiTokensTab() {
   const [name, setName] = useState('');
   const [personal, setPersonal] = useState(true);
   const [teamCanonical, setTeamCanonical] = useState('');
-  const [tokenRole, setTokenRole] = useState('viewer');
+  const [tokenRole, setTokenRole] = useState('read');
   const [useExpiration, setUseExpiration] = useState(false);
   const [expiresAt, setExpiresAt] = useState('');
   const [teams, setTeams] = useState([]);
@@ -456,7 +456,7 @@ function ApiTokensTab() {
     });
   };
 
-  const roleOptions = ['viewer', 'operator', 'maintainer', 'admin'];
+  const roleOptions = ['read', 'write', 'maintain', 'admin'];
 
   const teamMembership = userMemberships.find(m => m.team_canonical === teamCanonical);
   const maxRoleLevel = teamMembership ? roleOptions.indexOf(teamMembership.role) : -1;
@@ -522,7 +522,7 @@ function ApiTokensTab() {
                 <div class="col">
                   <label class="form-label">Team</label>
                   <select class="form-select" value=${teamCanonical}
-                    onChange=${(e) => { setTeamCanonical(e.target.value); setTokenRole('viewer'); }}>
+                    onChange=${(e) => { setTeamCanonical(e.target.value); setTokenRole('read'); }}>
                     <option value="">Select a team</option>
                     ${teams.map(t => html`
                       <option value=${t.canonical}>${t.name}</option>

@@ -13,9 +13,9 @@ func TestLevel(t *testing.T) {
 		level int
 	}{
 		{role.Public, 0},
-		{role.Viewer, 1},
-		{role.Operator, 2},
-		{role.Maintainer, 3},
+		{role.Read, 1},
+		{role.Write, 2},
+		{role.Maintain, 3},
 		{role.Admin, 4},
 		{role.Role("invalid"), -1},
 		{role.Role(""), -1},
@@ -29,15 +29,15 @@ func TestLevel(t *testing.T) {
 func TestAtLeast(t *testing.T) {
 	assert.True(t, role.Admin.AtLeast(role.Public))
 	assert.True(t, role.Admin.AtLeast(role.Admin))
-	assert.True(t, role.Viewer.AtLeast(role.Viewer))
-	assert.True(t, role.Viewer.AtLeast(role.Public))
-	assert.False(t, role.Viewer.AtLeast(role.Operator))
-	assert.False(t, role.Public.AtLeast(role.Viewer))
+	assert.True(t, role.Read.AtLeast(role.Read))
+	assert.True(t, role.Read.AtLeast(role.Public))
+	assert.False(t, role.Read.AtLeast(role.Write))
+	assert.False(t, role.Public.AtLeast(role.Read))
 	assert.False(t, role.Role("invalid").AtLeast(role.Public))
 }
 
 func TestValid(t *testing.T) {
-	for _, r := range []role.Role{role.Public, role.Viewer, role.Operator, role.Maintainer, role.Admin} {
+	for _, r := range []role.Role{role.Public, role.Read, role.Write, role.Maintain, role.Admin} {
 		assert.True(t, r.Valid(), "role=%q", r)
 	}
 	assert.False(t, role.Role("invalid").Valid())
@@ -47,9 +47,9 @@ func TestValid(t *testing.T) {
 
 func TestAssignable(t *testing.T) {
 	assert.False(t, role.Public.Assignable())
-	assert.True(t, role.Viewer.Assignable())
-	assert.True(t, role.Operator.Assignable())
-	assert.True(t, role.Maintainer.Assignable())
+	assert.True(t, role.Read.Assignable())
+	assert.True(t, role.Write.Assignable())
+	assert.True(t, role.Maintain.Assignable())
 	assert.True(t, role.Admin.Assignable())
 	assert.False(t, role.Role("invalid").Assignable())
 	assert.False(t, role.Role("owner").Assignable())

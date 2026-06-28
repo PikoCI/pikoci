@@ -128,7 +128,7 @@ func (q *PikoCI) CreateTeamMember(ctx context.Context, tc string, tm team.Member
 		return nil, fmt.Errorf("invalid Team Member Username format %q", tm.User.Username)
 	}
 	if !tm.Role.Assignable() {
-		return nil, fmt.Errorf("invalid role %q: must be one of viewer, operator, maintainer, admin", tm.Role)
+		return nil, fmt.Errorf("invalid role %q: must be one of read, write, maintain, admin", tm.Role)
 	}
 
 	err := q.Teams.CreateMember(ctx, tc, tm)
@@ -156,7 +156,7 @@ func (q *PikoCI) UpdateTeamMember(ctx context.Context, tc, mu string, tm team.Me
 		return nil, fmt.Errorf("invalid Team Member Username format %q", mu)
 	}
 	if !tm.Role.Assignable() {
-		return nil, fmt.Errorf("invalid role %q: must be one of viewer, operator, maintainer, admin", tm.Role)
+		return nil, fmt.Errorf("invalid role %q: must be one of read, write, maintain, admin", tm.Role)
 	}
 
 	// Capture old role before the transaction for audit logging.
