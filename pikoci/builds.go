@@ -120,6 +120,12 @@ func (q *PikoCI) GetJobBuild(ctx context.Context, tc, pc, jn string, buildNumber
 	if err != nil {
 		return nil, fmt.Errorf("failed to Find Build: %w", err)
 	}
+	if b.Status == build.WaitingForApproval {
+		approvals, aErr := q.Builds.FindApprovals(ctx, b.ID)
+		if aErr == nil {
+			b.Approvals = approvals
+		}
+	}
 	return b, nil
 }
 
