@@ -421,6 +421,74 @@ func parsePaginationParams(r *http.Request) (before *uint32, after *uint32, limi
 	return
 }
 
+// ApproveBuildRequest is the request body for the approve endpoint.
+type ApproveBuildRequest struct {
+	Message string `json:"message"`
+}
+
+// ApproveBuildResponse is the response body for the approve endpoint.
+type ApproveBuildResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r ApproveBuildResponse) Error() string { return r.Err }
+
+func approveBuild(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var (
+			req ApproveBuildRequest
+			ctx = r.Context()
+		)
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		jn := vars["job_name"]
+		bn := vars["build_number"]
+		un, _ := ctx.Value(UsernameContextKey).(string)
+		err := s.ApproveBuild(ctx, tc, pc, jn, bn, un, req.Message)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(ApproveBuildResponse{Err: errs}, w)
+	}
+}
+
+// RejectBuildRequest is the request body for the reject endpoint.
+type RejectBuildRequest struct {
+	Message string `json:"message"`
+}
+
+// RejectBuildResponse is the response body for the reject endpoint.
+type RejectBuildResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r RejectBuildResponse) Error() string { return r.Err }
+
+func rejectBuild(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var (
+			req RejectBuildRequest
+			ctx = r.Context()
+		)
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		jn := vars["job_name"]
+		bn := vars["build_number"]
+		un, _ := ctx.Value(UsernameContextKey).(string)
+		err := s.RejectBuild(ctx, tc, pc, jn, bn, un, req.Message)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(RejectBuildResponse{Err: errs}, w)
+	}
+}
+
 func listJobBuilds(s pikoci.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (

@@ -21,6 +21,7 @@ func TestCreateJobBuild(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job"}, nil)
 	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "my-job", gomock.Any()).Return(uint32(1), "1", nil)
 
 	b, err := s.S.CreateJobBuild(ctx, "main", "my-pipeline", "my-job", build.Build{})
@@ -196,7 +197,7 @@ func TestRetryJobBuild_RunningBuildFails(t *testing.T) {
 
 	err := s.S.RetryJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "still running or pending")
+	assert.Contains(t, err.Error(), "still running, pending, or waiting for approval")
 }
 
 func TestCreateRetryJobBuild(t *testing.T) {
@@ -437,7 +438,7 @@ func TestCancelJobBuild_AlreadyCompleted(t *testing.T) {
 
 	err := s.S.CancelJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not running or pending")
+	assert.Contains(t, err.Error(), "not running, pending, or waiting for approval")
 }
 
 func TestUpdateJobBuild_CancelledBuildNotOverwritten(t *testing.T) {

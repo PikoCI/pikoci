@@ -28,7 +28,19 @@ const (
 	Cancelled
 	// Pending indicates the build is queued and waiting to start.
 	Pending
+	// WaitingApproval indicates the build is waiting for human approval before starting.
+	WaitingApproval
 )
+
+// Approval represents a single approve/reject vote on a build.
+type Approval struct {
+	ID        uint32    `json:"id"`
+	BuildID   uint32    `json:"build_id"`
+	Username  string    `json:"username"`
+	Action    string    `json:"action"` // "approved" or "rejected"
+	Message   string    `json:"message,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
 
 // Build represents a single execution of a job within a pipeline.
 type Build struct {
@@ -47,6 +59,10 @@ type Build struct {
 	ResourceCanonical string `json:"resource_canonical,omitempty"`
 
 	RetrySourceBuildID uint32 `json:"retry_source_build_id,omitempty"`
+
+	// Approvals contains the approval/rejection votes for this build.
+	// Only populated for builds with WaitingApproval status.
+	Approvals []Approval `json:"approvals,omitempty"`
 
 	// SuppressUpdates prevents updateBuild from persisting this build.
 	// Used by in_parallel goroutines that operate on local build copies.

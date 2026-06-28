@@ -4,7 +4,7 @@ import { html } from 'htm/preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { route } from 'preact-router';
 import { isLoggedIn, hasTeamRole } from '../state.js';
-import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
+import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, approveBuild, rejectBuild, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
 import { useLoading, usePolling } from '../hooks.js';
 import { sortBuilds, selectActiveBuild, durationToString, processLogs, pikoTimeAgo, fetchInterval } from '../utils.js';
 import { showToast } from '../toast.js';
@@ -39,6 +39,7 @@ function buildStatusBadge(status) {
   if (status === 'started') return html`<span class="piko-badge piko-badge-started">Running</span>`;
   if (status === 'cancelled') return html`<span class="piko-badge piko-badge-cancelled">Cancelled</span>`;
   if (status === 'pending') return html`<span class="piko-badge piko-badge-pending">Pending</span>`;
+  if (status === 'waiting_for_approval') return html`<span class="piko-badge" style="background:rgba(142,68,173,0.15);color:#8e44ad;">Waiting for Approval</span>`;
   return null;
 }
 
@@ -262,12 +263,70 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
   const steps = build.steps || [];
   const jobSteps = build.job || [];
   const isRunningOrPending = build.status === 'started' || build.status === 'pending';
+  const isWaitingApproval = build.status === 'waiting_for_approval';
+  const isMaintainer = hasTeamRole(tc, 'maintain');
+  const [approveMsg, setApproveMsg] = useState('');
+  const [rejectMsg, setRejectMsg] = useState('');
+  const [approveLoading, withApproveLoading] = useLoading();
+  const [rejectLoading, withRejectLoading] = useLoading();
 
   return html`
     <div class="piko-build-content-inner">
       ${build.error ? html`<div class="alert alert-danger" role="alert">${build.error}</div>` : null}
+      ${isWaitingApproval ? html`
+        <div class="card mb-3" style="border-color:var(--status-waiting_for_approval);">
+          <div class="card-header" style="background:var(--status-waiting_for_approval);color:#fff;">
+            <i class="bi bi-hourglass-split"></i> Waiting for Approval
+          </div>
+          <div class="card-body">
+            ${(build.approvals || []).length > 0 ? html`
+              <div class="mb-2">
+                ${(build.approvals || []).map(a => html`
+                  <div key=${a.id} class="d-flex align-items-center gap-2 mb-1">
+                    <span class="badge ${a.action === 'approved' ? 'bg-success' : 'bg-danger'}">${a.action}</span>
+                    <strong>${a.username}</strong>
+                    ${a.message ? html`<span class="text-muted">— ${a.message}</span>` : null}
+                  </div>
+                `)}
+              </div>
+            ` : html`<p class="text-muted mb-2">No votes yet.</p>`}
+            ${isMaintainer ? html`
+              <div class="d-flex gap-2 mt-2">
+                <div class="input-group input-group-sm" style="max-width:400px;">
+                  <input type="text" class="form-control" placeholder="Optional message"
+                    value=${approveMsg} onInput=${(e) => setApproveMsg(e.target.value)} />
+                  <button class="btn btn-success" disabled=${approveLoading} onClick=${() => {
+                    withApproveLoading(async () => {
+                      await approveBuild(tc, pn, jn, build.build_number, approveMsg);
+                      showToast('Build approved', 'success');
+                      setApproveMsg('');
+                      if (onRetry) onRetry();
+                    });
+                  }}>
+                    <i class="bi bi-check-circle"></i> ${approveLoading ? 'Approving...' : 'Approve'}
+                  </button>
+                </div>
+                <div class="input-group input-group-sm" style="max-width:400px;">
+                  <input type="text" class="form-control" placeholder="Reason (required)"
+                    value=${rejectMsg} onInput=${(e) => setRejectMsg(e.target.value)} />
+                  <button class="btn btn-danger" disabled=${rejectLoading || !rejectMsg} onClick=${() => {
+                    withRejectLoading(async () => {
+                      await rejectBuild(tc, pn, jn, build.build_number, rejectMsg);
+                      showToast('Build rejected', 'success');
+                      setRejectMsg('');
+                      if (onRetry) onRetry();
+                    });
+                  }}>
+                    <i class="bi bi-x-circle"></i> ${rejectLoading ? 'Rejecting...' : 'Reject'}
+                  </button>
+                </div>
+              </div>
+            ` : null}
+          </div>
+        </div>
+      ` : null}
       <div class="piko-build-meta">
-        ${build.status !== 'pending' ? html`
+        ${build.status !== 'pending' && build.status !== 'waiting_for_approval' ? html`
           <span>
             <span class="piko-build-label">Started</span>
             ${' '}

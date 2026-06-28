@@ -1309,3 +1309,29 @@ func (cl *Client) ListAuditLog(ctx context.Context, tc string, opts auditlog.Fil
 
 	return resp.Entries, hasMore, nil
 }
+
+func (cl *Client) ApproveBuild(ctx context.Context, tc, pc, jn, buildNumber, username, message string) error {
+	u := fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/builds/%s/approve", cl.url, tc, pc, jn, buildNumber)
+	var resp thttp.ErrorResponse
+	err := cl.Request(ctx, http.MethodPost, u, thttp.ApproveBuildRequest{Message: message}, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+	return nil
+}
+
+func (cl *Client) RejectBuild(ctx context.Context, tc, pc, jn, buildNumber, username, message string) error {
+	u := fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/builds/%s/reject", cl.url, tc, pc, jn, buildNumber)
+	var resp thttp.ErrorResponse
+	err := cl.Request(ctx, http.MethodPost, u, thttp.RejectBuildRequest{Message: message}, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+	return nil
+}

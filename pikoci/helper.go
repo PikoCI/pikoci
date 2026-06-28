@@ -73,6 +73,14 @@ type hclPutStep struct {
 	Remain hcl.Body `hcl:",remain"`
 }
 
+// hclApproveBlock is the intermediate HCL-decoded approve block inside a job.
+type hclApproveBlock struct {
+	Label     string          `hcl:"label,label"`
+	Timeout   string          `hcl:"timeout,optional"`
+	Approvals int             `hcl:"approvals,optional"`
+	Notify    []hclNotifyStep `hcl:"notify,block"`
+}
+
 // hclJob is the intermediate HCL-decoded job with separate get/task/put/notify arrays.
 type hclJob struct {
 	Name         string           `hcl:"name,label"`
@@ -86,6 +94,7 @@ type hclJob struct {
 	Notify       []hclNotifyStep  `hcl:"notify,block"`
 	Service      []hclServiceRef      `hcl:"service,block"`
 	InParallel   []hclInParallelBlock `hcl:"in_parallel,block"`
+	Approve      []hclApproveBlock    `hcl:"approve,block"`
 
 	Remain hcl.Body `hcl:",remain"` // absorbs hook blocks; parsed by parseHooks from AST
 }
@@ -634,7 +643,7 @@ var (
 	}
 	jobBlocks = map[string]bool{
 		"get": true, "task": true, "put": true, "notify": true, "service": true,
-		"in_parallel": true,
+		"in_parallel": true, "approve": true,
 		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
 		"matrix": true,
 	}
@@ -1410,6 +1419,15 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 			OnFailure:    jh.OnFailure,
 			OnCancel:     jh.OnCancel,
 			Ensure:       jh.Ensure,
+		}
+		if len(hj.Approve) > 0 {
+			ab := hj.Approve[0]
+			j.ApproveLabel = ab.Label
+			j.ApproveTimeout = ab.Timeout
+			j.ApproveCount = ab.Approvals
+			if j.ApproveCount == 0 {
+				j.ApproveCount = 1
+			}
 		}
 		if meta, ok := forEachMetas[hj.Name]; ok {
 			j.ForEachGroup = meta.baseName

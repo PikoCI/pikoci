@@ -163,4 +163,9 @@ const (
 
 	// ListAuditLog is the route for listing audit log entries for a team.
 	ListAuditLog
+
+	// ApproveBuild is the route for approving a build waiting for approval.
+	ApproveBuild
+	// RejectBuild is the route for rejecting a build waiting for approval.
+	RejectBuild
 )

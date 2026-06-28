@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Approval gates**: Jobs can now require human approval before builds start. Add an `approve` block to any job in the pipeline HCL to create a gate. Builds enter "Waiting for Approval" (purple) status and don't consume worker resources. Maintain+ users can approve or reject via UI buttons, CLI (`builds approve`/`builds reject`), or API. Features: configurable approval count, rejection immediately fails the build with reason, retries skip the gate, audit log tracks `build.approved`/`build.rejected` events. Purple status appears in build tabs, graph view, list view, resource versions, and legend ([#152](https://github.com/PikoCI/pikoci/issues/152)).
+
 - **Audit log**: Append-only audit trail recording who did what within a team. Tracks 16 event types across pipelines, jobs, resources, and team membership. Accessible via Team page Audit Log tab, CLI (`audit list`), and API (`GET /teams/{tc}/audit`). Supports multi-select include/exclude filters for users, actions, and pipelines with cursor-based pagination. Entries persist after user removal or pipeline deletion. Read+ access required ([#532](https://github.com/PikoCI/pikoci/issues/532)).
 - **Secrets masking in build logs**: Resolved secret values are automatically replaced with `***` in command stdout/stderr as a safety net against accidental leaks. Masking applies to real-time partial log streaming and final stored output. Values shorter than 3 characters are skipped to avoid false positives, and longer secrets are masked before shorter substrings to prevent partial masking ([#147](https://github.com/PikoCI/pikoci/issues/147)).
 

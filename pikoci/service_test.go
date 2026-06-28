@@ -53,7 +53,7 @@ func TestTriggerPipelineJob(t *testing.T) {
 	ppc := "pipeline-name"
 	jn := "job-name"
 
-	s.Jobs.EXPECT().Find(ctx, tc, ppc, jn).Return(&job.Job{ID: 2}, nil)
+	s.Jobs.EXPECT().Find(ctx, tc, ppc, jn).Return(&job.Job{ID: 2}, nil).Times(2)
 	// TriggerPipelineJob creates a pending build and calls Notify()
 	s.Builds.EXPECT().Create(ctx, tc, ppc, jn, gomock.Any()).Return(uint32(1), "1", nil)
 

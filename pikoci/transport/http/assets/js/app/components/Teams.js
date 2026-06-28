@@ -300,6 +300,7 @@ const AUDIT_ACTIONS = [
   'pipeline.created', 'pipeline.updated', 'pipeline.deleted',
   'pipeline.paused', 'pipeline.unpaused',
   'job.triggered', 'job.cancelled', 'job.retried', 'job.paused', 'job.unpaused',
+  'build.approved', 'build.rejected',
   'resource.pinned', 'resource.unpinned', 'resource.check_triggered',
   'member.added', 'member.removed', 'member.role_changed',
 ];

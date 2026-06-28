@@ -649,6 +649,10 @@ export function PipelineShow({ tc, pn }) {
             No builds
           </span>
           <span class="piko-graph-legend-item">
+            <span class="piko-graph-legend-swatch" style="background:var(--status-waiting_for_approval);"></span>
+            Waiting for approval
+          </span>
+          <span class="piko-graph-legend-item">
             <span class="piko-graph-legend-swatch" style="background:var(--primary);"></span>
             Paused
           </span>

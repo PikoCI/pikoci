@@ -783,3 +783,51 @@ func scanBuilds(rows *sql.Rows) ([]*build.Build, error) {
 	}
 	return bs, nil
 }
+
+func (r *BuildRepository) CreateApproval(ctx context.Context, buildID uint32, username, action, message string) error {
+	_, err := r.querier.ExecContext(ctx, `
+		INSERT INTO build_approvals (build_id, username, action, message)
+		VALUES (?, ?, ?, ?)
+	`, buildID, username, action, message)
+	if err != nil {
+		return fmt.Errorf("failed to create approval: %w", err)
+	}
+	return nil
+}
+
+func (r *BuildRepository) FindApprovals(ctx context.Context, buildID uint32) ([]build.Approval, error) {
+	rows, err := r.querier.QueryContext(ctx, `
+		SELECT id, build_id, username, action, message, created_at
+		FROM build_approvals
+		WHERE build_id = ?
+		ORDER BY created_at ASC
+	`, buildID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query approvals: %w", err)
+	}
+	defer rows.Close()
+
+	var approvals []build.Approval
+	for rows.Next() {
+		var a build.Approval
+		var msg sql.NullString
+		if err := rows.Scan(&a.ID, &a.BuildID, &a.Username, &a.Action, &msg, &a.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan approval: %w", err)
+		}
+		a.Message = msg.String
+		approvals = append(approvals, a)
+	}
+	return approvals, rows.Err()
+}
+
+func (r *BuildRepository) CountApprovals(ctx context.Context, buildID uint32) (int, error) {
+	var count int
+	err := r.querier.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM build_approvals
+		WHERE build_id = ? AND action = 'approved'
+	`, buildID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count approvals: %w", err)
+	}
+	return count, nil
+}

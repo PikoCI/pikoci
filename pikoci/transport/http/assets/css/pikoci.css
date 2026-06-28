@@ -33,6 +33,7 @@
   --status-started:   #FFA300;
   --status-cancelled: #AB5236;
   --status-pending:   #83769C;
+  --status-waiting_for_approval: #8e44ad;
 
   --font-body:     'Plus Jakarta Sans', system-ui, sans-serif;
   --font-mono:     'JetBrains Mono', monospace;
@@ -558,6 +559,7 @@ textarea.form-control {
 .piko-tab-status.status-started { background: var(--status-started); }
 .piko-tab-status.status-cancelled { background: var(--status-cancelled); }
 .piko-tab-status.status-pending { background: var(--status-pending); }
+.piko-tab-status.status-waiting_for_approval { background: var(--status-waiting_for_approval); }
 
 /* ============================================================
    BUILD META & STEP LABELS
@@ -984,6 +986,7 @@ textarea.form-control {
 .piko-status-dot-failed { background: var(--status-failed); }
 .piko-status-dot-started { background: var(--status-started); }
 .piko-status-dot-pending { background: var(--status-pending); }
+.piko-status-dot-waiting_for_approval { background: var(--status-waiting_for_approval); }
 .piko-status-dot-cancelled { background: var(--status-cancelled); }
 .piko-status-dot-paused { background: #29ADFF; }
 .piko-status-dot- { background: var(--status-pending); }

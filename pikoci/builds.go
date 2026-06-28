@@ -42,6 +42,12 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 
 	b.Status = build.Pending
 
+	// Check if the job has an approval gate — if so, set WaitingApproval
+	j, jErr := q.Jobs.Find(ctx, tc, pc, jn)
+	if jErr == nil && j.ApproveLabel != "" {
+		b.Status = build.WaitingApproval
+	}
+
 	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
 		id, buildNumber, err := uow.Builds().Create(ctx, tc, pc, jn, b)
 		if err != nil {
@@ -56,7 +62,9 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 		return nil, err
 	}
 
-	q.Notifier.Notify()
+	if b.Status != build.WaitingApproval {
+		q.Notifier.Notify()
+	}
 
 	return &b, nil
 }
@@ -131,8 +139,8 @@ func (q *PikoCI) CancelJobBuild(ctx context.Context, tc, pc, jn string, buildNum
 		return fmt.Errorf("failed to Find Build: %w", err)
 	}
 	wasRunning := b.Status == build.Started
-	if b.Status != build.Started && b.Status != build.Pending {
-		return fmt.Errorf("build %s is not running or pending (status: %s)", buildNumber, b.Status)
+	if b.Status != build.Started && b.Status != build.Pending && b.Status != build.WaitingApproval {
+		return fmt.Errorf("build %s is not running, pending, or waiting for approval (status: %s)", buildNumber, b.Status)
 	}
 	b.Status = build.Cancelled
 	if wasRunning {
@@ -232,8 +240,8 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 	if err != nil {
 		return fmt.Errorf("failed to Find Build: %w", err)
 	}
-	if b.Status == build.Started || b.Status == build.Pending {
-		return fmt.Errorf("build %s is still running or pending", buildNumber)
+	if b.Status == build.Started || b.Status == build.Pending || b.Status == build.WaitingApproval {
+		return fmt.Errorf("build %s is still running, pending, or waiting for approval", buildNumber)
 	}
 
 	// Extract parent build number: if "3.1" -> "3", if "3" -> "3"
@@ -572,8 +580,12 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 			return nil
 		}
 
+		status := build.Pending
+		if j.ApproveLabel != "" {
+			status = build.WaitingApproval
+		}
 		id, buildNumber, err := uow.Builds().Create(ctx, tc, pn, j.Name, build.Build{
-			Status:    build.Pending,
+			Status:    status,
 			VersionID: versionID,
 		})
 		if err != nil {

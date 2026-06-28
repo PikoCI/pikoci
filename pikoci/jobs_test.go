@@ -68,7 +68,7 @@ func TestTriggerPipelineJob_Success(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(&job.Job{ID: 1}, nil)
+	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(&job.Job{ID: 1}, nil).Times(2)
 	s.Builds.EXPECT().Create(ctx, "main", "pp", "jn", gomock.Any()).Return(uint32(1), "1", nil)
 
 	err := s.S.TriggerPipelineJob(ctx, "main", "pp", "jn")
@@ -102,7 +102,7 @@ func TestTriggerPipelineJob_PinsLatestVersion(t *testing.T) {
 
 	rCan := j.GetSteps()[0].ResourceCanonical()
 
-	s.Jobs.EXPECT().Find(ctx, tc, ppc, jn).Return(j, nil)
+	s.Jobs.EXPECT().Find(ctx, tc, ppc, jn).Return(j, nil).Times(2)
 	// Resource is not pinned — falls through to latest version
 	s.Resources.EXPECT().Find(ctx, tc, ppc, rCan).Return(&resource.Resource{}, nil)
 	s.Resources.EXPECT().FilterVersions(ctx, tc, ppc, rCan, (*uint32)(nil), (*uint32)(nil), uint32(0)).Return(versions, nil)
@@ -135,7 +135,7 @@ func TestTriggerPipelineJob_UsesPinnedVersion(t *testing.T) {
 	rCan := j.GetSteps()[0].ResourceCanonical()
 	pinnedVersion := uint32(20)
 
-	s.Jobs.EXPECT().Find(ctx, tc, ppc, jn).Return(j, nil)
+	s.Jobs.EXPECT().Find(ctx, tc, ppc, jn).Return(j, nil).Times(2)
 	// Resource is pinned to version 20
 	s.Resources.EXPECT().Find(ctx, tc, ppc, rCan).Return(&resource.Resource{PinnedVersionID: &pinnedVersion}, nil)
 	// FilterVersions should NOT be called — pinned version is used directly

@@ -56,6 +56,14 @@ type Job struct {
 
 	BaselineVersionID *uint32 `json:"baseline_version_id,omitempty"`
 
+	// ApproveLabel is the display label for the approval gate (e.g. "deploy to production").
+	// When non-empty, builds for this job require approval before starting.
+	ApproveLabel string `json:"approve_label,omitempty"`
+	// ApproveTimeout is the duration string after which a waiting build fails (e.g. "24h").
+	ApproveTimeout string `json:"approve_timeout,omitempty"`
+	// ApproveCount is the number of approvals required. Default 1 if approve block is present.
+	ApproveCount int `json:"approve_count,omitempty"`
+
 	OnSuccess []HookStep `json:"on_success,omitempty"`
 	OnFailure []HookStep `json:"on_failure,omitempty"`
 	OnCancel  []HookStep `json:"on_cancel,omitempty"`

@@ -312,6 +312,7 @@ func TestTriggerResourceVersion(t *testing.T) {
 		},
 	}, nil)
 	// CreateJobBuild for the matching job
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job"}, nil)
 	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "my-job", gomock.Any()).Return(uint32(1), "1", nil)
 
 	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
