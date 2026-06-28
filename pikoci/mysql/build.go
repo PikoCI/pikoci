@@ -543,7 +543,7 @@ func (r *BuildRepository) FindOldestPending(ctx context.Context, tc, pn, jn stri
 			ON j.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ? AND b.status = 'pending'
+		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ? AND b.status IN ('pending', 'waiting_for_approval')
 		ORDER BY b.id ASC
 		LIMIT 1
 	`, tc, pn, jn)
@@ -596,6 +596,7 @@ func (r *BuildRepository) AggregateStatusByVersionIDs(ctx context.Context, versi
 				WHEN SUM(CASE WHEN b.status = 'failed' THEN 1 ELSE 0 END) > 0 THEN 'failed'
 				WHEN SUM(CASE WHEN b.status = 'started' THEN 1 ELSE 0 END) > 0 THEN 'started'
 				WHEN SUM(CASE WHEN b.status = 'pending' THEN 1 ELSE 0 END) > 0 THEN 'pending'
+				WHEN SUM(CASE WHEN b.status = 'waiting_for_approval' THEN 1 ELSE 0 END) > 0 THEN 'waiting_for_approval'
 				WHEN SUM(CASE WHEN b.status = 'succeeded' THEN 1 ELSE 0 END) > 0 THEN 'succeeded'
 				WHEN SUM(CASE WHEN b.status = 'cancelled' THEN 1 ELSE 0 END) > 0 THEN 'cancelled'
 				ELSE ''

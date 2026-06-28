@@ -42,10 +42,10 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 
 	b.Status = build.Pending
 
-	// Check if the job has an approval gate — if so, set WaitingApproval
+	// Check if the job has an approval gate — if so, set WaitingForApproval
 	j, jErr := q.Jobs.Find(ctx, tc, pc, jn)
 	if jErr == nil && j.ApproveLabel != "" {
-		b.Status = build.WaitingApproval
+		b.Status = build.WaitingForApproval
 	}
 
 	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
@@ -62,7 +62,7 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 		return nil, err
 	}
 
-	if b.Status != build.WaitingApproval {
+	if b.Status != build.WaitingForApproval {
 		q.Notifier.Notify()
 	}
 
@@ -139,7 +139,7 @@ func (q *PikoCI) CancelJobBuild(ctx context.Context, tc, pc, jn string, buildNum
 		return fmt.Errorf("failed to Find Build: %w", err)
 	}
 	wasRunning := b.Status == build.Started
-	if b.Status != build.Started && b.Status != build.Pending && b.Status != build.WaitingApproval {
+	if b.Status != build.Started && b.Status != build.Pending && b.Status != build.WaitingForApproval {
 		return fmt.Errorf("build %s is not running, pending, or waiting for approval (status: %s)", buildNumber, b.Status)
 	}
 	b.Status = build.Cancelled
@@ -240,7 +240,7 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 	if err != nil {
 		return fmt.Errorf("failed to Find Build: %w", err)
 	}
-	if b.Status == build.Started || b.Status == build.Pending || b.Status == build.WaitingApproval {
+	if b.Status == build.Started || b.Status == build.Pending || b.Status == build.WaitingForApproval {
 		return fmt.Errorf("build %s is still running, pending, or waiting for approval", buildNumber)
 	}
 
@@ -582,7 +582,7 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 
 		status := build.Pending
 		if j.ApproveLabel != "" {
-			status = build.WaitingApproval
+			status = build.WaitingForApproval
 		}
 		id, buildNumber, err := uow.Builds().Create(ctx, tc, pn, j.Name, build.Build{
 			Status:    status,

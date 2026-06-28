@@ -56,6 +56,12 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 		{"maintainer can create pipeline", http.MethodPost, "/teams/main/pipelines", role.Maintain, false, true},
 		{"operator denied create pipeline", http.MethodPost, "/teams/main/pipelines", role.Write, false, false},
 
+		// --- Approval routes: maintain+ allowed, write denied ---
+		{"maintain can approve build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/1/approve", role.Maintain, false, true},
+		{"maintain can reject build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/1/reject", role.Maintain, false, true},
+		{"write denied approve build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/1/approve", role.Write, false, false},
+		{"write denied reject build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/1/reject", role.Write, false, false},
+
 		// --- Admin routes: admin+ allowed, maintainer denied ---
 		{"admin can create member", http.MethodPost, "/teams/main/members", role.Admin, false, true},
 		{"admin can update team", http.MethodPut, "/teams/main", role.Admin, false, true},
@@ -107,6 +113,8 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 			svc.EXPECT().PinResourceVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			svc.EXPECT().TriggerPipelineResource(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 		svc.EXPECT().ListAuditLog(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, false, nil).AnyTimes()
+			svc.EXPECT().ApproveBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().RejectBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 			// Sign JWT
 			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user": um})

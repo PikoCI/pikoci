@@ -1295,12 +1295,14 @@ textarea.form-control {
 .piko-badge-started { background: #fff0d0; color: #9a7000; }
 .piko-badge-cancelled { background: #f5e6df; color: #8A3F2B; }
 .piko-badge-pending { background: #e8e0f0; color: #5F574F; }
+.piko-badge-waiting_for_approval { background: rgba(142,68,173,0.15); color: #8e44ad; }
 .piko-badge-primary { background: rgba(41,173,255,0.15); color: #29ADFF; }
 [data-theme="dark"] .piko-badge-succeeded { background: rgba(0,168,58,0.15); color: #00E436; }
 [data-theme="dark"] .piko-badge-failed { background: rgba(255,0,77,0.15); color: #FF77A8; }
 [data-theme="dark"] .piko-badge-started { background: rgba(255,163,0,0.15); color: #FFA300; }
 [data-theme="dark"] .piko-badge-cancelled { background: rgba(171,82,54,0.15); color: #D4845E; }
 [data-theme="dark"] .piko-badge-pending { background: rgba(131,118,156,0.15); color: #83769C; }
+[data-theme="dark"] .piko-badge-waiting_for_approval { background: rgba(142,68,173,0.15); color: #b370cf; }
 
 /* In-parallel step group */
 .piko-parallel-group > .piko-step-row-body {

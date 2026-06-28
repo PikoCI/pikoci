@@ -8,11 +8,11 @@ import (
 	"strings"
 )
 
-const _StatusName = "succeededfailedstartedcancelledpendingwaiting_approval"
+const _StatusName = "succeededfailedstartedcancelledpendingwaiting_for_approval"
 
-var _StatusIndex = [...]uint8{0, 9, 15, 22, 31, 38, 54}
+var _StatusIndex = [...]uint8{0, 9, 15, 22, 31, 38, 58}
 
-const _StatusLowerName = "succeededfailedstartedcancelledpendingwaiting_approval"
+const _StatusLowerName = "succeededfailedstartedcancelledpendingwaiting_for_approval"
 
 func (i Status) String() string {
 	if i < 0 || i >= Status(len(_StatusIndex)-1) {
@@ -30,10 +30,10 @@ func _StatusNoOp() {
 	_ = x[Started-(2)]
 	_ = x[Cancelled-(3)]
 	_ = x[Pending-(4)]
-	_ = x[WaitingApproval-(5)]
+	_ = x[WaitingForApproval-(5)]
 }
 
-var _StatusValues = []Status{Succeeded, Failed, Started, Cancelled, Pending, WaitingApproval}
+var _StatusValues = []Status{Succeeded, Failed, Started, Cancelled, Pending, WaitingForApproval}
 
 var _StatusNameToValueMap = map[string]Status{
 	_StatusName[0:9]:        Succeeded,
@@ -46,8 +46,8 @@ var _StatusNameToValueMap = map[string]Status{
 	_StatusLowerName[22:31]: Cancelled,
 	_StatusName[31:38]:      Pending,
 	_StatusLowerName[31:38]: Pending,
-	_StatusName[38:54]:      WaitingApproval,
-	_StatusLowerName[38:54]: WaitingApproval,
+	_StatusName[38:58]:      WaitingForApproval,
+	_StatusLowerName[38:58]: WaitingForApproval,
 }
 
 var _StatusNames = []string{
@@ -56,7 +56,7 @@ var _StatusNames = []string{
 	_StatusName[15:22],
 	_StatusName[22:31],
 	_StatusName[31:38],
-	_StatusName[38:54],
+	_StatusName[38:58],
 }
 
 // StatusString retrieves an enum value from the enum constants string name.

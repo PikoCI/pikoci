@@ -24,7 +24,7 @@ func (q *PikoCI) ApproveBuild(ctx context.Context, tc, pc, jn, buildNumber, user
 	if err != nil {
 		return fmt.Errorf("failed to Find Build: %w", err)
 	}
-	if b.Status != build.WaitingApproval {
+	if b.Status != build.WaitingForApproval {
 		return fmt.Errorf("build %s is not waiting for approval (status: %s)", buildNumber, b.Status)
 	}
 
@@ -77,7 +77,7 @@ func (q *PikoCI) RejectBuild(ctx context.Context, tc, pc, jn, buildNumber, usern
 	if err != nil {
 		return fmt.Errorf("failed to Find Build: %w", err)
 	}
-	if b.Status != build.WaitingApproval {
+	if b.Status != build.WaitingForApproval {
 		return fmt.Errorf("build %s is not waiting for approval (status: %s)", buildNumber, b.Status)
 	}
 

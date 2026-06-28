@@ -39,7 +39,7 @@ function buildStatusBadge(status) {
   if (status === 'started') return html`<span class="piko-badge piko-badge-started">Running</span>`;
   if (status === 'cancelled') return html`<span class="piko-badge piko-badge-cancelled">Cancelled</span>`;
   if (status === 'pending') return html`<span class="piko-badge piko-badge-pending">Pending</span>`;
-  if (status === 'waiting_for_approval') return html`<span class="piko-badge" style="background:rgba(142,68,173,0.15);color:#8e44ad;">Waiting for Approval</span>`;
+  if (status === 'waiting_for_approval') return html`<span class="piko-badge piko-badge-waiting_for_approval">Waiting for Approval</span>`;
   return null;
 }
 
@@ -188,6 +188,10 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
   const isAutoScrollingRef = useRef(false);
   const [cancelLoading, withCancelLoading] = useLoading();
   const [retryLoading, withRetryLoading] = useLoading();
+  const [approveMsg, setApproveMsg] = useState('');
+  const [rejectMsg, setRejectMsg] = useState('');
+  const [approveLoading, withApproveLoading] = useLoading();
+  const [rejectLoading, withRejectLoading] = useLoading();
   const initializedRef = useRef(false);
 
   // Initialize expanded steps - running steps start expanded
@@ -265,10 +269,6 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
   const isRunningOrPending = build.status === 'started' || build.status === 'pending';
   const isWaitingApproval = build.status === 'waiting_for_approval';
   const isMaintainer = hasTeamRole(tc, 'maintain');
-  const [approveMsg, setApproveMsg] = useState('');
-  const [rejectMsg, setRejectMsg] = useState('');
-  const [approveLoading, withApproveLoading] = useLoading();
-  const [rejectLoading, withRejectLoading] = useLoading();
 
   return html`
     <div class="piko-build-content-inner">
@@ -352,7 +352,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
               </button>
             ` : null}
           </span>
-        ` : isOperator ? html`
+        ` : isOperator && !isWaitingApproval ? html`
           <button type="button" class="btn btn-sm btn-outline-warning piko-retry-build" style="margin-left:auto;" onClick=${handleRetry} disabled=${retryLoading}>
             <i class="bi bi-arrow-clockwise"></i> ${retryLoading ? 'Retrying...' : 'Retry'}
           </button>

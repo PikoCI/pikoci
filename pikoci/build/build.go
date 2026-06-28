@@ -28,8 +28,8 @@ const (
 	Cancelled
 	// Pending indicates the build is queued and waiting to start.
 	Pending
-	// WaitingApproval indicates the build is waiting for human approval before starting.
-	WaitingApproval
+	// WaitingForApproval indicates the build is waiting for human approval before starting.
+	WaitingForApproval
 )
 
 // Approval represents a single approve/reject vote on a build.
@@ -61,7 +61,7 @@ type Build struct {
 	RetrySourceBuildID uint32 `json:"retry_source_build_id,omitempty"`
 
 	// Approvals contains the approval/rejection votes for this build.
-	// Only populated for builds with WaitingApproval status.
+	// Only populated for builds with WaitingForApproval status.
 	Approvals []Approval `json:"approvals,omitempty"`
 
 	// SuppressUpdates prevents updateBuild from persisting this build.

@@ -165,7 +165,7 @@ export const selectActiveBuild = (builds, requestedID) => {
     const found = builds.find((b) => String(b.id) === String(requestedID));
     if (found) return found;
   }
-  const active = builds.find((b) => b.status === 'started' || b.status === 'pending');
+  const active = builds.find((b) => b.status === 'started' || b.status === 'pending' || b.status === 'waiting_for_approval');
   return active || builds[0];
 };
 
