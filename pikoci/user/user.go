@@ -58,10 +58,10 @@ func (u *WithMemberships) IsAdmin(tcs ...string) bool {
 	return u.HasRole(role.Admin, tcs...)
 }
 
-// IsMember reports whether the user is a global admin or a member (viewer+)
+// IsMember reports whether the user is a global admin or a member (read+)
 // of any of the teams identified by the given canonical names. An empty
 // canonical name is treated as a wildcard match.
-// Deprecated: Use HasRole(role.Viewer, tcs...) instead.
+// Deprecated: Use HasRole(role.Read, tcs...) instead.
 func (u *WithMemberships) IsMember(tcs ...string) bool {
 	if u.Admin {
 		return true
@@ -70,5 +70,5 @@ func (u *WithMemberships) IsMember(tcs ...string) bool {
 		// In case it's only an empty one it's member
 		return true
 	}
-	return u.HasRole(role.Viewer, tcs...)
+	return u.HasRole(role.Read, tcs...)
 }

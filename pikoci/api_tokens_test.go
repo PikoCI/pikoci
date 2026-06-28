@@ -45,13 +45,13 @@ func TestCreateApiToken_TeamScoped(t *testing.T) {
 	}, nil)
 	s.ApiTokens.EXPECT().Create(ctx, gomock.Any(), gomock.Any()).Return(uint32(2), nil)
 
-	token, err := s.S.CreateApiToken(ctx, "admin", "team-token", false, "main", role.Operator, nil)
+	token, err := s.S.CreateApiToken(ctx, "admin", "team-token", false, "main", role.Write, nil)
 	require.NoError(t, err)
 	require.NotNil(t, token)
 	assert.Equal(t, "team-token", token.Name)
 	assert.False(t, token.Personal)
 	assert.Equal(t, "main", token.TeamCanonical)
-	assert.Equal(t, role.Operator, token.Role)
+	assert.Equal(t, role.Write, token.Role)
 }
 
 func TestCreateApiToken_EmptyName(t *testing.T) {
@@ -114,7 +114,7 @@ func TestCreateApiToken_TeamScoped_MissingTeam(t *testing.T) {
 
 	s.Users.EXPECT().Find(ctx, "admin").Return(&user.User{ID: 1, Username: "admin"}, nil)
 
-	_, err := s.S.CreateApiToken(ctx, "admin", "bad", false, "", role.Viewer, nil)
+	_, err := s.S.CreateApiToken(ctx, "admin", "bad", false, "", role.Read, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "team canonical is required")
 }
@@ -139,7 +139,7 @@ func TestCreateApiToken_TeamScoped_InsufficientRole(t *testing.T) {
 	s.Users.EXPECT().Find(ctx, "viewer-user").Return(&user.User{ID: 2, Username: "viewer-user"}, nil)
 	s.Users.EXPECT().FindWithMemberships(ctx, "viewer-user").Return(&user.WithMemberships{
 		User:        user.User{ID: 2, Username: "viewer-user"},
-		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Viewer}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Read}},
 	}, nil)
 
 	_, err := s.S.CreateApiToken(ctx, "viewer-user", "bad", false, "main", role.Admin, nil)
@@ -155,14 +155,14 @@ func TestCreateApiToken_TeamScoped_RoleAtExactLevel(t *testing.T) {
 	s.Users.EXPECT().Find(ctx, "op-user").Return(&user.User{ID: 3, Username: "op-user"}, nil)
 	s.Users.EXPECT().FindWithMemberships(ctx, "op-user").Return(&user.WithMemberships{
 		User:        user.User{ID: 3, Username: "op-user"},
-		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
 	}, nil)
 	s.ApiTokens.EXPECT().Create(ctx, gomock.Any(), gomock.Any()).Return(uint32(1), nil)
 
 	// Can create token at same level as user's role
-	token, err := s.S.CreateApiToken(ctx, "op-user", "ok", false, "main", role.Operator, nil)
+	token, err := s.S.CreateApiToken(ctx, "op-user", "ok", false, "main", role.Write, nil)
 	require.NoError(t, err)
-	assert.Equal(t, role.Operator, token.Role)
+	assert.Equal(t, role.Write, token.Role)
 }
 
 func TestCreateApiToken_TeamScoped_RoleBelowUserLevel(t *testing.T) {
@@ -178,9 +178,9 @@ func TestCreateApiToken_TeamScoped_RoleBelowUserLevel(t *testing.T) {
 	s.ApiTokens.EXPECT().Create(ctx, gomock.Any(), gomock.Any()).Return(uint32(1), nil)
 
 	// Can create token below user's role
-	token, err := s.S.CreateApiToken(ctx, "admin-user", "low", false, "main", role.Viewer, nil)
+	token, err := s.S.CreateApiToken(ctx, "admin-user", "low", false, "main", role.Read, nil)
 	require.NoError(t, err)
-	assert.Equal(t, role.Viewer, token.Role)
+	assert.Equal(t, role.Read, token.Role)
 }
 
 func TestCreateApiToken_DuplicateName(t *testing.T) {
@@ -203,7 +203,7 @@ func TestListApiTokens(t *testing.T) {
 
 	expected := []*apitoken.Token{
 		{ID: 1, Name: "tok1", Personal: true},
-		{ID: 2, Name: "tok2", Personal: false, TeamCanonical: "main", Role: role.Viewer},
+		{ID: 2, Name: "tok2", Personal: false, TeamCanonical: "main", Role: role.Read},
 	}
 	s.ApiTokens.EXPECT().Filter(ctx, "admin").Return(expected, nil)
 
@@ -300,7 +300,7 @@ func TestDeleteTeamMember_CleansUpTokens(t *testing.T) {
 		UserID:        2,
 		Personal:      false,
 		TeamCanonical: "main",
-		TokenRole:     role.Viewer,
+		TokenRole:     role.Read,
 		TokenID:       10,
 	}, nil)
 	result, err := s.S.FindApiTokenByHash(ctx, "hash-before")
@@ -313,7 +313,7 @@ func TestDeleteTeamMember_CleansUpTokens(t *testing.T) {
 		Team: team.Team{ID: 1, Canonical: "main"},
 		Members: []team.Member{
 			{Role: role.Admin, User: user.User{Username: "admin"}},
-			{Role: role.Viewer, User: user.User{Username: "pepito"}},
+			{Role: role.Read, User: user.User{Username: "pepito"}},
 		},
 	}, nil)
 	s.Teams.EXPECT().DeleteMember(ctx, "main", "pepito").Return(nil)
@@ -343,9 +343,9 @@ func TestCreateApiToken_TeamScoped_WrongTeam(t *testing.T) {
 	}, nil)
 
 	// Try to create a token for team-b — user is only a member of team-a
-	_, err := s.S.CreateApiToken(ctx, "pepito", "bad-token", false, "team-b", role.Viewer, nil)
+	_, err := s.S.CreateApiToken(ctx, "pepito", "bad-token", false, "team-b", role.Read, nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "does not have viewer role on team \"team-b\"")
+	assert.Contains(t, err.Error(), "does not have read role on team \"team-b\"")
 }
 
 // TestCreateApiToken_TeamScoped_UserNotMember verifies that a user with no
@@ -361,9 +361,9 @@ func TestCreateApiToken_TeamScoped_UserNotMember(t *testing.T) {
 		Memberships: []user.Member{},
 	}, nil)
 
-	_, err := s.S.CreateApiToken(ctx, "lonely", "no-access", false, "main", role.Viewer, nil)
+	_, err := s.S.CreateApiToken(ctx, "lonely", "no-access", false, "main", role.Read, nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "does not have viewer role")
+	assert.Contains(t, err.Error(), "does not have read role")
 }
 
 // TestDeleteTeamMember_PersonalTokensSurvive verifies that personal tokens are
@@ -378,7 +378,7 @@ func TestDeleteTeamMember_PersonalTokensSurvive(t *testing.T) {
 		Team: team.Team{ID: 1, Canonical: "main"},
 		Members: []team.Member{
 			{Role: role.Admin, User: user.User{Username: "admin"}},
-			{Role: role.Viewer, User: user.User{Username: "pepito"}},
+			{Role: role.Read, User: user.User{Username: "pepito"}},
 		},
 	}, nil)
 	s.Teams.EXPECT().DeleteMember(ctx, "main", "pepito").Return(nil)

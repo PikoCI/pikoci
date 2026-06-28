@@ -520,8 +520,8 @@ export function PipelineShow({ tc, pn }) {
 
   if (!pipeline) return null;
 
-  const isOperator = hasTeamRole(tc, 'operator');
-  const isMaintainer = hasTeamRole(tc, 'maintainer');
+  const isOperator = hasTeamRole(tc, 'write');
+  const isMaintainer = hasTeamRole(tc, 'maintain');
   const hasPaused = pipeline.jobs && pipeline.jobs.some(j => j.paused);
   const shareUrls = getShareUrls();
   const showGraphView = currentView === 'graph';

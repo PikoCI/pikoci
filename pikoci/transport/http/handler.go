@@ -407,7 +407,7 @@ func membershipsDiffer(jwtUser map[string]interface{}, dbUser *user.WithMembersh
 			if a {
 				key = tc + ":" + string(role.Admin)
 			} else {
-				key = tc + ":" + string(role.Maintainer)
+				key = tc + ":" + string(role.Maintain)
 			}
 		}
 		if !dbSet[key] {

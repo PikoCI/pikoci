@@ -756,7 +756,7 @@ export function Editor({ pipeline, teamCanonical, onSave, onSaveSuccess }) {
 // PipelineNew wrapper
 // ================================================================
 export function PipelineNew({ tc }) {
-  useRequireAuth({ requiredRole: 'maintainer', teamCanonical: tc });
+  useRequireAuth({ requiredRole: 'maintain', teamCanonical: tc });
 
   const onSave = useCallback((data) => {
     return createPipeline(tc, data);
@@ -776,7 +776,7 @@ export function PipelineNew({ tc }) {
 // PipelineEdit wrapper
 // ================================================================
 export function PipelineEdit({ tc, pn }) {
-  useRequireAuth({ requiredRole: 'maintainer', teamCanonical: tc, redirectTo: '/teams/' + tc + '/pipelines/' + pn });
+  useRequireAuth({ requiredRole: 'maintain', teamCanonical: tc, redirectTo: '/teams/' + tc + '/pipelines/' + pn });
   const [pipeline, setPipeline] = useState(null);
   const [loading, setLoading] = useState(true);
 

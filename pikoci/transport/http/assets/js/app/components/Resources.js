@@ -29,8 +29,8 @@ export function ResourceVersions({ tc, pn, rCan }) {
   const [loading, withLoading] = useLoading();
   const fetchingMore = useRef(false);
 
-  const isMember = hasTeamRole(tc, 'operator');
-  const isAdm = hasTeamRole(tc, 'maintainer');
+  const isMember = hasTeamRole(tc, 'write');
+  const isAdm = hasTeamRole(tc, 'maintain');
 
   // Initial fetch
   useEffect(() => {

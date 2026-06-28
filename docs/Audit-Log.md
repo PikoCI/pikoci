@@ -101,7 +101,7 @@ Example: to see all actions except those by `system`, add `system` to the User f
 
 ## Permissions
 
-Any team member with **Viewer** role or above can read the audit log. API tokens with viewer access can also read it.
+Any team member with **Read** role or above can read the audit log. API tokens with viewer access can also read it.
 
 The audit log is read-only — there is no API to modify or delete entries.
 

@@ -40,7 +40,7 @@ func TestApiTokens_FullLifecycle(t *testing.T) {
 	var teamToken apitoken.WithPlaintext
 	t.Run("create team-scoped token", func(t *testing.T) {
 		resp := doJSONRequest(t, http.MethodPost, pikoURL+"/api-tokens", adminJWT,
-			`{"name":"test-team","personal":false,"team_canonical":"main","role":"viewer"}`)
+			`{"name":"test-team","personal":false,"team_canonical":"main","role":"read"}`)
 		defer resp.Body.Close()
 		requireOK(t, resp)
 
@@ -50,7 +50,7 @@ func TestApiTokens_FullLifecycle(t *testing.T) {
 		require.NotNil(t, got.Token)
 		assert.False(t, got.Token.Personal)
 		assert.Equal(t, "main", got.Token.TeamCanonical)
-		assert.Equal(t, "viewer", string(got.Token.Role))
+		assert.Equal(t, "read", string(got.Token.Role))
 		teamToken = *got.Token
 	})
 
@@ -186,7 +186,7 @@ func TestApiTokens_MembershipCleanup(t *testing.T) {
 
 	// Add user to main team as operator
 	resp = doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/members", adminJWT,
-		`{"role":"operator","user":{"username":"token-test-user"}}`)
+		`{"role":"write","user":{"username":"token-test-user"}}`)
 	resp.Body.Close()
 
 	// Login as the new user and create a team-scoped token
@@ -194,7 +194,7 @@ func TestApiTokens_MembershipCleanup(t *testing.T) {
 
 	var userToken apitoken.WithPlaintext
 	resp = doJSONRequest(t, http.MethodPost, pikoURL+"/api-tokens", userJWT,
-		`{"name":"member-token","personal":false,"team_canonical":"main","role":"viewer"}`)
+		`{"name":"member-token","personal":false,"team_canonical":"main","role":"read"}`)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var createResp thttp.CreateApiTokenResponse
 	decodeBody(t, resp, &createResp)
@@ -224,7 +224,7 @@ func TestApiTokens_MembershipCleanup(t *testing.T) {
 	// Create a personal token for the user (should still work for teams they're on)
 	// First re-add user to team so they can login
 	resp = doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/members", adminJWT,
-		`{"role":"viewer","user":{"username":"token-test-user"}}`)
+		`{"role":"read","user":{"username":"token-test-user"}}`)
 	resp.Body.Close()
 
 	userJWT = loginAndGetJWT(t, pikoURL, "token-test-user", "pass123")
@@ -260,7 +260,7 @@ func TestApiTokens_RoleDowngrade(t *testing.T) {
 	resp.Body.Close()
 
 	resp = doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/members", adminJWT,
-		`{"role":"maintainer","user":{"username":"downgrade-user"}}`)
+		`{"role":"maintain","user":{"username":"downgrade-user"}}`)
 	resp.Body.Close()
 
 	// Login and create a maintainer-scoped token
@@ -268,7 +268,7 @@ func TestApiTokens_RoleDowngrade(t *testing.T) {
 
 	var token apitoken.WithPlaintext
 	resp = doJSONRequest(t, http.MethodPost, pikoURL+"/api-tokens", userJWT,
-		`{"name":"maintainer-token","personal":false,"team_canonical":"main","role":"maintainer"}`)
+		`{"name":"maintainer-token","personal":false,"team_canonical":"main","role":"maintain"}`)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var createResp thttp.CreateApiTokenResponse
 	decodeBody(t, resp, &createResp)
@@ -286,7 +286,7 @@ func TestApiTokens_RoleDowngrade(t *testing.T) {
 
 	// Downgrade user to viewer
 	resp = doJSONRequest(t, http.MethodPut, pikoURL+"/teams/main/members/downgrade-user", adminJWT,
-		`{"role":"viewer","user":{"username":"downgrade-user"}}`)
+		`{"role":"read","user":{"username":"downgrade-user"}}`)
 	resp.Body.Close()
 
 	// Token should now be denied for maintainer actions (effective = min(viewer, maintainer) = viewer)

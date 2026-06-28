@@ -179,7 +179,7 @@ function ParallelGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoF
 
 function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
   const build = prepareBuild(rawBuild);
-  const isOperator = hasTeamRole(tc, 'operator');
+  const isOperator = hasTeamRole(tc, 'write');
   const [autoFollow, setAutoFollow] = useState(true);
   const [expandedSteps, setExpandedSteps] = useState({});
   const [elapsed, setElapsed] = useState('');
@@ -639,7 +639,7 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
     route(pipelinePath + versionParam);
   }, [tc, pn, trackedVersionID]);
 
-  const isMember = hasTeamRole(tc, 'operator');
+  const isMember = hasTeamRole(tc, 'write');
 
   return html`
     <div>

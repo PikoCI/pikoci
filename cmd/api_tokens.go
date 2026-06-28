@@ -74,7 +74,7 @@ func init() {
 	apiTokensCreateCmd.Flags().String("name", "", "Name for the token (unique per user)")
 	apiTokensCreateCmd.Flags().Bool("personal", false, "Create a personal token with full user access")
 	apiTokensCreateCmd.Flags().String("team-canonical", "", "Team canonical for a team-scoped token")
-	apiTokensCreateCmd.Flags().String("role", "", "Role cap for a team-scoped token (viewer, operator, maintainer, admin)")
+	apiTokensCreateCmd.Flags().String("role", "", "Role cap for a team-scoped token (read, write, maintain, admin)")
 	apiTokensCreateCmd.Flags().String("expires-at", "", "Optional expiration in RFC3339 format (e.g. 2026-12-31T23:59:59Z)")
 	apiTokensCreateCmd.MarkFlagRequired("name")
 }

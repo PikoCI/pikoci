@@ -9,7 +9,7 @@ import { useRequireAuth, useLoading } from '../hooks.js';
 import { showToast } from '../toast.js';
 import { Breadcrumb } from './Layout.js';
 
-const ASSIGNABLE_ROLES = ['viewer', 'operator', 'maintainer', 'admin'];
+const ASSIGNABLE_ROLES = ['read', 'write', 'maintain', 'admin'];
 
 // ---------------------------------------------------------------------------
 // TeamsView – list all teams
@@ -278,7 +278,7 @@ function MembersTab({ tc, members, setMembers, loadTeam }) {
       <thead>
         <tr>
           <th scope="col" class="col-4">Full Name</th>
-          <th scope="col" class="col-4">Role${' '}<a href="https://docs.pikoci.com/Roles" target="_blank" rel="noopener" title="${'Viewer: read-only access\nOperator: trigger, cancel, retry builds; pause/unpause; pin/unpin\nMaintainer: create, edit, delete pipelines and resources\nAdmin: manage members, team settings, delete team\n\nClick to go to docs'}" style="color:var(--text-muted);font-size:0.85em;"><i class="bi bi-info-circle"></i></a></th>
+          <th scope="col" class="col-4">Role${' '}<a href="https://docs.pikoci.com/Roles" target="_blank" rel="noopener" title="${'Read: read-only access\nWrite: trigger, cancel, retry builds; pause/unpause; pin/unpin\nMaintain: create, edit, delete pipelines and resources\nAdmin: manage members, team settings, delete team\n\nClick to go to docs'}" style="color:var(--text-muted);font-size:0.85em;"><i class="bi bi-info-circle"></i></a></th>
           <th scope="col" class="col-4">Options</th>
         </tr>
       </thead>
@@ -515,7 +515,7 @@ function AuditLogTab({ tc }) {
 
 function NewMemberRow({ users, onAdd }) {
   const [username, setUsername] = useState(users.length ? users[0].username : '');
-  const [memberRole, setMemberRole] = useState('maintainer');
+  const [memberRole, setMemberRole] = useState('maintain');
   const [loading, withLoading] = useLoading();
 
   const handleCreate = (e) => {

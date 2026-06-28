@@ -36,34 +36,34 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 
 	tests := []testCase{
 		// --- Viewer routes: viewer+ allowed ---
-		{"viewer can list pipelines", http.MethodGet, "/teams/main/pipelines", role.Viewer, false, true},
-		{"viewer can get team", http.MethodGet, "/teams/main", role.Viewer, false, true},
-		{"viewer can list audit log", http.MethodGet, "/teams/main/audit", role.Viewer, false, true},
+		{"viewer can list pipelines", http.MethodGet, "/teams/main/pipelines", role.Read, false, true},
+		{"viewer can get team", http.MethodGet, "/teams/main", role.Read, false, true},
+		{"viewer can list audit log", http.MethodGet, "/teams/main/audit", role.Read, false, true},
 
 		// --- Operator routes: operator+ allowed, viewer denied ---
-		{"operator can trigger job", http.MethodPost, "/teams/main/pipelines/p/jobs/j/trigger", role.Operator, false, true},
-		{"operator can pause pipeline", http.MethodPost, "/teams/main/pipelines/p/pause", role.Operator, false, true},
-		{"operator can cancel build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/1/cancel", role.Operator, false, true},
-		{"operator can retry build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/1/retry", role.Operator, false, true},
-		{"viewer denied trigger job", http.MethodPost, "/teams/main/pipelines/p/jobs/j/trigger", role.Viewer, false, false},
-		{"viewer denied cancel build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/1/cancel", role.Viewer, false, false},
-		{"viewer denied retry build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/1/retry", role.Viewer, false, false},
-		{"viewer denied pause pipeline", http.MethodPost, "/teams/main/pipelines/p/pause", role.Viewer, false, false},
-		{"viewer denied pin resource", http.MethodPost, "/teams/main/pipelines/p/resources/r/pin", role.Viewer, false, false},
-		{"viewer denied trigger resource", http.MethodPost, "/teams/main/pipelines/p/resources/r/trigger", role.Viewer, false, false},
+		{"operator can trigger job", http.MethodPost, "/teams/main/pipelines/p/jobs/j/trigger", role.Write, false, true},
+		{"operator can pause pipeline", http.MethodPost, "/teams/main/pipelines/p/pause", role.Write, false, true},
+		{"operator can cancel build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/1/cancel", role.Write, false, true},
+		{"operator can retry build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/1/retry", role.Write, false, true},
+		{"viewer denied trigger job", http.MethodPost, "/teams/main/pipelines/p/jobs/j/trigger", role.Read, false, false},
+		{"viewer denied cancel build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/1/cancel", role.Read, false, false},
+		{"viewer denied retry build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/1/retry", role.Read, false, false},
+		{"viewer denied pause pipeline", http.MethodPost, "/teams/main/pipelines/p/pause", role.Read, false, false},
+		{"viewer denied pin resource", http.MethodPost, "/teams/main/pipelines/p/resources/r/pin", role.Read, false, false},
+		{"viewer denied trigger resource", http.MethodPost, "/teams/main/pipelines/p/resources/r/trigger", role.Read, false, false},
 
 		// --- Maintainer routes: maintainer+ allowed, operator denied ---
-		{"maintainer can create pipeline", http.MethodPost, "/teams/main/pipelines", role.Maintainer, false, true},
-		{"operator denied create pipeline", http.MethodPost, "/teams/main/pipelines", role.Operator, false, false},
+		{"maintainer can create pipeline", http.MethodPost, "/teams/main/pipelines", role.Maintain, false, true},
+		{"operator denied create pipeline", http.MethodPost, "/teams/main/pipelines", role.Write, false, false},
 
 		// --- Admin routes: admin+ allowed, maintainer denied ---
 		{"admin can create member", http.MethodPost, "/teams/main/members", role.Admin, false, true},
 		{"admin can update team", http.MethodPut, "/teams/main", role.Admin, false, true},
-		{"maintainer denied create member", http.MethodPost, "/teams/main/members", role.Maintainer, false, false},
-		{"maintainer denied update team", http.MethodPut, "/teams/main", role.Maintainer, false, false},
+		{"maintainer denied create member", http.MethodPost, "/teams/main/members", role.Maintain, false, false},
+		{"maintainer denied update team", http.MethodPut, "/teams/main", role.Maintain, false, false},
 
 		{"admin can delete team", http.MethodDelete, "/teams/main", role.Admin, false, true},
-		{"maintainer denied delete team", http.MethodDelete, "/teams/main", role.Maintainer, false, false},
+		{"maintainer denied delete team", http.MethodDelete, "/teams/main", role.Maintain, false, false},
 
 		// --- Global admin routes: only global admin ---
 		{"global admin can list users", http.MethodGet, "/users", role.Admin, true, true},
@@ -239,7 +239,7 @@ func TestApiTokenAuth(t *testing.T) {
 		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(1)).AnyTimes()
 		svc.EXPECT().GetUser(gomock.Any(), "admin").Return(&user.WithMemberships{
 			User:        user.User{Username: "admin"},
-			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Viewer}},
+			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Read}},
 		}, nil)
 		svc.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
@@ -266,7 +266,7 @@ func TestApiTokenAuth(t *testing.T) {
 			UserID:        1,
 			Personal:      false,
 			TeamCanonical: "main",
-			TokenRole:     role.Operator,
+			TokenRole:     role.Write,
 			TokenID:       2,
 		}, nil)
 		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(2)).AnyTimes()
@@ -336,7 +336,7 @@ func TestApiTokenAuth(t *testing.T) {
 			UserID:        1,
 			Personal:      false,
 			TeamCanonical: "main",
-			TokenRole:     role.Operator,
+			TokenRole:     role.Write,
 			TokenID:       4,
 		}, nil)
 		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(4)).AnyTimes()
@@ -370,13 +370,13 @@ func TestApiTokenAuth(t *testing.T) {
 			UserID:        1,
 			Personal:      false,
 			TeamCanonical: "main",
-			TokenRole:     role.Maintainer,
+			TokenRole:     role.Maintain,
 			TokenID:       5,
 		}, nil)
 		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(5)).AnyTimes()
 		svc.EXPECT().GetUser(gomock.Any(), "admin").Return(&user.WithMemberships{
 			User:        user.User{Username: "admin"},
-			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Viewer}},
+			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Read}},
 		}, nil)
 
 		req, _ := http.NewRequest(http.MethodPost, server.URL+"/teams/main/pipelines", strings.NewReader("{}"))
@@ -573,7 +573,7 @@ func TestApiTokenAuth(t *testing.T) {
 		svc.EXPECT().UpdateApiTokenLastUsed(gomock.Any(), uint32(11)).AnyTimes()
 		svc.EXPECT().GetUser(gomock.Any(), "admin").Return(&user.WithMemberships{
 			User:        user.User{Username: "admin"},
-			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Viewer}},
+			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Read}},
 		}, nil)
 		svc.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
@@ -632,11 +632,11 @@ func TestMinRole(t *testing.T) {
 		a, b     role.Role
 		expected role.Role
 	}{
-		{role.Admin, role.Viewer, role.Viewer},
-		{role.Viewer, role.Admin, role.Viewer},
-		{role.Operator, role.Operator, role.Operator},
-		{role.Maintainer, role.Operator, role.Operator},
-		{role.Viewer, role.Maintainer, role.Viewer},
+		{role.Admin, role.Read, role.Read},
+		{role.Read, role.Admin, role.Read},
+		{role.Write, role.Write, role.Write},
+		{role.Maintain, role.Write, role.Write},
+		{role.Read, role.Maintain, role.Read},
 		{role.Admin, role.Admin, role.Admin},
 	}
 
@@ -653,12 +653,12 @@ func TestRoleOnTeam(t *testing.T) {
 		User: user.User{Username: "testuser"},
 		Memberships: []user.Member{
 			{TeamCanonical: "team-a", Role: role.Admin},
-			{TeamCanonical: "team-b", Role: role.Viewer},
+			{TeamCanonical: "team-b", Role: role.Read},
 		},
 	}
 
 	assert.Equal(t, role.Admin, roleOnTeam(um, "team-a"))
-	assert.Equal(t, role.Viewer, roleOnTeam(um, "team-b"))
+	assert.Equal(t, role.Read, roleOnTeam(um, "team-b"))
 	assert.Equal(t, role.Role(""), roleOnTeam(um, "team-c")) // no membership
 }
 
@@ -680,7 +680,7 @@ func TestApiTokenAuth_PersonalTokenMultiTeam(t *testing.T) {
 			User: user.User{Username: "multi-user"},
 			Memberships: []user.Member{
 				{TeamCanonical: "team-a", Role: role.Admin},
-				{TeamCanonical: "team-b", Role: role.Viewer},
+				{TeamCanonical: "team-b", Role: role.Read},
 			},
 		}, nil)
 	}

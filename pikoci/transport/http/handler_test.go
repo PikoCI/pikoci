@@ -125,12 +125,12 @@ func TestMembershipsDiffer(t *testing.T) {
 			jwtUser: map[string]interface{}{
 				"admin": false,
 				"memberships": []interface{}{
-					map[string]interface{}{"team_canonical": "main", "role": "operator"},
+					map[string]interface{}{"team_canonical": "main", "role": "write"},
 				},
 			},
 			dbUser: &user.WithMemberships{
 				User:        user.User{Admin: false},
-				Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
+				Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
 			},
 			expected: false,
 		},
@@ -153,7 +153,7 @@ func TestMembershipsDiffer(t *testing.T) {
 			},
 			dbUser: &user.WithMemberships{
 				User:        user.User{Admin: false},
-				Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
+				Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
 			},
 			expected: true,
 		},
@@ -162,7 +162,7 @@ func TestMembershipsDiffer(t *testing.T) {
 			jwtUser: map[string]interface{}{
 				"admin": false,
 				"memberships": []interface{}{
-					map[string]interface{}{"team_canonical": "main", "role": "operator"},
+					map[string]interface{}{"team_canonical": "main", "role": "write"},
 				},
 			},
 			dbUser: &user.WithMemberships{
@@ -175,7 +175,7 @@ func TestMembershipsDiffer(t *testing.T) {
 			jwtUser: map[string]interface{}{
 				"admin": false,
 				"memberships": []interface{}{
-					map[string]interface{}{"team_canonical": "main", "role": "operator"},
+					map[string]interface{}{"team_canonical": "main", "role": "write"},
 				},
 			},
 			dbUser: &user.WithMemberships{
@@ -208,7 +208,7 @@ func TestMembershipsDiffer(t *testing.T) {
 			},
 			dbUser: &user.WithMemberships{
 				User:        user.User{Admin: false},
-				Memberships: []user.Member{{TeamCanonical: "main", Role: role.Maintainer}},
+				Memberships: []user.Member{{TeamCanonical: "main", Role: role.Maintain}},
 			},
 			expected: false,
 		},
@@ -290,7 +290,7 @@ func TestRefreshTokenEndpoint(t *testing.T) {
 
 	updatedUM := &user.WithMemberships{
 		User:        user.User{Username: "pepito"},
-		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
 	}
 
 	// Stale-check in middleware calls GetUser; RefreshToken is the handler
@@ -392,7 +392,7 @@ func TestExportDatabase_NonAdminForbidden(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "pepito", Admin: false},
-		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -487,7 +487,7 @@ func TestXRefreshTokenHeader(t *testing.T) {
 
 		updatedUM := &user.WithMemberships{
 			User:        user.User{Username: "pepito"},
-			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
+			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
 		}
 
 		// member() authz calls GetUser, then middleware stale-check calls GetUser again
@@ -515,7 +515,7 @@ func TestXRefreshTokenHeader(t *testing.T) {
 
 		um := &user.WithMemberships{
 			User:        user.User{Username: "pepito"},
-			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
+			Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
 		}
 		jwtToken := signJWT(t, secret, um)
 
@@ -861,7 +861,7 @@ func TestListWorkers_NonAdminForbidden(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "pepito", Admin: false},
-		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
@@ -962,7 +962,7 @@ func TestDeleteWorker_NonAdminForbidden(t *testing.T) {
 
 	um := &user.WithMemberships{
 		User:        user.User{Username: "pepito", Admin: false},
-		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Operator}},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
 	}
 	jwtToken := signJWT(t, secret, um)
 
