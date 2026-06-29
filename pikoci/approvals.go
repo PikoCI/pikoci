@@ -3,6 +3,7 @@ package pikoci
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/build"
@@ -37,6 +38,9 @@ func (q *PikoCI) ApproveBuild(ctx context.Context, tc, pc, jn, buildNumber, user
 	}
 
 	if err := q.Builds.CreateApproval(ctx, b.ID, username, "approved", message); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return fmt.Errorf("you have already voted on this build")
+		}
 		return fmt.Errorf("failed to record approval: %w", err)
 	}
 
@@ -82,6 +86,9 @@ func (q *PikoCI) RejectBuild(ctx context.Context, tc, pc, jn, buildNumber, usern
 	}
 
 	if err := q.Builds.CreateApproval(ctx, b.ID, username, "rejected", message); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return fmt.Errorf("you have already voted on this build")
+		}
 		return fmt.Errorf("failed to record rejection: %w", err)
 	}
 

@@ -3,7 +3,7 @@
 import { html } from 'htm/preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { route } from 'preact-router';
-import { isLoggedIn, hasTeamRole } from '../state.js';
+import { isLoggedIn, hasTeamRole, session } from '../state.js';
 import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, approveBuild, rejectBuild, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
 import { useLoading, usePolling } from '../hooks.js';
 import { sortBuilds, selectActiveBuild, durationToString, processLogs, pikoTimeAgo, fetchInterval } from '../utils.js';
@@ -318,38 +318,41 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
                 `)}
               </div>
             ` : html`<p class="text-muted mb-1" style="font-size:0.9em;">No votes yet.</p>`}
-            ${isWaitingApproval && isMaintainer ? html`
+            ${isWaitingApproval && isMaintainer && !(build.approvals || []).some(a => a.username === (session.value.user && session.value.user.username)) ? html`
               <div class="d-flex gap-2 mt-2">
-                <div class="input-group input-group-sm" style="max-width:400px;">
+                <form class="input-group input-group-sm" style="max-width:400px;" onSubmit=${(e) => {
+                  e.preventDefault();
+                  withApproveLoading(async () => {
+                    await approveBuild(tc, pn, jn, build.build_number, approveMsg);
+                    showToast('Build approved', 'success');
+                    setApproveMsg('');
+                    refreshFullBuild();
+                    if (onRetry) onRetry();
+                  });
+                }}>
                   <input type="text" class="form-control" placeholder="Optional message"
                     value=${approveMsg} onInput=${(e) => setApproveMsg(e.target.value)} />
-                  <button class="btn btn-success" disabled=${approveLoading} onClick=${() => {
-                    withApproveLoading(async () => {
-                      await approveBuild(tc, pn, jn, build.build_number, approveMsg);
-                      showToast('Build approved', 'success');
-                      setApproveMsg('');
-                      refreshFullBuild();
-                      if (onRetry) onRetry();
-                    });
-                  }}>
+                  <button type="submit" class="btn btn-success" disabled=${approveLoading}>
                     <i class="bi bi-check-circle"></i> ${approveLoading ? 'Approving...' : 'Approve'}
                   </button>
-                </div>
-                <div class="input-group input-group-sm" style="max-width:400px;">
+                </form>
+                <form class="input-group input-group-sm" style="max-width:400px;" onSubmit=${(e) => {
+                  e.preventDefault();
+                  if (!rejectMsg) return;
+                  withRejectLoading(async () => {
+                    await rejectBuild(tc, pn, jn, build.build_number, rejectMsg);
+                    showToast('Build rejected', 'success');
+                    setRejectMsg('');
+                    refreshFullBuild();
+                    if (onRetry) onRetry();
+                  });
+                }}>
                   <input type="text" class="form-control" placeholder="Reason (required)"
                     value=${rejectMsg} onInput=${(e) => setRejectMsg(e.target.value)} />
-                  <button class="btn btn-danger" disabled=${rejectLoading || !rejectMsg} onClick=${() => {
-                    withRejectLoading(async () => {
-                      await rejectBuild(tc, pn, jn, build.build_number, rejectMsg);
-                      showToast('Build rejected', 'success');
-                      setRejectMsg('');
-                      refreshFullBuild();
-                      if (onRetry) onRetry();
-                    });
-                  }}>
+                  <button type="submit" class="btn btn-danger" disabled=${rejectLoading || !rejectMsg}>
                     <i class="bi bi-x-circle"></i> ${rejectLoading ? 'Rejecting...' : 'Reject'}
                   </button>
-                </div>
+                </form>
               </div>
             ` : null}
           </div>

@@ -122,7 +122,7 @@ func TestApproveBuild_DuplicateVote(t *testing.T) {
 
 	err := s.S.ApproveBuild(ctx, "main", "pp", "jn", "1", "alice", "")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to record approval")
+	assert.Contains(t, err.Error(), "you have already voted on this build")
 }
 
 func TestApproveBuild_InvalidCanonical(t *testing.T) {
