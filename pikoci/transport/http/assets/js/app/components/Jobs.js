@@ -197,24 +197,24 @@ function ApprovalResourceRow({ rCan, passed, versionMeta, tc, pn }) {
   };
 
   return html`
-    <div class="mb-1">
+    <div class="mb-2">
       <div class="d-flex align-items-center gap-2" style="cursor:pointer;" onClick=${toggle}>
-        <i class="bi ${expanded ? 'bi-chevron-down' : 'bi-chevron-right'}" style="font-size:0.7em;color:var(--text-muted);"></i>
+        <i class="bi ${expanded ? 'bi-chevron-down' : 'bi-chevron-right'}" style="color:var(--text-muted);"></i>
         <i class="bi bi-cloud-download" style="color:var(--text-muted);"></i>
         <code>${rCan}</code>
         ${passed && passed.length > 0 ? html`<span class="text-muted">passed: ${passed.join(', ')}</span>` : null}
         ${versionMeta ? html`<span class="badge bg-info">${versionRef(versionMeta)}</span>` : null}
       </div>
       ${expanded ? html`
-        <div style="margin-left:2rem;margin-top:0.25rem;font-size:0.85em;">
+        <div style="margin-left:2.5rem;margin-top:0.4rem;">
           ${loading ? html`<span class="text-muted">Loading...</span>` : null}
           ${versionData ? html`
-            <table class="table table-sm table-borderless mb-0" style="font-size:0.9em;">
+            <table class="table table-sm table-borderless mb-0">
               <tbody>
                 ${Object.entries(versionData).map(([k, v]) => html`
                   <tr key=${k}>
-                    <td class="text-muted" style="width:100px;padding:0.1rem 0.5rem;">${k}</td>
-                    <td style="padding:0.1rem 0.5rem;word-break:break-all;">${String(v)}</td>
+                    <td class="text-muted" style="width:120px;padding:0.25rem 0.5rem;font-weight:600;">${k}</td>
+                    <td style="padding:0.25rem 0.5rem;word-break:break-all;">${String(v)}</td>
                   </tr>
                 `)}
               </tbody>
@@ -358,7 +358,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
           </div>
           <div class="piko-step-row-body" style="display:block;padding:0.5rem 1rem 0.5rem 2rem;">
             ${jobData && jobData.plan ? html`
-              <div class="mb-2" style="font-size:0.85em;">
+              <div class="mb-2">
                 ${jobData.plan.filter(s => s.type === 'get' && s.get).map(s => {
                   const rCan = s.get.type + '.' + s.get.name;
                   const isTrigger = rCan === build.resource_canonical;
@@ -373,7 +373,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
                 })}
               </div>
             ` : build.resource_canonical ? html`
-              <div class="mb-2" style="font-size:0.85em;">
+              <div class="mb-2">
                 <${ApprovalResourceRow}
                   rCan=${build.resource_canonical}
                   versionMeta=${build.version_metadata}
