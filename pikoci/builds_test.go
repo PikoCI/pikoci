@@ -340,6 +340,7 @@ func TestGetJobBuild(t *testing.T) {
 
 	expected := &build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3").Return(expected, nil)
+	s.Builds.EXPECT().FindApprovals(ctx, uint32(5)).Return(nil, nil)
 
 	b, err := s.S.GetJobBuild(ctx, "main", "my-pipeline", "my-job", "3")
 	require.NoError(t, err)

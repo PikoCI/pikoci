@@ -273,24 +273,26 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
   return html`
     <div class="piko-build-content-inner">
       ${build.error ? html`<div class="alert alert-danger" role="alert">${build.error}</div>` : null}
-      ${isWaitingApproval ? html`
-        <div class="card mb-3" style="border-color:var(--status-waiting_for_approval);">
-          <div class="card-header" style="background:var(--status-waiting_for_approval);color:#fff;">
-            <i class="bi bi-hourglass-split"></i> Waiting for Approval
+      ${(build.approvals || []).length > 0 || isWaitingApproval ? html`
+        <div class="piko-step-row" data-status="${isWaitingApproval ? 'started' : (build.approvals || []).some(a => a.action === 'rejected') ? 'failed' : 'succeeded'}" style="border-left: 3px solid var(--status-waiting_for_approval);">
+          <div class="piko-step-row-header" style="cursor:default;">
+            <i class="bi bi-shield-check" style="color:var(--status-waiting_for_approval);"></i>
+            <span class="piko-step-name" style="color:var(--status-waiting_for_approval);font-weight:600;">Approval Gate</span>
+            ${buildStatusBadge(isWaitingApproval ? 'waiting_for_approval' : (build.approvals || []).some(a => a.action === 'rejected') ? 'failed' : 'succeeded')}
           </div>
-          <div class="card-body">
+          <div class="piko-step-row-body" style="display:block;padding:0.5rem 1rem 0.5rem 2rem;">
             ${(build.approvals || []).length > 0 ? html`
               <div class="mb-2">
                 ${(build.approvals || []).map(a => html`
-                  <div key=${a.id} class="d-flex align-items-center gap-2 mb-1">
+                  <div key=${a.id} class="d-flex align-items-center gap-2 mb-1" style="font-size:0.9em;">
                     <span class="badge ${a.action === 'approved' ? 'bg-success' : 'bg-danger'}">${a.action}</span>
                     <strong>${a.username}</strong>
                     ${a.message ? html`<span class="text-muted">— ${a.message}</span>` : null}
                   </div>
                 `)}
               </div>
-            ` : html`<p class="text-muted mb-2">No votes yet.</p>`}
-            ${isMaintainer ? html`
+            ` : html`<p class="text-muted mb-1" style="font-size:0.9em;">No votes yet.</p>`}
+            ${isWaitingApproval && isMaintainer ? html`
               <div class="d-flex gap-2 mt-2">
                 <div class="input-group input-group-sm" style="max-width:400px;">
                   <input type="text" class="form-control" placeholder="Optional message"

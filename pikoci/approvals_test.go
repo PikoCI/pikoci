@@ -255,7 +255,8 @@ func TestGetJobBuild_NoApprovalsForPending(t *testing.T) {
 	s.Builds.EXPECT().Find(ctx, "main", "pp", "jn", "1").Return(&build.Build{
 		ID: 1, BuildNumber: "1", Status: build.Pending,
 	}, nil)
-	// FindApprovals should NOT be called
+	// FindApprovals is always called now, returns empty
+	s.Builds.EXPECT().FindApprovals(ctx, uint32(1)).Return(nil, nil)
 
 	b, err := s.S.GetJobBuild(ctx, "main", "pp", "jn", "1")
 	require.NoError(t, err)
