@@ -37,6 +37,7 @@ func newTestWorker(ctrl *gomock.Controller) (*Worker, *mock.Service) {
 	// InsertBuildGetVersion is called after every successful get step; allow it globally.
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
+
 	// NotifySerialGroupPendingBuilds is called by notifyNextPendingBuild; allow it globally.
 	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
