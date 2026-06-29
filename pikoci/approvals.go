@@ -112,6 +112,22 @@ func (q *PikoCI) RejectBuild(ctx context.Context, tc, pc, jn, buildNumber, usern
 // block when a build enters WaitingForApproval. The message is interpolated with
 // build metadata. This is fire-and-forget: errors are logged, not returned.
 func (q *PikoCI) FireApproveNotifications(ctx context.Context, tc, pc, jn string, j *job.Job, buildNumber string) {
+	// ApproveNotify may be empty if the job was loaded from DB (which doesn't
+	// persist it). Re-read from the pipeline's raw HCL to get the full config.
+	if len(j.ApproveNotify) == 0 {
+		pp, pErr := q.Pipelines.Find(ctx, tc, pc)
+		if pErr == nil && pp.Raw != nil {
+			parsed, rErr := ReadPipeline(ctx, pp.Raw, nil)
+			if rErr == nil {
+				for _, pj := range parsed.Jobs {
+					if pj.Name == jn {
+						j = &pj
+						break
+					}
+				}
+			}
+		}
+	}
 	if len(j.ApproveNotify) == 0 {
 		return
 	}

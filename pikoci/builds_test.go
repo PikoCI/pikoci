@@ -856,7 +856,7 @@ func TestEvaluateDownstreamJobs_WaitingApprovalBuildsPileUp(t *testing.T) {
 			},
 		},
 	}
-	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil).Times(2)
 
 	s.Builds.EXPECT().FindReadyDownstreamVersion(
 		ctx, "main", "my-pipeline",

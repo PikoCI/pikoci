@@ -178,10 +178,12 @@ func TestCreateJobBuild_WithApproveGate(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	// Job has an approval gate
+	// Job has an approval gate (no approve notify — notification will be skipped)
 	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(&job.Job{
 		Name: "jn", ApproveLabel: "deploy to prod", ApproveCount: 1,
 	}, nil)
+	// FireApproveNotifications tries to re-read pipeline raw HCL
+	s.Pipelines.EXPECT().Find(ctx, "main", "pp").Return(&pipeline.Pipeline{Name: "pp"}, nil)
 	s.Builds.EXPECT().Create(ctx, "main", "pp", "jn", gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, _, _ string, b build.Build) (uint32, string, error) {
 			// Verify the build was created with WaitingForApproval

@@ -65,7 +65,7 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 	if b.Status != build.WaitingForApproval {
 		q.Notifier.Notify()
 	} else if jErr == nil {
-		go q.FireApproveNotifications(ctx, tc, pc, jn, j, b.BuildNumber)
+		q.FireApproveNotifications(ctx, tc, pc, jn, j, b.BuildNumber)
 	}
 
 	return &b, nil
@@ -651,7 +651,7 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 	if triggered && j.ApproveLabel == "" {
 		q.Notifier.Notify()
 	} else if triggered && j.ApproveLabel != "" {
-		go q.FireApproveNotifications(ctx, tc, pn, j.Name, j, createdBuildNumber)
+		q.FireApproveNotifications(ctx, tc, pn, j.Name, j, createdBuildNumber)
 	}
 	return nil
 }
