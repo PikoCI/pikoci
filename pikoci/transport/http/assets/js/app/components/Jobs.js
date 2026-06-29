@@ -4,7 +4,7 @@ import { html } from 'htm/preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { route } from 'preact-router';
 import { isLoggedIn, hasTeamRole, session } from '../state.js';
-import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, approveBuild, rejectBuild, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
+import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, approveBuild, rejectBuild, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchResourceVersions, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
 import { useLoading, usePolling } from '../hooks.js';
 import { sortBuilds, selectActiveBuild, durationToString, processLogs, pikoTimeAgo, fetchInterval, versionRef } from '../utils.js';
 import { showToast } from '../toast.js';
@@ -176,6 +176,56 @@ function ParallelGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoF
   `;
 }
 
+// ---------- ApprovalResourceRow ----------
+
+function ApprovalResourceRow({ rCan, passed, versionMeta, tc, pn }) {
+  const [expanded, setExpanded] = useState(false);
+  const [versionData, setVersionData] = useState(versionMeta || null);
+  const [loading, setLoading] = useState(false);
+
+  const toggle = () => {
+    if (!expanded && !versionData && !loading) {
+      setLoading(true);
+      fetchResourceVersions(tc, pn, rCan, { limit: 1 }).then(resp => {
+        const versions = resp.data || resp || [];
+        if (versions.length > 0 && versions[0].version) {
+          setVersionData(versions[0].version);
+        }
+      }).catch(() => {}).finally(() => setLoading(false));
+    }
+    setExpanded(prev => !prev);
+  };
+
+  return html`
+    <div class="mb-1">
+      <div class="d-flex align-items-center gap-2" style="cursor:pointer;" onClick=${toggle}>
+        <i class="bi ${expanded ? 'bi-chevron-down' : 'bi-chevron-right'}" style="font-size:0.7em;color:var(--text-muted);"></i>
+        <i class="bi bi-cloud-download" style="color:var(--text-muted);"></i>
+        <code>${rCan}</code>
+        ${passed && passed.length > 0 ? html`<span class="text-muted">passed: ${passed.join(', ')}</span>` : null}
+        ${versionMeta ? html`<span class="badge bg-info">${versionRef(versionMeta)}</span>` : null}
+      </div>
+      ${expanded ? html`
+        <div style="margin-left:2rem;margin-top:0.25rem;font-size:0.85em;">
+          ${loading ? html`<span class="text-muted">Loading...</span>` : null}
+          ${versionData ? html`
+            <table class="table table-sm table-borderless mb-0" style="font-size:0.9em;">
+              <tbody>
+                ${Object.entries(versionData).map(([k, v]) => html`
+                  <tr key=${k}>
+                    <td class="text-muted" style="width:100px;padding:0.1rem 0.5rem;">${k}</td>
+                    <td style="padding:0.1rem 0.5rem;word-break:break-all;">${String(v)}</td>
+                  </tr>
+                `)}
+              </tbody>
+            </table>
+          ` : !loading ? html`<span class="text-muted">No version data available.</span>` : null}
+        </div>
+      ` : null}
+    </div>
+  `;
+}
+
 // ---------- BuildContent ----------
 
 function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
@@ -312,29 +362,24 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
                 ${jobData.plan.filter(s => s.type === 'get' && s.get).map(s => {
                   const rCan = s.get.type + '.' + s.get.name;
                   const isTrigger = rCan === build.resource_canonical;
-                  return html`
-                    <div class="d-flex align-items-center gap-2 mb-1" key=${rCan}>
-                      <i class="bi bi-cloud-download" style="color:var(--text-muted);"></i>
-                      <code>${rCan}</code>
-                      ${s.get.passed && s.get.passed.length > 0 ? html`<span class="text-muted">passed: ${s.get.passed.join(', ')}</span>` : null}
-                      ${isTrigger && build.version_metadata ? html`
-                        <span class="badge bg-info">${versionRef(build.version_metadata)}</span>
-                      ` : isTrigger && build.version_id ? html`
-                        <span class="text-muted">#${build.version_id}</span>
-                      ` : null}
-                    </div>
-                  `;
+                  return html`<${ApprovalResourceRow}
+                    key=${rCan}
+                    rCan=${rCan}
+                    passed=${s.get.passed}
+                    versionMeta=${isTrigger ? build.version_metadata : null}
+                    tc=${tc}
+                    pn=${pn}
+                  />`;
                 })}
               </div>
             ` : build.resource_canonical ? html`
               <div class="mb-2" style="font-size:0.85em;">
-                <i class="bi bi-cloud-download" style="color:var(--text-muted);"></i>
-                <code>${build.resource_canonical}</code>
-                ${build.version_metadata ? html`
-                  <span class="badge bg-info ms-1">${versionRef(build.version_metadata)}</span>
-                ` : build.version_id ? html`
-                  <span class="text-muted ms-1">#${build.version_id}</span>
-                ` : null}
+                <${ApprovalResourceRow}
+                  rCan=${build.resource_canonical}
+                  versionMeta=${build.version_metadata}
+                  tc=${tc}
+                  pn=${pn}
+                />
               </div>
             ` : null}
             ${(build.approvals || []).length > 0 ? html`
