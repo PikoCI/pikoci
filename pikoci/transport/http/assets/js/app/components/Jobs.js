@@ -200,20 +200,22 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
   const initializedRef = useRef(false);
 
   // Fetch full build detail to get approvals (not in list endpoint).
-  // Only re-fetch when the build ID changes (switching builds).
-  // Polling updates rawBuild which is merged via the fallback.
   const rawBuildId = rawBuild && rawBuild.id;
   const fetchedIdRef = useRef(null);
+  const refreshFullBuild = useCallback(() => {
+    if (rawBuild && rawBuild.build_number) {
+      fetchBuild(tc, pn, jn, rawBuild.build_number).then(b => {
+        if (b) setFullBuild(b);
+      }).catch(() => {});
+    }
+  }, [tc, pn, jn, rawBuild && rawBuild.build_number]);
+  // Fetch on build switch
   useEffect(() => {
     if (rawBuildId && rawBuildId !== fetchedIdRef.current) {
       fetchedIdRef.current = rawBuildId;
-      if (rawBuild && rawBuild.build_number) {
-        fetchBuild(tc, pn, jn, rawBuild.build_number).then(b => {
-          if (b) setFullBuild(b);
-        }).catch(() => {});
-      }
+      refreshFullBuild();
     }
-  }, [tc, pn, jn, rawBuildId]);
+  }, [rawBuildId, refreshFullBuild]);
 
   // Initialize expanded steps - running steps start expanded
   useEffect(() => {
@@ -323,6 +325,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
                       await approveBuild(tc, pn, jn, build.build_number, approveMsg);
                       showToast('Build approved', 'success');
                       setApproveMsg('');
+                      refreshFullBuild();
                       if (onRetry) onRetry();
                     });
                   }}>
@@ -337,6 +340,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
                       await rejectBuild(tc, pn, jn, build.build_number, rejectMsg);
                       showToast('Build rejected', 'success');
                       setRejectMsg('');
+                      refreshFullBuild();
                       if (onRetry) onRetry();
                     });
                   }}>
