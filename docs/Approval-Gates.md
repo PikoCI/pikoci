@@ -20,6 +20,10 @@ job "deploy" {
 
   approve "deploy to production" {
     approvals = 2
+
+    notify "discord" "deploy-alerts" {
+      message = "⏳ Build #$BUILD_NUMBER needs approval $BUILD_URL"
+    }
   }
 
   task "deploy" {
@@ -34,6 +38,36 @@ job "deploy" {
 |-----------|----------|---------|-------------|
 | label (first argument) | **yes** | — | Display label for the approval gate |
 | `approvals` | no | 1 | Number of approvals required before the build starts |
+
+### Notifications
+
+The `approve` block can contain a `notify` sub-block that fires when a build enters Waiting for Approval. The notification references a pipeline-level `notification` by type and name.
+
+```hcl
+approve "deploy to production" {
+  notify "discord" "deploy-alerts" {
+    message = "⏳ Build #$BUILD_NUMBER needs approval $BUILD_URL"
+  }
+}
+```
+
+**Available variables** for message interpolation:
+
+| Variable | Description |
+|----------|-------------|
+| `$BUILD_NUMBER` | The build number |
+| `$BUILD_PIPELINE_NAME` | The pipeline canonical name |
+| `$BUILD_JOB_NAME` | The job name |
+| `$BUILD_TEAM_NAME` | The team canonical name |
+| `$BUILD_URL` | Direct link to the build (requires `base_url` on the notification) |
+
+**Default message** (when no `message` is set):
+
+```
+⏳ [pipeline/job] Build #N needs approval - https://ci.example.com/teams/main/pipelines/deploy/jobs/deploy/builds/5
+```
+
+The URL is only included if the notification's `base_url` param is configured. Without `base_url`, the message omits the link. This is the same behavior as regular build notifications.
 
 ## Build Lifecycle
 
