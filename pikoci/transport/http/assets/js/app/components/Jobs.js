@@ -180,8 +180,12 @@ function ParallelGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoF
 
 function ApprovalResourceRow({ rCan, passed, versionMeta, tc, pn }) {
   const [expanded, setExpanded] = useState(false);
-  const [versionData, setVersionData] = useState(versionMeta || null);
+  const [fetchedData, setFetchedData] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Prefer versionMeta prop (from build's version_metadata for the triggering
+  // resource) over fetched data. Only fetch on expand if no prop provided.
+  const versionData = versionMeta || fetchedData;
 
   const toggle = () => {
     if (!expanded && !versionData && !loading) {
@@ -189,7 +193,7 @@ function ApprovalResourceRow({ rCan, passed, versionMeta, tc, pn }) {
       fetchResourceVersions(tc, pn, rCan, { limit: 1 }).then(resp => {
         const versions = resp.data || resp || [];
         if (versions.length > 0 && versions[0].version) {
-          setVersionData(versions[0].version);
+          setFetchedData(versions[0].version);
         }
       }).catch(() => {}).finally(() => setLoading(false));
     }
@@ -208,6 +212,7 @@ function ApprovalResourceRow({ rCan, passed, versionMeta, tc, pn }) {
       ${expanded ? html`
         <div style="margin-left:2.5rem;margin-top:0.4rem;">
           ${loading ? html`<span class="text-muted">Loading...</span>` : null}
+          ${!versionMeta && fetchedData ? html`<span class="text-muted" style="font-size:0.85em;font-style:italic;">Latest version (resolved at build time):</span>` : null}
           ${versionData ? html`
             <table class="table table-sm table-borderless mb-0">
               <tbody>
@@ -219,7 +224,7 @@ function ApprovalResourceRow({ rCan, passed, versionMeta, tc, pn }) {
                 `)}
               </tbody>
             </table>
-          ` : !loading ? html`<span class="text-muted">No version data available.</span>` : null}
+          ` : !loading ? html`<span class="text-muted">Version resolved at build time.</span>` : null}
         </div>
       ` : null}
     </div>
