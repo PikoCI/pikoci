@@ -212,7 +212,7 @@ function ApprovalResourceRow({ rCan, passed, versionMeta, tc, pn }) {
       ${expanded ? html`
         <div style="margin-left:2.5rem;margin-top:0.4rem;">
           ${loading ? html`<span class="text-muted">Loading...</span>` : null}
-          ${!versionMeta && fetchedData ? html`<span class="text-muted" style="font-size:0.85em;font-style:italic;">Latest version (resolved at build time):</span>` : null}
+          ${!versionMeta && fetchedData ? html`<span class="text-muted" style="font-size:0.85em;font-style:italic;">Version not pinned — showing latest:</span>` : null}
           ${versionData ? html`
             <table class="table table-sm table-borderless mb-0">
               <tbody>
@@ -237,7 +237,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
   const [fullBuild, setFullBuild] = useState(null);
   // Merge: use rawBuild (latest from polling) but overlay fields only in full detail
   const mergedBuild = rawBuild && fullBuild && rawBuild.id === fullBuild.id
-    ? { ...rawBuild, approvals: fullBuild.approvals, version_metadata: fullBuild.version_metadata }
+    ? { ...rawBuild, approvals: fullBuild.approvals, version_metadata: fullBuild.version_metadata, pinned_versions: fullBuild.pinned_versions }
     : (fullBuild || rawBuild);
   const build = prepareBuild(mergedBuild);
   const isOperator = hasTeamRole(tc, 'write');
@@ -366,12 +366,13 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
               <div class="mb-2">
                 ${jobData.plan.filter(s => s.type === 'get' && s.get).map(s => {
                   const rCan = s.get.type + '.' + s.get.name;
+                  const pinnedMeta = build.pinned_versions && build.pinned_versions[rCan];
                   const isTrigger = rCan === build.resource_canonical;
                   return html`<${ApprovalResourceRow}
                     key=${rCan}
                     rCan=${rCan}
                     passed=${s.get.passed}
-                    versionMeta=${isTrigger ? build.version_metadata : null}
+                    versionMeta=${pinnedMeta || (isTrigger ? build.version_metadata : null)}
                     tc=${tc}
                     pn=${pn}
                   />`;

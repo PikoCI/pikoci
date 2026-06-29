@@ -341,6 +341,7 @@ func TestGetJobBuild(t *testing.T) {
 	expected := &build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3").Return(expected, nil)
 	s.Builds.EXPECT().FindApprovals(ctx, uint32(5)).Return(nil, nil)
+	s.Builds.EXPECT().FindGetVersions(ctx, uint32(5)).Return(nil, nil)
 
 	b, err := s.S.GetJobBuild(ctx, "main", "my-pipeline", "my-job", "3")
 	require.NoError(t, err)
@@ -875,6 +876,8 @@ func TestEvaluateDownstreamJobs_WaitingApprovalBuildsPileUp(t *testing.T) {
 			assert.Equal(t, uint32(99), b.VersionID)
 			return uint32(20), "2", nil
 		})
+	// Versions are pinned at creation time for approval builds
+	s.Builds.EXPECT().InsertGetVersion(ctx, "main", "my-pipeline", "deploy", uint32(20), "repo", uint32(99)).Return(nil)
 
 	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")
 	require.NoError(t, err)

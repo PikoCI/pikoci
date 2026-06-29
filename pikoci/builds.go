@@ -131,6 +131,24 @@ func (q *PikoCI) GetJobBuild(ctx context.Context, tc, pc, jn string, buildNumber
 			b.VersionMetadata = v.Version
 		}
 	}
+	// Populate pinned versions (stored at build creation for approval gates)
+	getVersions, gvErr := q.Builds.FindGetVersions(ctx, b.ID)
+	if gvErr == nil && len(getVersions) > 0 {
+		pinned := make(map[string]map[string]interface{}, len(getVersions))
+		for stepName, vID := range getVersions {
+			v, rCan, vErr := q.Resources.FindVersionByID(ctx, vID)
+			if vErr == nil && v != nil {
+				key := rCan
+				if key == "" {
+					key = stepName
+				}
+				pinned[key] = v.Version
+			}
+		}
+		if len(pinned) > 0 {
+			b.PinnedVersions = pinned
+		}
+	}
 	return b, nil
 }
 
@@ -603,6 +621,18 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 		})
 		if err != nil {
 			return fmt.Errorf("create pending build: %w", err)
+		}
+
+		// Pin all resolved resource versions at build creation time for
+		// approval builds. This ensures approved builds use the exact versions
+		// that triggered them, not whatever is latest when they eventually run.
+		if status == build.WaitingForApproval {
+			for _, c := range candidates {
+				if err := uow.Builds().InsertGetVersion(ctx, tc, pn, j.Name, id, c.stepName, c.versionID); err != nil {
+					q.logger.Error("failed to pin version for approval build",
+						"build_id", id, "step", c.stepName, "version_id", c.versionID, "error", err)
+				}
+			}
 		}
 
 		q.logger.Info("triggered downstream job",

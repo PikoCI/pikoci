@@ -239,6 +239,7 @@ func TestGetJobBuild_PopulatesApprovals(t *testing.T) {
 	s.Builds.EXPECT().FindApprovals(ctx, uint32(1)).Return([]build.Approval{
 		{ID: 1, BuildID: 1, Username: "alice", Action: "approved", Message: "LGTM"},
 	}, nil)
+	s.Builds.EXPECT().FindGetVersions(ctx, uint32(1)).Return(nil, nil)
 
 	b, err := s.S.GetJobBuild(ctx, "main", "pp", "jn", "1")
 	require.NoError(t, err)
@@ -257,6 +258,7 @@ func TestGetJobBuild_NoApprovalsForPending(t *testing.T) {
 	}, nil)
 	// FindApprovals is always called now, returns empty
 	s.Builds.EXPECT().FindApprovals(ctx, uint32(1)).Return(nil, nil)
+	s.Builds.EXPECT().FindGetVersions(ctx, uint32(1)).Return(nil, nil)
 
 	b, err := s.S.GetJobBuild(ctx, "main", "pp", "jn", "1")
 	require.NoError(t, err)

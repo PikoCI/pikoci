@@ -59,6 +59,11 @@ type Build struct {
 	ResourceCanonical string                 `json:"resource_canonical,omitempty"`
 	VersionMetadata   map[string]interface{} `json:"version_metadata,omitempty"`
 
+	// PinnedVersions maps get-step resource canonical names to their version
+	// metadata. Populated at build creation time for approval gate builds so
+	// the exact versions are tracked and displayed.
+	PinnedVersions map[string]map[string]interface{} `json:"pinned_versions,omitempty"`
+
 	RetrySourceBuildID uint32 `json:"retry_source_build_id,omitempty"`
 
 	// Approvals contains the approval/rejection votes for this build.
