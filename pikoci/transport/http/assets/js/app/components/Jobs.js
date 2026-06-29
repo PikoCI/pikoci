@@ -6,7 +6,7 @@ import { route } from 'preact-router';
 import { isLoggedIn, hasTeamRole, session } from '../state.js';
 import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, approveBuild, rejectBuild, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchResourceVersions, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
 import { useLoading, usePolling } from '../hooks.js';
-import { sortBuilds, selectActiveBuild, durationToString, processLogs, pikoTimeAgo, fetchInterval, versionRef } from '../utils.js';
+import { sortBuilds, selectActiveBuild, durationToString, processLogs, pikoTimeAgo, fetchInterval } from '../utils.js';
 import { showToast } from '../toast.js';
 import { Breadcrumb } from './Layout.js';
 
@@ -207,7 +207,6 @@ function ApprovalResourceRow({ rCan, passed, versionMeta, tc, pn }) {
         <i class="bi bi-cloud-download" style="color:var(--text-muted);"></i>
         <code>${rCan}</code>
         ${passed && passed.length > 0 ? html`<span class="text-muted">passed: ${passed.join(', ')}</span>` : null}
-        ${versionMeta ? html`<span class="badge bg-info">${versionRef(versionMeta)}</span>` : null}
       </div>
       ${expanded ? html`
         <div style="margin-left:2.5rem;margin-top:0.4rem;">
