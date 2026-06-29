@@ -825,6 +825,61 @@ func TestEvaluateDownstreamJobs_SkipsWhenPendingExists(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestEvaluateDownstreamJobs_WaitingApprovalBuildsPileUp(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// Deploy job has an approval gate
+	pp := &pipeline.Pipeline{
+		Name: "my-pipeline",
+		Jobs: []job.Job{
+			{Name: "lint"},
+			{
+				Name:         "deploy",
+				ApproveLabel: "deploy to prod",
+				ApproveCount: 1,
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get: &job.GetStep{
+							Type:    "git",
+							Name:    "repo",
+							Passed:  []string{"lint"},
+							Trigger: true,
+						},
+					},
+				},
+			},
+		},
+	}
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+
+	s.Builds.EXPECT().FindReadyDownstreamVersion(
+		ctx, "main", "my-pipeline",
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
+	).Return(uint32(99), true, nil)
+
+	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").
+		Return(&resource.Resource{Type: "git", Name: "repo"}, nil)
+
+	// FindOldestPending returns nil (no pending build — the existing one is waiting_for_approval)
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "deploy").
+		Return(nil, nil)
+
+	// A new build IS created even though another waiting build may exist.
+	// Waiting builds pile up — each version gets its own approval gate.
+	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "deploy", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _ string, b build.Build) (uint32, string, error) {
+			assert.Equal(t, build.WaitingForApproval, b.Status, "downstream build with approve gate should be WaitingForApproval")
+			assert.Equal(t, uint32(99), b.VersionID)
+			return uint32(20), "2", nil
+		})
+
+	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")
+	require.NoError(t, err)
+}
+
 func TestEvaluateDownstreamJobs_SkipsWhenResourcePinned(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
