@@ -36,6 +36,7 @@ job "deploy-staging" {
     trigger = true
     passed  = ["gen"]
   }
+  approve "deploy to staging" {}
   task "deploy" {
     run "exec" {
       path = "/bin/sh"
@@ -48,6 +49,9 @@ job "deploy-prod" {
   get "artifact" "cron_output" {
     trigger = true
     passed  = ["gen"]
+  }
+  approve "deploy to production" {
+    approvals = 2
   }
   task "deploy" {
     run "exec" {
