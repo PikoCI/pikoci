@@ -55,8 +55,9 @@ type Build struct {
 	StartedAt time.Time     `json:"started_at"`
 	Duration  time.Duration `json:"duration"`
 
-	VersionID         uint32 `json:"version_id,omitempty"`
-	ResourceCanonical string `json:"resource_canonical,omitempty"`
+	VersionID         uint32                 `json:"version_id,omitempty"`
+	ResourceCanonical string                 `json:"resource_canonical,omitempty"`
+	VersionMetadata   map[string]interface{} `json:"version_metadata,omitempty"`
 
 	RetrySourceBuildID uint32 `json:"retry_source_build_id,omitempty"`
 

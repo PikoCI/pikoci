@@ -124,6 +124,13 @@ func (q *PikoCI) GetJobBuild(ctx context.Context, tc, pc, jn string, buildNumber
 	if aErr == nil && len(approvals) > 0 {
 		b.Approvals = approvals
 	}
+	// Populate version metadata for the triggering resource
+	if b.VersionID > 0 {
+		v, _, vErr := q.Resources.FindVersionByID(ctx, b.VersionID)
+		if vErr == nil && v != nil {
+			b.VersionMetadata = v.Version
+		}
+	}
 	return b, nil
 }
 

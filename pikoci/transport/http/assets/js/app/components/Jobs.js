@@ -6,7 +6,7 @@ import { route } from 'preact-router';
 import { isLoggedIn, hasTeamRole, session } from '../state.js';
 import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, approveBuild, rejectBuild, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
 import { useLoading, usePolling } from '../hooks.js';
-import { sortBuilds, selectActiveBuild, durationToString, processLogs, pikoTimeAgo, fetchInterval } from '../utils.js';
+import { sortBuilds, selectActiveBuild, durationToString, processLogs, pikoTimeAgo, fetchInterval, versionRef } from '../utils.js';
 import { showToast } from '../toast.js';
 import { Breadcrumb } from './Layout.js';
 
@@ -307,10 +307,34 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
             ${buildStatusBadge(isWaitingApproval ? 'waiting_for_approval' : (build.approvals || []).some(a => a.action === 'rejected') ? 'failed' : 'succeeded')}
           </div>
           <div class="piko-step-row-body" style="display:block;padding:0.5rem 1rem 0.5rem 2rem;">
-            ${build.resource_canonical ? html`
+            ${jobData && jobData.plan ? html`
               <div class="mb-2" style="font-size:0.85em;">
-                <span class="text-muted">Resource:</span> <code>${build.resource_canonical}</code>
-                ${build.version_id ? html`<span class="text-muted ms-2">Version: #${build.version_id}</span>` : null}
+                ${jobData.plan.filter(s => s.type === 'get' && s.get).map(s => {
+                  const rCan = s.get.type + '.' + s.get.name;
+                  const isTrigger = rCan === build.resource_canonical;
+                  return html`
+                    <div class="d-flex align-items-center gap-2 mb-1" key=${rCan}>
+                      <i class="bi bi-cloud-download" style="color:var(--text-muted);"></i>
+                      <code>${rCan}</code>
+                      ${s.get.passed && s.get.passed.length > 0 ? html`<span class="text-muted">passed: ${s.get.passed.join(', ')}</span>` : null}
+                      ${isTrigger && build.version_metadata ? html`
+                        <span class="badge bg-info">${versionRef(build.version_metadata)}</span>
+                      ` : isTrigger && build.version_id ? html`
+                        <span class="text-muted">#${build.version_id}</span>
+                      ` : null}
+                    </div>
+                  `;
+                })}
+              </div>
+            ` : build.resource_canonical ? html`
+              <div class="mb-2" style="font-size:0.85em;">
+                <i class="bi bi-cloud-download" style="color:var(--text-muted);"></i>
+                <code>${build.resource_canonical}</code>
+                ${build.version_metadata ? html`
+                  <span class="badge bg-info ms-1">${versionRef(build.version_metadata)}</span>
+                ` : build.version_id ? html`
+                  <span class="text-muted ms-1">#${build.version_id}</span>
+                ` : null}
               </div>
             ` : null}
             ${(build.approvals || []).length > 0 ? html`
