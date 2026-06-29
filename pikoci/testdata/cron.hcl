@@ -5,6 +5,7 @@ notification_type "discord" {
 notification "discord" "deploy-alerts" {
   params {
     webhook_url = "https://discord.com/api/webhooks/1513636375348641802/oPiF3O0bLhSPM3ITVI917ki_fCGSSLn8p8aQz2exvkBk2dRSQDiHSfY-iCLVN5Uik60r"
+    base_url    = "http://localhost:4000"
   }
 }
 

@@ -151,13 +151,23 @@ func (q *PikoCI) FireApproveNotifications(ctx context.Context, tc, pc, jn string
 		}
 
 		// Interpolate message with build variables
+		baseURL := strings.TrimRight(params["base_url"], "/")
+		buildURL := ""
+		if baseURL != "" {
+			buildURL = fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/builds/%s", baseURL, tc, pc, jn, buildNumber)
+		}
+
 		msg := ns.Message
 		msg = strings.ReplaceAll(msg, "$BUILD_NUMBER", buildNumber)
 		msg = strings.ReplaceAll(msg, "$BUILD_PIPELINE_NAME", pc)
 		msg = strings.ReplaceAll(msg, "$BUILD_JOB_NAME", jn)
 		msg = strings.ReplaceAll(msg, "$BUILD_TEAM_NAME", tc)
+		msg = strings.ReplaceAll(msg, "$BUILD_URL", buildURL)
 		if msg == "" {
 			msg = fmt.Sprintf("⏳ [%s/%s] Build #%s needs approval", pc, jn, buildNumber)
+			if buildURL != "" {
+				msg += " - " + buildURL
+			}
 		}
 
 		body, _ := json.Marshal(map[string]string{"content": msg})
