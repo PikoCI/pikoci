@@ -62,7 +62,6 @@ function prepareBuild(b) {
 // ---------- BuildTab ----------
 
 function BuildTab({ build, active, onClick }) {
-  const ref = build.version_metadata ? versionRef(build.version_metadata) : '';
   return html`
     <div
       class="piko-build-tab ${active ? 'active' : ''}"
@@ -70,7 +69,6 @@ function BuildTab({ build, active, onClick }) {
       onClick=${() => onClick(build)}
     >
       #${build.build_number}
-      ${ref ? html`<span class="piko-build-tab-ref" title=${ref}>${ref.length > 12 ? ref.slice(0, 12) + '…' : ref}</span>` : null}
       <span class="piko-tab-status status-${build.status}"></span>
     </div>
   `;
