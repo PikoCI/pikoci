@@ -541,6 +541,15 @@ textarea.form-control {
   transition: all 0.1s;
   text-align: center;
 }
+.piko-build-tab-ref {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
 .piko-build-tab:hover { color: var(--text-primary); background: var(--border); }
 .piko-build-tab.active {
   background: var(--bg-surface);

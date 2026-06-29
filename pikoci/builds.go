@@ -103,6 +103,17 @@ func (q *PikoCI) ListJobBuilds(ctx context.Context, tc, pc, jn string, before *u
 		slices.Reverse(builds)
 	}
 
+	// Populate version metadata for builds with a version ID so the UI
+	// can show which resource version triggered each build (e.g. in tabs).
+	for _, b := range builds {
+		if b.VersionID > 0 {
+			v, _, vErr := q.Resources.FindVersionByID(ctx, b.VersionID)
+			if vErr == nil && v != nil {
+				b.VersionMetadata = v.Version
+			}
+		}
+	}
+
 	return builds, hasMore, nil
 }
 
