@@ -230,9 +230,9 @@ function ApprovalResourceRow({ rCan, passed, versionMeta, tc, pn }) {
 
 function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
   const [fullBuild, setFullBuild] = useState(null);
-  // Merge: use rawBuild (latest from polling) but overlay approvals from fullBuild
+  // Merge: use rawBuild (latest from polling) but overlay fields only in full detail
   const mergedBuild = rawBuild && fullBuild && rawBuild.id === fullBuild.id
-    ? { ...rawBuild, approvals: fullBuild.approvals }
+    ? { ...rawBuild, approvals: fullBuild.approvals, version_metadata: fullBuild.version_metadata }
     : (fullBuild || rawBuild);
   const build = prepareBuild(mergedBuild);
   const isOperator = hasTeamRole(tc, 'write');
