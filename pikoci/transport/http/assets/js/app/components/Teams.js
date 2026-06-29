@@ -433,6 +433,7 @@ function AuditLogTab({ tc }) {
   const actionBadgeClass = (action) => {
     if (action.startsWith('pipeline.')) return 'bg-primary';
     if (action.startsWith('job.')) return 'bg-info';
+    if (action.startsWith('build.')) return 'piko-badge-waiting_for_approval';
     if (action.startsWith('resource.')) return 'bg-warning text-dark';
     if (action.startsWith('member.')) return 'bg-success';
     return 'bg-secondary';
