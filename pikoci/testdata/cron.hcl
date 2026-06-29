@@ -50,6 +50,9 @@ job "deploy-prod" {
     trigger = true
     passed  = ["gen"]
   }
+  get "cron" "my_cron" {
+    passed = ["gen"]
+  }
   approve "deploy to production" {
     approvals = 2
   }
