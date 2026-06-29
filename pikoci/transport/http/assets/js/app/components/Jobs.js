@@ -179,7 +179,12 @@ function ParallelGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoF
 // ---------- BuildContent ----------
 
 function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
-  const build = prepareBuild(rawBuild);
+  const [fullBuild, setFullBuild] = useState(null);
+  // Merge: use rawBuild (latest from polling) but overlay approvals from fullBuild
+  const mergedBuild = rawBuild && fullBuild && rawBuild.id === fullBuild.id
+    ? { ...rawBuild, approvals: fullBuild.approvals }
+    : (fullBuild || rawBuild);
+  const build = prepareBuild(mergedBuild);
   const isOperator = hasTeamRole(tc, 'write');
   const [autoFollow, setAutoFollow] = useState(true);
   const [expandedSteps, setExpandedSteps] = useState({});
@@ -193,6 +198,22 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
   const [approveLoading, withApproveLoading] = useLoading();
   const [rejectLoading, withRejectLoading] = useLoading();
   const initializedRef = useRef(false);
+
+  // Fetch full build detail to get approvals (not in list endpoint).
+  // Only re-fetch when the build ID changes (switching builds).
+  // Polling updates rawBuild which is merged via the fallback.
+  const rawBuildId = rawBuild && rawBuild.id;
+  const fetchedIdRef = useRef(null);
+  useEffect(() => {
+    if (rawBuildId && rawBuildId !== fetchedIdRef.current) {
+      fetchedIdRef.current = rawBuildId;
+      if (rawBuild && rawBuild.build_number) {
+        fetchBuild(tc, pn, jn, rawBuild.build_number).then(b => {
+          if (b) setFullBuild(b);
+        }).catch(() => {});
+      }
+    }
+  }, [tc, pn, jn, rawBuildId]);
 
   // Initialize expanded steps - running steps start expanded
   useEffect(() => {
