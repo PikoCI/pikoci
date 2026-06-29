@@ -579,8 +579,10 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 
 	versionID := candidates[0].versionID
 
-	// Atomic check-and-create to prevent duplicate pending/waiting builds
+	// Atomic check-and-create to prevent duplicate pending builds
 	// from concurrent callers (multiple workers or worker + scheduler).
+	// Note: waiting_for_approval builds are allowed to pile up — each
+	// resource version gets its own approval gate.
 	var triggered bool
 	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
 		pending, err := uow.Builds().FindOldestPending(ctx, tc, pn, j.Name)
@@ -589,14 +591,6 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 		}
 		if pending != nil {
 			return nil
-		}
-		// Also check for existing waiting-for-approval builds (FindOldestPending
-		// only returns pending builds; workers must not see waiting builds).
-		if j.ApproveLabel != "" {
-			latest, lErr := uow.Builds().Filter(ctx, tc, pn, j.Name, nil, nil, 1)
-			if lErr == nil && len(latest) > 0 && latest[0].Status == build.WaitingForApproval {
-				return nil
-			}
 		}
 
 		status := build.Pending
