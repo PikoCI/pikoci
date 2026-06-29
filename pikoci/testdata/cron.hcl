@@ -36,9 +36,6 @@ job "deploy-staging" {
     trigger = true
     passed  = ["gen"]
   }
-  get "cron" "my_cron" {
-    passed = ["gen"]
-  }
   approve "deploy to staging" {}
   task "deploy" {
     run "exec" {
