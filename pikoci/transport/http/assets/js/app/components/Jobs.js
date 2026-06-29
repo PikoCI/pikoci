@@ -295,7 +295,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
 
   return html`
     <div class="piko-build-content-inner">
-      ${build.error ? html`<div class="alert alert-danger" role="alert">${build.error}</div>` : null}
+      ${build.error && !(build.approvals || []).some(a => a.action === 'rejected') ? html`<div class="alert alert-danger" role="alert">${build.error}</div>` : null}
       ${(build.approvals || []).length > 0 || isWaitingApproval ? html`
         <div class="piko-step-row" data-status="${isWaitingApproval ? 'started' : (build.approvals || []).some(a => a.action === 'rejected') ? 'failed' : 'succeeded'}" style="border-left: 3px solid var(--status-waiting_for_approval);">
           <div class="piko-step-row-header" style="cursor:default;">
