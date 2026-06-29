@@ -617,7 +617,7 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 	if err != nil {
 		return err
 	}
-	if triggered {
+	if triggered && j.ApproveLabel == "" {
 		q.Notifier.Notify()
 	}
 	return nil
