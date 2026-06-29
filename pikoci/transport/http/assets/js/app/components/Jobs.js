@@ -178,7 +178,7 @@ function ParallelGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoF
 
 // ---------- BuildContent ----------
 
-function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
+function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
   const [fullBuild, setFullBuild] = useState(null);
   // Merge: use rawBuild (latest from polling) but overlay approvals from fullBuild
   const mergedBuild = rawBuild && fullBuild && rawBuild.id === fullBuild.id
@@ -301,6 +301,9 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
           <div class="piko-step-row-header" style="cursor:default;">
             <i class="bi bi-shield-check" style="color:var(--status-waiting_for_approval);"></i>
             <span class="piko-step-name" style="color:var(--status-waiting_for_approval);font-weight:600;">Approval Gate</span>
+            ${isWaitingApproval && jobData && jobData.approve_count ? html`
+              <span class="text-muted" style="font-size:0.85em;">${(build.approvals || []).filter(a => a.action === 'approved').length}/${jobData.approve_count} approvals</span>
+            ` : null}
             ${buildStatusBadge(isWaitingApproval ? 'waiting_for_approval' : (build.approvals || []).some(a => a.action === 'rejected') ? 'failed' : 'succeeded')}
           </div>
           <div class="piko-step-row-body" style="display:block;padding:0.5rem 1rem 0.5rem 2rem;">
@@ -781,6 +784,7 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
                 tc=${tc}
                 pn=${pn}
                 jn=${jn}
+                job=${job}
                 onRetry=${onRetry}
               />
             ` : null}
