@@ -775,6 +775,8 @@ func TestEvaluateDownstreamJobs_TriggersWhenReady(t *testing.T) {
 	// Create is called to create a new pending build
 	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "deploy", gomock.Any()).
 		Return(uint32(10), "1", nil)
+	// Versions are pinned at creation time for all builds
+	s.Builds.EXPECT().InsertGetVersion(ctx, "main", "my-pipeline", "deploy", uint32(10), "repo", uint32(42)).Return(nil)
 
 	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")
 	require.NoError(t, err)
@@ -1071,6 +1073,7 @@ func TestEvaluateDownstreamJobs_ForEachGroupExpansion(t *testing.T) {
 		Return(nil, nil)
 	s.Builds.EXPECT().Create(gomock.Any(), "main", "my-pipeline", "deploy", gomock.Any()).
 		Return(uint32(1), "1", nil)
+	s.Builds.EXPECT().InsertGetVersion(gomock.Any(), "main", "my-pipeline", "deploy", uint32(1), "repo", uint32(42)).Return(nil)
 
 	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint-go")
 	require.NoError(t, err)

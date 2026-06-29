@@ -473,24 +473,6 @@ func (w *Worker) processJob(ctx context.Context, m workitem.Body, cwd string, pp
 				resolvedVersions[ps.Get.ResourceCanonical()] = vid
 			}
 		}
-	} else if j.ApproveLabel != "" {
-		// Approval gate builds have versions pinned at creation time for
-		// triggered get steps. Resolve normally for non-pinned steps, then
-		// overlay the pinned versions so they take priority.
-		ok, rv := w.checkPassedConstraints(jobCtx, m, &b, j, pp)
-		if !ok {
-			return
-		}
-		resolvedVersions = rv
-		pinnedVersions, _ := w.pikoci.FindBuildGetVersions(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.ID)
-		for _, ps := range j.FlatPlanSteps() {
-			if ps.Type != job.StepTypeGet || ps.Get == nil {
-				continue
-			}
-			if vid, ok := pinnedVersions[ps.Get.Name]; ok {
-				resolvedVersions[ps.Get.ResourceCanonical()] = vid
-			}
-		}
 	} else {
 		ok, rv := w.checkPassedConstraints(jobCtx, m, &b, j, pp)
 		if !ok {
@@ -503,6 +485,22 @@ func (w *Worker) processJob(ctx context.Context, m workitem.Body, cwd string, pp
 		// the build is deleted silently — no hooks run, no failure recorded.
 		if !w.checkVersionAvailability(jobCtx, m, &b, j, pp) {
 			return
+		}
+	}
+
+	// Overlay pinned versions (stored at build creation time) on top of
+	// resolved versions. This ensures builds use the exact versions that
+	// triggered them, even if newer versions arrived while queued.
+	// Skipped for local mode and retry builds (which already resolve from parent).
+	if !w.LocalMode && m.RetryBuildNumber == "" {
+		pinnedVersions, _ := w.pikoci.FindBuildGetVersions(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.ID)
+		for _, ps := range j.FlatPlanSteps() {
+			if ps.Type != job.StepTypeGet || ps.Get == nil {
+				continue
+			}
+			if vid, ok := pinnedVersions[ps.Get.Name]; ok {
+				resolvedVersions[ps.Get.ResourceCanonical()] = vid
+			}
 		}
 	}
 

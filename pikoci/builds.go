@@ -623,15 +623,13 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 			return fmt.Errorf("create pending build: %w", err)
 		}
 
-		// Pin all resolved resource versions at build creation time for
-		// approval builds. This ensures approved builds use the exact versions
-		// that triggered them, not whatever is latest when they eventually run.
-		if status == build.WaitingForApproval {
-			for _, c := range candidates {
-				if err := uow.Builds().InsertGetVersion(ctx, tc, pn, j.Name, id, c.stepName, c.versionID); err != nil {
-					q.logger.Error("failed to pin version for approval build",
-						"build_id", id, "step", c.stepName, "version_id", c.versionID, "error", err)
-				}
+		// Pin all resolved resource versions at build creation time.
+		// This ensures builds use the exact versions that triggered them,
+		// not whatever is latest when they eventually run (same as Concourse).
+		for _, c := range candidates {
+			if err := uow.Builds().InsertGetVersion(ctx, tc, pn, j.Name, id, c.stepName, c.versionID); err != nil {
+				q.logger.Error("failed to pin version at build creation",
+					"build_id", id, "step", c.stepName, "version_id", c.versionID, "error", err)
 			}
 		}
 
