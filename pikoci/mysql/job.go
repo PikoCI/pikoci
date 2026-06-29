@@ -65,7 +65,6 @@ func newDBJob(p job.Job) dbJob {
 		dbj.Timeout = sql.NullInt64{Int64: int64(p.Timeout), Valid: true}
 	}
 	dbj.ApproveLabel = toNullString(p.ApproveLabel)
-	dbj.ApproveTimeout = toNullString(p.ApproveTimeout)
 	dbj.ApproveCount = sql.NullInt64{Int64: int64(p.ApproveCount), Valid: true}
 	return dbj
 }
@@ -94,7 +93,6 @@ func (dbp *dbJob) toDomainEntity() *job.Job {
 	}
 	if dbp.ApproveLabel.Valid && dbp.ApproveLabel.String != "" {
 		j.ApproveLabel = dbp.ApproveLabel.String
-		j.ApproveTimeout = dbp.ApproveTimeout.String
 		j.ApproveCount = int(dbp.ApproveCount.Int64)
 	}
 

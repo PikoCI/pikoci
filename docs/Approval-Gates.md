@@ -126,6 +126,6 @@ Approval actions are recorded in the team audit log:
 
 The following features are planned but not yet implemented:
 
-- **Timeout enforcement** — the `timeout` parameter is accepted in HCL but not yet enforced. Builds will wait indefinitely until approved/rejected/cancelled.
+- **Approval timeout** — automatic failure of builds that wait too long for approval ([#TBD]).
 - **Notification on approval** — the `notify` block inside `approve` is parsed but notifications are not yet dispatched when a build enters Waiting for Approval status.
 - **`${BUILD_URL}` variable** — not yet available for use in approval notification messages.

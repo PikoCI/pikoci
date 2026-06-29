@@ -76,7 +76,6 @@ type hclPutStep struct {
 // hclApproveBlock is the intermediate HCL-decoded approve block inside a job.
 type hclApproveBlock struct {
 	Label     string          `hcl:"label,label"`
-	Timeout   string          `hcl:"timeout,optional"`
 	Approvals int             `hcl:"approvals,optional"`
 	Notify    []hclNotifyStep `hcl:"notify,block"`
 }
@@ -1423,7 +1422,6 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 		if len(hj.Approve) > 0 {
 			ab := hj.Approve[0]
 			j.ApproveLabel = ab.Label
-			j.ApproveTimeout = ab.Timeout
 			j.ApproveCount = ab.Approvals
 			if j.ApproveCount == 0 {
 				j.ApproveCount = 1
