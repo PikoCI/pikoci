@@ -15,6 +15,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/notification"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/resource"
 	"go.uber.org/mock/gomock"
 )
 
@@ -319,4 +320,174 @@ func TestFireApproveNotifications(t *testing.T) {
 	defer mu.Unlock()
 	require.NotNil(t, receivedBody)
 	assert.Equal(t, "Build #5 needs approval", receivedBody["content"])
+}
+
+// Test: default notification message includes build URL when base_url is set
+func TestFireApproveNotifications_DefaultMessageWithURL(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	var mu sync.Mutex
+	var receivedBody map[string]string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		json.NewDecoder(r.Body).Decode(&receivedBody)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	pp := &pipeline.Pipeline{
+		Name: "pp",
+		Notifications: []notification.Notification{
+			{
+				Type: "discord", Name: "alerts", Canonical: "discord.alerts",
+				Params: &notification.Params{Params: map[string]string{
+					"webhook_url": ts.URL,
+					"base_url":    "https://ci.example.com",
+				}},
+			},
+		},
+	}
+	s.Pipelines.EXPECT().Find(ctx, "main", "pp").Return(pp, nil)
+
+	j := &job.Job{
+		Name: "deploy", ApproveLabel: "deploy", ApproveCount: 1,
+		ApproveNotify: []job.NotifyStep{{Type: "discord", Name: "alerts"}},
+	}
+
+	s.P.FireApproveNotifications(ctx, "main", "pp", "deploy", j, "3")
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotNil(t, receivedBody)
+	assert.Contains(t, receivedBody["content"], "Build #3 needs approval")
+	assert.Contains(t, receivedBody["content"], "https://ci.example.com/teams/main/pipelines/pp/jobs/deploy/builds/3")
+}
+
+// Test: default notification message without base_url omits link
+func TestFireApproveNotifications_DefaultMessageNoURL(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	var mu sync.Mutex
+	var receivedBody map[string]string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		json.NewDecoder(r.Body).Decode(&receivedBody)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	pp := &pipeline.Pipeline{
+		Name: "pp",
+		Notifications: []notification.Notification{
+			{
+				Type: "discord", Name: "alerts", Canonical: "discord.alerts",
+				Params: &notification.Params{Params: map[string]string{"webhook_url": ts.URL}},
+			},
+		},
+	}
+	s.Pipelines.EXPECT().Find(ctx, "main", "pp").Return(pp, nil)
+
+	j := &job.Job{
+		Name: "deploy", ApproveLabel: "deploy", ApproveCount: 1,
+		ApproveNotify: []job.NotifyStep{{Type: "discord", Name: "alerts"}},
+	}
+
+	s.P.FireApproveNotifications(ctx, "main", "pp", "deploy", j, "7")
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotNil(t, receivedBody)
+	assert.Equal(t, "⏳ [pp/deploy] Build #7 needs approval", receivedBody["content"])
+	assert.NotContains(t, receivedBody["content"], "http")
+}
+
+// Test: notification skipped when no ApproveNotify and no raw HCL
+func TestFireApproveNotifications_NoNotify(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Pipelines.EXPECT().Find(ctx, "main", "pp").Return(&pipeline.Pipeline{Name: "pp"}, nil)
+
+	j := &job.Job{Name: "deploy", ApproveLabel: "deploy", ApproveCount: 1}
+
+	// Should return without error — no webhook call
+	s.P.FireApproveNotifications(ctx, "main", "pp", "deploy", j, "1")
+}
+
+// Test: $BUILD_URL variable interpolation
+func TestFireApproveNotifications_BuildURLVariable(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	var mu sync.Mutex
+	var receivedBody map[string]string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		json.NewDecoder(r.Body).Decode(&receivedBody)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	pp := &pipeline.Pipeline{
+		Name: "pp",
+		Notifications: []notification.Notification{
+			{
+				Type: "discord", Name: "alerts", Canonical: "discord.alerts",
+				Params: &notification.Params{Params: map[string]string{
+					"webhook_url": ts.URL,
+					"base_url":    "https://ci.example.com/",
+				}},
+			},
+		},
+	}
+	s.Pipelines.EXPECT().Find(ctx, "main", "pp").Return(pp, nil)
+
+	j := &job.Job{
+		Name: "deploy", ApproveLabel: "deploy", ApproveCount: 1,
+		ApproveNotify: []job.NotifyStep{{Type: "discord", Name: "alerts", Message: "Approve at $BUILD_URL"}},
+	}
+
+	s.P.FireApproveNotifications(ctx, "main", "pp", "deploy", j, "10")
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotNil(t, receivedBody)
+	assert.Equal(t, "Approve at https://ci.example.com/teams/main/pipelines/pp/jobs/deploy/builds/10", receivedBody["content"])
+}
+
+// Test: CreateJobBuild with approval gate sets WaitingForApproval and
+// populates version metadata on GetJobBuild
+func TestGetJobBuild_WithPinnedVersions(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().Find(ctx, "main", "pp", "jn", "1").Return(&build.Build{
+		ID: 1, BuildNumber: "1", Status: build.WaitingForApproval, VersionID: 42,
+	}, nil)
+	s.Builds.EXPECT().FindApprovals(ctx, uint32(1)).Return(nil, nil)
+	s.Resources.EXPECT().FindVersionByID(ctx, uint32(42)).Return(
+		&resource.Version{ID: 42, Version: map[string]interface{}{"ref": "abc123"}}, "git.repo", nil,
+	)
+	s.Builds.EXPECT().FindGetVersions(ctx, uint32(1)).Return(
+		map[string]uint32{"repo": 42}, nil,
+	)
+	s.Resources.EXPECT().FindVersionByID(ctx, uint32(42)).Return(
+		&resource.Version{ID: 42, Version: map[string]interface{}{"ref": "abc123"}}, "git.repo", nil,
+	)
+
+	b, err := s.S.GetJobBuild(ctx, "main", "pp", "jn", "1")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{"ref": "abc123"}, b.VersionMetadata)
+	require.NotNil(t, b.PinnedVersions)
+	assert.Equal(t, map[string]interface{}{"ref": "abc123"}, b.PinnedVersions["git.repo"])
 }
