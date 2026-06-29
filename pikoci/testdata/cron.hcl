@@ -1,14 +1,3 @@
-notification_type "discord" {
-  source = "pikoci://discord"
-}
-
-notification "discord" "deploy-alerts" {
-  params {
-    webhook_url = "https://discord.com/api/webhooks/1513636375348641802/oPiF3O0bLhSPM3ITVI917ki_fCGSSLn8p8aQz2exvkBk2dRSQDiHSfY-iCLVN5Uik60r"
-    base_url    = "http://localhost:4000"
-  }
-}
-
 resource "cron" "my_cron" {
   check_interval = "@every 20s"
 }
@@ -47,11 +36,7 @@ job "deploy-staging" {
     trigger = true
     passed  = ["gen"]
   }
-  approve "deploy to staging" {
-    notify "discord" "deploy-alerts" {
-      message = "⏳ **deploy-staging** build #$BUILD_NUMBER needs approval"
-    }
-  }
+  approve "deploy to staging" {}
   task "deploy" {
     run "exec" {
       path = "/bin/sh"
@@ -70,9 +55,6 @@ job "deploy-prod" {
   }
   approve "deploy to production" {
     approvals = 2
-    notify "discord" "deploy-alerts" {
-      message = "⏳ **deploy-prod** build #$BUILD_NUMBER needs 2 approvals"
-    }
   }
   task "deploy" {
     run "exec" {
