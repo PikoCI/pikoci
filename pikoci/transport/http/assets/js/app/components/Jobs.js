@@ -307,6 +307,12 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
             ${buildStatusBadge(isWaitingApproval ? 'waiting_for_approval' : (build.approvals || []).some(a => a.action === 'rejected') ? 'failed' : 'succeeded')}
           </div>
           <div class="piko-step-row-body" style="display:block;padding:0.5rem 1rem 0.5rem 2rem;">
+            ${build.resource_canonical ? html`
+              <div class="mb-2" style="font-size:0.85em;">
+                <span class="text-muted">Resource:</span> <code>${build.resource_canonical}</code>
+                ${build.version_id ? html`<span class="text-muted ms-2">Version: #${build.version_id}</span>` : null}
+              </div>
+            ` : null}
             ${(build.approvals || []).length > 0 ? html`
               <div class="mb-2">
                 ${(build.approvals || []).map(a => html`
