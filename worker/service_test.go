@@ -37,6 +37,10 @@ func newTestWorker(ctrl *gomock.Controller) (*Worker, *mock.Service) {
 	// InsertBuildGetVersion is called after every successful get step; allow it globally.
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
+	// FindBuildGetVersions is checked after version resolution for pinned versions.
+	// Runs for all non-retry, non-local builds with build ID 10 (from GetJobBuild mock above).
+	svc.EXPECT().FindBuildGetVersions(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), uint32(10)).Return(nil, nil).AnyTimes()
+
 	// NotifySerialGroupPendingBuilds is called by notifyNextPendingBuild; allow it globally.
 	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -329,6 +333,9 @@ func TestInsertBuildGetVersion_CalledWithCorrectArgs(t *testing.T) {
 		}, false, nil).AnyTimes()
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), "main", "test-pipeline", "test-job", "10", gomock.Any()).
 		Return(nil).AnyTimes()
+
+	// Pinned versions check (none pinned for this test)
+	svc.EXPECT().FindBuildGetVersions(gomock.Any(), "main", "test-pipeline", "test-job", uint32(10)).Return(nil, nil)
 
 	// Verify InsertBuildGetVersion is called with exact correct arguments
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), "main", "test-pipeline", "test-job", uint32(10), "my-cron", uint32(1)).
@@ -3664,6 +3671,7 @@ func TestProcessJob_Cancellation(t *testing.T) {
 	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	svc.EXPECT().FindBuildGetVersions(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
 	w := &Worker{
 		pikoci: svc,
@@ -3880,6 +3888,7 @@ func TestProcessJob_Cancellation_RunsOnCancelNotOnFailure(t *testing.T) {
 	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	svc.EXPECT().FindBuildGetVersions(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
 	w := &Worker{
 		pikoci: svc,
@@ -3997,6 +4006,7 @@ func TestProcessJob_Cancellation_NoUpdateLoopAfterCancel(t *testing.T) {
 	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	svc.EXPECT().InsertBuildGetVersion(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	svc.EXPECT().FindBuildGetVersions(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
 	w := &Worker{
 		pikoci: svc,

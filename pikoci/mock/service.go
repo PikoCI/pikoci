@@ -52,6 +52,20 @@ func (m *Service) EXPECT() *ServiceMockRecorder {
 	return m.recorder
 }
 
+// ApproveBuild mocks base method.
+func (m *Service) ApproveBuild(ctx context.Context, tc, pc, jn, buildNumber, username, message string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApproveBuild", ctx, tc, pc, jn, buildNumber, username, message)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApproveBuild indicates an expected call of ApproveBuild.
+func (mr *ServiceMockRecorder) ApproveBuild(ctx, tc, pc, jn, buildNumber, username, message any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApproveBuild", reflect.TypeOf((*Service)(nil).ApproveBuild), ctx, tc, pc, jn, buildNumber, username, message)
+}
+
 // CancelJobBuild mocks base method.
 func (m *Service) CancelJobBuild(ctx context.Context, tc, pn, jn, buildNumber string) error {
 	m.ctrl.T.Helper()
@@ -909,6 +923,20 @@ func (m *Service) RegenerateWebhookToken(ctx context.Context, tc, pn, rCan strin
 func (mr *ServiceMockRecorder) RegenerateWebhookToken(ctx, tc, pn, rCan any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegenerateWebhookToken", reflect.TypeOf((*Service)(nil).RegenerateWebhookToken), ctx, tc, pn, rCan)
+}
+
+// RejectBuild mocks base method.
+func (m *Service) RejectBuild(ctx context.Context, tc, pc, jn, buildNumber, username, message string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RejectBuild", ctx, tc, pc, jn, buildNumber, username, message)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RejectBuild indicates an expected call of RejectBuild.
+func (mr *ServiceMockRecorder) RejectBuild(ctx, tc, pc, jn, buildNumber, username, message any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RejectBuild", reflect.TypeOf((*Service)(nil).RejectBuild), ctx, tc, pc, jn, buildNumber, username, message)
 }
 
 // RetryJobBuild mocks base method.

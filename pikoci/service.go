@@ -250,6 +250,11 @@ type Service interface {
 	// UpdateApiTokenLastUsed updates the last_used_at timestamp for a token.
 	UpdateApiTokenLastUsed(ctx context.Context, tokenID uint32)
 
+	// ApproveBuild records an approval vote for a build waiting for approval.
+	ApproveBuild(ctx context.Context, tc, pc, jn, buildNumber, username, message string) error
+	// RejectBuild records a rejection vote and immediately fails the build.
+	RejectBuild(ctx context.Context, tc, pc, jn, buildNumber, username, message string) error
+
 	// ListAuditLog returns audit log entries for the given team matching the
 	// filter options. The boolean return value indicates whether more results exist.
 	ListAuditLog(ctx context.Context, tc string, opts auditlog.FilterOpts) ([]*auditlog.Entry, bool, error)

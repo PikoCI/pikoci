@@ -28,7 +28,19 @@ const (
 	Cancelled
 	// Pending indicates the build is queued and waiting to start.
 	Pending
+	// WaitingForApproval indicates the build is waiting for human approval before starting.
+	WaitingForApproval
 )
+
+// Approval represents a single approve/reject vote on a build.
+type Approval struct {
+	ID        uint32    `json:"id"`
+	BuildID   uint32    `json:"build_id"`
+	Username  string    `json:"username"`
+	Action    string    `json:"action"` // "approved" or "rejected"
+	Message   string    `json:"message,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
 
 // Build represents a single execution of a job within a pipeline.
 type Build struct {
@@ -43,10 +55,20 @@ type Build struct {
 	StartedAt time.Time     `json:"started_at"`
 	Duration  time.Duration `json:"duration"`
 
-	VersionID         uint32 `json:"version_id,omitempty"`
-	ResourceCanonical string `json:"resource_canonical,omitempty"`
+	VersionID         uint32                 `json:"version_id,omitempty"`
+	ResourceCanonical string                 `json:"resource_canonical,omitempty"`
+	VersionMetadata   map[string]interface{} `json:"version_metadata,omitempty"`
+
+	// PinnedVersions maps get-step resource canonical names to their version
+	// metadata. Populated at build creation time for approval gate builds so
+	// the exact versions are tracked and displayed.
+	PinnedVersions map[string]map[string]interface{} `json:"pinned_versions,omitempty"`
 
 	RetrySourceBuildID uint32 `json:"retry_source_build_id,omitempty"`
+
+	// Approvals contains the approval/rejection votes for this build.
+	// Only populated for builds with WaitingForApproval status.
+	Approvals []Approval `json:"approvals,omitempty"`
 
 	// SuppressUpdates prevents updateBuild from persisting this build.
 	// Used by in_parallel goroutines that operate on local build copies.

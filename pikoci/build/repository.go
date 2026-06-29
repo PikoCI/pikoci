@@ -51,4 +51,11 @@ type Repository interface {
 	// FailStartedBuilds transitions all builds with status "started" to "failed" with the given reason.
 	// It returns the number of builds that were updated.
 	FailStartedBuilds(ctx context.Context, reason string) (int, error)
+
+	// CreateApproval records an approve or reject vote for a build.
+	CreateApproval(ctx context.Context, buildID uint32, username, action, message string) error
+	// FindApprovals returns all approval/rejection votes for a build.
+	FindApprovals(ctx context.Context, buildID uint32) ([]Approval, error)
+	// CountApprovals returns the number of "approved" votes for a build.
+	CountApprovals(ctx context.Context, buildID uint32) (int, error)
 }

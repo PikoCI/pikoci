@@ -988,6 +988,8 @@ func init() {
 	buildsCmd.AddCommand(buildsDeleteCmd)
 	buildsCmd.AddCommand(buildsCancelCmd)
 	buildsCmd.AddCommand(buildsRetryCmd)
+	buildsCmd.AddCommand(buildsApproveCmd)
+	buildsCmd.AddCommand(buildsRejectCmd)
 }
 
 var buildsListCmd = &cobra.Command{
@@ -1142,6 +1144,75 @@ var buildsRetryCmd = &cobra.Command{
 func init() {
 	buildsRetryCmd.Flags().String("build-number", "", "Number of the Build")
 	buildsRetryCmd.MarkFlagRequired("build-number")
+}
+
+var buildsApproveCmd = &cobra.Command{
+	Use:   "approve",
+	Short: "Approves a Build waiting for approval",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url, _ := cmd.Flags().GetString("url")
+		jwt, _ := cmd.Flags().GetString("jwt")
+		tc, _ := cmd.Flags().GetString("team-canonical")
+		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
+		jn, _ := cmd.Flags().GetString("job-name")
+		bn, _ := cmd.Flags().GetString("build-number")
+		msg, _ := cmd.Flags().GetString("message")
+
+		c, err := newClientWithConfig(url, jwt)
+		if err != nil {
+			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
+		}
+
+		err = c.ApproveBuild(cmd.Context(), tc, pn, jn, bn, "", msg)
+		if err != nil {
+			return fmt.Errorf("failed to approve build %q: %w", bn, err)
+		}
+
+		fmt.Println("Build approved successfully")
+		return nil
+	},
+}
+
+func init() {
+	buildsApproveCmd.Flags().String("build-number", "", "Number of the Build")
+	buildsApproveCmd.Flags().String("message", "", "Optional approval message")
+	buildsApproveCmd.MarkFlagRequired("build-number")
+}
+
+var buildsRejectCmd = &cobra.Command{
+	Use:   "reject",
+	Short: "Rejects a Build waiting for approval",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url, _ := cmd.Flags().GetString("url")
+		jwt, _ := cmd.Flags().GetString("jwt")
+		tc, _ := cmd.Flags().GetString("team-canonical")
+		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
+		jn, _ := cmd.Flags().GetString("job-name")
+		bn, _ := cmd.Flags().GetString("build-number")
+		msg, _ := cmd.Flags().GetString("message")
+
+		c, err := newClientWithConfig(url, jwt)
+		if err != nil {
+			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
+		}
+
+		err = c.RejectBuild(cmd.Context(), tc, pn, jn, bn, "", msg)
+		if err != nil {
+			return fmt.Errorf("failed to reject build %q: %w", bn, err)
+		}
+
+		fmt.Println("Build rejected")
+		return nil
+	},
+}
+
+func init() {
+	buildsRejectCmd.Flags().String("build-number", "", "Number of the Build")
+	buildsRejectCmd.Flags().String("message", "", "Rejection reason (required)")
+	buildsRejectCmd.MarkFlagRequired("build-number")
+	buildsRejectCmd.MarkFlagRequired("message")
 }
 
 // resources

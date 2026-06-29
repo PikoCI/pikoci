@@ -57,6 +57,21 @@ func (mr *BuildRepositoryMockRecorder) AggregateStatusByVersionIDs(ctx, versionI
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AggregateStatusByVersionIDs", reflect.TypeOf((*BuildRepository)(nil).AggregateStatusByVersionIDs), ctx, versionIDs)
 }
 
+// CountApprovals mocks base method.
+func (m *BuildRepository) CountApprovals(ctx context.Context, buildID uint32) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountApprovals", ctx, buildID)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountApprovals indicates an expected call of CountApprovals.
+func (mr *BuildRepositoryMockRecorder) CountApprovals(ctx, buildID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountApprovals", reflect.TypeOf((*BuildRepository)(nil).CountApprovals), ctx, buildID)
+}
+
 // CountRunning mocks base method.
 func (m *BuildRepository) CountRunning(ctx context.Context, tc, pn, jn string) (int, error) {
 	m.ctrl.T.Helper()
@@ -116,6 +131,20 @@ func (m *BuildRepository) Create(ctx context.Context, tc, pn, jn string, b build
 func (mr *BuildRepositoryMockRecorder) Create(ctx, tc, pn, jn, b any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*BuildRepository)(nil).Create), ctx, tc, pn, jn, b)
+}
+
+// CreateApproval mocks base method.
+func (m *BuildRepository) CreateApproval(ctx context.Context, buildID uint32, username, action, message string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateApproval", ctx, buildID, username, action, message)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateApproval indicates an expected call of CreateApproval.
+func (mr *BuildRepositoryMockRecorder) CreateApproval(ctx, buildID, username, action, message any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateApproval", reflect.TypeOf((*BuildRepository)(nil).CreateApproval), ctx, buildID, username, action, message)
 }
 
 // CreateRetry mocks base method.
@@ -191,6 +220,21 @@ func (m *BuildRepository) Find(ctx context.Context, tc, pn, jn, buildNumber stri
 func (mr *BuildRepositoryMockRecorder) Find(ctx, tc, pn, jn, buildNumber any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Find", reflect.TypeOf((*BuildRepository)(nil).Find), ctx, tc, pn, jn, buildNumber)
+}
+
+// FindApprovals mocks base method.
+func (m *BuildRepository) FindApprovals(ctx context.Context, buildID uint32) ([]build.Approval, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindApprovals", ctx, buildID)
+	ret0, _ := ret[0].([]build.Approval)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindApprovals indicates an expected call of FindApprovals.
+func (mr *BuildRepositoryMockRecorder) FindApprovals(ctx, buildID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindApprovals", reflect.TypeOf((*BuildRepository)(nil).FindApprovals), ctx, buildID)
 }
 
 // FindByID mocks base method.

@@ -21,6 +21,7 @@ func TestCreateJobBuild(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job"}, nil)
 	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "my-job", gomock.Any()).Return(uint32(1), "1", nil)
 
 	b, err := s.S.CreateJobBuild(ctx, "main", "my-pipeline", "my-job", build.Build{})
@@ -196,7 +197,7 @@ func TestRetryJobBuild_RunningBuildFails(t *testing.T) {
 
 	err := s.S.RetryJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "still running or pending")
+	assert.Contains(t, err.Error(), "still running, pending, or waiting for approval")
 }
 
 func TestCreateRetryJobBuild(t *testing.T) {
@@ -339,6 +340,8 @@ func TestGetJobBuild(t *testing.T) {
 
 	expected := &build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3").Return(expected, nil)
+	s.Builds.EXPECT().FindApprovals(ctx, uint32(5)).Return(nil, nil)
+	s.Builds.EXPECT().FindGetVersions(ctx, uint32(5)).Return(nil, nil)
 
 	b, err := s.S.GetJobBuild(ctx, "main", "my-pipeline", "my-job", "3")
 	require.NoError(t, err)
@@ -437,7 +440,7 @@ func TestCancelJobBuild_AlreadyCompleted(t *testing.T) {
 
 	err := s.S.CancelJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not running or pending")
+	assert.Contains(t, err.Error(), "not running, pending, or waiting for approval")
 }
 
 func TestUpdateJobBuild_CancelledBuildNotOverwritten(t *testing.T) {
@@ -772,6 +775,8 @@ func TestEvaluateDownstreamJobs_TriggersWhenReady(t *testing.T) {
 	// Create is called to create a new pending build
 	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "deploy", gomock.Any()).
 		Return(uint32(10), "1", nil)
+	// Versions are pinned at creation time for all builds
+	s.Builds.EXPECT().InsertGetVersion(ctx, "main", "my-pipeline", "deploy", uint32(10), "repo", uint32(42)).Return(nil)
 
 	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")
 	require.NoError(t, err)
@@ -818,6 +823,63 @@ func TestEvaluateDownstreamJobs_SkipsWhenPendingExists(t *testing.T) {
 		Return(&build.Build{ID: 5, BuildNumber: "1", Status: build.Pending}, nil)
 
 	// Create must NOT be called
+
+	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")
+	require.NoError(t, err)
+}
+
+func TestEvaluateDownstreamJobs_WaitingApprovalBuildsPileUp(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// Deploy job has an approval gate
+	pp := &pipeline.Pipeline{
+		Name: "my-pipeline",
+		Jobs: []job.Job{
+			{Name: "lint"},
+			{
+				Name:         "deploy",
+				ApproveLabel: "deploy to prod",
+				ApproveCount: 1,
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get: &job.GetStep{
+							Type:    "git",
+							Name:    "repo",
+							Passed:  []string{"lint"},
+							Trigger: true,
+						},
+					},
+				},
+			},
+		},
+	}
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil).Times(2)
+
+	s.Builds.EXPECT().FindReadyDownstreamVersion(
+		ctx, "main", "my-pipeline",
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
+	).Return(uint32(99), true, nil)
+
+	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").
+		Return(&resource.Resource{Type: "git", Name: "repo"}, nil)
+
+	// FindOldestPending returns nil (no pending build — the existing one is waiting_for_approval)
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "deploy").
+		Return(nil, nil)
+
+	// A new build IS created even though another waiting build may exist.
+	// Waiting builds pile up — each version gets its own approval gate.
+	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "deploy", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _ string, b build.Build) (uint32, string, error) {
+			assert.Equal(t, build.WaitingForApproval, b.Status, "downstream build with approve gate should be WaitingForApproval")
+			assert.Equal(t, uint32(99), b.VersionID)
+			return uint32(20), "2", nil
+		})
+	// Versions are pinned at creation time for approval builds
+	s.Builds.EXPECT().InsertGetVersion(ctx, "main", "my-pipeline", "deploy", uint32(20), "repo", uint32(99)).Return(nil)
 
 	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")
 	require.NoError(t, err)
@@ -1011,6 +1073,7 @@ func TestEvaluateDownstreamJobs_ForEachGroupExpansion(t *testing.T) {
 		Return(nil, nil)
 	s.Builds.EXPECT().Create(gomock.Any(), "main", "my-pipeline", "deploy", gomock.Any()).
 		Return(uint32(1), "1", nil)
+	s.Builds.EXPECT().InsertGetVersion(gomock.Any(), "main", "my-pipeline", "deploy", uint32(1), "repo", uint32(42)).Return(nil)
 
 	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint-go")
 	require.NoError(t, err)

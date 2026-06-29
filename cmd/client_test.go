@@ -27,7 +27,7 @@ func TestCommandTree(t *testing.T) {
 		{usersCmd, "users", []string{"create", "list", "update", "delete", "change-password"}},
 		{teamsCmd, "teams", []string{"create", "list", "get", "update", "delete", "members"}},
 		{teamsMembersCmd, "members", []string{"create", "update", "delete"}},
-		{buildsCmd, "builds", []string{"list", "get", "delete", "cancel", "retry"}},
+		{buildsCmd, "builds", []string{"list", "get", "delete", "cancel", "retry", "approve", "reject"}},
 		{resourcesCmd, "resources", []string{"get", "trigger", "versions", "webhook-regenerate"}},
 		{triggersCmd, "triggers", []string{"create", "list"}},
 	}

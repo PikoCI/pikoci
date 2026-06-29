@@ -9,12 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Role rename**: Renamed RBAC roles to match GitHub's model: Viewer→Read, Operator→Write, Maintainer→Maintain. Admin role unchanged. Existing role assignments are automatically migrated. CLI flag defaults updated (`--role maintain`). All UI dropdowns, tooltips, and docs updated to use new names.
+- **Role rename**: Viewer→Read, Operator→Write, Maintainer→Maintain to match GitHub's model. DB migration auto-renames stored values. CLI, UI, and docs updated.
 
 ### Added
 
-- **Audit log**: Append-only audit trail recording who did what within a team. Tracks 16 event types across pipelines, jobs, resources, and team membership. Accessible via Team page Audit Log tab, CLI (`audit list`), and API (`GET /teams/{tc}/audit`). Supports multi-select include/exclude filters for users, actions, and pipelines with cursor-based pagination. Entries persist after user removal or pipeline deletion. Read+ access required ([#532](https://github.com/PikoCI/pikoci/issues/532)).
-- **Secrets masking in build logs**: Resolved secret values are automatically replaced with `***` in command stdout/stderr as a safety net against accidental leaks. Masking applies to real-time partial log streaming and final stored output. Values shorter than 3 characters are skipped to avoid false positives, and longer secrets are masked before shorter substrings to prevent partial masking ([#147](https://github.com/PikoCI/pikoci/issues/147)).
+- **Approval gates**: `approve` HCL block on jobs creates a human approval gate. Purple "Waiting for Approval" status, approve/reject UI+CLI+API (Maintain+), configurable count, notifications, version pinning, audit events ([#152](https://github.com/PikoCI/pikoci/issues/152)).
+- **Version pinning at build creation**: Downstream builds snapshot triggered resource versions at creation time, matching Concourse CI behavior.
+- **Audit log**: Append-only team audit trail with 16 event types, filterable UI/CLI/API, cursor-based pagination. Read+ access ([#532](https://github.com/PikoCI/pikoci/issues/532)).
+- **Secrets masking in build logs**: Secret values replaced with `***` in stdout/stderr. Real-time and stored output. Skips values < 3 chars ([#147](https://github.com/PikoCI/pikoci/issues/147)).
 
 ### Fixed
 

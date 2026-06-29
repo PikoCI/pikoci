@@ -24,6 +24,9 @@ const (
 	ResourceUnpinned Action = "resource.unpinned"
 	ResourceChecked  Action = "resource.check_triggered"
 
+	BuildApproved Action = "build.approved"
+	BuildRejected Action = "build.rejected"
+
 	MemberAdded       Action = "member.added"
 	MemberRemoved     Action = "member.removed"
 	MemberRoleChanged Action = "member.role_changed"

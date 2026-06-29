@@ -42,6 +42,12 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 
 	b.Status = build.Pending
 
+	// Check if the job has an approval gate — if so, set WaitingForApproval
+	j, jErr := q.Jobs.Find(ctx, tc, pc, jn)
+	if jErr == nil && j.ApproveLabel != "" {
+		b.Status = build.WaitingForApproval
+	}
+
 	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
 		id, buildNumber, err := uow.Builds().Create(ctx, tc, pc, jn, b)
 		if err != nil {
@@ -56,7 +62,11 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 		return nil, err
 	}
 
-	q.Notifier.Notify()
+	if b.Status != build.WaitingForApproval {
+		q.Notifier.Notify()
+	} else if jErr == nil {
+		q.FireApproveNotifications(ctx, tc, pc, jn, j, b.BuildNumber)
+	}
 
 	return &b, nil
 }
@@ -112,6 +122,35 @@ func (q *PikoCI) GetJobBuild(ctx context.Context, tc, pc, jn string, buildNumber
 	if err != nil {
 		return nil, fmt.Errorf("failed to Find Build: %w", err)
 	}
+	approvals, aErr := q.Builds.FindApprovals(ctx, b.ID)
+	if aErr == nil && len(approvals) > 0 {
+		b.Approvals = approvals
+	}
+	// Populate version metadata for the triggering resource
+	if b.VersionID > 0 {
+		v, _, vErr := q.Resources.FindVersionByID(ctx, b.VersionID)
+		if vErr == nil && v != nil {
+			b.VersionMetadata = v.Version
+		}
+	}
+	// Populate pinned versions (stored at build creation for approval gates)
+	getVersions, gvErr := q.Builds.FindGetVersions(ctx, b.ID)
+	if gvErr == nil && len(getVersions) > 0 {
+		pinned := make(map[string]map[string]interface{}, len(getVersions))
+		for stepName, vID := range getVersions {
+			v, rCan, vErr := q.Resources.FindVersionByID(ctx, vID)
+			if vErr == nil && v != nil {
+				key := rCan
+				if key == "" {
+					key = stepName
+				}
+				pinned[key] = v.Version
+			}
+		}
+		if len(pinned) > 0 {
+			b.PinnedVersions = pinned
+		}
+	}
 	return b, nil
 }
 
@@ -131,8 +170,8 @@ func (q *PikoCI) CancelJobBuild(ctx context.Context, tc, pc, jn string, buildNum
 		return fmt.Errorf("failed to Find Build: %w", err)
 	}
 	wasRunning := b.Status == build.Started
-	if b.Status != build.Started && b.Status != build.Pending {
-		return fmt.Errorf("build %s is not running or pending (status: %s)", buildNumber, b.Status)
+	if b.Status != build.Started && b.Status != build.Pending && b.Status != build.WaitingForApproval {
+		return fmt.Errorf("build %s is not running, pending, or waiting for approval (status: %s)", buildNumber, b.Status)
 	}
 	b.Status = build.Cancelled
 	if wasRunning {
@@ -232,8 +271,8 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 	if err != nil {
 		return fmt.Errorf("failed to Find Build: %w", err)
 	}
-	if b.Status == build.Started || b.Status == build.Pending {
-		return fmt.Errorf("build %s is still running or pending", buildNumber)
+	if b.Status == build.Started || b.Status == build.Pending || b.Status == build.WaitingForApproval {
+		return fmt.Errorf("build %s is still running, pending, or waiting for approval", buildNumber)
 	}
 
 	// Extract parent build number: if "3.1" -> "3", if "3" -> "3"
@@ -562,7 +601,10 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 
 	// Atomic check-and-create to prevent duplicate pending builds
 	// from concurrent callers (multiple workers or worker + scheduler).
+	// Note: waiting_for_approval builds are allowed to pile up — each
+	// resource version gets its own approval gate.
 	var triggered bool
+	var createdBuildNumber string
 	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
 		pending, err := uow.Builds().FindOldestPending(ctx, tc, pn, j.Name)
 		if err != nil {
@@ -572,12 +614,26 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 			return nil
 		}
 
+		status := build.Pending
+		if j.ApproveLabel != "" {
+			status = build.WaitingForApproval
+		}
 		id, buildNumber, err := uow.Builds().Create(ctx, tc, pn, j.Name, build.Build{
-			Status:    build.Pending,
+			Status:    status,
 			VersionID: versionID,
 		})
 		if err != nil {
 			return fmt.Errorf("create pending build: %w", err)
+		}
+
+		// Pin all resolved resource versions at build creation time.
+		// This ensures builds use the exact versions that triggered them,
+		// not whatever is latest when they eventually run (same as Concourse).
+		for _, c := range candidates {
+			if err := uow.Builds().InsertGetVersion(ctx, tc, pn, j.Name, id, c.stepName, c.versionID); err != nil {
+				q.logger.Error("failed to pin version at build creation",
+					"build_id", id, "step", c.stepName, "version_id", c.versionID, "error", err)
+			}
 		}
 
 		q.logger.Info("triggered downstream job",
@@ -586,13 +642,16 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 			"completed_job", completedJobName)
 
 		triggered = true
+		createdBuildNumber = buildNumber
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	if triggered {
+	if triggered && j.ApproveLabel == "" {
 		q.Notifier.Notify()
+	} else if triggered && j.ApproveLabel != "" {
+		q.FireApproveNotifications(ctx, tc, pn, j.Name, j, createdBuildNumber)
 	}
 	return nil
 }

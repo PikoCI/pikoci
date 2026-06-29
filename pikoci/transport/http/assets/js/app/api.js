@@ -136,6 +136,10 @@ export const fetchBuild = (tc, pn, jn, bid) =>
   api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/builds/' + bid).then(r => r.data);
 export const retryBuild = (tc, pn, jn, bid) =>
   api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/builds/' + bid + '/retry', { method: 'POST' });
+export const approveBuild = (tc, pn, jn, bid, message) =>
+  api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/builds/' + bid + '/approve', { method: 'POST', body: JSON.stringify({ message }) });
+export const rejectBuild = (tc, pn, jn, bid, message) =>
+  api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/builds/' + bid + '/reject', { method: 'POST', body: JSON.stringify({ message }) });
 
 // --- Resources ---
 export const fetchResources = (tc, pn) => api('/teams/' + tc + '/pipelines/' + pn + '/resources').then(r => r.data);

@@ -494,16 +494,18 @@ func (q *PikoCI) GetPipeline(ctx context.Context, tc, pCan string) (*pipeline.Pi
 // colors used for rendering pipeline graph nodes.
 var (
 	jobColors = map[build.Status]string{
-		build.Started:   `"#FFA300"`,
-		build.Failed:    `"#FF004D"`,
-		build.Succeeded: `"#00A83A"`,
-		build.Cancelled: `"#AB5236"`,
+		build.Started:         `"#FFA300"`,
+		build.Failed:          `"#FF004D"`,
+		build.Succeeded:       `"#00A83A"`,
+		build.Cancelled:       `"#AB5236"`,
+		build.WaitingForApproval: `"#8e44ad"`,
 	}
 	jobBorderColors = map[build.Status]string{
-		build.Started:   `"#CC8200"`,
-		build.Failed:    `"#CC003E"`,
-		build.Succeeded: `"#008030"`,
-		build.Cancelled: `"#8A3F2B"`,
+		build.Started:         `"#CC8200"`,
+		build.Failed:          `"#CC003E"`,
+		build.Succeeded:       `"#008030"`,
+		build.Cancelled:       `"#8A3F2B"`,
+		build.WaitingForApproval: `"#6c3483"`,
 	}
 	colorResource       = `"#83769C"`
 	colorResourceBorder = `"#5F574F"`

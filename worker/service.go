@@ -488,6 +488,22 @@ func (w *Worker) processJob(ctx context.Context, m workitem.Body, cwd string, pp
 		}
 	}
 
+	// Overlay pinned versions (stored at build creation time) on top of
+	// resolved versions. This ensures builds use the exact versions that
+	// triggered them, even if newer versions arrived while queued.
+	// Skipped for local mode and retry builds (which already resolve from parent).
+	if !w.LocalMode && m.RetryBuildNumber == "" {
+		pinnedVersions, _ := w.pikoci.FindBuildGetVersions(ctx, m.TeamCanonical, m.PipelineCanonical, m.JobName, b.ID)
+		for _, ps := range j.FlatPlanSteps() {
+			if ps.Type != job.StepTypeGet || ps.Get == nil {
+				continue
+			}
+			if vid, ok := pinnedVersions[ps.Get.Name]; ok {
+				resolvedVersions[ps.Get.ResourceCanonical()] = vid
+			}
+		}
+	}
+
 	failed, resolved, exportedVars := w.runPlan(jobCtx, m, &b, cwd, pp, j, resolvedVersions)
 
 	// Handle job-level timeout

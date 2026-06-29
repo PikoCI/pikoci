@@ -3,8 +3,8 @@
 import { html } from 'htm/preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { route } from 'preact-router';
-import { isLoggedIn, hasTeamRole } from '../state.js';
-import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
+import { isLoggedIn, hasTeamRole, session } from '../state.js';
+import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, approveBuild, rejectBuild, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchResourceVersions, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
 import { useLoading, usePolling } from '../hooks.js';
 import { sortBuilds, selectActiveBuild, durationToString, processLogs, pikoTimeAgo, fetchInterval } from '../utils.js';
 import { showToast } from '../toast.js';
@@ -39,6 +39,7 @@ function buildStatusBadge(status) {
   if (status === 'started') return html`<span class="piko-badge piko-badge-started">Running</span>`;
   if (status === 'cancelled') return html`<span class="piko-badge piko-badge-cancelled">Cancelled</span>`;
   if (status === 'pending') return html`<span class="piko-badge piko-badge-pending">Pending</span>`;
+  if (status === 'waiting_for_approval') return html`<span class="piko-badge piko-badge-waiting_for_approval">Waiting for Approval</span>`;
   return null;
 }
 
@@ -175,10 +176,69 @@ function ParallelGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoF
   `;
 }
 
+// ---------- ApprovalResourceRow ----------
+
+function ApprovalResourceRow({ rCan, passed, versionMeta, tc, pn }) {
+  const [expanded, setExpanded] = useState(false);
+  const [fetchedData, setFetchedData] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // Prefer versionMeta prop (from build's version_metadata for the triggering
+  // resource) over fetched data. Only fetch on expand if no prop provided.
+  const versionData = versionMeta || fetchedData;
+
+  const toggle = () => {
+    if (!expanded && !versionData && !loading) {
+      setLoading(true);
+      fetchResourceVersions(tc, pn, rCan, { limit: 1 }).then(resp => {
+        const versions = resp.data || resp || [];
+        if (versions.length > 0 && versions[0].version) {
+          setFetchedData(versions[0].version);
+        }
+      }).catch(() => {}).finally(() => setLoading(false));
+    }
+    setExpanded(prev => !prev);
+  };
+
+  return html`
+    <div class="mb-2">
+      <div class="d-flex align-items-center gap-2" style="cursor:pointer;" onClick=${toggle}>
+        <i class="bi ${expanded ? 'bi-chevron-down' : 'bi-chevron-right'}" style="color:var(--text-muted);"></i>
+        <i class="bi bi-cloud-download" style="color:var(--text-muted);"></i>
+        <code>${rCan}</code>
+        ${passed && passed.length > 0 ? html`<span class="text-muted">passed: ${passed.join(', ')}</span>` : null}
+      </div>
+      ${expanded ? html`
+        <div style="margin-left:2.5rem;margin-top:0.4rem;">
+          ${loading ? html`<span class="text-muted">Loading...</span>` : null}
+          ${!versionMeta && fetchedData ? html`<span class="text-muted" style="font-size:0.85em;font-style:italic;">Version not pinned — showing latest:</span>` : null}
+          ${versionData ? html`
+            <table class="table table-sm table-borderless mb-0">
+              <tbody>
+                ${Object.entries(versionData).map(([k, v]) => html`
+                  <tr key=${k}>
+                    <td class="text-muted" style="width:120px;padding:0.25rem 0.5rem;font-weight:600;">${k}</td>
+                    <td style="padding:0.25rem 0.5rem;word-break:break-all;">${String(v)}</td>
+                  </tr>
+                `)}
+              </tbody>
+            </table>
+          ` : !loading ? html`<span class="text-muted">Version resolved at build time.</span>` : null}
+        </div>
+      ` : null}
+    </div>
+  `;
+}
+
 // ---------- BuildContent ----------
 
-function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
-  const build = prepareBuild(rawBuild);
+function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
+  const [fullBuild, setFullBuild] = useState(null);
+  // Merge: use rawBuild (latest from polling) but overlay fields only in full detail
+  const mergedBuild = rawBuild && fullBuild && rawBuild.id === fullBuild.id
+    ? { ...rawBuild, approvals: fullBuild.approvals, version_metadata: fullBuild.version_metadata, pinned_versions: fullBuild.pinned_versions }
+    : (fullBuild || rawBuild);
+  const build = prepareBuild(mergedBuild);
   const isOperator = hasTeamRole(tc, 'write');
   const [autoFollow, setAutoFollow] = useState(true);
   const [expandedSteps, setExpandedSteps] = useState({});
@@ -187,7 +247,29 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
   const isAutoScrollingRef = useRef(false);
   const [cancelLoading, withCancelLoading] = useLoading();
   const [retryLoading, withRetryLoading] = useLoading();
+  const [approveMsg, setApproveMsg] = useState('');
+  const [rejectMsg, setRejectMsg] = useState('');
+  const [approveLoading, withApproveLoading] = useLoading();
+  const [rejectLoading, withRejectLoading] = useLoading();
   const initializedRef = useRef(false);
+
+  // Fetch full build detail to get approvals (not in list endpoint).
+  const rawBuildId = rawBuild && rawBuild.id;
+  const fetchedIdRef = useRef(null);
+  const refreshFullBuild = useCallback(() => {
+    if (rawBuild && rawBuild.build_number) {
+      fetchBuild(tc, pn, jn, rawBuild.build_number).then(b => {
+        if (b) setFullBuild(b);
+      }).catch(() => {});
+    }
+  }, [tc, pn, jn, rawBuild && rawBuild.build_number]);
+  // Fetch on build switch
+  useEffect(() => {
+    if (rawBuildId && rawBuildId !== fetchedIdRef.current) {
+      fetchedIdRef.current = rawBuildId;
+      refreshFullBuild();
+    }
+  }, [rawBuildId, refreshFullBuild]);
 
   // Initialize expanded steps - running steps start expanded
   useEffect(() => {
@@ -262,12 +344,102 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
   const steps = build.steps || [];
   const jobSteps = build.job || [];
   const isRunningOrPending = build.status === 'started' || build.status === 'pending';
+  const isWaitingApproval = build.status === 'waiting_for_approval';
+  const isMaintainer = hasTeamRole(tc, 'maintain');
 
   return html`
     <div class="piko-build-content-inner">
-      ${build.error ? html`<div class="alert alert-danger" role="alert">${build.error}</div>` : null}
+      ${build.error && !(build.approvals || []).some(a => a.action === 'rejected') ? html`<div class="alert alert-danger" role="alert">${build.error}</div>` : null}
+      ${(build.approvals || []).length > 0 || isWaitingApproval ? html`
+        <div class="piko-step-row" data-status="${isWaitingApproval ? 'started' : (build.approvals || []).some(a => a.action === 'rejected') ? 'failed' : 'succeeded'}" style="border-left: 3px solid var(--status-waiting_for_approval);">
+          <div class="piko-step-row-header" style="cursor:default;">
+            <i class="bi bi-shield-check" style="color:var(--status-waiting_for_approval);"></i>
+            <span class="piko-step-name" style="color:var(--status-waiting_for_approval);font-weight:600;">Approval Gate</span>
+            ${isWaitingApproval && jobData && jobData.approve_count ? html`
+              <span class="text-muted" style="font-size:0.85em;">${(build.approvals || []).filter(a => a.action === 'approved').length}/${jobData.approve_count} approvals</span>
+            ` : null}
+            ${buildStatusBadge(isWaitingApproval ? 'waiting_for_approval' : (build.approvals || []).some(a => a.action === 'rejected') ? 'failed' : 'succeeded')}
+          </div>
+          <div class="piko-step-row-body" style="display:block;padding:0.5rem 1rem 0.5rem 2rem;">
+            ${jobData && jobData.plan ? html`
+              <div class="mb-2">
+                ${jobData.plan.filter(s => s.type === 'get' && s.get).map(s => {
+                  const rCan = s.get.type + '.' + s.get.name;
+                  const pinnedMeta = build.pinned_versions && build.pinned_versions[rCan];
+                  const isTrigger = rCan === build.resource_canonical;
+                  return html`<${ApprovalResourceRow}
+                    key=${rCan}
+                    rCan=${rCan}
+                    passed=${s.get.passed}
+                    versionMeta=${pinnedMeta || (isTrigger ? build.version_metadata : null)}
+                    tc=${tc}
+                    pn=${pn}
+                  />`;
+                })}
+              </div>
+            ` : build.resource_canonical ? html`
+              <div class="mb-2">
+                <${ApprovalResourceRow}
+                  rCan=${build.resource_canonical}
+                  versionMeta=${build.version_metadata}
+                  tc=${tc}
+                  pn=${pn}
+                />
+              </div>
+            ` : null}
+            ${(build.approvals || []).length > 0 ? html`
+              <div class="mb-2">
+                ${(build.approvals || []).map(a => html`
+                  <div key=${a.id} class="d-flex align-items-center gap-2 mb-1" style="font-size:0.9em;">
+                    <span class="badge ${a.action === 'approved' ? 'bg-success' : 'bg-danger'}">${a.action}</span>
+                    <strong>${a.username}</strong>
+                    ${a.message ? html`<span class="text-muted">— ${a.message}</span>` : null}
+                  </div>
+                `)}
+              </div>
+            ` : html`<p class="text-muted mb-1" style="font-size:0.9em;">No votes yet.</p>`}
+            ${isWaitingApproval && isMaintainer && !(build.approvals || []).some(a => a.username === (session.value.user && session.value.user.username)) ? html`
+              <div class="d-flex gap-2 mt-2">
+                <form class="input-group input-group-sm" style="max-width:400px;" onSubmit=${(e) => {
+                  e.preventDefault();
+                  withApproveLoading(async () => {
+                    await approveBuild(tc, pn, jn, build.build_number, approveMsg);
+                    showToast('Build approved', 'success');
+                    setApproveMsg('');
+                    refreshFullBuild();
+                    if (onRetry) onRetry();
+                  });
+                }}>
+                  <input type="text" class="form-control" placeholder="Optional message"
+                    value=${approveMsg} onInput=${(e) => setApproveMsg(e.target.value)} />
+                  <button type="submit" class="btn btn-success" disabled=${approveLoading}>
+                    <i class="bi bi-check-circle"></i> ${approveLoading ? 'Approving...' : 'Approve'}
+                  </button>
+                </form>
+                <form class="input-group input-group-sm" style="max-width:400px;" onSubmit=${(e) => {
+                  e.preventDefault();
+                  if (!rejectMsg) return;
+                  withRejectLoading(async () => {
+                    await rejectBuild(tc, pn, jn, build.build_number, rejectMsg);
+                    showToast('Build rejected', 'success');
+                    setRejectMsg('');
+                    refreshFullBuild();
+                    if (onRetry) onRetry();
+                  });
+                }}>
+                  <input type="text" class="form-control" placeholder="Reason (required)"
+                    value=${rejectMsg} onInput=${(e) => setRejectMsg(e.target.value)} />
+                  <button type="submit" class="btn btn-danger" disabled=${rejectLoading || !rejectMsg}>
+                    <i class="bi bi-x-circle"></i> ${rejectLoading ? 'Rejecting...' : 'Reject'}
+                  </button>
+                </form>
+              </div>
+            ` : null}
+          </div>
+        </div>
+      ` : null}
       <div class="piko-build-meta">
-        ${build.status !== 'pending' ? html`
+        ${build.status !== 'pending' && build.status !== 'waiting_for_approval' ? html`
           <span>
             <span class="piko-build-label">Started</span>
             ${' '}
@@ -293,7 +465,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, onRetry }) {
               </button>
             ` : null}
           </span>
-        ` : isOperator ? html`
+        ` : isOperator && !isWaitingApproval ? html`
           <button type="button" class="btn btn-sm btn-outline-warning piko-retry-build" style="margin-left:auto;" onClick=${handleRetry} disabled=${retryLoading}>
             <i class="bi bi-arrow-clockwise"></i> ${retryLoading ? 'Retrying...' : 'Retry'}
           </button>
@@ -481,7 +653,7 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
     // Also refresh other non-terminal builds
     for (const b of buildList) {
       if (b.id === active?.id) continue;
-      if (b.status === 'started' || b.status === 'pending') {
+      if (b.status === 'started' || b.status === 'pending' || b.status === 'waiting_for_approval') {
         try {
           const fresh = await fetchBuild(tc, pn, jn, b.build_number);
           setBuilds(prev => sortBuilds(prev.map(x => x.id === fresh.id ? fresh : x)));
@@ -695,6 +867,7 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
                 tc=${tc}
                 pn=${pn}
                 jn=${jn}
+                job=${job}
                 onRetry=${onRetry}
               />
             ` : null}
