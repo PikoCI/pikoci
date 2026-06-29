@@ -1426,6 +1426,13 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 			if j.ApproveCount == 0 {
 				j.ApproveCount = 1
 			}
+			for _, n := range ab.Notify {
+				j.ApproveNotify = append(j.ApproveNotify, job.NotifyStep{
+					Type:    n.Type,
+					Name:    n.Name,
+					Message: n.Message,
+				})
+			}
 		}
 		if meta, ok := forEachMetas[hj.Name]; ok {
 			j.ForEachGroup = meta.baseName

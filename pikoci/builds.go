@@ -64,6 +64,8 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 
 	if b.Status != build.WaitingForApproval {
 		q.Notifier.Notify()
+	} else if jErr == nil {
+		go q.FireApproveNotifications(ctx, tc, pc, jn, j, b.BuildNumber)
 	}
 
 	return &b, nil
@@ -602,6 +604,7 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 	// Note: waiting_for_approval builds are allowed to pile up — each
 	// resource version gets its own approval gate.
 	var triggered bool
+	var createdBuildNumber string
 	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
 		pending, err := uow.Builds().FindOldestPending(ctx, tc, pn, j.Name)
 		if err != nil {
@@ -639,6 +642,7 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 			"completed_job", completedJobName)
 
 		triggered = true
+		createdBuildNumber = buildNumber
 		return nil
 	})
 	if err != nil {
@@ -646,6 +650,8 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 	}
 	if triggered && j.ApproveLabel == "" {
 		q.Notifier.Notify()
+	} else if triggered && j.ApproveLabel != "" {
+		go q.FireApproveNotifications(ctx, tc, pn, j.Name, j, createdBuildNumber)
 	}
 	return nil
 }

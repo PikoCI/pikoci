@@ -61,6 +61,8 @@ type Job struct {
 	ApproveLabel string `json:"approve_label,omitempty"`
 	// ApproveCount is the number of approvals required. Default 1 if approve block is present.
 	ApproveCount int `json:"approve_count,omitempty"`
+	// ApproveNotify contains notification steps to fire when a build enters WaitingForApproval.
+	ApproveNotify []NotifyStep `json:"approve_notify,omitempty"`
 
 	OnSuccess []HookStep `json:"on_success,omitempty"`
 	OnFailure []HookStep `json:"on_failure,omitempty"`

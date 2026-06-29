@@ -1,12 +1,16 @@
 package pikoci
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/build"
+	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/utils"
 )
 
@@ -102,4 +106,51 @@ func (q *PikoCI) RejectBuild(ctx context.Context, tc, pc, jn, buildNumber, usern
 		map[string]interface{}{"build_number": buildNumber, "message": message})
 
 	return nil
+}
+
+// FireApproveNotifications sends notifications configured in the job's approve
+// block when a build enters WaitingForApproval. The message is interpolated with
+// build metadata. This is fire-and-forget: errors are logged, not returned.
+func (q *PikoCI) FireApproveNotifications(ctx context.Context, tc, pc, jn string, j *job.Job, buildNumber string) {
+	if len(j.ApproveNotify) == 0 {
+		return
+	}
+	pp, err := q.Pipelines.Find(ctx, tc, pc)
+	if err != nil {
+		q.logger.Error("approve notify: failed to find pipeline", "error", err)
+		return
+	}
+	for _, ns := range j.ApproveNotify {
+		nCan := utils.NotificationCanonical(ns.Type, ns.Name)
+		notif, ok := pp.Notification(nCan)
+		if !ok {
+			q.logger.Error("approve notify: notification not found", "canonical", nCan)
+			continue
+		}
+		params := notif.GetParams()
+		webhookURL := params["webhook_url"]
+		if webhookURL == "" {
+			q.logger.Error("approve notify: missing webhook_url", "canonical", nCan)
+			continue
+		}
+
+		// Interpolate message with build variables
+		msg := ns.Message
+		msg = strings.ReplaceAll(msg, "$BUILD_NUMBER", buildNumber)
+		msg = strings.ReplaceAll(msg, "$BUILD_PIPELINE_NAME", pc)
+		msg = strings.ReplaceAll(msg, "$BUILD_JOB_NAME", jn)
+		msg = strings.ReplaceAll(msg, "$BUILD_TEAM_NAME", tc)
+		if msg == "" {
+			msg = fmt.Sprintf("⏳ [%s/%s] Build #%s needs approval", pc, jn, buildNumber)
+		}
+
+		body, _ := json.Marshal(map[string]string{"content": msg})
+		resp, err := http.Post(webhookURL, "application/json", bytes.NewReader(body))
+		if err != nil {
+			q.logger.Error("approve notify: failed to send", "canonical", nCan, "error", err)
+			continue
+		}
+		resp.Body.Close()
+		q.logger.Info("approve notify: sent", "canonical", nCan, "build_number", buildNumber)
+	}
 }

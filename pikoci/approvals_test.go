@@ -2,13 +2,19 @@ package pikoci_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
+	"github.com/pikoci/pikoci/pikoci/notification"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"go.uber.org/mock/gomock"
 )
 
@@ -263,4 +269,52 @@ func TestGetJobBuild_NoApprovalsForPending(t *testing.T) {
 	b, err := s.S.GetJobBuild(ctx, "main", "pp", "jn", "1")
 	require.NoError(t, err)
 	assert.Nil(t, b.Approvals)
+}
+
+// Test: approve notification fires when build enters WaitingForApproval
+func TestFireApproveNotifications(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// Set up a test HTTP server to receive the webhook
+	var mu sync.Mutex
+	var receivedBody map[string]string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		json.NewDecoder(r.Body).Decode(&receivedBody)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	// Pipeline has a discord notification with the test server URL
+	pp := &pipeline.Pipeline{
+		Name: "pp",
+		Notifications: []notification.Notification{
+			{
+				Type:      "discord",
+				Name:      "alerts",
+				Canonical: "discord.alerts",
+				Params:    &notification.Params{Params: map[string]string{"webhook_url": ts.URL}},
+			},
+		},
+	}
+	s.Pipelines.EXPECT().Find(ctx, "main", "pp").Return(pp, nil)
+
+	j := &job.Job{
+		Name:         "deploy",
+		ApproveLabel: "deploy to prod",
+		ApproveCount: 1,
+		ApproveNotify: []job.NotifyStep{
+			{Type: "discord", Name: "alerts", Message: "Build #$BUILD_NUMBER needs approval"},
+		},
+	}
+
+	s.P.FireApproveNotifications(ctx, "main", "pp", "deploy", j, "5")
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotNil(t, receivedBody)
+	assert.Equal(t, "Build #5 needs approval", receivedBody["content"])
 }
