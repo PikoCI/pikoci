@@ -161,4 +161,3 @@ Approval actions are recorded in the team audit log:
 The following features are planned but not yet implemented:
 
 - **Approval timeout** — automatic failure of builds that wait too long for approval (#584).
-- **`${BUILD_URL}` variable** — not yet available for use in approval notification messages.
