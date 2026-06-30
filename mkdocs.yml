@@ -37,6 +37,9 @@ nav:
   - Variables: Variables.md
   - Functions: Functions.md
   - Roles & Permissions: Roles.md
+  - Approval Gates: Approval-Gates.md
+  - API Tokens: API-Tokens.md
+  - Audit Log: Audit-Log.md
   - CLI Reference: CLI.md
   - Server Configuration: Server.md
   - Database Backends: Database.md
