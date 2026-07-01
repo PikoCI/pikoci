@@ -39,6 +39,7 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 		{"viewer can list pipelines", http.MethodGet, "/teams/main/pipelines", role.Read, false, true},
 		{"viewer can get team", http.MethodGet, "/teams/main", role.Read, false, true},
 		{"viewer can list audit log", http.MethodGet, "/teams/main/audit", role.Read, false, true},
+		{"viewer can get build report", http.MethodGet, "/teams/main/pipelines/p/jobs/j/builds/1/report", role.Read, false, true},
 
 		// --- Operator routes: operator+ allowed, viewer denied ---
 		{"operator can trigger job", http.MethodPost, "/teams/main/pipelines/p/jobs/j/trigger", role.Write, false, true},
@@ -115,6 +116,7 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 		svc.EXPECT().ListAuditLog(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, false, nil).AnyTimes()
 			svc.EXPECT().ApproveBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			svc.EXPECT().RejectBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().GetBuildReport(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
 			// Sign JWT
 			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user": um})

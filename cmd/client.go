@@ -990,6 +990,7 @@ func init() {
 	buildsCmd.AddCommand(buildsRetryCmd)
 	buildsCmd.AddCommand(buildsApproveCmd)
 	buildsCmd.AddCommand(buildsRejectCmd)
+	buildsCmd.AddCommand(buildsReportCmd)
 }
 
 var buildsListCmd = &cobra.Command{
@@ -1213,6 +1214,52 @@ func init() {
 	buildsRejectCmd.Flags().String("message", "", "Rejection reason (required)")
 	buildsRejectCmd.MarkFlagRequired("build-number")
 	buildsRejectCmd.MarkFlagRequired("message")
+}
+
+var buildsReportCmd = &cobra.Command{
+	Use:   "report",
+	Short: "Exports a Build report as JSON",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url, _ := cmd.Flags().GetString("url")
+		jwt, _ := cmd.Flags().GetString("jwt")
+		tc, _ := cmd.Flags().GetString("team-canonical")
+		pn, _ := cmd.Flags().GetString("pipeline-name")
+		pn = utils.Canonicalize(pn)
+		jn, _ := cmd.Flags().GetString("job-name")
+		bn, _ := cmd.Flags().GetString("build-number")
+		output, _ := cmd.Flags().GetString("output")
+
+		c, err := newClientWithConfig(url, jwt)
+		if err != nil {
+			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
+		}
+
+		report, err := c.GetBuildReport(cmd.Context(), tc, pn, jn, bn)
+		if err != nil {
+			return fmt.Errorf("failed to get build report %q: %w", bn, err)
+		}
+
+		data, err := json.MarshalIndent(report, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal report: %w", err)
+		}
+
+		if output != "" {
+			if err := os.WriteFile(output, data, 0644); err != nil {
+				return fmt.Errorf("failed to write report to %q: %w", output, err)
+			}
+			fmt.Printf("Report written to %s\n", output)
+		} else {
+			fmt.Println(string(data))
+		}
+		return nil
+	},
+}
+
+func init() {
+	buildsReportCmd.Flags().String("build-number", "", "Number of the Build")
+	buildsReportCmd.Flags().String("output", "", "Output file path (default: stdout)")
+	buildsReportCmd.MarkFlagRequired("build-number")
 }
 
 // resources

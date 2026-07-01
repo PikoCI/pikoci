@@ -79,6 +79,34 @@ type Build struct {
 	OnUpdate func() `json:"-"`
 }
 
+// BuildReport is a structured JSON report containing all runtime data for a build.
+// It wraps the build data with team/pipeline/job context and a generation timestamp.
+type BuildReport struct {
+	ReportVersion   string                            `json:"report_version"`
+	GeneratedAt     time.Time                         `json:"generated_at"`
+	Team            string                            `json:"team"`
+	Pipeline        string                            `json:"pipeline"`
+	Job             string                            `json:"job"`
+	Build           BuildReportData                   `json:"build"`
+	Approvals       []Approval                        `json:"approvals"`
+	Steps           []Step                            `json:"steps"`
+	JobLogs         []Step                            `json:"job_logs"`
+}
+
+// BuildReportData contains the build-specific fields for the report.
+type BuildReportData struct {
+	Number            string                            `json:"number"`
+	Status            string                            `json:"status"`
+	Error             string                            `json:"error"`
+	StartedAt         time.Time                         `json:"started_at"`
+	Duration          time.Duration                     `json:"duration"`
+	VersionID         uint32                            `json:"version_id"`
+	ResourceCanonical string                            `json:"resource_canonical"`
+	VersionMetadata   map[string]interface{}            `json:"version_metadata"`
+	PinnedVersions    map[string]map[string]interface{} `json:"pinned_versions"`
+	RetryOf           string                            `json:"retry_of"`
+}
+
 // Step represents an individual step within a build, such as a get, put, or task
 // operation. Each step tracks its own logs, duration, and completion status.
 type Step struct {

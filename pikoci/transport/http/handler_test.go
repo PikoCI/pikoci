@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/mock"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
@@ -773,6 +774,116 @@ func TestGetPipelineImage_Error_ReturnsJSON(t *testing.T) {
 	assert.NotEmpty(t, result.Err)
 }
 
+
+func TestGetBuildReport_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	report := &build.BuildReport{
+		ReportVersion: "1",
+		Team:          "main",
+		Pipeline:      "my-pipeline",
+		Job:           "my-job",
+		Build:         build.BuildReportData{Number: "1", Status: "succeeded"},
+		Approvals:     []build.Approval{},
+		Steps:         []build.Step{{Type: "task", Name: "echo", Status: build.Succeeded}},
+		JobLogs:       []build.Step{},
+	}
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+	s.EXPECT().GetBuildReport(gomock.Any(), "main", "my-pipeline", "my-job", "1").Return(report, nil)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/jobs/my-job/builds/1/report", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Content-Disposition"), "attachment")
+	assert.Contains(t, resp.Header.Get("Content-Disposition"), "build-report-1.json")
+
+	var result GetBuildReportResponse
+	json.NewDecoder(resp.Body).Decode(&result)
+	assert.Empty(t, result.Err)
+	require.NotNil(t, result.Report)
+	assert.Equal(t, "1", result.Report.ReportVersion)
+	assert.Equal(t, "main", result.Report.Team)
+	assert.Equal(t, "1", result.Report.Build.Number)
+	assert.Len(t, result.Report.Steps, 1)
+}
+
+func TestGetBuildReport_Error_NoContentDisposition(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "admin", Admin: true},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Admin}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	s.EXPECT().GetUser(gomock.Any(), "admin").Return(um, nil).AnyTimes()
+	s.EXPECT().GetBuildReport(gomock.Any(), "main", "my-pipeline", "my-job", "99").Return(nil, assert.AnError)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/jobs/my-job/builds/99/report", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	assert.Empty(t, resp.Header.Get("Content-Disposition"), "error responses should not have Content-Disposition")
+
+	var result GetBuildReportResponse
+	json.NewDecoder(resp.Body).Decode(&result)
+	assert.NotEmpty(t, result.Err)
+	assert.Nil(t, result.Report)
+}
+
+func TestGetBuildReport_UnauthenticatedDenied(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/my-pipeline/jobs/my-job/builds/1/report", nil)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
 
 func TestWorkerHeartbeat_WithWorkerToken(t *testing.T) {
 	ctrl := gomock.NewController(t)

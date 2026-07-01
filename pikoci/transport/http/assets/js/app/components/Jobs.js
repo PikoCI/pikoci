@@ -4,7 +4,7 @@ import { html } from 'htm/preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { route } from 'preact-router';
 import { isLoggedIn, hasTeamRole, session } from '../state.js';
-import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, approveBuild, rejectBuild, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchResourceVersions, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
+import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, approveBuild, rejectBuild, fetchBuildReport, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchResourceVersions, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
 import { useLoading, usePolling } from '../hooks.js';
 import { sortBuilds, selectActiveBuild, durationToString, processLogs, pikoTimeAgo, fetchInterval } from '../utils.js';
 import { showToast } from '../toast.js';
@@ -239,6 +239,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
     ? { ...rawBuild, approvals: fullBuild.approvals, version_metadata: fullBuild.version_metadata, pinned_versions: fullBuild.pinned_versions }
     : (fullBuild || rawBuild);
   const build = prepareBuild(mergedBuild);
+  const isReader = hasTeamRole(tc, 'read');
   const isOperator = hasTeamRole(tc, 'write');
   const [autoFollow, setAutoFollow] = useState(true);
   const [expandedSteps, setExpandedSteps] = useState({});
@@ -249,6 +250,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
   const [retryLoading, withRetryLoading] = useLoading();
   const [approveMsg, setApproveMsg] = useState('');
   const [rejectMsg, setRejectMsg] = useState('');
+  const [exportLoading, withExportLoading] = useLoading();
   const [approveLoading, withApproveLoading] = useLoading();
   const [rejectLoading, withRejectLoading] = useLoading();
   const initializedRef = useRef(false);
@@ -335,6 +337,19 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
     });
   }, [tc, pn, jn, build.build_number, withRetryLoading, onRetry]);
 
+  const onExport = useCallback(async () => {
+    await withExportLoading(async () => {
+      const resp = await fetchBuildReport(tc, pn, jn, build.build_number);
+      const blob = new Blob([JSON.stringify(resp.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'build-report-' + build.build_number + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }, [tc, pn, jn, build.build_number, withExportLoading]);
+
   const toggleFollowBtn = useCallback(() => {
     setAutoFollow(prev => !prev);
   }, []);
@@ -412,7 +427,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
                 }}>
                   <input type="text" class="form-control" placeholder="Optional message"
                     value=${approveMsg} onInput=${(e) => setApproveMsg(e.target.value)} />
-                  <button type="submit" class="btn btn-success" disabled=${approveLoading}>
+                  <button type="submit" class="btn btn-success" title="Approve build" disabled=${approveLoading}>
                     <i class="bi bi-check-circle"></i> ${approveLoading ? 'Approving...' : 'Approve'}
                   </button>
                 </form>
@@ -429,7 +444,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
                 }}>
                   <input type="text" class="form-control" placeholder="Reason (required)"
                     value=${rejectMsg} onInput=${(e) => setRejectMsg(e.target.value)} />
-                  <button type="submit" class="btn btn-danger" disabled=${rejectLoading || !rejectMsg}>
+                  <button type="submit" class="btn btn-danger" title="Reject build" disabled=${rejectLoading || !rejectMsg}>
                     <i class="bi bi-x-circle"></i> ${rejectLoading ? 'Rejecting...' : 'Reject'}
                   </button>
                 </form>
@@ -460,16 +475,25 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
               </button>
             ` : null}
             ${isOperator ? html`
-              <button type="button" class="btn btn-sm btn-outline-danger piko-cancel-build" onClick=${onCancel} disabled=${cancelLoading}>
+              <button type="button" class="btn btn-sm btn-outline-danger piko-cancel-build" title="Cancel build" onClick=${onCancel} disabled=${cancelLoading}>
                 <i class="bi bi-x-circle"></i> ${cancelLoading ? 'Cancelling...' : 'Cancel'}
               </button>
             ` : null}
           </span>
-        ` : isOperator && !isWaitingApproval ? html`
-          <button type="button" class="btn btn-sm btn-outline-warning piko-retry-build" style="margin-left:auto;" onClick=${handleRetry} disabled=${retryLoading}>
-            <i class="bi bi-arrow-clockwise"></i> ${retryLoading ? 'Retrying...' : 'Retry'}
-          </button>
-        ` : null}
+        ` : html`
+          <span style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+            ${isOperator && !isWaitingApproval ? html`
+              <button type="button" class="btn btn-sm btn-outline-warning piko-retry-build" title="Retry build" onClick=${handleRetry} disabled=${retryLoading}>
+                <i class="bi bi-arrow-clockwise"></i> ${retryLoading ? 'Retrying...' : 'Retry'}
+              </button>
+            ` : null}
+            ${isReader ? html`
+              <button type="button" class="btn btn-sm btn-outline-secondary" title="Export build report" onClick=${onExport} disabled=${exportLoading}>
+                <i class="bi bi-download"></i> ${exportLoading ? 'Exporting...' : 'Export'}
+              </button>
+            ` : null}
+          </span>
+        `}
       </div>
       ${steps.map((s, i) => {
         if (s.type === 'in_parallel') {
@@ -821,14 +845,14 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
         <div class="d-flex gap-2">
           ${isMember ? html`
             ${job && job.paused ? html`
-              <button type="button" id="unpause-job" class="btn btn-primary" onClick=${onUnpause} disabled=${unpauseLoading}>
+              <button type="button" id="unpause-job" class="btn btn-primary" title="Unpause job" onClick=${onUnpause} disabled=${unpauseLoading}>
                 <i class="bi bi-play-circle"></i> ${unpauseLoading ? 'Unpausing...' : 'Unpause Job'}
               </button>
             ` : html`
-              <button type="button" id="trigger-job" class="btn btn-warning" onClick=${onTrigger} disabled=${triggerLoading}>
+              <button type="button" id="trigger-job" class="btn btn-warning" title="Trigger job" onClick=${onTrigger} disabled=${triggerLoading}>
                 <i class="bi bi-play-circle"></i> ${triggerLoading ? 'Triggering...' : 'Trigger Job'}
               </button>
-              <button type="button" id="pause-job" class="btn btn-primary" onClick=${onPause} disabled=${pauseLoading}>
+              <button type="button" id="pause-job" class="btn btn-primary" title="Pause job" onClick=${onPause} disabled=${pauseLoading}>
                 <i class="bi bi-pause-circle"></i> ${pauseLoading ? 'Pausing...' : 'Pause Job'}
               </button>
             `}

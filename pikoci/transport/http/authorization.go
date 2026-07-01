@@ -37,6 +37,7 @@ var (
 		ListTeams:        requireRole(role.Read),
 		GetTeam:          requireRole(role.Read),
 		GetJobBuild:      requireRole(role.Read),
+		GetBuildReport:   requireRole(role.Read),
 		ChangePassword:   requireRole(role.Read),
 		UpdateProfile:    requireRole(role.Read),
 		ListTriggersAfter: requireRole(role.Read),

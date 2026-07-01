@@ -154,6 +154,57 @@ func (q *PikoCI) GetJobBuild(ctx context.Context, tc, pc, jn string, buildNumber
 	return b, nil
 }
 
+// GetBuildReport generates a structured JSON report for a build.
+func (q *PikoCI) GetBuildReport(ctx context.Context, tc, pc, jn, buildNumber string) (*build.BuildReport, error) {
+	b, err := q.GetJobBuild(ctx, tc, pc, jn, buildNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to GetJobBuild: %w", err)
+	}
+
+	retryOf := ""
+	if b.RetrySourceBuildID > 0 {
+		rb, err := q.Builds.FindByID(ctx, b.RetrySourceBuildID)
+		if err == nil && rb != nil {
+			retryOf = rb.BuildNumber
+		}
+	}
+
+	report := &build.BuildReport{
+		ReportVersion: "1",
+		GeneratedAt:   time.Now().UTC(),
+		Team:          tc,
+		Pipeline:      pc,
+		Job:           jn,
+		Build: build.BuildReportData{
+			Number:            b.BuildNumber,
+			Status:            b.Status.String(),
+			Error:             b.Error,
+			StartedAt:         b.StartedAt,
+			Duration:          b.Duration,
+			VersionID:         b.VersionID,
+			ResourceCanonical: b.ResourceCanonical,
+			VersionMetadata:   b.VersionMetadata,
+			PinnedVersions:    b.PinnedVersions,
+			RetryOf:           retryOf,
+		},
+		Approvals: b.Approvals,
+		Steps:     b.Steps,
+		JobLogs:   b.Job,
+	}
+
+	if report.Approvals == nil {
+		report.Approvals = []build.Approval{}
+	}
+	if report.Steps == nil {
+		report.Steps = []build.Step{}
+	}
+	if report.JobLogs == nil {
+		report.JobLogs = []build.Step{}
+	}
+
+	return report, nil
+}
+
 // CancelJobBuild cancels a running or pending build and notifies the next
 // pending build in the queue so it can potentially start.
 func (q *PikoCI) CancelJobBuild(ctx context.Context, tc, pc, jn string, buildNumber string) error {

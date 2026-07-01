@@ -555,6 +555,33 @@ func TestHTTPEndpoints(t *testing.T) {
 			decodeBody(t, resp, &rr)
 			assert.Empty(t, rr.Err)
 		})
+
+		t.Run("Report", func(t *testing.T) {
+			resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/pipelines/test-pipe/jobs/test-job/builds/1/report", adminJWT, "")
+			defer resp.Body.Close()
+			requireOK(t, resp)
+			assert.Contains(t, resp.Header.Get("Content-Disposition"), "attachment")
+			assert.Contains(t, resp.Header.Get("Content-Disposition"), "build-report-1.json")
+			var rr thttp.GetBuildReportResponse
+			decodeBody(t, resp, &rr)
+			assert.Empty(t, rr.Err)
+			require.NotNil(t, rr.Report)
+			assert.Equal(t, "1", rr.Report.ReportVersion)
+			assert.Equal(t, "main", rr.Report.Team)
+			assert.Equal(t, "test-pipe", rr.Report.Pipeline)
+			assert.Equal(t, "test-job", rr.Report.Job)
+			assert.Equal(t, "1", rr.Report.Build.Number)
+			assert.NotEmpty(t, rr.Report.Build.Status)
+			assert.NotNil(t, rr.Report.Approvals)
+			assert.NotNil(t, rr.Report.Steps)
+			assert.NotNil(t, rr.Report.JobLogs)
+		})
+
+		t.Run("Report_Unauthenticated", func(t *testing.T) {
+			resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/pipelines/test-pipe/jobs/test-job/builds/1/report", "", "")
+			defer resp.Body.Close()
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		})
 	})
 
 	// ---- Workers ----
