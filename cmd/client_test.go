@@ -27,7 +27,7 @@ func TestCommandTree(t *testing.T) {
 		{usersCmd, "users", []string{"create", "list", "update", "delete", "change-password"}},
 		{teamsCmd, "teams", []string{"create", "list", "get", "update", "delete", "members"}},
 		{teamsMembersCmd, "members", []string{"create", "update", "delete"}},
-		{buildsCmd, "builds", []string{"list", "get", "delete", "cancel", "retry", "approve", "reject"}},
+		{buildsCmd, "builds", []string{"list", "get", "delete", "cancel", "retry", "approve", "reject", "report"}},
 		{resourcesCmd, "resources", []string{"get", "trigger", "versions", "webhook-regenerate"}},
 		{triggersCmd, "triggers", []string{"create", "list"}},
 	}
@@ -63,6 +63,7 @@ func TestRequiredFlags(t *testing.T) {
 		{"builds delete", buildsDeleteCmd, []string{"build-number"}},
 		{"builds cancel", buildsCancelCmd, []string{"build-number"}},
 		{"builds retry", buildsRetryCmd, []string{"build-number"}},
+		{"builds report", buildsReportCmd, []string{"build-number"}},
 		{"resources get", resourcesGetCmd, []string{"resource-canonical"}},
 		{"resources trigger", resourcesTriggerCmd, []string{"resource-canonical"}},
 		{"resources versions", resourcesVersionsCmd, []string{"resource-canonical"}},

@@ -164,6 +164,9 @@ const (
 	// ListAuditLog is the route for listing audit log entries for a team.
 	ListAuditLog
 
+	// GetBuildReport is the route for exporting a build report as JSON.
+	GetBuildReport
+
 	// ApproveBuild is the route for approving a build waiting for approval.
 	ApproveBuild
 	// RejectBuild is the route for rejecting a build waiting for approval.

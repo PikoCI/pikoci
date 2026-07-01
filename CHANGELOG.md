@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Version pinning at build creation**: Downstream builds snapshot triggered resource versions at creation time, matching Concourse CI behavior.
 - **Audit log**: Append-only team audit trail with 16 event types, filterable UI/CLI/API, cursor-based pagination. Read+ access ([#532](https://github.com/PikoCI/pikoci/issues/532)).
 - **Secrets masking in build logs**: Secret values replaced with `***` in stdout/stderr. Real-time and stored output. Skips values < 3 chars ([#147](https://github.com/PikoCI/pikoci/issues/147)).
+- **Build report export**: JSON report for any build containing status, steps, logs, approvals, and version data. Available via API (`GET .../builds/{bn}/report`), CLI (`builds report`), and UI Export button. Read+ access ([#531](https://github.com/PikoCI/pikoci/issues/531)).
 
 ### Fixed
 

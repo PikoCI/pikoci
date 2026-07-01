@@ -169,6 +169,9 @@ type Service interface {
 	// CancelJobBuild cancels a running or pending build and notifies the next
 	// pending build in the queue.
 	CancelJobBuild(ctx context.Context, tc, pn, jn string, buildNumber string) error
+	// GetBuildReport generates a structured JSON report for a build containing
+	// all runtime data including approvals, versions, and step logs.
+	GetBuildReport(ctx context.Context, tc, pn, jn, buildNumber string) (*build.BuildReport, error)
 	// RetryJobBuild creates a retry of a completed build and enqueues it for execution.
 	RetryJobBuild(ctx context.Context, tc, pn, jn, buildNumber string) error
 	// FindBuildGetVersions returns the resource version IDs fetched during get

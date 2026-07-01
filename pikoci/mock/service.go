@@ -401,6 +401,21 @@ func (mr *ServiceMockRecorder) FindOldestPendingBuild(ctx, tc, pn, jn any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindOldestPendingBuild", reflect.TypeOf((*Service)(nil).FindOldestPendingBuild), ctx, tc, pn, jn)
 }
 
+// GetBuildReport mocks base method.
+func (m *Service) GetBuildReport(ctx context.Context, tc, pn, jn, buildNumber string) (*build.BuildReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBuildReport", ctx, tc, pn, jn, buildNumber)
+	ret0, _ := ret[0].(*build.BuildReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBuildReport indicates an expected call of GetBuildReport.
+func (mr *ServiceMockRecorder) GetBuildReport(ctx, tc, pn, jn, buildNumber any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBuildReport", reflect.TypeOf((*Service)(nil).GetBuildReport), ctx, tc, pn, jn, buildNumber)
+}
+
 // GetJobBuild mocks base method.
 func (m *Service) GetJobBuild(ctx context.Context, tc, pn, jn, buildNumber string) (*build.Build, error) {
 	m.ctrl.T.Helper()

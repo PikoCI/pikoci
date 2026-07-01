@@ -757,6 +757,22 @@ func (cl *Client) GetJobBuild(ctx context.Context, tc, pn, jn string, buildNumbe
 	return resp.Build, nil
 }
 
+// GetBuildReport retrieves a structured JSON report for a build.
+func (cl *Client) GetBuildReport(ctx context.Context, tc, pn, jn string, buildNumber string) (*build.BuildReport, error) {
+	var resp thttp.GetBuildReportResponse
+
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/builds/%s/report", cl.url, tc, pn, jn, buildNumber), nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return resp.Report, nil
+}
+
 // CancelJobBuild cancels a running build.
 func (cl *Client) CancelJobBuild(ctx context.Context, tc, pn, jn string, buildNumber string) error {
 	var resp thttp.CancelJobBuildResponse

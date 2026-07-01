@@ -225,6 +225,32 @@ func getJobBuild(s pikoci.Service) http.HandlerFunc {
 	}
 }
 
+type GetBuildReportResponse struct {
+	Report *build.BuildReport `json:"data,omitempty"`
+	Err    string             `json:"error,omitempty"`
+}
+
+func (r GetBuildReportResponse) Error() string { return r.Err }
+
+func getBuildReport(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var ctx = r.Context()
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		jn := vars["job_name"]
+		bn := vars["build_number"]
+		report, err := s.GetBuildReport(ctx, tc, pc, jn, bn)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		} else {
+			w.Header().Set("Content-Disposition", "attachment; filename=build-report-"+bn+".json")
+		}
+		encodeResponse(GetBuildReportResponse{Report: report, Err: errs}, w)
+	}
+}
+
 type CancelJobBuildResponse struct {
 	Err string `json:"error,omitempty"`
 }

@@ -140,6 +140,8 @@ export const approveBuild = (tc, pn, jn, bid, message) =>
   api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/builds/' + bid + '/approve', { method: 'POST', body: JSON.stringify({ message }) });
 export const rejectBuild = (tc, pn, jn, bid, message) =>
   api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/builds/' + bid + '/reject', { method: 'POST', body: JSON.stringify({ message }) });
+export const fetchBuildReport = (tc, pn, jn, bid) =>
+  api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/builds/' + bid + '/report');
 
 // --- Resources ---
 export const fetchResources = (tc, pn) => api('/teams/' + tc + '/pipelines/' + pn + '/resources').then(r => r.data);

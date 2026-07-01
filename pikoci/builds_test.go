@@ -385,6 +385,56 @@ func TestInsertBuildGetVersion(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestGetBuildReport(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	expected := &build.Build{
+		ID:          5,
+		BuildNumber: "3",
+		Status:      build.Succeeded,
+		Steps:       []build.Step{{Type: "task", Name: "deploy", Status: build.Succeeded}},
+		Job:         []build.Step{{Type: "job", Name: "summary", Status: build.Succeeded}},
+		Approvals:   []build.Approval{{Username: "alice", Action: "approved"}},
+	}
+	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3").Return(expected, nil)
+	s.Builds.EXPECT().FindApprovals(ctx, uint32(5)).Return(expected.Approvals, nil)
+	s.Builds.EXPECT().FindGetVersions(ctx, uint32(5)).Return(nil, nil)
+
+	report, err := s.S.GetBuildReport(ctx, "main", "my-pipeline", "my-job", "3")
+	require.NoError(t, err)
+	assert.Equal(t, "1", report.ReportVersion)
+	assert.Equal(t, "main", report.Team)
+	assert.Equal(t, "my-pipeline", report.Pipeline)
+	assert.Equal(t, "my-job", report.Job)
+	assert.Equal(t, "3", report.Build.Number)
+	assert.Equal(t, "succeeded", report.Build.Status)
+	assert.Len(t, report.Steps, 1)
+	assert.Len(t, report.JobLogs, 1)
+	assert.Len(t, report.Approvals, 1)
+}
+
+func TestGetBuildReport_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.GetBuildReport(ctx, "INVALID", "my-pipeline", "my-job", "1")
+	require.Error(t, err)
+}
+
+func TestGetBuildReport_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "99").Return(nil, assert.AnError)
+
+	_, err := s.S.GetBuildReport(ctx, "main", "my-pipeline", "my-job", "99")
+	require.Error(t, err)
+}
+
 func TestReEnqueuePendingBuilds_NoPipelines(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
