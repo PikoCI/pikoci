@@ -932,14 +932,27 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 	funcs := hclFunctions()
 	ectx := pipeline.TypeEvalContext()
 	ectx.Functions = funcs
-	var pvars pipeline.Variables
+	// Use VariablesBasic to avoid decoding secret block internals (which may
+	// contain expressions like path = var.x that aren't resolvable yet).
+	var pvars pipeline.VariablesBasic
 	err := hclsimple.Decode("pipeline.hcl", rpp, ectx, &pvars)
 	if err != nil {
 		return nil, fmt.Errorf("failed to Decode Pipeline config: %w", err)
 	}
 
+	// Pass 1: Build ecvars with defaults and temporary placeholders for secret vars.
+	// Secret block details (type, path, key) are extracted from AST below.
 	ecvars := make(map[string]cty.Value)
 	secretVars := make(map[string]pipeline.VariableSecret)
+
+	// Parse secret blocks from AST with TypeEvalContext (no var.* yet).
+	// For literal path/key this resolves correctly; for expressions referencing
+	// var.*, per-attribute fallback produces empty strings — pass 2 re-evaluates.
+	preSecrets, err := pipeline.ParseSecretBlocksFromASTLenient(rpp, ectx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse secret blocks: %w", err)
+	}
+
 	for _, v := range pvars.Variables {
 		switch v.Type {
 		case "string":
@@ -949,11 +962,11 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 					return nil, fmt.Errorf("variable %q configured with invalid type type, expected 'string'", v.Name)
 				}
 				ecvars[v.Name] = cty.StringVal(s)
-			} else if v.Secret != nil {
+			} else if sv, ok := preSecrets[v.Name]; ok {
 				placeholder := fmt.Sprintf("__pikoci_secret:%s:%s:%s__",
-					v.Secret.Type, v.Secret.Path, v.Secret.Key)
+					sv.Type, sv.Path, sv.Key)
 				ecvars[v.Name] = cty.StringVal(placeholder)
-				secretVars[v.Name] = *v.Secret
+				secretVars[v.Name] = sv
 			} else {
 				a, ok := v.Default.(*hcl.Attribute)
 				if !ok {
@@ -1009,6 +1022,30 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 			}
 		}
 	}
+
+	// Pass 2: Re-evaluate secret block path/key as HCL expressions against the
+	// fully-populated eval context, so they can reference other variables.
+	if len(secretVars) > 0 {
+		varEctx := &hcl.EvalContext{
+			Variables: map[string]cty.Value{
+				"var": cty.ObjectVal(ecvars),
+			},
+			Functions: funcs,
+		}
+		resolvedSecrets, err := pipeline.ParseSecretBlocksFromAST(rpp, varEctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate secret expressions: %w", err)
+		}
+		for varName := range secretVars {
+			if sv, ok := resolvedSecrets[varName]; ok {
+				secretVars[varName] = sv
+				placeholder := fmt.Sprintf("__pikoci_secret:%s:%s:%s__",
+					sv.Type, sv.Path, sv.Key)
+				ecvars[varName] = cty.StringVal(placeholder)
+			}
+		}
+	}
+
 	ectx = &hcl.EvalContext{
 		Variables: map[string]cty.Value{
 			"var": cty.ObjectVal(ecvars),

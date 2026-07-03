@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Secret chaining**: Secret-backed variables can now reference other variables in their `path` and `key` fields (e.g., `path = var.key_path`). Dependencies are resolved automatically in topological order with cycle detection and a max depth of 10 levels. Secret type config values that contain secret placeholders are also resolved in dependency order ([#248](https://github.com/PikoCI/pikoci/issues/248)).
 - **Approval gates**: `approve` HCL block on jobs creates a human approval gate. Purple "Waiting for Approval" status, approve/reject UI+CLI+API (Maintain+), configurable count, notifications, version pinning, audit events ([#152](https://github.com/PikoCI/pikoci/issues/152)).
 - **Version pinning at build creation**: Downstream builds snapshot triggered resource versions at creation time, matching Concourse CI behavior.
 - **Audit log**: Append-only team audit trail with 16 event types, filterable UI/CLI/API, cursor-based pagination. Read+ access ([#532](https://github.com/PikoCI/pikoci/issues/532)).
