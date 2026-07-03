@@ -187,7 +187,7 @@ export function TeamShow({ tc, tab }) {
     </ul>
     ${activeTab === 'settings' && html`<${SettingsTab} tc=${tc} team=${team} />`}
     ${activeTab === 'members' && html`<${MembersTab} tc=${tc} members=${members} setMembers=${setMembers} loadTeam=${loadTeam} />`}
-    ${activeTab === 'workers' && html`<${WorkersTab} tc=${tc} />`}
+    ${activeTab === 'workers' && hasTeamRole(tc, 'admin') && html`<${WorkersTab} tc=${tc} />`}
     ${activeTab === 'audit' && html`<${AuditLogTab} tc=${tc} />`}
   `;
 }
