@@ -31,38 +31,106 @@ func validWorkerToken(secret []byte) string {
 // --- Unit tests ---
 
 func TestServer_ValidateWorkerToken(t *testing.T) {
+	ctx := context.TODO()
 	secret := []byte("test-secret")
-	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, testLogger)
+	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, nil, testLogger)
 
-	// Valid worker token
-	err := s.validateWorkerToken(validWorkerToken(secret))
+	// Valid global worker token
+	tc, err := s.validateWorkerToken(ctx, validWorkerToken(secret))
 	assert.NoError(t, err)
+	assert.Empty(t, tc)
 
 	// Non-worker token (user token, missing is_from_worker)
 	token2 := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user": map[string]interface{}{"username": "test"},
 	})
 	tokenStr2, _ := token2.SignedString(secret)
-	err = s.validateWorkerToken(tokenStr2)
+	_, err = s.validateWorkerToken(ctx, tokenStr2)
 	assert.Error(t, err)
 
 	// Invalid token string
-	err = s.validateWorkerToken("invalid-token")
+	_, err = s.validateWorkerToken(ctx, "invalid-token")
 	assert.Error(t, err)
 
 	// Wrong signing secret
 	wrongSecret := []byte("wrong-secret")
-	err = s.validateWorkerToken(validWorkerToken(wrongSecret))
+	_, err = s.validateWorkerToken(ctx, validWorkerToken(wrongSecret))
 	assert.Error(t, err)
 
 	// Empty token
-	err = s.validateWorkerToken("")
+	_, err = s.validateWorkerToken(ctx, "")
 	assert.Error(t, err)
+}
+
+// fakeTeamSaltLookup implements TeamSaltLookup for testing.
+type fakeTeamSaltLookup struct {
+	salts map[string]string
+}
+
+func (f *fakeTeamSaltLookup) FindWorkerTokenSalt(ctx context.Context, tc string) (string, error) {
+	return f.salts[tc], nil
+}
+
+func TestServer_ValidateWorkerToken_TeamScoped(t *testing.T) {
+	ctx := context.TODO()
+	secret := []byte("test-secret")
+	salt := "test-salt-uuid"
+
+	tsl := &fakeTeamSaltLookup{salts: map[string]string{"teamA": salt}}
+	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, tsl, testLogger)
+
+	// Valid team token with correct salt
+	teamToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"is_from_worker": true,
+		"team_canonical": "teamA",
+		"salt":           salt,
+	})
+	tokenStr, _ := teamToken.SignedString(secret)
+	tc, err := s.validateWorkerToken(ctx, tokenStr)
+	assert.NoError(t, err)
+	assert.Equal(t, "teamA", tc)
+
+	// Team token with wrong salt
+	badSaltToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"is_from_worker": true,
+		"team_canonical": "teamA",
+		"salt":           "wrong-salt",
+	})
+	tokenStr, _ = badSaltToken.SignedString(secret)
+	_, err = s.validateWorkerToken(ctx, tokenStr)
+	assert.Error(t, err)
+
+	// Team token with empty salt in DB (token revoked)
+	tsl2 := &fakeTeamSaltLookup{salts: map[string]string{"teamB": ""}}
+	s2 := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, tsl2, testLogger)
+	revokedToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"is_from_worker": true,
+		"team_canonical": "teamB",
+		"salt":           "old-salt",
+	})
+	tokenStr, _ = revokedToken.SignedString(secret)
+	_, err = s2.validateWorkerToken(ctx, tokenStr)
+	assert.Error(t, err)
+
+	// Team token missing salt claim
+	noSaltToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"is_from_worker": true,
+		"team_canonical": "teamA",
+	})
+	tokenStr, _ = noSaltToken.SignedString(secret)
+	_, err = s.validateWorkerToken(ctx, tokenStr)
+	assert.Error(t, err)
+
+	// Global token (no team claim) → accepted, returns empty team canonical
+	globalToken := validWorkerToken(secret)
+	tc, err = s.validateWorkerToken(ctx, globalToken)
+	assert.NoError(t, err)
+	assert.Empty(t, tc)
 }
 
 func TestServer_Register_ValidToken(t *testing.T) {
 	secret := []byte("test-secret")
-	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, testLogger)
+	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, nil, testLogger)
 
 	resp, err := s.Register(context.TODO(), &workerv1.RegisterRequest{
 		WorkerId:    "w1",
@@ -82,7 +150,7 @@ func TestServer_Register_ValidToken(t *testing.T) {
 
 func TestServer_Register_InvalidToken(t *testing.T) {
 	secret := []byte("test-secret")
-	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, testLogger)
+	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, nil, testLogger)
 
 	resp, err := s.Register(context.TODO(), &workerv1.RegisterRequest{
 		WorkerId:    "w2",
@@ -101,7 +169,7 @@ func TestServer_Register_InvalidToken(t *testing.T) {
 
 func TestServer_Register_ConsumedByExecute(t *testing.T) {
 	secret := []byte("test-secret")
-	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, testLogger)
+	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, nil, testLogger)
 
 	// Register stores entry
 	s.Register(context.TODO(), &workerv1.RegisterRequest{
@@ -129,14 +197,14 @@ func TestServer_Register_ConsumedByExecute(t *testing.T) {
 }
 
 func TestServer_CancelBuild(t *testing.T) {
-	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), nil, testLogger)
+	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), nil, nil, testLogger)
 
 	// No worker has the build
 	err := s.CancelBuild("b1", "user cancelled")
 	assert.Error(t, err)
 
 	// Register a worker with the build
-	ws := NewWorkerStream("w1", 2, nil, false)
+	ws := NewWorkerStream("w1", 2, nil, false, "")
 	ws.AddBuild("b1")
 	s.streams.Register(ws)
 
@@ -152,8 +220,8 @@ func TestServer_CancelBuild(t *testing.T) {
 }
 
 func TestServer_SendWorkItem(t *testing.T) {
-	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), nil, testLogger)
-	ws := NewWorkerStream("w1", 2, nil, false)
+	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), nil, nil, testLogger)
+	ws := NewWorkerStream("w1", 2, nil, false, "")
 
 	item := &workitem.Item{
 		Type: "job",
@@ -185,8 +253,8 @@ func TestServer_SendWorkItem(t *testing.T) {
 }
 
 func TestServer_SendWorkItem_ResourceCheck(t *testing.T) {
-	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), nil, testLogger)
-	ws := NewWorkerStream("w1", 2, nil, false)
+	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), nil, nil, testLogger)
+	ws := NewWorkerStream("w1", 2, nil, false, "")
 
 	item := &workitem.Item{
 		Type: "check",
@@ -228,8 +296,8 @@ func TestServer_TryDispatch_FillsCapacity(t *testing.T) {
 		},
 	}
 
-	s := NewServer(dispatcher, notifier.New(), NewWorkerStreamManager(), nil, testLogger)
-	ws := NewWorkerStream("w1", 3, nil, false)
+	s := NewServer(dispatcher, notifier.New(), NewWorkerStreamManager(), nil, nil, testLogger)
+	ws := NewWorkerStream("w1", 3, nil, false, "")
 
 	s.tryDispatch(context.Background(), ws)
 
@@ -239,8 +307,8 @@ func TestServer_TryDispatch_FillsCapacity(t *testing.T) {
 
 func TestServer_HandleJobResult_NotifiesAndRemovesBuild(t *testing.T) {
 	n := notifier.New()
-	s := NewServer(nil, n, NewWorkerStreamManager(), nil, testLogger)
-	ws := NewWorkerStream("w1", 2, nil, false)
+	s := NewServer(nil, n, NewWorkerStreamManager(), nil, nil, testLogger)
+	ws := NewWorkerStream("w1", 2, nil, false, "")
 	ws.AddBuild("b1")
 
 	// Set up a waiter before the notification
@@ -270,7 +338,7 @@ func TestServer_HandleJobResult_NotifiesAndRemovesBuild(t *testing.T) {
 func startTestServer(t *testing.T, svc WorkDispatcher, n *notifier.WorkNotifier, secret []byte) (workerv1.WorkerServiceClient, *Server, func()) {
 	t.Helper()
 	sm := NewWorkerStreamManager()
-	srv := NewServer(svc, n, sm, secret, testLogger)
+	srv := NewServer(svc, n, sm, secret, nil, testLogger)
 	grpcSrv := grpc.NewServer()
 	workerv1.RegisterWorkerServiceServer(grpcSrv, srv)
 
