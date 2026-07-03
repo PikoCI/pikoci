@@ -136,3 +136,52 @@ func TestGlobalWorkerServesTeamWithoutDedicatedWorker(t *testing.T) {
 	require.NotNil(t, item)
 	assert.Equal(t, "teama", item.Body.TeamCanonical)
 }
+
+func TestTeamWorkerWithTagsCompose(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	svc := newTeamIsolationTestService(t, ctx, logger)
+
+	svc.CreateTeam(ctx, "admin", team.Team{Name: "teamA"})
+
+	hcl := []byte(`
+job "gpu-job" {
+  tags = ["gpu"]
+  task "work" {
+    run "exec" {
+      path = "/bin/true"
+    }
+  }
+}
+job "cpu-job" {
+  task "work" {
+    run "exec" {
+      path = "/bin/true"
+    }
+  }
+}
+`)
+	_, err := svc.CreatePipeline(ctx, "teama", "pipe", hcl, nil)
+	require.NoError(t, err)
+
+	svc.CreateJobBuild(ctx, "teama", "pipe", "gpu-job", build.Build{})
+	svc.CreateJobBuild(ctx, "teama", "pipe", "cpu-job", build.Build{})
+
+	// Team worker with gpu tag should only get gpu-job from its team
+	wc := workitem.WorkerContext{
+		TeamCanonical: "teama",
+		Tags:          []string{"gpu"},
+		ExclusiveTags: true,
+	}
+	item, err := svc.NextWork(ctx, wc)
+	require.NoError(t, err)
+	require.NotNil(t, item)
+	assert.Equal(t, "gpu-job", item.Body.JobName)
+	assert.Equal(t, "teama", item.Body.TeamCanonical)
+
+	// Same worker should NOT get cpu-job (exclusive tags)
+	item, err = svc.NextWork(ctx, wc)
+	require.NoError(t, err)
+	assert.Nil(t, item, "exclusive gpu worker should not get untagged cpu-job")
+}
