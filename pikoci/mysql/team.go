@@ -268,6 +268,27 @@ func (r *TeamRepository) DeleteMember(ctx context.Context, tc, mc string) error 
 	return nil
 }
 
+func (r *TeamRepository) FindWorkerTokenSalt(ctx context.Context, tc string) (string, error) {
+	var salt sql.NullString
+	err := r.querier.QueryRowContext(ctx, `
+		SELECT worker_token_salt FROM teams WHERE canonical = ?
+	`, tc).Scan(&salt)
+	if err != nil {
+		return "", fmt.Errorf("failed to find worker token salt: %w", err)
+	}
+	return salt.String, nil
+}
+
+func (r *TeamRepository) UpdateWorkerTokenSalt(ctx context.Context, tc, salt string) error {
+	res, err := r.querier.ExecContext(ctx, `
+		UPDATE teams SET worker_token_salt = ? WHERE canonical = ?
+	`, salt, tc)
+	if err != nil {
+		return fmt.Errorf("failed to update worker token salt: %w", err)
+	}
+	return isEntityFound(res)
+}
+
 func scanTeamsWithMembers(rows *sql.Rows) ([]*team.WithMembers, error) {
 	var ts []*team.WithMembers
 

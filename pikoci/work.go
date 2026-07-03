@@ -23,6 +23,15 @@ func (q *PikoCI) NextWork(ctx context.Context, wc workitem.WorkerContext) (*work
 	}
 
 	for _, pwt := range pps {
+		// Team isolation: team workers only serve their team;
+		// global workers defer to teams with dedicated workers.
+		if wc.TeamCanonical != "" && pwt.Team.Canonical != wc.TeamCanonical {
+			continue
+		}
+		if wc.TeamCanonical == "" && q.TeamWorkerChecker != nil && q.TeamWorkerChecker.HasTeamWorkers(pwt.Team.Canonical) {
+			continue
+		}
+
 		for _, j := range pwt.Jobs {
 			if j.Paused {
 				continue
@@ -94,6 +103,14 @@ func (q *PikoCI) NextWork(ctx context.Context, wc workitem.WorkerContext) (*work
 	}
 
 	for _, rwp := range due {
+		// Team isolation for resource checks
+		if wc.TeamCanonical != "" && rwp.TeamCanonical != wc.TeamCanonical {
+			continue
+		}
+		if wc.TeamCanonical == "" && q.TeamWorkerChecker != nil && q.TeamWorkerChecker.HasTeamWorkers(rwp.TeamCanonical) {
+			continue
+		}
+
 		rKey := rwp.TeamCanonical + "/" + rwp.PipelineCanonical + "/" + rwp.Canonical
 		if !wkr.TagsMatch(resourceTags[rKey], wc.Tags, wc.ExclusiveTags) {
 			continue

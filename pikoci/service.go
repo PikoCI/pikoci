@@ -310,6 +310,13 @@ type PikoCI struct {
 		CancelBuild(buildID string, reason string) error
 	}
 
+	// TeamWorkerChecker reports whether a team has online team-scoped workers.
+	// Used by NextWork to let global workers defer to team workers.
+	// Nil means no team workers exist (e.g. embedded worker mode).
+	TeamWorkerChecker interface {
+		HasTeamWorkers(tc string) bool
+	}
+
 	scheduler *scheduler.Scheduler
 	logger    *slog.Logger
 }

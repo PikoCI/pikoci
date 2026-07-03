@@ -199,12 +199,13 @@ var serverCmd = &cobra.Command{
 
 		// Create gRPC server for worker streaming
 		streamMgr := pikogrpc.NewWorkerStreamManager()
-		grpcServer := pikogrpc.NewServer(svc, wn, streamMgr, jwtSecret, logger.With("component", "gRPC"))
+		grpcServer := pikogrpc.NewServer(svc, wn, streamMgr, jwtSecret, tr, logger.With("component", "gRPC"))
 		grpcSrv := grpc.NewServer()
 		workerv1.RegisterWorkerServiceServer(grpcSrv, grpcServer)
 
 		// Store gRPC server on the service for cancellation routing
 		svc.GRPCServer = grpcServer
+		svc.TeamWorkerChecker = streamMgr
 
 		svr := &http.Server{
 			Handler: handlers.CombinedLoggingHandler(os.Stdout, mux),
@@ -433,6 +434,19 @@ func parseSlogLevel(s string) slog.Level {
 func generateWorkerJWT(js []byte) string {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"is_from_worker": true,
+	})
+	tokenString, err := token.SignedString(js)
+	if err != nil {
+		panic(err)
+	}
+	return tokenString
+}
+
+func generateTeamWorkerJWT(js []byte, tc, salt string) string {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"is_from_worker":  true,
+		"team_canonical":  tc,
+		"salt":            salt,
 	})
 	tokenString, err := token.SignedString(js)
 	if err != nil {

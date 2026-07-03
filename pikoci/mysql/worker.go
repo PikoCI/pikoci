@@ -31,8 +31,8 @@ func (r *WorkerRepository) Upsert(ctx context.Context, w wkr.Worker) error {
 	var q string
 	switch r.system {
 	case MySQL:
-		q = "INSERT INTO workers (name, hostname, os, arch, go_version, version, `commit`, concurrency, tags, exclusive_tags, started_at, last_ping_at)" +
-			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
+		q = "INSERT INTO workers (name, hostname, os, arch, go_version, version, `commit`, concurrency, tags, exclusive_tags, team_canonical, started_at, last_ping_at)" +
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
 			" ON DUPLICATE KEY UPDATE" +
 			" hostname = VALUES(hostname)," +
 			" os = VALUES(os)," +
@@ -43,12 +43,13 @@ func (r *WorkerRepository) Upsert(ctx context.Context, w wkr.Worker) error {
 			" concurrency = VALUES(concurrency)," +
 			" tags = VALUES(tags)," +
 			" exclusive_tags = VALUES(exclusive_tags)," +
+			" team_canonical = VALUES(team_canonical)," +
 			" started_at = VALUES(started_at)," +
 			" last_ping_at = VALUES(last_ping_at)"
 	default:
 		// SQLite, mem, PostgreSQL
-		q = "INSERT INTO workers (name, hostname, os, arch, go_version, version, `commit`, concurrency, tags, exclusive_tags, started_at, last_ping_at)" +
-			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
+		q = "INSERT INTO workers (name, hostname, os, arch, go_version, version, `commit`, concurrency, tags, exclusive_tags, team_canonical, started_at, last_ping_at)" +
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" +
 			" ON CONFLICT(name) DO UPDATE SET" +
 			" hostname = excluded.hostname," +
 			" os = excluded.os," +
@@ -59,13 +60,14 @@ func (r *WorkerRepository) Upsert(ctx context.Context, w wkr.Worker) error {
 			" concurrency = excluded.concurrency," +
 			" tags = excluded.tags," +
 			" exclusive_tags = excluded.exclusive_tags," +
+			" team_canonical = excluded.team_canonical," +
 			" started_at = excluded.started_at," +
 			" last_ping_at = excluded.last_ping_at"
 	}
 
 	_, err := r.querier.ExecContext(ctx, q,
 		w.Name, w.Hostname, w.OS, w.Arch, w.GoVersion, w.Version, w.Commit,
-		w.Concurrency, tagsStr, w.ExclusiveTags, w.StartedAt, w.LastPingAt,
+		w.Concurrency, tagsStr, w.ExclusiveTags, w.TeamCanonical, w.StartedAt, w.LastPingAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to upsert worker: %w", err)
@@ -75,7 +77,7 @@ func (r *WorkerRepository) Upsert(ctx context.Context, w wkr.Worker) error {
 
 func (r *WorkerRepository) Filter(ctx context.Context) ([]*wkr.Worker, error) {
 	rows, err := r.querier.QueryContext(ctx,
-		"SELECT id, name, hostname, os, arch, go_version, version, `commit`, concurrency, tags, exclusive_tags, started_at, last_ping_at"+
+		"SELECT id, name, hostname, os, arch, go_version, version, `commit`, concurrency, tags, exclusive_tags, team_canonical, started_at, last_ping_at"+
 			" FROM workers ORDER BY name ASC")
 	if err != nil {
 		return nil, fmt.Errorf("failed to query workers: %w", err)
@@ -97,10 +99,11 @@ func (r *WorkerRepository) Filter(ctx context.Context) ([]*wkr.Worker, error) {
 			concurrency   sql.NullInt64
 			tagsStr       sql.NullString
 			exclusiveTags sql.NullBool
+			teamCanonical sql.NullString
 			startedAt     sql.NullTime
 			lastPingAt    sql.NullTime
 		)
-		if err := rows.Scan(&id, &name, &hostname, &os, &arch, &goVersion, &version, &commit, &concurrency, &tagsStr, &exclusiveTags, &startedAt, &lastPingAt); err != nil {
+		if err := rows.Scan(&id, &name, &hostname, &os, &arch, &goVersion, &version, &commit, &concurrency, &tagsStr, &exclusiveTags, &teamCanonical, &startedAt, &lastPingAt); err != nil {
 			return nil, fmt.Errorf("failed to scan worker: %w", err)
 		}
 		var tags []string
@@ -119,6 +122,7 @@ func (r *WorkerRepository) Filter(ctx context.Context) ([]*wkr.Worker, error) {
 			Concurrency:   int(concurrency.Int64),
 			Tags:          tags,
 			ExclusiveTags: exclusiveTags.Bool,
+			TeamCanonical: teamCanonical.String,
 			StartedAt:     startedAt.Time,
 			LastPingAt:    lastPingAt.Time,
 		}
