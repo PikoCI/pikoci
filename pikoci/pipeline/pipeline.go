@@ -10,6 +10,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsimple"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/pikoci/pikoci/pikoci/builtin"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/notification"
@@ -78,6 +79,23 @@ type Variable struct {
 	Type    string          `json:"type" hcl:"type"`
 	Default interface{}     `json:"default" hcl:"default,optional"`
 	Secret  *VariableSecret `json:"secret,omitempty" hcl:"secret,block"`
+}
+
+// VariablesBasic is like Variables but does NOT decode secret block internals.
+// This is needed because secret blocks may contain expressions (path = var.x)
+// that reference variables not yet in the eval context during initial parsing.
+type VariablesBasic struct {
+	Variables []VariableBasic `hcl:"variable,block"`
+	Remain    hcl.Body        `hcl:",remain"`
+}
+
+// VariableBasic is like Variable but without secret block decoding.
+// Secret blocks go into Remain and are parsed separately from the AST.
+type VariableBasic struct {
+	Name    string      `hcl:"name,label"`
+	Type    string      `hcl:"type"`
+	Default interface{} `hcl:"default,optional"`
+	Remain  hcl.Body    `hcl:",remain"`
 }
 
 // VariableSecret references a secret value for a pipeline variable. The Type
@@ -284,18 +302,99 @@ func convertHCLService(hs hclServiceRaw) service.Service {
 	return s
 }
 
-// hclVariableRaw is a minimal struct for parsing variable blocks from raw HCL.
-type hclVariableRaw struct {
-	Name   string          `hcl:"name,label"`
-	Type   string          `hcl:"type"`
-	Secret *VariableSecret `hcl:"secret,block"`
-	Remain hcl.Body        `hcl:",remain"`
+// hclPipelineVariables is a minimal struct for parsing only variable blocks from raw HCL.
+// Uses VariableBasic (no secret block decoding) so path = var.x doesn't fail.
+type hclPipelineVariables struct {
+	Variables []VariableBasic `hcl:"variable,block"`
+	Remain    hcl.Body        `hcl:",remain"`
 }
 
-// hclPipelineVariables is a minimal struct for parsing only variable blocks from raw HCL.
-type hclPipelineVariables struct {
-	Variables []hclVariableRaw `hcl:"variable,block"`
-	Remain    hcl.Body         `hcl:",remain"`
+// ParseSecretBlocksFromASTLenient is like ParseSecretBlocksFromAST but uses
+// per-attribute fallback: if a path/key expression fails to evaluate (e.g.,
+// because it references var.* not yet in scope), the field is left empty
+// instead of returning an error. This is used for pass 1 bootstrapping.
+func ParseSecretBlocksFromASTLenient(raw []byte, ectx *hcl.EvalContext) (map[string]VariableSecret, error) {
+	file, diags := hclsyntax.ParseConfig(raw, "pipeline.hcl", hcl.Pos{Line: 1, Column: 1})
+	if diags.HasErrors() {
+		return nil, fmt.Errorf("failed to parse pipeline HCL: %s", diags.Error())
+	}
+
+	result := make(map[string]VariableSecret)
+	for _, block := range file.Body.(*hclsyntax.Body).Blocks {
+		if block.Type != "variable" || len(block.Labels) == 0 {
+			continue
+		}
+		varName := block.Labels[0]
+		for _, sub := range block.Body.Blocks {
+			if sub.Type != "secret" || len(sub.Labels) == 0 {
+				continue
+			}
+			sv := VariableSecret{Type: sub.Labels[0]}
+			if attr, exists := sub.Body.Attributes["path"]; exists {
+				if val, vd := attr.Expr.Value(ectx); !vd.HasErrors() && val.Type() == cty.String {
+					sv.Path = val.AsString()
+				}
+			}
+			if attr, exists := sub.Body.Attributes["key"]; exists {
+				if val, vd := attr.Expr.Value(ectx); !vd.HasErrors() && val.Type() == cty.String {
+					sv.Key = val.AsString()
+				}
+			}
+			result[varName] = sv
+			break
+		}
+	}
+	return result, nil
+}
+
+// ParseSecretBlocksFromAST extracts secret block information from raw HCL using
+// AST traversal. This is needed because secret block path/key may contain
+// variable expressions (e.g., path = var.x) that can't be decoded via struct
+// tags when var.* isn't in the eval context. The ectx must be non-nil and
+// should contain the full var.* namespace for expression evaluation.
+func ParseSecretBlocksFromAST(raw []byte, ectx *hcl.EvalContext) (map[string]VariableSecret, error) {
+	file, diags := hclsyntax.ParseConfig(raw, "pipeline.hcl", hcl.Pos{Line: 1, Column: 1})
+	if diags.HasErrors() {
+		return nil, fmt.Errorf("failed to parse pipeline HCL: %s", diags.Error())
+	}
+
+	result := make(map[string]VariableSecret)
+	for _, block := range file.Body.(*hclsyntax.Body).Blocks {
+		if block.Type != "variable" || len(block.Labels) == 0 {
+			continue
+		}
+		varName := block.Labels[0]
+		for _, sub := range block.Body.Blocks {
+			if sub.Type != "secret" || len(sub.Labels) == 0 {
+				continue
+			}
+			sv := VariableSecret{Type: sub.Labels[0]}
+
+			if attr, exists := sub.Body.Attributes["path"]; exists {
+				val, vdiags := attr.Expr.Value(ectx)
+				if vdiags.HasErrors() {
+					return nil, fmt.Errorf("failed to evaluate secret path for variable %q: %s", varName, vdiags.Error())
+				}
+				if val.Type() != cty.String {
+					return nil, fmt.Errorf("secret path for variable %q must be a string, got %s", varName, val.Type().FriendlyName())
+				}
+				sv.Path = val.AsString()
+			}
+			if attr, exists := sub.Body.Attributes["key"]; exists {
+				val, vdiags := attr.Expr.Value(ectx)
+				if vdiags.HasErrors() {
+					return nil, fmt.Errorf("failed to evaluate secret key for variable %q: %s", varName, vdiags.Error())
+				}
+				if val.Type() != cty.String {
+					return nil, fmt.Errorf("secret key for variable %q must be a string, got %s", varName, val.Type().FriendlyName())
+				}
+				sv.Key = val.AsString()
+			}
+			result[varName] = sv
+			break
+		}
+	}
+	return result, nil
 }
 
 // ParseSecretVarsFromRaw parses secret-backed variable declarations from raw pipeline HCL.
@@ -305,21 +404,23 @@ func ParseSecretVarsFromRaw(raw []byte, vars map[string]interface{}) (map[string
 		return nil, nil
 	}
 
-	ectx := TypeEvalContext()
-
-	var pv hclPipelineVariables
-	err := hclsimple.Decode("pipeline.hcl", raw, ectx, &pv)
+	// Build eval context with all variable defaults/placeholders so that
+	// path/key expressions like `path = var.x` can be resolved.
+	varEctx, err := buildVarEvalContextWithOverrides(raw, vars)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse variables from raw HCL: %w", err)
+		return nil, fmt.Errorf("failed to build eval context for secret parsing: %w", err)
 	}
 
-	secretVars := make(map[string]VariableSecret)
-	for _, v := range pv.Variables {
-		if v.Secret != nil {
-			// Only include if not overridden by vars file
-			if _, overridden := vars[v.Name]; !overridden {
-				secretVars[v.Name] = *v.Secret
-			}
+	// Parse secret blocks from AST using the full eval context.
+	secretVars, err := ParseSecretBlocksFromAST(raw, varEctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Exclude variables overridden by vars file
+	for varName := range secretVars {
+		if _, overridden := vars[varName]; overridden {
+			delete(secretVars, varName)
 		}
 	}
 
@@ -335,16 +436,29 @@ func ParseSecretVarsFromRaw(raw []byte, vars map[string]interface{}) (map[string
 func buildVarEvalContext(raw []byte) (*hcl.EvalContext, error) {
 	typeCtx := TypeEvalContext()
 
-	var pvars Variables
-	if err := hclsimple.Decode("pipeline.hcl", raw, typeCtx, &pvars); err != nil {
+	// Use hclPipelineVariables (which doesn't decode secret internals) so
+	// that secret blocks with path = var.x don't cause decode failures.
+	var pv hclPipelineVariables
+	if err := hclsimple.Decode("pipeline.hcl", raw, typeCtx, &pv); err != nil {
 		return nil, fmt.Errorf("failed to parse variables: %w", err)
 	}
 
+	// Detect secret blocks from AST using the lenient parser. Expression
+	// evaluation uses TypeEvalContext (no var.*), so expressions referencing
+	// var.* fall back to empty strings — the exact path/key are not needed
+	// for the eval context, only that the variable produces a string placeholder.
+	secretBlocks, err := ParseSecretBlocksFromASTLenient(raw, typeCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Now parse default values for non-secret variables
 	ecvars := make(map[string]cty.Value)
-	for _, v := range pvars.Variables {
-		if v.Secret != nil {
+	for _, v := range pv.Variables {
+		if _, isSecret := secretBlocks[v.Name]; isSecret {
+			sv := secretBlocks[v.Name]
 			placeholder := fmt.Sprintf("__pikoci_secret:%s:%s:%s__",
-				v.Secret.Type, v.Secret.Path, v.Secret.Key)
+				sv.Type, sv.Path, sv.Key)
 			ecvars[v.Name] = cty.StringVal(placeholder)
 			continue
 		}
@@ -360,8 +474,8 @@ func buildVarEvalContext(raw []byte) (*hcl.EvalContext, error) {
 			}
 			continue
 		}
-		ctyv, diags := a.Expr.Value(typeCtx)
-		if diags.HasErrors() {
+		ctyv, evalDiags := a.Expr.Value(typeCtx)
+		if evalDiags.HasErrors() {
 			switch v.Type {
 			case "number":
 				ecvars[v.Name] = cty.NumberIntVal(0)
@@ -384,4 +498,38 @@ func buildVarEvalContext(raw []byte) (*hcl.EvalContext, error) {
 			"var": cty.ObjectVal(ecvars),
 		},
 	}, nil
+}
+
+// buildVarEvalContextWithOverrides is like buildVarEvalContext but applies
+// vars file overrides, so that overridden variables resolve to their override
+// value instead of a secret placeholder.
+func buildVarEvalContextWithOverrides(raw []byte, vars map[string]interface{}) (*hcl.EvalContext, error) {
+	ectx, err := buildVarEvalContext(raw)
+	if err != nil {
+		return nil, err
+	}
+	if len(vars) == 0 {
+		return ectx, nil
+	}
+
+	// Extract the current var object and override with provided values
+	varObj := ectx.Variables["var"]
+	ecvars := varObj.AsValueMap()
+	if ecvars == nil {
+		ecvars = make(map[string]cty.Value)
+	}
+	for k, v := range vars {
+		switch val := v.(type) {
+		case string:
+			ecvars[k] = cty.StringVal(val)
+		case float64:
+			ecvars[k] = cty.NumberFloatVal(val)
+		case bool:
+			ecvars[k] = cty.BoolVal(val)
+		default:
+			return nil, fmt.Errorf("unsupported override type %T for variable %q", v, k)
+		}
+	}
+	ectx.Variables["var"] = cty.ObjectVal(ecvars)
+	return ectx, nil
 }

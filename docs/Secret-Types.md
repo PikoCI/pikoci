@@ -102,7 +102,40 @@ job "deploy" {
 
 Secret-backed variables are resolved lazily at runtime — every resource check, get, task, or put execution fetches the latest secret value. This means rotated secrets are picked up automatically without pipeline updates.
 
-For more details on secret-backed variables, including precedence rules and override behavior, see [Variables](Variables.md).
+### Config chaining
+
+Secret type config fields can reference secret-backed variables. This enables patterns like reading a vault address from a `.env` file, then using it to connect to vault:
+
+```hcl
+variable "vault_addr" {
+  type = string
+  secret "env" {
+    key = "VAULT_ADDR"
+  }
+}
+
+variable "vault_token" {
+  type = string  # provided via vars file
+}
+
+secret_type "my-vault" {
+  source  = "pikoci://vault"
+  address = var.vault_addr    # resolved from .env before vault secrets are fetched
+  token   = var.vault_token
+}
+
+variable "db_pass" {
+  type = string
+  secret "my-vault" {
+    path = "secret/data/db"
+    key  = "password"
+  }
+}
+```
+
+Dependencies between secrets are resolved automatically in the correct order.
+
+For more details on secret-backed variables, including precedence rules, override behavior, and secret chaining, see [Variables](Variables.md).
 
 ## Built-in: vault
 

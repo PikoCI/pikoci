@@ -34,6 +34,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
+	"github.com/pikoci/pikoci/pikoci/sectype"
 	"github.com/pikoci/pikoci/pikoci/service"
 	"github.com/pikoci/pikoci/pikoci/utils"
 	"github.com/pikoci/pikoci/pikoci/wkr"
@@ -3072,8 +3073,9 @@ func (w *Worker) stopServices(m workitem.Body, b *build.Build, cwd string, pp *p
 }
 
 // resolveSecretVars resolves all secret-backed variable placeholders by fetching
-// the actual secret values from the configured secret types. Variables sharing
-// the same secret type and path are batched into a single fetch call.
+// the actual secret values from the configured secret types. Variables are
+// resolved in dependency order: if a variable's path/key references another
+// secret variable's placeholder, the dependency is resolved first.
 func (w *Worker) resolveSecretVars(ctx context.Context, cwd string, pp *pipeline.Pipeline) (map[string]string, error) {
 	if len(pp.SecretVars) == 0 {
 		return nil, nil
@@ -3082,31 +3084,120 @@ func (w *Worker) resolveSecretVars(ctx context.Context, cwd string, pp *pipeline
 		return nil, nil
 	}
 
-	// Group variables by (type, path) to avoid duplicate fetches.
-	type fetchKey struct{ typ, path string }
-	groups := make(map[fetchKey][]string) // fetchKey -> []varName
-	for varName, sv := range pp.SecretVars {
-		k := fetchKey{sv.Type, sv.Path}
-		groups[k] = append(groups[k], varName)
+	// Build dependency graph and topological sort
+	graph := buildSecretDependencyGraph(pp.SecretVars, pp)
+
+	layers, err := graph.topologicalSort()
+	if err != nil {
+		return nil, err
 	}
 
+	w.logger.Debug("secret dependency resolution", "layers", len(layers), "vars", len(pp.SecretVars))
+	for i, layer := range layers {
+		w.logger.Debug("secret resolution layer", "layer", i, "vars", layer)
+	}
+
+	// Make a mutable copy of secret vars so we can substitute resolved
+	// placeholders into path/key without mutating the original pipeline.
+	workingVars := make(map[string]pipeline.VariableSecret, len(pp.SecretVars))
+	for k, v := range pp.SecretVars {
+		workingVars[k] = v
+	}
+
+	// Track resolved placeholder → value
 	resolved := make(map[string]string)
-	for k, varNames := range groups {
-		secrets, err := w.fetchSecrets(ctx, cwd, pp, map[string]string{k.typ: k.path})
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve secrets from %q at %q: %w", k.typ, k.path, err)
-		}
-		for _, varName := range varNames {
-			sv := pp.SecretVars[varName]
-			placeholder := fmt.Sprintf("__pikoci_secret:%s:%s:%s__", sv.Type, sv.Path, sv.Key)
-			val, ok := secrets["secret_"+sv.Key]
-			if !ok {
-				return nil, fmt.Errorf("secret for variable %q: key %q not found in response", varName, sv.Key)
+
+	for _, layer := range layers {
+		// Substitute resolved placeholders into this layer's path/key values
+		for _, varName := range layer {
+			sv := workingVars[varName]
+			for placeholder, val := range resolved {
+				sv.Path = strings.ReplaceAll(sv.Path, placeholder, val)
+				sv.Key = strings.ReplaceAll(sv.Key, placeholder, val)
 			}
-			resolved[placeholder] = val
+			workingVars[varName] = sv
+		}
+
+		// Build a pipeline copy with resolved secret_type configs for this layer
+		layerPP := pp
+		if len(resolved) > 0 {
+			layerPP = w.pipelineWithResolvedConfigs(pp, resolved)
+		}
+
+		// Group by (type, resolved_path) for batching
+		type fetchKey struct{ typ, path string }
+		groups := make(map[fetchKey][]string)
+		for _, varName := range layer {
+			sv := workingVars[varName]
+			k := fetchKey{sv.Type, sv.Path}
+			groups[k] = append(groups[k], varName)
+		}
+
+		for k, varNames := range groups {
+			secrets, err := w.fetchSecrets(ctx, cwd, layerPP, map[string]string{k.typ: k.path})
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve secrets from %q at %q: %w", k.typ, k.path, err)
+			}
+			for _, varName := range varNames {
+				sv := workingVars[varName]
+				// Use the original (pre-resolution) path/key for the placeholder
+				origSV := pp.SecretVars[varName]
+				placeholder := fmt.Sprintf("__pikoci_secret:%s:%s:%s__", origSV.Type, origSV.Path, origSV.Key)
+				val, ok := secrets["secret_"+sv.Key]
+				if !ok {
+					return nil, fmt.Errorf("secret for variable %q: key %q not found in response", varName, sv.Key)
+				}
+				resolved[placeholder] = val
+			}
 		}
 	}
+
 	return resolved, nil
+}
+
+// pipelineWithResolvedConfigs creates a shallow copy of the pipeline with
+// secret_type configs that have had placeholders substituted. The original
+// pipeline is not modified.
+func (w *Worker) pipelineWithResolvedConfigs(pp *pipeline.Pipeline, resolved map[string]string) *pipeline.Pipeline {
+	// Check if any config values contain placeholders
+	needsCopy := false
+	for _, st := range pp.SecretTypes {
+		for _, v := range st.Config {
+			for placeholder := range resolved {
+				if strings.Contains(v, placeholder) {
+					needsCopy = true
+					break
+				}
+			}
+			if needsCopy {
+				break
+			}
+		}
+		if needsCopy {
+			break
+		}
+	}
+	if !needsCopy {
+		return pp
+	}
+
+	// Shallow copy of pipeline, deep copy of SecretTypes
+	ppCopy := *pp
+	ppCopy.SecretTypes = make([]sectype.SecretType, len(pp.SecretTypes))
+	for i, st := range pp.SecretTypes {
+		stCopy := st
+		if len(st.Config) > 0 {
+			stCopy.Config = make(map[string]string, len(st.Config))
+			for k, v := range st.Config {
+				for placeholder, val := range resolved {
+					v = strings.ReplaceAll(v, placeholder, val)
+				}
+				stCopy.Config[k] = v
+			}
+		}
+		ppCopy.SecretTypes[i] = stCopy
+	}
+	return &ppCopy
 }
 
 // replaceSecretPlaceholders replaces secret placeholder strings in a params map

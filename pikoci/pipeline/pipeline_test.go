@@ -541,6 +541,251 @@ variable "db_pass" {
 	})
 }
 
+func TestParseSecretVarsFromRaw_SecretChaining(t *testing.T) {
+	t.Run("path references variable with default", func(t *testing.T) {
+		raw := []byte(`
+variable "base_path" {
+  type    = string
+  default = "/etc/secrets"
+}
+
+variable "key_content" {
+  type = string
+  secret "file" {
+    path = var.base_path
+    key  = "content"
+  }
+}
+`)
+		secretVars, err := pipeline.ParseSecretVarsFromRaw(raw, nil)
+		require.NoError(t, err)
+		require.Len(t, secretVars, 1)
+
+		kc, ok := secretVars["key_content"]
+		require.True(t, ok)
+		assert.Equal(t, "file", kc.Type)
+		assert.Equal(t, "/etc/secrets", kc.Path)
+		assert.Equal(t, "content", kc.Key)
+	})
+
+	t.Run("path references secret-backed variable contains placeholder", func(t *testing.T) {
+		raw := []byte(`
+variable "key_path" {
+  type = string
+  secret "env" {
+    key = "KEY_FILE"
+  }
+}
+
+variable "key_content" {
+  type = string
+  secret "file" {
+    path = var.key_path
+    key  = "content"
+  }
+}
+`)
+		secretVars, err := pipeline.ParseSecretVarsFromRaw(raw, nil)
+		require.NoError(t, err)
+		require.Len(t, secretVars, 2)
+
+		kc, ok := secretVars["key_content"]
+		require.True(t, ok)
+		assert.Equal(t, "file", kc.Type)
+		assert.Contains(t, kc.Path, "__pikoci_secret:env::KEY_FILE__")
+		assert.Equal(t, "content", kc.Key)
+	})
+
+	t.Run("path with string interpolation", func(t *testing.T) {
+		raw := []byte(`
+variable "key_path" {
+  type = string
+  secret "env" {
+    key = "KEY_DIR"
+  }
+}
+
+variable "key_content" {
+  type = string
+  secret "file" {
+    path = "${var.key_path}/subdir"
+    key  = "content"
+  }
+}
+`)
+		secretVars, err := pipeline.ParseSecretVarsFromRaw(raw, nil)
+		require.NoError(t, err)
+
+		kc, ok := secretVars["key_content"]
+		require.True(t, ok)
+		assert.Equal(t, "__pikoci_secret:env::KEY_DIR__/subdir", kc.Path)
+	})
+
+	t.Run("key references secret-backed variable", func(t *testing.T) {
+		raw := []byte(`
+variable "key_name" {
+  type = string
+  secret "env" {
+    key = "SECRET_KEY_NAME"
+  }
+}
+
+variable "value" {
+  type = string
+  secret "vault" {
+    path = "secret/data/app"
+    key  = var.key_name
+  }
+}
+`)
+		secretVars, err := pipeline.ParseSecretVarsFromRaw(raw, nil)
+		require.NoError(t, err)
+
+		v, ok := secretVars["value"]
+		require.True(t, ok)
+		assert.Equal(t, "vault", v.Type)
+		assert.Equal(t, "secret/data/app", v.Path)
+		assert.Contains(t, v.Key, "__pikoci_secret:env::SECRET_KEY_NAME__")
+	})
+
+	t.Run("no path just key works as before", func(t *testing.T) {
+		raw := []byte(`
+variable "api_key" {
+  type = string
+  secret "env" {
+    key = "API_KEY"
+  }
+}
+`)
+		secretVars, err := pipeline.ParseSecretVarsFromRaw(raw, nil)
+		require.NoError(t, err)
+		require.Len(t, secretVars, 1)
+
+		ak, ok := secretVars["api_key"]
+		require.True(t, ok)
+		assert.Equal(t, "env", ak.Type)
+		assert.Equal(t, "", ak.Path)
+		assert.Equal(t, "API_KEY", ak.Key)
+	})
+
+	t.Run("dependent declared before dependency still works", func(t *testing.T) {
+		raw := []byte(`
+variable "key_content" {
+  type = string
+  secret "file" {
+    path = var.key_path
+    key  = "content"
+  }
+}
+
+variable "key_path" {
+  type = string
+  secret "env" {
+    key = "KEY_FILE"
+  }
+}
+`)
+		secretVars, err := pipeline.ParseSecretVarsFromRaw(raw, nil)
+		require.NoError(t, err)
+		require.Len(t, secretVars, 2)
+
+		kc, ok := secretVars["key_content"]
+		require.True(t, ok)
+		assert.Contains(t, kc.Path, "__pikoci_secret:env::KEY_FILE__")
+	})
+
+	t.Run("path references undefined variable returns error", func(t *testing.T) {
+		raw := []byte(`
+variable "key_content" {
+  type = string
+  secret "file" {
+    path = var.nonexistent
+    key  = "content"
+  }
+}
+`)
+		_, err := pipeline.ParseSecretVarsFromRaw(raw, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to evaluate secret path")
+	})
+
+	t.Run("path references number variable returns type error", func(t *testing.T) {
+		raw := []byte(`
+variable "some_number" {
+  type    = number
+  default = 42
+}
+
+variable "key_content" {
+  type = string
+  secret "file" {
+    path = var.some_number
+    key  = "content"
+  }
+}
+`)
+		_, err := pipeline.ParseSecretVarsFromRaw(raw, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be a string")
+	})
+
+	t.Run("override in vars breaks chain", func(t *testing.T) {
+		raw := []byte(`
+variable "key_path" {
+  type = string
+  secret "env" {
+    key = "KEY_FILE"
+  }
+}
+
+variable "key_content" {
+  type = string
+  secret "file" {
+    path = var.key_path
+    key  = "content"
+  }
+}
+`)
+		// Override key_path — it's no longer secret-backed, so key_content's
+		// path resolves to the override value directly (no placeholder).
+		vars := map[string]interface{}{
+			"key_path": "/override/path",
+		}
+		secretVars, err := pipeline.ParseSecretVarsFromRaw(raw, vars)
+		require.NoError(t, err)
+		require.Len(t, secretVars, 1)
+
+		// key_path is excluded (overridden)
+		_, ok := secretVars["key_path"]
+		assert.False(t, ok)
+
+		// key_content's path resolves to the override value
+		kc, ok := secretVars["key_content"]
+		require.True(t, ok)
+		assert.Equal(t, "/override/path", kc.Path)
+	})
+
+	t.Run("literal path still works unchanged", func(t *testing.T) {
+		raw := []byte(`
+variable "db_pass" {
+  type = string
+  secret "vault" {
+    path = "secret/data/db"
+    key  = "password"
+  }
+}
+`)
+		secretVars, err := pipeline.ParseSecretVarsFromRaw(raw, nil)
+		require.NoError(t, err)
+		require.Len(t, secretVars, 1)
+
+		dp, ok := secretVars["db_pass"]
+		require.True(t, ok)
+		assert.Equal(t, "secret/data/db", dp.Path)
+		assert.Equal(t, "password", dp.Key)
+	})
+}
+
 func TestTypeEvalContext(t *testing.T) {
 	ectx := pipeline.TypeEvalContext()
 	require.NotNil(t, ectx)

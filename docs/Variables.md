@@ -117,6 +117,56 @@ This lets you override secrets with plaintext for local development:
 }
 ```
 
+### Secret chaining
+
+The `path` and `key` fields in a `secret` block can reference other variables using `var.<name>` or string interpolation `${var.<name>}`. This enables patterns where one secret's location is itself stored in another secret:
+
+```hcl
+# Step 1: Read the key file path from a .env file
+variable "key_path" {
+  type = string
+  secret "env" {
+    key = "GITHUB_APP_KEY_FILE"
+  }
+}
+
+# Step 2: Read the key content from the file at that path
+variable "key_content" {
+  type = string
+  secret "file" {
+    path = var.key_path
+    key  = "content"
+  }
+}
+
+# String interpolation also works
+variable "nested_secret" {
+  type = string
+  secret "file" {
+    path = "${var.key_path}/subdir"
+    key  = "content"
+  }
+}
+
+# Key chaining — the key name itself comes from another variable
+variable "key_name" {
+  type = string
+  secret "env" {
+    key = "SECRET_KEY_NAME"
+  }
+}
+
+variable "dynamic_secret" {
+  type = string
+  secret "vault" {
+    path = "secret/data/app"
+    key  = var.key_name
+  }
+}
+```
+
+Dependencies are resolved automatically in the correct order — you don't need to worry about declaration order. Circular dependencies are detected with a clear error message. The maximum chain depth is 10 levels.
+
 ### Full example
 
 ```hcl
