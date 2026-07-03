@@ -4,7 +4,7 @@ import { html } from 'htm/preact';
 import { useState, useEffect } from 'preact/hooks';
 import { route } from 'preact-router';
 import { isAdmin, hasTeamRole } from '../state.js';
-import { fetchTeams, createTeam, fetchTeam, updateTeam, deleteTeam, fetchUsers, addTeamMember, updateTeamMember, removeTeamMember, fetchAuditLog, fetchPipelines } from '../api.js';
+import { fetchTeams, createTeam, fetchTeam, updateTeam, deleteTeam, fetchUsers, addTeamMember, updateTeamMember, removeTeamMember, fetchAuditLog, fetchPipelines, generateTeamWorkerToken, getTeamWorkerToken } from '../api.js';
 import { useRequireAuth, useLoading } from '../hooks.js';
 import { showToast } from '../toast.js';
 import { Breadcrumb } from './Layout.js';
@@ -119,10 +119,10 @@ export function TeamNew() {
 }
 
 // ---------------------------------------------------------------------------
-// TeamShow – team detail with tabs: Settings | Members | Audit Log
+// TeamShow – team detail with tabs: Settings | Members | Workers | Audit Log
 // ---------------------------------------------------------------------------
 
-const VALID_TABS = ['settings', 'members', 'audit'];
+const VALID_TABS = ['settings', 'members', 'workers', 'audit'];
 
 export function TeamShow({ tc, tab }) {
   useRequireAuth();
@@ -170,6 +170,14 @@ export function TeamShow({ tc, tab }) {
           <i class="bi bi-people"></i> Members
         </a>
       </li>
+      ${hasTeamRole(tc, 'admin') && html`
+        <li class="nav-item">
+          <a class="nav-link${activeTab === 'workers' ? ' active' : ''}" href=${'/teams/' + tc + '/workers'} data-native id="tab-workers"
+            onClick=${(e) => { e.preventDefault(); switchTab('workers'); }}>
+            <i class="bi bi-cpu"></i> Workers
+          </a>
+        </li>
+      `}
       <li class="nav-item">
         <a class="nav-link${activeTab === 'audit' ? ' active' : ''}" href=${'/teams/' + tc + '/audit'} data-native id="tab-audit"
           onClick=${(e) => { e.preventDefault(); switchTab('audit'); }}>
@@ -179,6 +187,7 @@ export function TeamShow({ tc, tab }) {
     </ul>
     ${activeTab === 'settings' && html`<${SettingsTab} tc=${tc} team=${team} />`}
     ${activeTab === 'members' && html`<${MembersTab} tc=${tc} members=${members} setMembers=${setMembers} loadTeam=${loadTeam} />`}
+    ${activeTab === 'workers' && html`<${WorkersTab} tc=${tc} />`}
     ${activeTab === 'audit' && html`<${AuditLogTab} tc=${tc} />`}
   `;
 }
@@ -216,6 +225,77 @@ function SettingsTab({ tc, team }) {
         </button>
       `}
     </form>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// WorkersTab – team-scoped worker token management (Admin only)
+// ---------------------------------------------------------------------------
+
+function WorkersTab({ tc }) {
+  const [token, setToken] = useState(null);
+  const [loading, withLoading] = useLoading();
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    getTeamWorkerToken(tc).then(t => setToken(t || '')).catch(() => setToken(''));
+  }, [tc]);
+
+  const onGenerate = () => {
+    withLoading(async () => {
+      const t = await generateTeamWorkerToken(tc);
+      setToken(t);
+      showToast('Worker token generated', 'success');
+    });
+  };
+
+  const onRegenerate = () => {
+    if (!confirm('Regenerating the token will disconnect any workers using the current token. Continue?')) return;
+    onGenerate();
+  };
+
+  const onCopy = () => {
+    navigator.clipboard.writeText(token).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  if (token === null) return null;
+
+  return html`
+    <div style="max-width:640px;">
+      <h3 class="h5 fw-bold mb-3">Team Worker Token</h3>
+      <p class="text-muted mb-3">
+        Generate a token to start workers that only process this team's builds.
+        Workers started with this token will not receive builds from other teams.
+      </p>
+      ${token
+        ? html`
+          <div class="mb-3">
+            <div class="input-group">
+              <input type="text" class="form-control font-monospace" value=${'****' + token.slice(-8)} readonly />
+              <button class="btn btn-outline-primary" type="button" onClick=${onCopy}>
+                <i class="bi ${copied ? 'bi-check' : 'bi-clipboard'}"></i> ${copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          </div>
+          <div class="mb-3">
+            <code class="d-block p-2 rounded" style="background:var(--bg-code,#1d2021);color:var(--text-code,#ebdbb2);font-size:0.85em;">
+              pikoci worker --worker-token ${'${TOKEN}'} --pikoci-url ${'${URL}'}
+            </code>
+          </div>
+          <button class="btn btn-warning" disabled=${loading} onClick=${onRegenerate}>
+            ${loading ? html`Regenerating... <span class="spinner-border spinner-border-sm" role="status"></span>` : html`<i class="bi bi-arrow-repeat"></i> Regenerate Token`}
+          </button>
+        `
+        : html`
+          <button id="generate-worker-token" class="btn btn-success" disabled=${loading} onClick=${onGenerate}>
+            ${loading ? html`Generating... <span class="spinner-border spinner-border-sm" role="status"></span>` : html`<i class="bi bi-plus"></i> Generate Worker Token`}
+          </button>
+        `
+      }
+    </div>
   `;
 }
 
