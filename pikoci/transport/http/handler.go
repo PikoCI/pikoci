@@ -35,6 +35,8 @@ const (
 	IsPublicAccessKey contextKey = "is_public_access_key"
 	// ApiTokenContextKey is the context key used to store the API token auth result.
 	ApiTokenContextKey contextKey = "api_token_context_key"
+	// WorkerTeamCanonicalKey is the context key for the team canonical from a team-scoped worker JWT.
+	WorkerTeamCanonicalKey contextKey = "worker_team_canonical_key"
 )
 
 // publicFallbackRoutes lists routes that can fall back to public pipeline access
@@ -126,6 +128,8 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 								if !isFromWorker {
 									l.Error("missing user claim in token")
 									authFailed = true
+								} else if wtc, ok := claims["team_canonical"].(string); ok && wtc != "" {
+									rr = rr.WithContext(context.WithValue(rr.Context(), WorkerTeamCanonicalKey, wtc))
 								}
 							} else {
 								un, ok = userClaim["username"].(string)
@@ -308,6 +312,9 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/versions/{version_id}/trigger").Name(TriggerResourceVersion.String()).Handler(triggerResourceVersion(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/versions/{version_id}/path").Name(GetResourceVersionPath.String()).Handler(getResourceVersionPath(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/webhook_token").Name(RegenerateWebhookToken.String()).Handler(regenerateWebhookToken(s))
+
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/worker-token").Name(GenerateTeamWorkerToken.String()).Handler(generateTeamWorkerToken(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/worker-token").Name(GetTeamWorkerToken.String()).Handler(getTeamWorkerToken(s))
 
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/audit").Name(ListAuditLog.String()).Handler(listAuditLog(s))
 

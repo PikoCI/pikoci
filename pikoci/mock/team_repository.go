@@ -143,6 +143,21 @@ func (mr *TeamRepositoryMockRecorder) FindMember(ctx, tc, mc any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindMember", reflect.TypeOf((*TeamRepository)(nil).FindMember), ctx, tc, mc)
 }
 
+// FindWorkerTokenSalt mocks base method.
+func (m *TeamRepository) FindWorkerTokenSalt(ctx context.Context, tc string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindWorkerTokenSalt", ctx, tc)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindWorkerTokenSalt indicates an expected call of FindWorkerTokenSalt.
+func (mr *TeamRepositoryMockRecorder) FindWorkerTokenSalt(ctx, tc any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindWorkerTokenSalt", reflect.TypeOf((*TeamRepository)(nil).FindWorkerTokenSalt), ctx, tc)
+}
+
 // Update mocks base method.
 func (m *TeamRepository) Update(ctx context.Context, tc string, t team.Team) error {
 	m.ctrl.T.Helper()
@@ -169,4 +184,18 @@ func (m *TeamRepository) UpdateMember(ctx context.Context, tc, mc string, tm tea
 func (mr *TeamRepositoryMockRecorder) UpdateMember(ctx, tc, mc, tm any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMember", reflect.TypeOf((*TeamRepository)(nil).UpdateMember), ctx, tc, mc, tm)
+}
+
+// UpdateWorkerTokenSalt mocks base method.
+func (m *TeamRepository) UpdateWorkerTokenSalt(ctx context.Context, tc, salt string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkerTokenSalt", ctx, tc, salt)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateWorkerTokenSalt indicates an expected call of UpdateWorkerTokenSalt.
+func (mr *TeamRepositoryMockRecorder) UpdateWorkerTokenSalt(ctx, tc, salt any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerTokenSalt", reflect.TypeOf((*TeamRepository)(nil).UpdateWorkerTokenSalt), ctx, tc, salt)
 }

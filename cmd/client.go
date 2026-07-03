@@ -719,6 +719,7 @@ func init() {
 	teamsCmd.AddCommand(teamsUpdateCmd)
 	teamsCmd.AddCommand(teamsDeleteCmd)
 	teamsCmd.AddCommand(teamsMembersCmd)
+	teamsCmd.AddCommand(teamsWorkerTokenCmd)
 }
 
 var teamsCreateCmd = &cobra.Command{
@@ -967,6 +968,35 @@ var teamsMembersDeleteCmd = &cobra.Command{
 func init() {
 	teamsMembersDeleteCmd.Flags().String("username", "", "Username of the member to remove")
 	teamsMembersDeleteCmd.MarkFlagRequired("username")
+}
+
+// worker-token
+var teamsWorkerTokenCmd = &cobra.Command{
+	Use:   "worker-token",
+	Short: "Generates (or regenerates) a team-scoped worker token",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url, _ := cmd.Flags().GetString("url")
+		jwt, _ := cmd.Flags().GetString("jwt")
+		tc, _ := cmd.Flags().GetString("team-canonical")
+
+		c, err := newClientWithConfig(url, jwt)
+		if err != nil {
+			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
+		}
+
+		token, err := c.GenerateTeamWorkerToken(cmd.Context(), tc)
+		if err != nil {
+			return fmt.Errorf("failed to generate team worker token: %w", err)
+		}
+
+		fmt.Println(token)
+		return nil
+	},
+}
+
+func init() {
+	teamsWorkerTokenCmd.Flags().String("team-canonical", "", "Team Canonical to scope the action")
+	teamsWorkerTokenCmd.MarkFlagRequired("team-canonical")
 }
 
 // builds

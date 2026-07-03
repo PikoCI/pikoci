@@ -261,6 +261,13 @@ type Service interface {
 	// ListAuditLog returns audit log entries for the given team matching the
 	// filter options. The boolean return value indicates whether more results exist.
 	ListAuditLog(ctx context.Context, tc string, opts auditlog.FilterOpts) ([]*auditlog.Entry, bool, error)
+
+	// GenerateTeamWorkerToken generates (or regenerates) a team-scoped worker
+	// token by creating a new salt, storing it, and signing a JWT.
+	GenerateTeamWorkerToken(ctx context.Context, tc string) (string, error)
+	// GetTeamWorkerToken returns the current team worker token, or empty string
+	// if none has been generated.
+	GetTeamWorkerToken(ctx context.Context, tc string) (string, error)
 }
 
 // PikoCI is the primary implementation of the Service interface. It coordinates
