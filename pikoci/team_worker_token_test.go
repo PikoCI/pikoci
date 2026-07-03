@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,4 +74,43 @@ func TestGetTeamWorkerToken_FindSaltError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to find worker token salt")
 	assert.Empty(t, token)
+}
+
+// TestGenerateTeamWorkerToken_RoundTrip verifies the JWT produced by
+// GenerateTeamWorkerToken has the correct claims structure that
+// validateWorkerToken expects: is_from_worker, team_canonical, salt.
+func TestGenerateTeamWorkerToken_RoundTrip(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.WithValue(context.TODO(), pikoci.ActorContextKey, "admin")
+
+	var storedSalt string
+	s.Teams.EXPECT().UpdateWorkerTokenSalt(gomock.Any(), "main", gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ string, salt string) error {
+			storedSalt = salt
+			return nil
+		})
+
+	token, err := s.P.GenerateTeamWorkerToken(ctx, "main")
+	require.NoError(t, err)
+	require.NotEmpty(t, token)
+	require.NotEmpty(t, storedSalt)
+
+	// Parse the JWT and verify claims match what validateWorkerToken expects
+	parsed, err := jwt.Parse(token, func(t *jwt.Token) (interface{}, error) {
+		return s.P.JWTSecret, nil
+	})
+	require.NoError(t, err)
+
+	claims, ok := parsed.Claims.(jwt.MapClaims)
+	require.True(t, ok)
+
+	isWorker, _ := claims["is_from_worker"].(bool)
+	assert.True(t, isWorker, "must have is_from_worker claim")
+
+	tc, _ := claims["team_canonical"].(string)
+	assert.Equal(t, "main", tc, "must have team_canonical claim")
+
+	salt, _ := claims["salt"].(string)
+	assert.Equal(t, storedSalt, salt, "salt claim must match stored salt")
 }
