@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -65,9 +66,13 @@ func TestServer_ValidateWorkerToken(t *testing.T) {
 // fakeTeamSaltLookup implements TeamSaltLookup for testing.
 type fakeTeamSaltLookup struct {
 	salts map[string]string
+	err   error
 }
 
 func (f *fakeTeamSaltLookup) FindWorkerTokenSalt(ctx context.Context, tc string) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
 	return f.salts[tc], nil
 }
 
@@ -126,6 +131,90 @@ func TestServer_ValidateWorkerToken_TeamScoped(t *testing.T) {
 	tc, err = s.validateWorkerToken(ctx, globalToken)
 	assert.NoError(t, err)
 	assert.Empty(t, tc)
+}
+
+func TestServer_ValidateWorkerToken_NilSaltLookup_TeamToken(t *testing.T) {
+	ctx := context.TODO()
+	secret := []byte("test-secret")
+	// Server with nil teamSaltLookup (embedded mode)
+	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, nil, testLogger)
+
+	teamToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"is_from_worker": true,
+		"team_canonical": "teamA",
+		"salt":           "some-salt",
+	})
+	tokenStr, _ := teamToken.SignedString(secret)
+	_, err := s.validateWorkerToken(ctx, tokenStr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "team salt lookup not configured")
+}
+
+func TestServer_ValidateWorkerToken_SaltLookupDBError(t *testing.T) {
+	ctx := context.TODO()
+	secret := []byte("test-secret")
+	tsl := &fakeTeamSaltLookup{err: fmt.Errorf("connection refused")}
+	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, tsl, testLogger)
+
+	teamToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"is_from_worker": true,
+		"team_canonical": "teamA",
+		"salt":           "some-salt",
+	})
+	tokenStr, _ := teamToken.SignedString(secret)
+	_, err := s.validateWorkerToken(ctx, tokenStr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to look up team salt")
+}
+
+func TestServer_Register_TeamScoped(t *testing.T) {
+	secret := []byte("test-secret")
+	salt := "test-salt"
+	tsl := &fakeTeamSaltLookup{salts: map[string]string{"teamA": salt}}
+	s := NewServer(nil, notifier.New(), NewWorkerStreamManager(), secret, tsl, testLogger)
+
+	teamToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"is_from_worker": true,
+		"team_canonical": "teamA",
+		"salt":           salt,
+	})
+	tokenStr, _ := teamToken.SignedString(secret)
+
+	resp, err := s.Register(context.TODO(), &workerv1.RegisterRequest{
+		WorkerId:    "tw1",
+		WorkerToken: tokenStr,
+		MaxJobs:     2,
+		Tags:        []string{"gpu"},
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.Accepted)
+
+	// Verify teamCanonical is stored in registeredWorker
+	s.registeredMu.Lock()
+	rw, ok := s.registeredWorkers["tw1"]
+	s.registeredMu.Unlock()
+	assert.True(t, ok)
+	assert.Equal(t, "teamA", rw.teamCanonical)
+	assert.Equal(t, int32(2), rw.maxJobs)
+}
+
+func TestServer_TryDispatch_PropagatesTeamCanonical(t *testing.T) {
+	var capturedWC workitem.WorkerContext
+	dispatcher := &fakeDispatcher{
+		nextWorkFn: func(ctx context.Context, wc workitem.WorkerContext) (*workitem.Item, error) {
+			capturedWC = wc
+			return nil, nil
+		},
+	}
+
+	s := NewServer(dispatcher, notifier.New(), NewWorkerStreamManager(), nil, nil, testLogger)
+	ws := NewWorkerStream("w1", 2, []string{"gpu"}, true, "teamA")
+
+	s.tryDispatch(context.Background(), ws)
+
+	assert.Equal(t, "teamA", capturedWC.TeamCanonical)
+	assert.Equal(t, []string{"gpu"}, capturedWC.Tags)
+	assert.True(t, capturedWC.ExclusiveTags)
 }
 
 func TestServer_Register_ValidToken(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/team"
 	"github.com/pikoci/pikoci/pikoci/workitem"
 	"github.com/stretchr/testify/assert"
@@ -102,4 +103,70 @@ func TestNextWork_GlobalWorkerServesTeamWithoutDedicatedWorker(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, item)
 	assert.Equal(t, "teama", item.Body.TeamCanonical)
+}
+
+func TestNextWork_ResourceCheck_TeamWorkerSkipsOtherTeam(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// Phase 1: no pipelines with pending builds
+	s.Pipelines.EXPECT().FilterAll(ctx).Return([]*pipeline.WithTeam{
+		{
+			Pipeline: pipeline.Pipeline{
+				Canonical: "pipe-b",
+				Resources: []resource.Resource{{Canonical: "repo"}},
+			},
+			Team: team.Team{Canonical: "teamb"},
+		},
+	}, nil)
+
+	// Phase 2: due resource from teamb
+	s.Resources.EXPECT().FilterDueResources(ctx).Return([]*resource.ResourceWithPipeline{
+		{
+			Resource:          resource.Resource{Canonical: "repo", CheckInterval: "@every 1h"},
+			TeamCanonical:     "teamb",
+			PipelineCanonical: "pipe-b",
+		},
+	}, nil)
+
+	// Team A worker should NOT process team B's resource checks
+	wc := workitem.WorkerContext{TeamCanonical: "teama"}
+	item, err := s.P.NextWork(ctx, wc)
+	require.NoError(t, err)
+	assert.Nil(t, item, "team A worker should skip team B's resource check")
+}
+
+func TestNextWork_ResourceCheck_GlobalWorkerDefersToTeamWorker(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.P.TeamWorkerChecker = &fakeTeamWorkerChecker{teams: map[string]bool{"teama": true}}
+
+	// Phase 1: no pending builds
+	s.Pipelines.EXPECT().FilterAll(ctx).Return([]*pipeline.WithTeam{
+		{
+			Pipeline: pipeline.Pipeline{
+				Canonical: "pipe-a",
+				Resources: []resource.Resource{{Canonical: "repo"}},
+			},
+			Team: team.Team{Canonical: "teama"},
+		},
+	}, nil)
+
+	// Phase 2: due resource from teama
+	s.Resources.EXPECT().FilterDueResources(ctx).Return([]*resource.ResourceWithPipeline{
+		{
+			Resource:          resource.Resource{Canonical: "repo", CheckInterval: "@every 1h"},
+			TeamCanonical:     "teama",
+			PipelineCanonical: "pipe-a",
+		},
+	}, nil)
+
+	// Global worker should defer resource checks to team A's workers
+	wc := workitem.WorkerContext{TeamCanonical: ""}
+	item, err := s.P.NextWork(ctx, wc)
+	require.NoError(t, err)
+	assert.Nil(t, item, "global worker should defer resource check to team worker")
 }
