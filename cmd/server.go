@@ -441,16 +441,3 @@ func generateWorkerJWT(js []byte) string {
 	}
 	return tokenString
 }
-
-func generateTeamWorkerJWT(js []byte, tc, salt string) string {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"is_from_worker":  true,
-		"team_canonical":  tc,
-		"salt":            salt,
-	})
-	tokenString, err := token.SignedString(js)
-	if err != nil {
-		panic(err)
-	}
-	return tokenString
-}
