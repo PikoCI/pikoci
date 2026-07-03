@@ -11,9 +11,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
-	"github.com/pikoci/pikoci/pikoci/grpc"
+	pikogrpc "github.com/pikoci/pikoci/pikoci/grpc"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
 	"github.com/pikoci/pikoci/pikoci/notifier"
@@ -104,8 +105,8 @@ func TestGlobalWorkerDefersToTeamWorker(t *testing.T) {
 	svc.CreateJobBuild(ctx, "teama", "pipe", "build", build.Build{})
 
 	// Set up a stream manager with a team worker for teamA
-	streamMgr := grpc.NewWorkerStreamManager()
-	teamWs := grpc.NewWorkerStream("team-worker", 1, nil, false, "teama")
+	streamMgr := pikogrpc.NewWorkerStreamManager()
+	teamWs := pikogrpc.NewWorkerStream("team-worker", 1, nil, false, "teama")
 	streamMgr.Register(teamWs)
 	svc.TeamWorkerChecker = streamMgr
 
@@ -127,7 +128,7 @@ func TestGlobalWorkerServesTeamWithoutDedicatedWorker(t *testing.T) {
 	svc.CreateJobBuild(ctx, "teama", "pipe", "build", build.Build{})
 
 	// No team workers → global worker should serve
-	streamMgr := grpc.NewWorkerStreamManager()
+	streamMgr := pikogrpc.NewWorkerStreamManager()
 	svc.TeamWorkerChecker = streamMgr
 
 	globalWc := workitem.WorkerContext{TeamCanonical: ""}
@@ -135,6 +136,74 @@ func TestGlobalWorkerServesTeamWithoutDedicatedWorker(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, item)
 	assert.Equal(t, "teama", item.Body.TeamCanonical)
+}
+
+func TestTeamWorkerCannotGetOtherTeamWork(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	svc := newTeamIsolationTestService(t, ctx, logger)
+
+	svc.CreateTeam(ctx, "admin", team.Team{Name: "teamA"})
+	svc.CreateTeam(ctx, "admin", team.Team{Name: "teamB"})
+	svc.CreatePipeline(ctx, "teamb", "pipe-b", []byte(`job "build" {}`), nil)
+	svc.CreateJobBuild(ctx, "teamb", "pipe-b", "build", build.Build{})
+
+	// Team A worker should never get Team B's work, even when Team B
+	// has no dedicated workers
+	wc := workitem.WorkerContext{TeamCanonical: "teama"}
+	item, err := svc.NextWork(ctx, wc)
+	require.NoError(t, err)
+	assert.Nil(t, item, "team A worker must not get team B's work")
+}
+
+func TestRegeneratedTokenInvalidatesOldSalt(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	svc := newTeamIsolationTestService(t, ctx, logger)
+
+	svc.CreateTeam(ctx, "admin", team.Team{Name: "teamA"})
+
+	// Generate initial token
+	token1, err := svc.GenerateTeamWorkerToken(ctx, "teama")
+	require.NoError(t, err)
+	require.NotEmpty(t, token1)
+
+	// Regenerate → new token with new salt
+	token2, err := svc.GenerateTeamWorkerToken(ctx, "teama")
+	require.NoError(t, err)
+	require.NotEmpty(t, token2)
+	assert.NotEqual(t, token1, token2, "regenerated token should differ")
+
+	// GetTeamWorkerToken returns a token signed with the current salt.
+	// The old token (token1) has a different salt baked in, so it won't
+	// match the current one — proving the old salt is invalidated.
+	currentToken, err := svc.GetTeamWorkerToken(ctx, "teama")
+	require.NoError(t, err)
+	assert.Equal(t, token2, currentToken, "current token should match the regenerated one")
+	assert.NotEqual(t, token1, currentToken, "old token should not match current")
+
+	// Validate old token against gRPC server → should be rejected
+	n := notifier.New()
+	sm := pikogrpc.NewWorkerStreamManager()
+	grpcSrv := pikogrpc.NewServer(nil, n, sm, svc.JWTSecret, svc.Teams, logger)
+	resp, err := grpcSrv.Register(ctx, &workerv1.RegisterRequest{
+		WorkerId:    "old-worker",
+		WorkerToken: token1,
+		MaxJobs:     1,
+	})
+	require.NoError(t, err)
+	assert.False(t, resp.Accepted, "old token should be rejected after regeneration")
+
+	// New token should be accepted
+	resp, err = grpcSrv.Register(ctx, &workerv1.RegisterRequest{
+		WorkerId:    "new-worker",
+		WorkerToken: token2,
+		MaxJobs:     1,
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.Accepted, "new token should be accepted")
 }
 
 func TestTeamWorkerWithTagsCompose(t *testing.T) {

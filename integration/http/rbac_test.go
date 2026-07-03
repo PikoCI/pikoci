@@ -206,6 +206,47 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 		resp3.Body.Close()
 	})
 
+	// --- Team worker token RBAC ---
+	t.Run("TeamWorkerToken", func(t *testing.T) {
+		t.Run("admin can generate token", func(t *testing.T) {
+			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/worker-token", jwts["admin"], "")
+			defer resp.Body.Close()
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+			var got thttp.GenerateTeamWorkerTokenResponse
+			decodeBody(t, resp, &got)
+			assert.Empty(t, got.Err)
+			assert.NotEmpty(t, got.Token)
+		})
+
+		t.Run("admin can get token", func(t *testing.T) {
+			resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/worker-token", jwts["admin"], "")
+			defer resp.Body.Close()
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+			var got thttp.GetTeamWorkerTokenResponse
+			decodeBody(t, resp, &got)
+			assert.Empty(t, got.Err)
+			assert.NotEmpty(t, got.Token)
+		})
+
+		t.Run("maintain denied generate token", func(t *testing.T) {
+			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/worker-token", jwts["maintain"], "")
+			defer resp.Body.Close()
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		})
+
+		t.Run("write denied get token", func(t *testing.T) {
+			resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/worker-token", jwts["write"], "")
+			defer resp.Body.Close()
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		})
+
+		t.Run("read denied get token", func(t *testing.T) {
+			resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/worker-token", jwts["read"], "")
+			defer resp.Body.Close()
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		})
+	})
+
 	// --- Last admin protection ---
 	t.Run("LastAdminProtection", func(t *testing.T) {
 		// Create a team where admin is the sole admin
