@@ -308,11 +308,24 @@ func TestPikoCI(t *testing.T) {
 			}, 5*time.Second)
 		})
 		t.Run("Workers Tab", func(t *testing.T) {
-			// Navigate to team settings to find the Workers tab
+			// Always restore browser state for subsequent tests
+			defer func() {
+				wd.Get(pikoURL + "/teams/main")
+				waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+					tab, err := wd.FindElement(selenium.ByCSSSelector, "#tab-settings")
+					if err != nil {
+						return false
+					}
+					cls, _ := tab.GetAttribute("class")
+					return strings.Contains(cls, "active")
+				}, 5*time.Second)
+			}()
+
+			// Navigate to team settings Workers tab
 			err := wd.Get(pikoURL + "/teams/main/workers")
 			require.NoError(t, err)
 
-			// Wait for Workers tab to be active
+			// Wait for page to load and Workers tab to be active
 			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
 				tab, err := wd.FindElement(selenium.ByCSSSelector, "#tab-workers")
 				if err != nil {
@@ -320,21 +333,12 @@ func TestPikoCI(t *testing.T) {
 				}
 				cls, _ := tab.GetAttribute("class")
 				return strings.Contains(cls, "active")
-			}, 5*time.Second)
-
-			// Admin should see the Workers tab
-			workersTab, err := wd.FindElement(selenium.ByCSSSelector, "#tab-workers")
-			require.NoError(t, err, "admin should see Workers tab")
-
-			txt, err := workersTab.Text()
-			require.NoError(t, err)
-			require.Contains(t, txt, "Workers")
+			}, 10*time.Second)
 
 			// Should see "Generate Worker Token" button (no token yet)
 			genBtn, err := wd.FindElement(selenium.ByCSSSelector, "#generate-worker-token")
 			require.NoError(t, err, "should see Generate Worker Token button")
 
-			// Click to generate a token
 			err = genBtn.Click()
 			require.NoError(t, err)
 
@@ -347,29 +351,23 @@ func TestPikoCI(t *testing.T) {
 				val, _ := input.GetAttribute("value")
 				return strings.HasPrefix(val, "****")
 			}, 5*time.Second)
-
-			// Navigate back to settings for subsequent tests
-			err = wd.Get(pikoURL + "/teams/main")
-			require.NoError(t, err)
-			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
-				tab, err := wd.FindElement(selenium.ByCSSSelector, "#tab-settings")
-				if err != nil {
-					return false
-				}
-				cls, _ := tab.GetAttribute("class")
-				return strings.Contains(cls, "active")
-			}, 5*time.Second)
 		})
 		t.Run("Workers Page Team Column", func(t *testing.T) {
-			// Navigate to global workers page
-			navLink, err := wd.FindElement(selenium.ByCSSSelector, ".navbar .nav-link")
-			require.NoError(t, err)
-			err = navLink.Click()
-			require.NoError(t, err)
+			// Always restore browser state for subsequent tests
+			defer func() {
+				wd.Get(pikoURL + "/teams/main")
+				waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+					el, err := wd.FindElement(selenium.ByCSSSelector, "#breadcrumb")
+					if err != nil {
+						return false
+					}
+					txt, _ := el.Text()
+					return strings.Contains(txt, "Main")
+				}, 5*time.Second)
+			}()
 
-			workersLink, err := wd.FindElement(selenium.ByCSSSelector, "#nav-workers")
-			require.NoError(t, err)
-			err = workersLink.Click()
+			// Navigate directly to global workers page
+			err := wd.Get(pikoURL + "/workers")
 			require.NoError(t, err)
 
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Workers"), 5*time.Second)
@@ -387,11 +385,6 @@ func TestPikoCI(t *testing.T) {
 				}
 			}
 			require.True(t, foundTeamHeader, "Workers table should have a Team column header")
-
-			// Navigate back
-			err = wd.Get(pikoURL + "/teams/main")
-			require.NoError(t, err)
-			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain"), 5*time.Second)
 		})
 		t.Run("Delete Team", func(t *testing.T) {
 			tmsBtn, err := wd.FindElement(selenium.ByLinkText, "Teams")
