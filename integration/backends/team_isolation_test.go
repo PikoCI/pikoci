@@ -393,7 +393,8 @@ job "test-job" {
 		"team-alpha-worker", "test", "", 1, teamToken, addr, nil, false)
 	go teamWorker.Run(ctx)
 
-	// --- Start global worker ---
+	// --- Start global worker (with its own cancellable context) ---
+	globalCtx, globalCancel := context.WithCancel(ctx)
 	globalHTTPClient, err := client.New(fmt.Sprintf("http://%s", addr), globalToken)
 	require.NoError(t, err)
 	globalGRPCConn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -402,7 +403,7 @@ job "test-job" {
 	globalGRPCClient := workerv1.NewWorkerServiceClient(globalGRPCConn)
 	globalWorker := worker.NewGRPC(globalHTTPClient, globalGRPCClient, logger.With("worker", "global"),
 		"global-worker", "test", "", 1, globalToken, addr, nil, false)
-	go globalWorker.Run(ctx)
+	go globalWorker.Run(globalCtx)
 
 	// Wait for both workers to connect
 	require.Eventually(t, func() bool {
@@ -441,4 +442,85 @@ job "test-job" {
 			assert.Empty(t, wk.TeamCanonical, "global worker should have empty team_canonical in DB")
 		}
 	}
+
+	// ===================================================================
+	// Phase 2: Kill global worker → beta builds should stay pending
+	// because the team-alpha worker must NOT pick up beta's work.
+	// ===================================================================
+
+	globalCancel()
+
+	// Wait for global worker to disconnect from the stream manager
+	require.Eventually(t, func() bool {
+		return streamMgr.ConnectedCount() == 1
+	}, 5*time.Second, 50*time.Millisecond, "global worker should disconnect")
+
+	// Trigger a new build on beta
+	err = svc.TriggerPipelineJob(ctx, "beta", "beta-pipe", "test-job")
+	require.NoError(t, err)
+
+	// Wait a bit and verify the beta build stays pending — the alpha
+	// team worker must NOT pick it up.
+	time.Sleep(2 * time.Second)
+
+	betaBuilds, _, err := svc.ListJobBuilds(ctx, "beta", "beta-pipe", "test-job", nil, nil, 0)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(betaBuilds), 2, "should have at least 2 beta builds")
+
+	// The newest build (index 0) should still be pending
+	assert.Equal(t, build.Pending, betaBuilds[0].Status,
+		"beta build should stay pending: team-alpha worker must not process it")
+
+	// ===================================================================
+	// Phase 3: Trigger an alpha build → team worker should still pick it up
+	// ===================================================================
+
+	err = svc.TriggerPipelineJob(ctx, "alpha", "alpha-pipe", "test-job")
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		alphaBuilds, _, _ := svc.ListJobBuilds(ctx, "alpha", "alpha-pipe", "test-job", nil, nil, 0)
+		if len(alphaBuilds) < 2 {
+			return false
+		}
+		return alphaBuilds[0].Status == build.Succeeded
+	}, 10*time.Second, 200*time.Millisecond,
+		"alpha build should succeed even without global worker")
+
+	// Re-check: beta build is STILL pending
+	betaBuilds, _, err = svc.ListJobBuilds(ctx, "beta", "beta-pipe", "test-job", nil, nil, 0)
+	require.NoError(t, err)
+	assert.Equal(t, build.Pending, betaBuilds[0].Status,
+		"beta build must remain pending with only alpha team worker online")
+
+	// ===================================================================
+	// Phase 4: Start a new global worker → picks up the pending beta build
+	// ===================================================================
+
+	globalCtx2, globalCancel2 := context.WithCancel(ctx)
+	defer globalCancel2()
+	globalHTTPClient2, err := client.New(fmt.Sprintf("http://%s", addr), globalToken)
+	require.NoError(t, err)
+	globalGRPCConn2, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { globalGRPCConn2.Close() })
+	globalGRPCClient2 := workerv1.NewWorkerServiceClient(globalGRPCConn2)
+	globalWorker2 := worker.NewGRPC(globalHTTPClient2, globalGRPCClient2, logger.With("worker", "global2"),
+		"global-worker-2", "test", "", 1, globalToken, addr, nil, false)
+	go globalWorker2.Run(globalCtx2)
+
+	// Wait for new global worker to connect
+	require.Eventually(t, func() bool {
+		return streamMgr.ConnectedCount() >= 2
+	}, 5*time.Second, 50*time.Millisecond, "new global worker should connect")
+
+	// The pending beta build should now be picked up by the new global worker
+	require.Eventually(t, func() bool {
+		betaBuilds, _, _ := svc.ListJobBuilds(ctx, "beta", "beta-pipe", "test-job", nil, nil, 0)
+		if len(betaBuilds) < 2 {
+			return false
+		}
+		return betaBuilds[0].Status == build.Succeeded
+	}, 10*time.Second, 200*time.Millisecond,
+		"pending beta build should complete after new global worker connects")
 }
