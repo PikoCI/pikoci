@@ -173,6 +173,42 @@ Tags must be valid slugs: lowercase letters, digits, and hyphens. Maximum 10 tag
 
 Tags are visible in the workers dashboard alongside the worker status and platform information.
 
+## Team-scoped workers
+
+For multi-tenant environments, teams can generate dedicated worker tokens that restrict workers to only process that team's builds and resource checks. This provides a hard security boundary — team workers never access other teams' secrets or source code.
+
+### Generating a team worker token
+
+Team admins can generate a token from the web UI (**Team Settings > Workers** tab) or via the CLI:
+
+```bash
+pikoci client teams worker-token --team-canonical my-team --url http://server:8080
+# Output: eyJhbG...
+```
+
+### Starting a team-scoped worker
+
+```bash
+pikoci worker \
+  --pikoci-url http://server:8080 \
+  --worker-token <team-token> \
+  --concurrency 2
+```
+
+### Dispatch behavior
+
+- **Team worker**: only receives builds and resource checks from its team.
+- **Global worker**: serves teams that have no dedicated team workers. When a team has at least one online team worker, global workers skip that team's work.
+- **Tags compose**: a team worker with `--tags gpu` only gets GPU-tagged jobs from its team.
+
+### Token regeneration
+
+Regenerating a team's worker token invalidates the previous token. Workers using the old token will fail to re-register and must be restarted with the new token.
+
+### Workers dashboard
+
+The global workers dashboard shows a **Team** column for each worker, displaying the team canonical name or "Global" for non-team workers.
+
 ## Reverse proxy configuration
 
 Since gRPC and HTTP share the same port, your reverse proxy needs to handle HTTP/2 for gRPC. Most proxies support this automatically.

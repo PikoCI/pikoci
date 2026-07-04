@@ -8,11 +8,12 @@ type Item struct {
 	Body Body   `json:"body"`
 }
 
-// WorkerContext carries the requesting worker's tag configuration so that
-// NextWork can filter work items by tag compatibility.
+// WorkerContext carries the requesting worker's tag and team configuration so
+// that NextWork can filter work items by tag compatibility and team isolation.
 type WorkerContext struct {
 	Tags          []string
 	ExclusiveTags bool
+	TeamCanonical string
 }
 
 // Body is the JSON-serializable payload carried inside every work item.

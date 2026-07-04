@@ -199,12 +199,13 @@ var serverCmd = &cobra.Command{
 
 		// Create gRPC server for worker streaming
 		streamMgr := pikogrpc.NewWorkerStreamManager()
-		grpcServer := pikogrpc.NewServer(svc, wn, streamMgr, jwtSecret, logger.With("component", "gRPC"))
+		grpcServer := pikogrpc.NewServer(svc, wn, streamMgr, jwtSecret, tr, logger.With("component", "gRPC"))
 		grpcSrv := grpc.NewServer()
 		workerv1.RegisterWorkerServiceServer(grpcSrv, grpcServer)
 
 		// Store gRPC server on the service for cancellation routing
 		svc.GRPCServer = grpcServer
+		svc.TeamWorkerChecker = streamMgr
 
 		svr := &http.Server{
 			Handler: handlers.CombinedLoggingHandler(os.Stdout, mux),

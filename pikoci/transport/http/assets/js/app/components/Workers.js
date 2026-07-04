@@ -53,6 +53,7 @@ export function WorkersList() {
         <tr>
           <th>Name</th>
           <th>Status</th>
+          <th>Team</th>
           <th>Tags</th>
           <th>Platform</th>
           <th>Version</th>
@@ -104,6 +105,7 @@ function WorkerRow({ worker, serverVersion, serverCommit, onDelete }) {
           : html`<span class="piko-badge piko-badge-started">stale</span>`
         }
       </td>
+      <td>${worker.team_canonical || html`<span class="text-muted">Global</span>`}</td>
       <td>
         ${worker.tags && worker.tags.length > 0 ? html`
           ${worker.tags.map(tag => html`<span class="piko-badge piko-badge-pending">${tag}</span> `)}

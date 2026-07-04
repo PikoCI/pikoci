@@ -171,4 +171,9 @@ const (
 	ApproveBuild
 	// RejectBuild is the route for rejecting a build waiting for approval.
 	RejectBuild
+
+	// GenerateTeamWorkerToken is the route for generating a team worker token.
+	GenerateTeamWorkerToken
+	// GetTeamWorkerToken is the route for retrieving the current team worker token.
+	GetTeamWorkerToken
 )

@@ -139,3 +139,52 @@ test('api: successful request clears notice', async () => {
     globalThis.fetch = original;
   }
 });
+
+// --- Team Worker Token API functions ---
+
+import { generateTeamWorkerToken, getTeamWorkerToken } from '../../pikoci/transport/http/assets/js/app/api.js';
+
+test('generateTeamWorkerToken: POSTs to correct endpoint and returns token', async () => {
+  const original = globalThis.fetch;
+  let capturedUrl, capturedOpts;
+  globalThis.fetch = (url, opts) => {
+    capturedUrl = url;
+    capturedOpts = opts;
+    return Promise.resolve(mockResponse(200, { token: 'eyJhbG...' }));
+  };
+  try {
+    const token = await generateTeamWorkerToken('main');
+    assert.equal(token, 'eyJhbG...');
+    assert.equal(capturedUrl, '/teams/main/worker-token');
+    assert.equal(capturedOpts.method, 'POST');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('getTeamWorkerToken: GETs from correct endpoint and returns token', async () => {
+  const original = globalThis.fetch;
+  let capturedUrl;
+  globalThis.fetch = (url, opts) => {
+    capturedUrl = url;
+    return Promise.resolve(mockResponse(200, { token: 'eyJtoken...' }));
+  };
+  try {
+    const token = await getTeamWorkerToken('my-team');
+    assert.equal(token, 'eyJtoken...');
+    assert.equal(capturedUrl, '/teams/my-team/worker-token');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('getTeamWorkerToken: returns empty string when no token', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = () => Promise.resolve(mockResponse(200, { token: '' }));
+  try {
+    const token = await getTeamWorkerToken('main');
+    assert.equal(token, '');
+  } finally {
+    globalThis.fetch = original;
+  }
+});

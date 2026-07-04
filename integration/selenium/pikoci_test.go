@@ -307,6 +307,84 @@ func TestPikoCI(t *testing.T) {
 				return strings.Contains(cls, "active")
 			}, 5*time.Second)
 		})
+		t.Run("Workers Tab", func(t *testing.T) {
+			// Always restore browser state for subsequent tests
+			defer func() {
+				wd.Get(pikoURL + "/teams/main")
+				waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+					tab, err := wd.FindElement(selenium.ByCSSSelector, "#tab-settings")
+					if err != nil {
+						return false
+					}
+					cls, _ := tab.GetAttribute("class")
+					return strings.Contains(cls, "active")
+				}, 5*time.Second)
+			}()
+
+			// Navigate to team settings Workers tab
+			err := wd.Get(pikoURL + "/teams/main/workers")
+			require.NoError(t, err)
+
+			// Wait for page to load and Workers tab to be active
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				tab, err := wd.FindElement(selenium.ByCSSSelector, "#tab-workers")
+				if err != nil {
+					return false
+				}
+				cls, _ := tab.GetAttribute("class")
+				return strings.Contains(cls, "active")
+			}, 10*time.Second)
+
+			// Wait for WorkersTab content to load (useEffect makes a GET call,
+			// component returns null until response arrives, then shows either
+			// the generate button or the masked token display)
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				// No token yet → generate button
+				_, err := wd.FindElement(selenium.ByCSSSelector, "#generate-worker-token")
+				if err == nil {
+					return true
+				}
+				// Token exists → masked input
+				_, err = wd.FindElement(selenium.ByCSSSelector, "input.font-monospace")
+				return err == nil
+			}, 10*time.Second)
+		})
+		t.Run("Workers Page Team Column", func(t *testing.T) {
+			// Always restore browser state for subsequent tests
+			defer func() {
+				wd.Get(pikoURL + "/teams/main")
+				waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+					el, err := wd.FindElement(selenium.ByCSSSelector, "#breadcrumb")
+					if err != nil {
+						return false
+					}
+					txt, _ := el.Text()
+					return strings.Contains(txt, "Main")
+				}, 5*time.Second)
+			}()
+
+			// Navigate directly to global workers page
+			err := wd.Get(pikoURL + "/workers")
+			require.NoError(t, err)
+
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Workers"), 5*time.Second)
+
+			// Verify "Team" column header exists (added by worker team isolation)
+			headers, err := wd.FindElements(selenium.ByCSSSelector, "table thead th")
+			require.NoError(t, err)
+
+			var headerTexts []string
+			var foundTeamHeader bool
+			for _, h := range headers {
+				txt, _ := h.Text()
+				headerTexts = append(headerTexts, txt)
+				if strings.EqualFold(txt, "Team") {
+					foundTeamHeader = true
+				}
+			}
+			require.True(t, foundTeamHeader,
+				"Workers table should have a Team column header, found headers: %v", headerTexts)
+		})
 		t.Run("Delete Team", func(t *testing.T) {
 			tmsBtn, err := wd.FindElement(selenium.ByLinkText, "Teams")
 			require.NoError(t, err)
@@ -1678,6 +1756,10 @@ job "gen" {
 			roleSelects, err := wd.FindElements(selenium.ByCSSSelector, "select.form-select-sm")
 			require.NoError(t, err)
 			require.Equal(t, 0, len(roleSelects), "non-admin should not see role dropdowns")
+
+			// Workers tab should NOT be visible for non-admin members
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#tab-workers")
+			require.Error(t, err, "non-admin should NOT see Workers tab")
 		})
 		t.Run("Pipelines", func(t *testing.T) {
 			tmsBtn, err := wd.FindElement(selenium.ByLinkText, "Teams")

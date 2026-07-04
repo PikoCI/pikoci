@@ -72,6 +72,13 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 		{"admin can delete team", http.MethodDelete, "/teams/main", role.Admin, false, true},
 		{"maintainer denied delete team", http.MethodDelete, "/teams/main", role.Maintain, false, false},
 
+		// --- Team worker token routes: admin only ---
+		{"admin can generate team worker token", http.MethodPost, "/teams/main/worker-token", role.Admin, false, true},
+		{"maintain denied generate team worker token", http.MethodPost, "/teams/main/worker-token", role.Maintain, false, false},
+		{"admin can get team worker token", http.MethodGet, "/teams/main/worker-token", role.Admin, false, true},
+		{"write denied get team worker token", http.MethodGet, "/teams/main/worker-token", role.Write, false, false},
+		{"read denied get team worker token", http.MethodGet, "/teams/main/worker-token", role.Read, false, false},
+
 		// --- Global admin routes: only global admin ---
 		{"global admin can list users", http.MethodGet, "/users", role.Admin, true, true},
 		{"admin denied list users (no global admin)", http.MethodGet, "/users", role.Admin, false, false},
@@ -117,6 +124,8 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 			svc.EXPECT().ApproveBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			svc.EXPECT().RejectBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			svc.EXPECT().GetBuildReport(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+			svc.EXPECT().GenerateTeamWorkerToken(gomock.Any(), gomock.Any()).Return("token", nil).AnyTimes()
+			svc.EXPECT().GetTeamWorkerToken(gomock.Any(), gomock.Any()).Return("token", nil).AnyTimes()
 
 			// Sign JWT
 			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user": um})

@@ -46,6 +46,9 @@ func workerHeartbeat(s pikoci.Service) http.HandlerFunc {
 			startedAt, _ = time.Parse(time.RFC3339, req.StartedAt)
 		}
 
+		// Extract team canonical from worker JWT context (if team-scoped)
+		teamCanonical, _ := ctx.Value(WorkerTeamCanonicalKey).(string)
+
 		wk := wkr.Worker{
 			Name:          req.Name,
 			Hostname:      req.Hostname,
@@ -57,6 +60,7 @@ func workerHeartbeat(s pikoci.Service) http.HandlerFunc {
 			Concurrency:   req.Concurrency,
 			Tags:          req.Tags,
 			ExclusiveTags: req.ExclusiveTags,
+			TeamCanonical: teamCanonical,
 			StartedAt:     startedAt,
 		}
 

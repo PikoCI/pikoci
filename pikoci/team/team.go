@@ -10,9 +10,10 @@ import (
 
 // Team represents a group of users that owns pipelines and resources.
 type Team struct {
-	ID        uint32 `json:"id"`
-	Name      string `json:"name"`
-	Canonical string `json:"canonical"`
+	ID              uint32 `json:"id"`
+	Name            string `json:"name"`
+	Canonical       string `json:"canonical"`
+	WorkerTokenSalt string `json:"-"`
 }
 
 // WithMembers embeds a Team along with its list of members.

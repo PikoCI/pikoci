@@ -91,7 +91,7 @@ func TestGRPCWorkerFullFlow(t *testing.T) {
 
 	// --- Start HTTP + gRPC server via cmux ---
 	streamMgr := pikogrpc.NewWorkerStreamManager()
-	grpcServer := pikogrpc.NewServer(svc, wn, streamMgr, jwtSecret, logger.With("component", "gRPC"))
+	grpcServer := pikogrpc.NewServer(svc, wn, streamMgr, jwtSecret, tr, logger.With("component", "gRPC"))
 	grpcSrv := grpc.NewServer()
 	workerv1.RegisterWorkerServiceServer(grpcSrv, grpcServer)
 	svc.GRPCServer = grpcServer
@@ -374,7 +374,7 @@ func TestServerDrainWaitsForSeparatedWorkerBuilds(t *testing.T) {
 
 	// --- Start HTTP + gRPC server ---
 	streamMgr := pikogrpc.NewWorkerStreamManager()
-	grpcServer := pikogrpc.NewServer(svc, wn, streamMgr, jwtSecret, logger.With("component", "gRPC"))
+	grpcServer := pikogrpc.NewServer(svc, wn, streamMgr, jwtSecret, tr, logger.With("component", "gRPC"))
 	grpcSrv := grpc.NewServer()
 	workerv1.RegisterWorkerServiceServer(grpcSrv, grpcServer)
 	svc.GRPCServer = grpcServer

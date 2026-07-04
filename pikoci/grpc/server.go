@@ -24,15 +24,21 @@ type WorkDispatcher interface {
 	NextWork(ctx context.Context, wc workitem.WorkerContext) (*workitem.Item, error)
 }
 
+// TeamSaltLookup provides team worker token salt for JWT validation.
+type TeamSaltLookup interface {
+	FindWorkerTokenSalt(ctx context.Context, tc string) (string, error)
+}
+
 // Server implements the WorkerService gRPC server.
 type Server struct {
 	workerv1.UnimplementedWorkerServiceServer
 
-	svc       WorkDispatcher
-	notifier  *notifier.WorkNotifier
-	streams   *WorkerStreamManager
-	jwtSecret []byte
-	logger    *slog.Logger
+	svc            WorkDispatcher
+	notifier       *notifier.WorkNotifier
+	streams        *WorkerStreamManager
+	jwtSecret      []byte
+	teamSaltLookup TeamSaltLookup
+	logger         *slog.Logger
 
 	// registeredWorkers stores registration info from Register calls.
 	// Entries expire after 30 seconds if Execute is not called.
@@ -44,16 +50,18 @@ type registeredWorker struct {
 	maxJobs       int32
 	tags          []string
 	exclusiveTags bool
-	registeredAt    time.Time
+	teamCanonical string
+	registeredAt  time.Time
 }
 
 // NewServer creates a new gRPC WorkerService server.
-func NewServer(svc WorkDispatcher, n *notifier.WorkNotifier, sm *WorkerStreamManager, jwtSecret []byte, l *slog.Logger) *Server {
+func NewServer(svc WorkDispatcher, n *notifier.WorkNotifier, sm *WorkerStreamManager, jwtSecret []byte, tsl TeamSaltLookup, l *slog.Logger) *Server {
 	return &Server{
 		svc:               svc,
 		notifier:          n,
 		streams:           sm,
 		jwtSecret:         jwtSecret,
+		teamSaltLookup:    tsl,
 		logger:            l,
 		registeredWorkers: make(map[string]*registeredWorker),
 	}
@@ -67,21 +75,23 @@ func (s *Server) Streams() *WorkerStreamManager {
 // Register validates a worker's JWT token and stores the worker's max_jobs
 // capacity for use when the Execute stream opens.
 func (s *Server) Register(ctx context.Context, req *workerv1.RegisterRequest) (*workerv1.RegisterResponse, error) {
-	if err := s.validateWorkerToken(req.WorkerToken); err != nil {
+	teamCanonical, err := s.validateWorkerToken(ctx, req.WorkerToken)
+	if err != nil {
 		return &workerv1.RegisterResponse{
 			Accepted: false,
 			Message:  "invalid worker token",
 		}, nil
 	}
 
-	s.logger.Info("worker registered via gRPC", "worker_id", req.WorkerId, "max_jobs", req.MaxJobs)
+	s.logger.Info("worker registered via gRPC", "worker_id", req.WorkerId, "max_jobs", req.MaxJobs, "team", teamCanonical)
 
 	s.registeredMu.Lock()
 	s.registeredWorkers[req.WorkerId] = &registeredWorker{
 		maxJobs:       req.MaxJobs,
 		tags:          req.Tags,
 		exclusiveTags: req.ExclusiveTags,
-		registeredAt:    time.Now(),
+		teamCanonical: teamCanonical,
+		registeredAt:  time.Now(),
 	}
 	s.registeredMu.Unlock()
 
@@ -134,7 +144,7 @@ func (s *Server) Execute(stream workerv1.WorkerService_ExecuteServer) error {
 	if maxJobs <= 0 {
 		maxJobs = 1
 	}
-	ws := NewWorkerStream(workerID, maxJobs, rw.tags, rw.exclusiveTags)
+	ws := NewWorkerStream(workerID, maxJobs, rw.tags, rw.exclusiveTags, rw.teamCanonical)
 	s.streams.Register(ws)
 	defer s.streams.Unregister(workerID)
 
@@ -222,6 +232,7 @@ func (s *Server) tryDispatch(ctx context.Context, ws *WorkerStream) {
 	wc := workitem.WorkerContext{
 		Tags:          ws.Tags,
 		ExclusiveTags: ws.ExclusiveTags,
+		TeamCanonical: ws.TeamCanonical,
 	}
 	for ws.HasCapacity() {
 		item, err := s.svc.NextWork(ctx, wc)
@@ -340,25 +351,53 @@ func (s *Server) CancelBuild(buildID string, reason string) error {
 	return s.streams.SendToWorker(ws.WorkerID, msg)
 }
 
-// validateWorkerToken validates a JWT worker token.
-func (s *Server) validateWorkerToken(tokenStr string) error {
+// validateWorkerToken validates a JWT worker token and returns the team
+// canonical if the token is team-scoped, or empty string for global workers.
+func (s *Server) validateWorkerToken(ctx context.Context, tokenStr string) (string, error) {
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
 		return s.jwtSecret, nil
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	if err != nil {
-		return fmt.Errorf("invalid token: %w", err)
+		return "", fmt.Errorf("invalid token: %w", err)
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return fmt.Errorf("invalid claims")
+		return "", fmt.Errorf("invalid claims")
 	}
 
 	isFromWorker, _ := claims["is_from_worker"].(bool)
 	if !isFromWorker {
-		return fmt.Errorf("token is not a worker token")
+		return "", fmt.Errorf("token is not a worker token")
 	}
 
-	return nil
+	// Check for team-scoped token
+	tc, _ := claims["team_canonical"].(string)
+	if tc == "" {
+		return "", nil // global worker
+	}
+
+	// Verify salt against DB
+	salt, _ := claims["salt"].(string)
+	if salt == "" {
+		return "", fmt.Errorf("team token missing salt claim")
+	}
+
+	if s.teamSaltLookup == nil {
+		return "", fmt.Errorf("team salt lookup not configured")
+	}
+
+	dbSalt, err := s.teamSaltLookup.FindWorkerTokenSalt(ctx, tc)
+	if err != nil {
+		return "", fmt.Errorf("failed to look up team salt: %w", err)
+	}
+	if dbSalt == "" {
+		return "", fmt.Errorf("team worker token has been revoked")
+	}
+	if dbSalt != salt {
+		return "", fmt.Errorf("team worker token salt mismatch")
+	}
+
+	return tc, nil
 }
 
