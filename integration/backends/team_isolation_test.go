@@ -4,11 +4,16 @@ package backends_test
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/gorilla/handlers"
+	"github.com/soheilhy/cmux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
@@ -18,10 +23,16 @@ import (
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
 	"github.com/pikoci/pikoci/pikoci/notifier"
+	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/team"
+	tshttp "github.com/pikoci/pikoci/pikoci/transport/http"
+	"github.com/pikoci/pikoci/pikoci/transport/http/client"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
 	"github.com/pikoci/pikoci/pikoci/workitem"
+	"github.com/pikoci/pikoci/worker"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func newTeamIsolationTestService(t *testing.T, ctx context.Context, logger *slog.Logger) *pikoci.PikoCI {
@@ -253,4 +264,181 @@ job "cpu-job" {
 	item, err = svc.NextWork(ctx, wc)
 	require.NoError(t, err)
 	assert.Nil(t, item, "exclusive gpu worker should not get untagged cpu-job")
+}
+
+// TestTeamIsolation_FullGRPCFlow is an end-to-end test that starts a real
+// server (HTTP + gRPC via cmux), connects a team-scoped worker and a global
+// worker, triggers builds on two teams, and verifies:
+//   - The team worker only processes its own team's builds
+//   - The global worker processes the other team's builds
+//   - Workers show correct team_canonical in the DB
+func TestTeamIsolation_FullGRPCFlow(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})).With("test", "team-isolation-e2e")
+
+	// --- Set up DB + service ---
+	dbFile := t.TempDir() + "/test.db"
+	db, err := mysql.New("", 0, "", "", mysql.Options{
+		MultiStatements: true,
+		ClientFoundRows: true,
+		System:          mysql.SQLite,
+		DBName:          dbFile,
+		DBFile:          dbFile,
+	})
+	require.NoError(t, err)
+	require.NoError(t, migrate.Migrate(db, mysql.SQLite))
+
+	ur := mysql.NewUserRepository(db)
+	tr := mysql.NewTeamRepository(db)
+	ppr := mysql.NewPipelineRepository(db)
+	jr := mysql.NewJobRepository(db)
+	rr := mysql.NewResourceRepository(db, mysql.SQLite)
+	rt := mysql.NewResourceTypeRepository(db)
+	br := mysql.NewBuildRepository(db, mysql.SQLite)
+	rur := mysql.NewRunnerRepository(db)
+	str := mysql.NewSecretTypeRepository(db)
+	tgr := mysql.NewTriggerRepository(db)
+	wr := mysql.NewWorkerRepository(db, mysql.SQLite)
+	atr := mysql.NewApiTokenRepository(db)
+	suow := unitwork.NewStartUnitOfWork(db, mysql.SQLite)
+
+	jwtSecret := []byte("test-secret")
+	wn := notifier.New()
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, nil, suow, jwtSecret, wn, logger)
+	svc.StartScheduler(ctx)
+
+	svc.CreateUser(ctx, user.User{
+		FullName: "admin", Username: "admin",
+		Password: "$2a$14$rwQk8Qvc2rij7qhFO4P1W.OiSF6AkgVU1RCrLaY2wawJcpkPEKwbm",
+	}, true)
+
+	// --- Start HTTP + gRPC server via cmux ---
+	streamMgr := pikogrpc.NewWorkerStreamManager()
+	grpcServer := pikogrpc.NewServer(svc, wn, streamMgr, jwtSecret, tr, logger.With("component", "gRPC"))
+	grpcSrv := grpc.NewServer()
+	workerv1.RegisterWorkerServiceServer(grpcSrv, grpcServer)
+	svc.GRPCServer = grpcServer
+	svc.TeamWorkerChecker = streamMgr
+
+	httpHandler := tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.SQLite, "test", "test")
+	httpSrv := &http.Server{Handler: handlers.CombinedLoggingHandler(os.Stderr, httpHandler)}
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := lis.Addr().String()
+
+	m := cmux.New(lis)
+	grpcLis := m.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
+	httpLis := m.Match(cmux.Any())
+
+	go grpcSrv.Serve(grpcLis)
+	go httpSrv.Serve(httpLis)
+	go m.Serve()
+	t.Cleanup(func() {
+		grpcSrv.Stop()
+		httpSrv.Close()
+	})
+
+	// --- Create two teams with simple pipelines ---
+	svc.CreateTeam(ctx, "admin", team.Team{Name: "alpha"})
+	svc.CreateTeam(ctx, "admin", team.Team{Name: "beta"})
+
+	hcl := []byte(`
+resource "cron" "trigger" {
+  check_interval = "@every 1h"
+}
+job "test-job" {
+  get "cron" "trigger" { trigger = true }
+  task "work" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo hello"]
+    }
+  }
+}
+`)
+	_, err = svc.CreatePipeline(ctx, "alpha", "alpha-pipe", hcl, nil)
+	require.NoError(t, err)
+	_, err = svc.CreatePipeline(ctx, "beta", "beta-pipe", hcl, nil)
+	require.NoError(t, err)
+
+	// Seed resource versions
+	for _, tc := range []string{"alpha", "beta"} {
+		pipe := tc + "-pipe"
+		svc.CreateResourceVersion(ctx, tc, pipe, "cron.trigger", resource.Version{
+			Version: map[string]interface{}{"date": "seed"},
+		})
+		svc.CreateResourceVersion(ctx, tc, pipe, "cron.trigger", resource.Version{
+			Version: map[string]interface{}{"date": "v2"},
+		})
+	}
+
+	// --- Generate team worker token for alpha ---
+	teamToken, err := svc.GenerateTeamWorkerToken(ctx, "alpha")
+	require.NoError(t, err)
+
+	// Global worker token
+	globalToken := generateTestWorkerJWT(jwtSecret)
+
+	// --- Start team worker for alpha ---
+	teamHTTPClient, err := client.New(fmt.Sprintf("http://%s", addr), teamToken)
+	require.NoError(t, err)
+	teamGRPCConn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { teamGRPCConn.Close() })
+	teamGRPCClient := workerv1.NewWorkerServiceClient(teamGRPCConn)
+	teamWorker := worker.NewGRPC(teamHTTPClient, teamGRPCClient, logger.With("worker", "team-alpha"),
+		"team-alpha-worker", "test", "", 1, teamToken, addr, nil, false)
+	go teamWorker.Run(ctx)
+
+	// --- Start global worker ---
+	globalHTTPClient, err := client.New(fmt.Sprintf("http://%s", addr), globalToken)
+	require.NoError(t, err)
+	globalGRPCConn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { globalGRPCConn.Close() })
+	globalGRPCClient := workerv1.NewWorkerServiceClient(globalGRPCConn)
+	globalWorker := worker.NewGRPC(globalHTTPClient, globalGRPCClient, logger.With("worker", "global"),
+		"global-worker", "test", "", 1, globalToken, addr, nil, false)
+	go globalWorker.Run(ctx)
+
+	// Wait for both workers to connect
+	require.Eventually(t, func() bool {
+		return streamMgr.ConnectedCount() >= 2
+	}, 5*time.Second, 50*time.Millisecond, "both workers should connect")
+
+	// Verify team worker stream has correct team canonical
+	require.True(t, streamMgr.HasTeamWorkers("alpha"), "stream manager should know alpha has team workers")
+	require.False(t, streamMgr.HasTeamWorkers("beta"), "beta should not have team workers")
+
+	// --- Trigger builds on both teams ---
+	err = svc.TriggerPipelineJob(ctx, "alpha", "alpha-pipe", "test-job")
+	require.NoError(t, err)
+	err = svc.TriggerPipelineJob(ctx, "beta", "beta-pipe", "test-job")
+	require.NoError(t, err)
+
+	// --- Wait for both builds to complete ---
+	require.Eventually(t, func() bool {
+		alphaBuilds, _, _ := svc.ListJobBuilds(ctx, "alpha", "alpha-pipe", "test-job", nil, nil, 0)
+		betaBuilds, _, _ := svc.ListJobBuilds(ctx, "beta", "beta-pipe", "test-job", nil, nil, 0)
+		if len(alphaBuilds) == 0 || len(betaBuilds) == 0 {
+			return false
+		}
+		return alphaBuilds[0].Status == build.Succeeded && betaBuilds[0].Status == build.Succeeded
+	}, 15*time.Second, 200*time.Millisecond, "both builds should succeed")
+
+	// --- Verify worker DB records show correct team_canonical ---
+	workers, err := svc.ListWorkers(ctx)
+	require.NoError(t, err)
+
+	for _, wk := range workers {
+		switch wk.Name {
+		case "team-alpha-worker":
+			assert.Equal(t, "alpha", wk.TeamCanonical, "team worker should have team_canonical=alpha in DB")
+		case "global-worker":
+			assert.Empty(t, wk.TeamCanonical, "global worker should have empty team_canonical in DB")
+		}
+	}
 }
