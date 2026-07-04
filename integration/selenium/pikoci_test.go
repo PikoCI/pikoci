@@ -335,7 +335,13 @@ func TestPikoCI(t *testing.T) {
 				return strings.Contains(cls, "active")
 			}, 10*time.Second)
 
-			// Should see "Generate Worker Token" button (no token yet)
+			// Wait for WorkersTab content to load (useEffect makes an API call,
+			// component returns null until response arrives)
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				_, err := wd.FindElement(selenium.ByCSSSelector, "#generate-worker-token")
+				return err == nil
+			}, 5*time.Second)
+
 			genBtn, err := wd.FindElement(selenium.ByCSSSelector, "#generate-worker-token")
 			require.NoError(t, err, "should see Generate Worker Token button")
 
@@ -372,19 +378,21 @@ func TestPikoCI(t *testing.T) {
 
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Workers"), 5*time.Second)
 
-			// Verify "Team" column header exists
+			// Verify "Team" column header exists (added by worker team isolation)
 			headers, err := wd.FindElements(selenium.ByCSSSelector, "table thead th")
 			require.NoError(t, err)
 
+			var headerTexts []string
 			var foundTeamHeader bool
 			for _, h := range headers {
 				txt, _ := h.Text()
+				headerTexts = append(headerTexts, txt)
 				if txt == "Team" {
 					foundTeamHeader = true
-					break
 				}
 			}
-			require.True(t, foundTeamHeader, "Workers table should have a Team column header")
+			require.True(t, foundTeamHeader,
+				"Workers table should have a Team column header, found headers: %v", headerTexts)
 		})
 		t.Run("Delete Team", func(t *testing.T) {
 			tmsBtn, err := wd.FindElement(selenium.ByLinkText, "Teams")
