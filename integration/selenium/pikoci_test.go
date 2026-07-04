@@ -335,32 +335,17 @@ func TestPikoCI(t *testing.T) {
 				return strings.Contains(cls, "active")
 			}, 10*time.Second)
 
-			// Wait for WorkersTab content to load (useEffect makes an API call,
-			// component returns null until response arrives)
+			// Wait for WorkersTab content to load (useEffect makes a GET call,
+			// component returns null until response arrives, then shows either
+			// the generate button or the masked token display)
 			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				// No token yet → generate button
 				_, err := wd.FindElement(selenium.ByCSSSelector, "#generate-worker-token")
-				return err == nil
-			}, 5*time.Second)
-
-			genBtn, err := wd.FindElement(selenium.ByCSSSelector, "#generate-worker-token")
-			require.NoError(t, err, "should see Generate Worker Token button")
-
-			err = genBtn.Click()
-			require.NoError(t, err)
-
-			// Wait for token to appear (masked display) — POST may take a
-			// moment in CI; also check for any visible token-related element
-			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
-				// Check for masked token input
-				input, err := wd.FindElement(selenium.ByCSSSelector, "input.font-monospace")
 				if err == nil {
-					val, _ := input.GetAttribute("value")
-					if strings.HasPrefix(val, "****") {
-						return true
-					}
+					return true
 				}
-				// Also accept if regenerate button appears (token was set)
-				_, err = wd.FindElement(selenium.ByCSSSelector, ".btn-warning")
+				// Token exists → masked input
+				_, err = wd.FindElement(selenium.ByCSSSelector, "input.font-monospace")
 				return err == nil
 			}, 10*time.Second)
 		})

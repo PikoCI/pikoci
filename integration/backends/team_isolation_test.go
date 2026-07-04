@@ -83,12 +83,12 @@ func TestTeamWorkerOnlyGetsTeamWork(t *testing.T) {
 
 	pipeA := []byte(`job "build" {}`)
 	pipeB := []byte(`job "build" {}`)
-	svc.CreatePipeline(ctx, "teama", "pipeA", pipeA, nil)
-	svc.CreatePipeline(ctx, "teamb", "pipeB", pipeB, nil)
+	svc.CreatePipeline(ctx, "teama", "pipe-a", pipeA, nil)
+	svc.CreatePipeline(ctx, "teamb", "pipe-b", pipeB, nil)
 
 	// Create pending builds on both teams
-	svc.CreateJobBuild(ctx, "teama", "pipeA", "build", build.Build{})
-	svc.CreateJobBuild(ctx, "teamb", "pipeB", "build", build.Build{})
+	svc.CreateJobBuild(ctx, "teama", "pipe-a", "build", build.Build{})
+	svc.CreateJobBuild(ctx, "teamb", "pipe-b", "build", build.Build{})
 
 	// Team worker for teamA should only get teamA's work
 	wc := workitem.WorkerContext{TeamCanonical: "teama"}
@@ -96,7 +96,7 @@ func TestTeamWorkerOnlyGetsTeamWork(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, item)
 	assert.Equal(t, "teama", item.Body.TeamCanonical)
-	assert.Equal(t, "pipeA", item.Body.PipelineCanonical)
+	assert.Equal(t, "pipe-a", item.Body.PipelineCanonical)
 
 	// teamA worker should not get teamB's work (no more teamA work)
 	item, err = svc.NextWork(ctx, wc)
