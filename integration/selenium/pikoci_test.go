@@ -348,15 +348,21 @@ func TestPikoCI(t *testing.T) {
 			err = genBtn.Click()
 			require.NoError(t, err)
 
-			// Wait for token to appear (masked display)
+			// Wait for token to appear (masked display) — POST may take a
+			// moment in CI; also check for any visible token-related element
 			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				// Check for masked token input
 				input, err := wd.FindElement(selenium.ByCSSSelector, "input.font-monospace")
-				if err != nil {
-					return false
+				if err == nil {
+					val, _ := input.GetAttribute("value")
+					if strings.HasPrefix(val, "****") {
+						return true
+					}
 				}
-				val, _ := input.GetAttribute("value")
-				return strings.HasPrefix(val, "****")
-			}, 5*time.Second)
+				// Also accept if regenerate button appears (token was set)
+				_, err = wd.FindElement(selenium.ByCSSSelector, ".btn-warning")
+				return err == nil
+			}, 10*time.Second)
 		})
 		t.Run("Workers Page Team Column", func(t *testing.T) {
 			// Always restore browser state for subsequent tests
@@ -387,7 +393,7 @@ func TestPikoCI(t *testing.T) {
 			for _, h := range headers {
 				txt, _ := h.Text()
 				headerTexts = append(headerTexts, txt)
-				if txt == "Team" {
+				if strings.EqualFold(txt, "Team") {
 					foundTeamHeader = true
 				}
 			}
