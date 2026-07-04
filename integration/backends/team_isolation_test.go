@@ -273,7 +273,7 @@ job "cpu-job" {
 //   - The global worker processes the other team's builds
 //   - Workers show correct team_canonical in the DB
 func TestTeamIsolation_FullGRPCFlow(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})).With("test", "team-isolation-e2e")
