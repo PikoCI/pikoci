@@ -183,6 +183,12 @@ export const fetchWorkers = () => api('/workers').then(r => r.data);
 export const fetchWorkersHealth = () => api('/workers/health');
 export const deleteWorker = (name) => api('/workers/' + name, { method: 'DELETE' });
 
+// --- Team Worker Tokens ---
+export const generateTeamWorkerToken = (tc) =>
+  api('/teams/' + tc + '/worker-token', { method: 'POST' }).then(r => r.token);
+export const getTeamWorkerToken = (tc) =>
+  api('/teams/' + tc + '/worker-token').then(r => r.token);
+
 // --- Webhooks ---
 export const regenerateWebhookToken = (tc, pn, rCan) =>
   api('/teams/' + tc + '/pipelines/' + pn + '/resources/' + rCan + '/webhook_token', { method: 'POST' });

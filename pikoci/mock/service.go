@@ -401,6 +401,21 @@ func (mr *ServiceMockRecorder) FindOldestPendingBuild(ctx, tc, pn, jn any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindOldestPendingBuild", reflect.TypeOf((*Service)(nil).FindOldestPendingBuild), ctx, tc, pn, jn)
 }
 
+// GenerateTeamWorkerToken mocks base method.
+func (m *Service) GenerateTeamWorkerToken(ctx context.Context, tc string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateTeamWorkerToken", ctx, tc)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateTeamWorkerToken indicates an expected call of GenerateTeamWorkerToken.
+func (mr *ServiceMockRecorder) GenerateTeamWorkerToken(ctx, tc any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateTeamWorkerToken", reflect.TypeOf((*Service)(nil).GenerateTeamWorkerToken), ctx, tc)
+}
+
 // GetBuildReport mocks base method.
 func (m *Service) GetBuildReport(ctx context.Context, tc, pn, jn, buildNumber string) (*build.BuildReport, error) {
 	m.ctrl.T.Helper()
@@ -594,6 +609,21 @@ func (m *Service) GetTeam(ctx context.Context, tc string) (*team.WithMembers, er
 func (mr *ServiceMockRecorder) GetTeam(ctx, tc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTeam", reflect.TypeOf((*Service)(nil).GetTeam), ctx, tc)
+}
+
+// GetTeamWorkerToken mocks base method.
+func (m *Service) GetTeamWorkerToken(ctx context.Context, tc string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTeamWorkerToken", ctx, tc)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTeamWorkerToken indicates an expected call of GetTeamWorkerToken.
+func (mr *ServiceMockRecorder) GetTeamWorkerToken(ctx, tc any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTeamWorkerToken", reflect.TypeOf((*Service)(nil).GetTeamWorkerToken), ctx, tc)
 }
 
 // GetUser mocks base method.

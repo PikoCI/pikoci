@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/build"
@@ -20,6 +21,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/team"
 	"github.com/pikoci/pikoci/pikoci/trigger"
 	"github.com/pikoci/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/wkr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -2653,6 +2655,123 @@ func TestListAuditLog_WithDateAndMultiFilters(t *testing.T) {
 		"&pipeline=deploy&pipeline=staging"+
 		"&since=2026-01-01T00:00:00Z&until=2026-12-31T23:59:59Z",
 		e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+// ===== Team Worker Token Handler Tests =====
+
+func TestGenerateTeamWorkerToken_Success(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	e.svc.EXPECT().GenerateTeamWorkerToken(gomock.Any(), "main").Return("eyJhbG...", nil)
+
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/teams/main/worker-token", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got GenerateTeamWorkerTokenResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Equal(t, "eyJhbG...", got.Token)
+}
+
+func TestGenerateTeamWorkerToken_ServiceError(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	e.svc.EXPECT().GenerateTeamWorkerToken(gomock.Any(), "main").Return("", fmt.Errorf("db error"))
+
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/teams/main/worker-token", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	var got GenerateTeamWorkerTokenResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Contains(t, got.Err, "db error")
+}
+
+func TestGetTeamWorkerToken_Success(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	e.svc.EXPECT().GetTeamWorkerToken(gomock.Any(), "main").Return("eyJhbG...", nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/worker-token", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got GetTeamWorkerTokenResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Equal(t, "eyJhbG...", got.Token)
+}
+
+func TestGetTeamWorkerToken_NoToken(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	e.svc.EXPECT().GetTeamWorkerToken(gomock.Any(), "main").Return("", nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/worker-token", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got GetTeamWorkerTokenResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Empty(t, got.Token)
+}
+
+// TestWorkerHeartbeat_TeamScoped verifies that a team-scoped worker JWT
+// extracts team_canonical from claims and passes it to WorkerHeartbeat.
+func TestWorkerHeartbeat_TeamScoped(t *testing.T) {
+	e := newTestEnv(t)
+
+	// Sign a team-scoped worker JWT
+	workerToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"is_from_worker": true,
+		"team_canonical": "teama",
+		"salt":           "test-salt",
+	})
+	workerJWT, err := workerToken.SignedString(e.secret)
+	require.NoError(t, err)
+
+	// Expect heartbeat to be called with TeamCanonical set
+	e.svc.EXPECT().WorkerHeartbeat(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx interface{}, w interface{}) error {
+			wk := w.(wkr.Worker)
+			assert.Equal(t, "team-worker-1", wk.Name)
+			assert.Equal(t, "teama", wk.TeamCanonical)
+			return nil
+		})
+
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/workers/heartbeat",
+		workerJWT, `{"name":"team-worker-1","hostname":"h1","os":"linux","arch":"amd64"}`)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+// TestWorkerHeartbeat_GlobalWorker verifies that a global worker JWT
+// results in empty TeamCanonical on the worker.
+func TestWorkerHeartbeat_GlobalWorker(t *testing.T) {
+	e := newTestEnv(t)
+
+	workerToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"is_from_worker": true,
+	})
+	workerJWT, err := workerToken.SignedString(e.secret)
+	require.NoError(t, err)
+
+	e.svc.EXPECT().WorkerHeartbeat(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx interface{}, w interface{}) error {
+			wk := w.(wkr.Worker)
+			assert.Equal(t, "global-worker-1", wk.Name)
+			assert.Empty(t, wk.TeamCanonical)
+			return nil
+		})
+
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/workers/heartbeat",
+		workerJWT, `{"name":"global-worker-1","hostname":"h1","os":"linux","arch":"amd64"}`)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)

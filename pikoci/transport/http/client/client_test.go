@@ -2859,3 +2859,69 @@ func TestUpdateApiTokenLastUsed_ClientStub(t *testing.T) {
 	// Should not panic — it's a no-op
 	c.UpdateApiTokenLastUsed(context.Background(), 1)
 }
+
+func TestGenerateTeamWorkerToken(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/worker-token", func(w http.ResponseWriter, req *http.Request) {
+		assert.Equal(t, "POST", req.Method)
+		jsonHandler(w, thttp.GenerateTeamWorkerTokenResponse{Token: "eyJhbG..."})
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	token, err := c.GenerateTeamWorkerToken(context.Background(), "main")
+	require.NoError(t, err)
+	assert.Equal(t, "eyJhbG...", token)
+}
+
+func TestGenerateTeamWorkerToken_Error(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/worker-token", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.GenerateTeamWorkerTokenResponse{Err: "not admin"})
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	_, err = c.GenerateTeamWorkerToken(context.Background(), "main")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not admin")
+}
+
+func TestGetTeamWorkerToken(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/worker-token", func(w http.ResponseWriter, req *http.Request) {
+		assert.Equal(t, "GET", req.Method)
+		jsonHandler(w, thttp.GetTeamWorkerTokenResponse{Token: "eyJhbG..."})
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	token, err := c.GetTeamWorkerToken(context.Background(), "main")
+	require.NoError(t, err)
+	assert.Equal(t, "eyJhbG...", token)
+}
+
+func TestGetTeamWorkerToken_Error(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/worker-token", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.GetTeamWorkerTokenResponse{Err: "not found"})
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	_, err = c.GetTeamWorkerToken(context.Background(), "main")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}

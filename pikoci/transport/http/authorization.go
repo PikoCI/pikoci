@@ -84,11 +84,13 @@ var (
 		RejectBuild:  requireRole(role.Maintain),
 
 		// Admin routes
-		CreateTeamMember: requireRole(role.Admin),
-		UpdateTeamMember: requireRole(role.Admin),
-		DeleteTeamMember: requireRole(role.Admin),
-		UpdateTeam: requireRole(role.Admin),
-		DeleteTeam: requireRole(role.Admin),
+		CreateTeamMember:        requireRole(role.Admin),
+		UpdateTeamMember:        requireRole(role.Admin),
+		DeleteTeamMember:        requireRole(role.Admin),
+		UpdateTeam:              requireRole(role.Admin),
+		DeleteTeam:              requireRole(role.Admin),
+		GenerateTeamWorkerToken: requireRole(role.Admin),
+		GetTeamWorkerToken:      requireRole(role.Admin),
 
 		// Global admin routes
 		CreateUser:     globalAdmin,

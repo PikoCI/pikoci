@@ -15,6 +15,7 @@ type WorkerStream struct {
 	MaxJobs       int32
 	Tags          []string
 	ExclusiveTags bool
+	TeamCanonical string
 	Send          chan *workerv1.ServerMessage
 	Done          chan struct{}
 
@@ -23,12 +24,13 @@ type WorkerStream struct {
 }
 
 // NewWorkerStream creates a WorkerStream for the given worker.
-func NewWorkerStream(workerID string, maxJobs int32, tags []string, exclusiveTags bool) *WorkerStream {
+func NewWorkerStream(workerID string, maxJobs int32, tags []string, exclusiveTags bool, teamCanonical string) *WorkerStream {
 	return &WorkerStream{
 		WorkerID:      workerID,
 		MaxJobs:       maxJobs,
 		Tags:          tags,
 		ExclusiveTags: exclusiveTags,
+		TeamCanonical: teamCanonical,
 		Send:          make(chan *workerv1.ServerMessage, 16),
 		Done:          make(chan struct{}),
 		runningBuilds: make(map[string]struct{}),
@@ -156,4 +158,16 @@ func (m *WorkerStreamManager) ConnectedCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.streams)
+}
+
+// HasTeamWorkers returns true if any connected worker is scoped to the given team.
+func (m *WorkerStreamManager) HasTeamWorkers(tc string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, ws := range m.streams {
+		if ws.TeamCanonical == tc {
+			return true
+		}
+	}
+	return false
 }

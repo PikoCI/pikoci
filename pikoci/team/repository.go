@@ -25,4 +25,9 @@ type Repository interface {
 	FindMember(ctx context.Context, tc, mc string) (*Member, error)
 	// DeleteMember removes a member from a team.
 	DeleteMember(ctx context.Context, tc, mc string) error
+
+	// FindWorkerTokenSalt returns the worker token salt for a team.
+	FindWorkerTokenSalt(ctx context.Context, tc string) (string, error)
+	// UpdateWorkerTokenSalt sets the worker token salt for a team.
+	UpdateWorkerTokenSalt(ctx context.Context, tc, salt string) error
 }

@@ -261,6 +261,13 @@ type Service interface {
 	// ListAuditLog returns audit log entries for the given team matching the
 	// filter options. The boolean return value indicates whether more results exist.
 	ListAuditLog(ctx context.Context, tc string, opts auditlog.FilterOpts) ([]*auditlog.Entry, bool, error)
+
+	// GenerateTeamWorkerToken generates (or regenerates) a team-scoped worker
+	// token by creating a new salt, storing it, and signing a JWT.
+	GenerateTeamWorkerToken(ctx context.Context, tc string) (string, error)
+	// GetTeamWorkerToken returns the current team worker token, or empty string
+	// if none has been generated.
+	GetTeamWorkerToken(ctx context.Context, tc string) (string, error)
 }
 
 // PikoCI is the primary implementation of the Service interface. It coordinates
@@ -308,6 +315,13 @@ type PikoCI struct {
 	// via gRPC streams. It is nil when no gRPC server is running.
 	GRPCServer interface {
 		CancelBuild(buildID string, reason string) error
+	}
+
+	// TeamWorkerChecker reports whether a team has online team-scoped workers.
+	// Used by NextWork to let global workers defer to team workers.
+	// Nil means no team workers exist (e.g. embedded worker mode).
+	TeamWorkerChecker interface {
+		HasTeamWorkers(tc string) bool
 	}
 
 	scheduler *scheduler.Scheduler

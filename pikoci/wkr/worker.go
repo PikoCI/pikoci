@@ -21,11 +21,12 @@ type Worker struct {
 	Version     string    `json:"version"`
 	Commit      string    `json:"commit"`
 	Concurrency int       `json:"concurrency"`
-	Tags          []string  `json:"tags"`
-	ExclusiveTags bool      `json:"exclusive_tags"`
-	StartedAt     time.Time `json:"started_at"`
-	LastPingAt    time.Time `json:"last_ping_at"`
-	Status        Status    `json:"status"`
+	Tags            []string  `json:"tags"`
+	ExclusiveTags   bool      `json:"exclusive_tags"`
+	TeamCanonical   string    `json:"team_canonical"`
+	StartedAt       time.Time `json:"started_at"`
+	LastPingAt      time.Time `json:"last_ping_at"`
+	Status          Status    `json:"status"`
 }
 
 // ComputeStatus sets the worker's Status based on how recently it pinged.
