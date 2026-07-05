@@ -10,15 +10,6 @@
     <link href="/css/pikoci.css" rel="stylesheet" />
     <link href="/css/bootstrap-icons.min.css" rel="stylesheet" />
     <link href="/images/favicon.svg" rel="icon" type="image/svg+xml"/>
-  </head>
-  <body>
-    <script>
-      if (localStorage.getItem('piko-theme') === 'dark') {
-        document.documentElement.setAttribute('data-theme', 'dark');
-      }
-    </script>
-
-    <div id="app"></div>
 
     <script type="importmap">
     {
@@ -35,6 +26,46 @@
       }
     }
     </script>
+
+    <!-- Modulepreload hints: collapse 4 discovery rounds into 1 parallel fetch -->
+    <!-- Vendor modules -->
+    <link rel="modulepreload" href="/js/vendor/preact.module.js" />
+    <link rel="modulepreload" href="/js/vendor/preact/hooks.module.js" />
+    <link rel="modulepreload" href="/js/vendor/htm.module.js" />
+    <link rel="modulepreload" href="/js/vendor/htm-preact.module.js" />
+    <link rel="modulepreload" href="/js/vendor/preact-router.module.js" />
+    <link rel="modulepreload" href="/js/vendor/preact-router-match.module.js" />
+    <link rel="modulepreload" href="/js/vendor/signals.module.js" />
+    <link rel="modulepreload" href="/js/vendor/signals-core.module.js" />
+    <!-- Core app modules -->
+    <link rel="modulepreload" href="/js/app/state.js" />
+    <link rel="modulepreload" href="/js/app/api.js" />
+    <link rel="modulepreload" href="/js/app/hooks.js" />
+    <link rel="modulepreload" href="/js/app/toast.js" />
+    <link rel="modulepreload" href="/js/app/utils.js" />
+    <link rel="modulepreload" href="/js/app/graph-zoom.js" />
+    <!-- Component modules -->
+    <link rel="modulepreload" href="/js/app/components/Layout.js" />
+    <link rel="modulepreload" href="/js/app/components/Login.js" />
+    <link rel="modulepreload" href="/js/app/components/Teams.js" />
+    <link rel="modulepreload" href="/js/app/components/PipelineList.js" />
+    <link rel="modulepreload" href="/js/app/components/PipelineShow.js" />
+    <link rel="modulepreload" href="/js/app/components/PipelineGraph.js" />
+    <link rel="modulepreload" href="/js/app/components/PipelineListView.js" />
+    <link rel="modulepreload" href="/js/app/components/Editor.js" />
+    <link rel="modulepreload" href="/js/app/components/Jobs.js" />
+    <link rel="modulepreload" href="/js/app/components/Resources.js" />
+    <link rel="modulepreload" href="/js/app/components/Workers.js" />
+    <link rel="modulepreload" href="/js/app/components/Users.js" />
+  </head>
+  <body>
+    <script>
+      if (localStorage.getItem('piko-theme') === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    </script>
+
+    <div id="app"></div>
 
     <script type="text/javascript" src="/js/bootstrap.bundle.min.js"></script>
     <script type="text/javascript" src="/js/viz-global.js"></script>

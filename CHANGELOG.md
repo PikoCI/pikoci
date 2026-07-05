@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Role rename**: Viewer→Read, Operator→Write, Maintainer→Maintain to match GitHub's model. DB migration auto-renames stored values. CLI, UI, and docs updated.
+- **Modulepreload hints**: Add `<link rel="modulepreload">` for all 27 ES modules, collapsing 4 discovery rounds to 1 parallel fetch ([#575](https://github.com/PikoCI/pikoci/issues/575)).
 
 ### Added
 
@@ -19,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Audit log**: Append-only team audit trail with 16 event types, filterable UI/CLI/API, cursor-based pagination. Read+ access ([#532](https://github.com/PikoCI/pikoci/issues/532)).
 - **Secrets masking in build logs**: Secret values replaced with `***` in stdout/stderr. Real-time and stored output. Skips values < 3 chars ([#147](https://github.com/PikoCI/pikoci/issues/147)).
 - **Build report export**: JSON report for any build containing status, steps, logs, approvals, and version data. Available via API (`GET .../builds/{bn}/report`), CLI (`builds report`), and UI Export button. Read+ access ([#531](https://github.com/PikoCI/pikoci/issues/531)).
-- **Worker team isolation**: Team-scoped worker tokens (JWT with salt for revocation) restrict workers to only process their team's builds. Global workers automatically defer to teams with dedicated workers. Admin-only token management via UI (Team Settings > Workers tab), CLI (`teams worker-token`), and API. Workers dashboard shows team association ([#12](https://github.com/PikoCI/pikoci/issues/12), [#98](https://github.com/PikoCI/pikoci/issues/98)).
+- **Worker team isolation**: Team-scoped worker tokens restrict workers to their team's builds with automatic global-worker deferral ([#12](https://github.com/PikoCI/pikoci/issues/12), [#98](https://github.com/PikoCI/pikoci/issues/98)).
 
 ### Fixed
 
