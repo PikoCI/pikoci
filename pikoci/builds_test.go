@@ -52,12 +52,12 @@ func TestListJobBuilds(t *testing.T) {
 	ctx := context.TODO()
 
 	// limit=0 fetches all, DB returns DESC order
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
 		{ID: 2, BuildNumber: "2", Status: build.Started},
 		{ID: 1, BuildNumber: "1", Status: build.Succeeded},
 	}, nil)
 
-	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 0)
+	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, builds, 2)
 	assert.False(t, hasMore)
@@ -72,13 +72,13 @@ func TestListJobBuilds_WithLimit(t *testing.T) {
 	ctx := context.TODO()
 
 	// DB returns limit+1 items (3) when we ask for limit=2 → hasMore=true
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(3)).Return([]*build.Build{
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(3), ([]build.Status)(nil)).Return([]*build.Build{
 		{ID: 5, BuildNumber: "5"},
 		{ID: 4, BuildNumber: "4"},
 		{ID: 3, BuildNumber: "3"},
 	}, nil)
 
-	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 2)
+	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 2, nil)
 	require.NoError(t, err)
 	require.Len(t, builds, 2)
 	assert.True(t, hasMore)
@@ -92,12 +92,12 @@ func TestListJobBuilds_Before(t *testing.T) {
 	ctx := context.TODO()
 
 	before := uint32(4)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", &before, (*uint32)(nil), uint32(3)).Return([]*build.Build{
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", &before, (*uint32)(nil), uint32(3), ([]build.Status)(nil)).Return([]*build.Build{
 		{ID: 3, BuildNumber: "3"},
 		{ID: 2, BuildNumber: "2"},
 	}, nil)
 
-	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", &before, nil, 2)
+	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", &before, nil, 2, nil)
 	require.NoError(t, err)
 	require.Len(t, builds, 2)
 	assert.False(t, hasMore)
@@ -110,12 +110,12 @@ func TestListJobBuilds_After(t *testing.T) {
 
 	after := uint32(3)
 	// DB returns ASC order for after queries
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), &after, uint32(0)).Return([]*build.Build{
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), &after, uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
 		{ID: 4, BuildNumber: "4"},
 		{ID: 5, BuildNumber: "5"},
 	}, nil)
 
-	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, &after, 0)
+	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, &after, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, builds, 2)
 	assert.False(t, hasMore)
@@ -546,13 +546,13 @@ func TestListJobBuilds_InvalidCanonical(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	_, _, err := s.S.ListJobBuilds(ctx, "INVALID", "my-pipeline", "my-job", nil, nil, 0)
+	_, _, err := s.S.ListJobBuilds(ctx, "INVALID", "my-pipeline", "my-job", nil, nil, 0, nil)
 	require.Error(t, err)
 
-	_, _, err = s.S.ListJobBuilds(ctx, "main", "INVALID", "my-job", nil, nil, 0)
+	_, _, err = s.S.ListJobBuilds(ctx, "main", "INVALID", "my-job", nil, nil, 0, nil)
 	require.Error(t, err)
 
-	_, _, err = s.S.ListJobBuilds(ctx, "main", "my-pipeline", "INVALID", nil, nil, 0)
+	_, _, err = s.S.ListJobBuilds(ctx, "main", "my-pipeline", "INVALID", nil, nil, 0, nil)
 	require.Error(t, err)
 }
 

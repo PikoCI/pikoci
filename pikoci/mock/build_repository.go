@@ -193,18 +193,33 @@ func (mr *BuildRepositoryMockRecorder) FailStartedBuilds(ctx, reason any) *gomoc
 }
 
 // Filter mocks base method.
-func (m *BuildRepository) Filter(ctx context.Context, tc, pn, jn string, before, after *uint32, limit uint32) ([]*build.Build, error) {
+func (m *BuildRepository) Filter(ctx context.Context, tc, pn, jn string, before, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Filter", ctx, tc, pn, jn, before, after, limit)
+	ret := m.ctrl.Call(m, "Filter", ctx, tc, pn, jn, before, after, limit, statuses)
 	ret0, _ := ret[0].([]*build.Build)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Filter indicates an expected call of Filter.
-func (mr *BuildRepositoryMockRecorder) Filter(ctx, tc, pn, jn, before, after, limit any) *gomock.Call {
+func (mr *BuildRepositoryMockRecorder) Filter(ctx, tc, pn, jn, before, after, limit, statuses any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Filter", reflect.TypeOf((*BuildRepository)(nil).Filter), ctx, tc, pn, jn, before, after, limit)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Filter", reflect.TypeOf((*BuildRepository)(nil).Filter), ctx, tc, pn, jn, before, after, limit, statuses)
+}
+
+// FilterByPipeline mocks base method.
+func (m *BuildRepository) FilterByPipeline(ctx context.Context, tc, pn string, statuses []build.Status) (map[string][]*build.Build, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FilterByPipeline", ctx, tc, pn, statuses)
+	ret0, _ := ret[0].(map[string][]*build.Build)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FilterByPipeline indicates an expected call of FilterByPipeline.
+func (mr *BuildRepositoryMockRecorder) FilterByPipeline(ctx, tc, pn, statuses any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilterByPipeline", reflect.TypeOf((*BuildRepository)(nil).FilterByPipeline), ctx, tc, pn, statuses)
 }
 
 // Find mocks base method.

@@ -177,7 +177,7 @@ job "grpc-test" {
 
 	// --- Wait for build to complete ---
 	require.Eventually(t, func() bool {
-		builds, _, err := svc.ListJobBuilds(ctx, "main", "grpc-test", "grpc-test", nil, nil, 0)
+		builds, _, err := svc.ListJobBuilds(ctx, "main", "grpc-test", "grpc-test", nil, nil, 0, nil)
 		if err != nil || len(builds) == 0 {
 			return false
 		}
@@ -185,7 +185,7 @@ job "grpc-test" {
 	}, 15*time.Second, 200*time.Millisecond, "build should complete")
 
 	// --- Verify build succeeded with steps ---
-	builds, _, err := svc.ListJobBuilds(ctx, "main", "grpc-test", "grpc-test", nil, nil, 0)
+	builds, _, err := svc.ListJobBuilds(ctx, "main", "grpc-test", "grpc-test", nil, nil, 0, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, builds)
 
@@ -450,7 +450,7 @@ job "drain-test" {
 
 	// Wait until the build is started
 	require.Eventually(t, func() bool {
-		builds, _, err := svc.ListJobBuilds(ctx, "main", "drain-test", "drain-test", nil, nil, 0)
+		builds, _, err := svc.ListJobBuilds(ctx, "main", "drain-test", "drain-test", nil, nil, 0, nil)
 		if err != nil || len(builds) == 0 {
 			return false
 		}
@@ -484,7 +484,7 @@ job "drain-test" {
 	}
 
 	// Verify build reached terminal status
-	builds, _, err := svc.ListJobBuilds(ctx, "main", "drain-test", "drain-test", nil, nil, 0)
+	builds, _, err := svc.ListJobBuilds(ctx, "main", "drain-test", "drain-test", nil, nil, 0, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, builds)
 	b := builds[0]

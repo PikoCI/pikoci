@@ -1411,9 +1411,8 @@ func TestGetPipelineImage_HidesUnlinkedResources(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "build", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "github-check.ci", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, false, nil)
 	require.NoError(t, err)
@@ -1462,8 +1461,8 @@ func TestGetPipelineImage_QuotesHyphenatedName(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "hello-world").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "hello-world", "hello", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "hello-world", "cron.tick", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "hello-world", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "hello-world").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "hello-world", "dot", false, false, nil)
 	require.NoError(t, err)
@@ -1506,9 +1505,8 @@ func TestGetPipelineImage_ShowsLinkedResources(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "test", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, false, nil)
 	require.NoError(t, err)
@@ -1559,10 +1557,8 @@ func TestGetPipelineImage_PassedReusesPutOutputNode(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "artifact-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "artifact-pipeline", "build", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "artifact-pipeline", "deploy", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "artifact-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "artifact-pipeline", "artifact.output", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "artifact-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "artifact-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "artifact-pipeline", "dot", false, false, nil)
 	require.NoError(t, err)
@@ -1762,8 +1758,8 @@ func TestGetPipelineImage_JobStatusColors(t *testing.T) {
 
 			pp := makePipeline()
 			s.Pipelines.EXPECT().Find(ctx, "main", "p").Return(pp, nil)
-			s.Builds.EXPECT().Filter(ctx, "main", "p", "j", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return(tt.builds, nil)
-			s.Resources.EXPECT().FilterVersions(ctx, "main", "p", "cron.tick", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+			s.Builds.EXPECT().FilterByPipeline(ctx, "main", "p", ([]build.Status)(nil)).Return(map[string][]*build.Build{"j": tt.builds}, nil)
+			s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "p").Return(map[string]*resource.Version{}, nil)
 
 			img, err := s.S.GetPipelineImage(ctx, "main", "p", "dot", false, false, nil)
 			require.NoError(t, err)
@@ -2778,7 +2774,7 @@ func TestListPublicJobBuilds(t *testing.T) {
 	s.Pipelines.EXPECT().FindPublic(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
 		ID: 1, Canonical: "my-pipeline",
 	}, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
 		{
 			ID: 1, BuildNumber: "1", Status: build.Succeeded,
 			Steps: []build.Step{
@@ -2788,7 +2784,7 @@ func TestListPublicJobBuilds(t *testing.T) {
 		},
 	}, nil)
 
-	builds, hasMore, err := s.S.ListPublicJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 0)
+	builds, hasMore, err := s.S.ListPublicJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 0, nil)
 	require.NoError(t, err)
 	assert.False(t, hasMore)
 	require.Len(t, builds, 1)
@@ -3548,7 +3544,7 @@ func TestListPublicJobBuilds_NotFound(t *testing.T) {
 
 	s.Pipelines.EXPECT().FindPublic(ctx, "main", "my-pipeline").Return(nil, assert.AnError)
 
-	_, _, err := s.S.ListPublicJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 0)
+	_, _, err := s.S.ListPublicJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 0, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pipeline not found or not public")
 }
@@ -3636,8 +3632,8 @@ job "test" {
 `)
 
 	// No builds for the job
-	s.Builds.EXPECT().Filter(ctx, "main", "pikoci", "test", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "pikoci", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "pikoci", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "pikoci").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.CreatePipelineImage(ctx, "main", hclConfig, nil, "dot")
 	require.NoError(t, err)
@@ -3712,8 +3708,8 @@ job "test" {
 `)
 
 	// No builds for the job
-	s.Builds.EXPECT().Filter(ctx, "main", "pikoci", "test", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "pikoci", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "pikoci", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "pikoci").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.CreatePipelineImage(ctx, "main", hclConfig, nil, "image.dot")
 	require.NoError(t, err)
@@ -3743,8 +3739,8 @@ func TestGetPublicPipelineImage_DOT(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().FindPublic(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPublicPipelineImage(ctx, "main", "my-pipeline", "dot", false, false, nil)
 	require.NoError(t, err)
@@ -3834,8 +3830,8 @@ func TestGetPipelineImage_DOT(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, false, nil)
 	require.NoError(t, err)
@@ -3856,6 +3852,8 @@ func TestGetPipelineImage_FormatFromExtension(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "image.dot", false, false, nil)
 	require.NoError(t, err)
@@ -3876,6 +3874,8 @@ func TestGetPipelineImage_EmptyFormat(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "", false, false, nil)
 	require.NoError(t, err)
@@ -3926,22 +3926,12 @@ func TestGetPipelineImage_WithBuildStatuses(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	// succeeded-job has a terminal build
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "succeeded-job", gomock.Any(), gomock.Any(), gomock.Any()).Return([]*build.Build{
-		{ID: 1, BuildNumber: "1", Status: build.Succeeded},
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{
+		"succeeded-job": {{ID: 1, BuildNumber: "1", Status: build.Succeeded}},
+		"failed-job":    {{ID: 2, BuildNumber: "1", Status: build.Failed}},
+		"running-job":   {{ID: 3, BuildNumber: "1", Status: build.Started}},
 	}, nil)
-	// failed-job has a failed build
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "failed-job", gomock.Any(), gomock.Any(), gomock.Any()).Return([]*build.Build{
-		{ID: 2, BuildNumber: "1", Status: build.Failed},
-	}, nil)
-	// paused-job has no builds
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "paused-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	// running-job has a running build and a pending build
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "running-job", gomock.Any(), gomock.Any(), gomock.Any()).Return([]*build.Build{
-		{ID: 3, BuildNumber: "1", Status: build.Started},
-	}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, false, nil)
 	require.NoError(t, err)
@@ -3982,9 +3972,8 @@ func TestGetPipelineImage_WithPassedConstraints(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "upstream", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "downstream", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, false, nil)
 	require.NoError(t, err)
@@ -4016,8 +4005,8 @@ func TestGetPipelineImage_ResourceWithError(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, false, nil)
 	require.NoError(t, err)
@@ -4048,8 +4037,8 @@ func TestGetPipelineImage_PinnedResource(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, false, nil)
 	require.NoError(t, err)
@@ -4079,9 +4068,9 @@ func TestGetPipelineImage_ResourceTooltip(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{
-		{ID: 10, Version: map[string]interface{}{"ref": "abc1234", "sha": "deadbeef"}},
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{
+		"git.repo": {ID: 10, Version: map[string]interface{}{"ref": "abc1234", "sha": "deadbeef"}},
 	}, nil)
 	s.Builds.EXPECT().AggregateStatusByVersionIDs(ctx, []uint32{10}).Return(map[uint32]string{10: "succeeded"}, nil)
 
@@ -4115,8 +4104,8 @@ func TestGetPipelineImage_ResourceTooltipNoVersions(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, false, nil)
 	require.NoError(t, err)
@@ -4149,9 +4138,9 @@ func TestGetPipelineImage_ResourceTooltipNoStatus(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{
-		{ID: 5, Version: map[string]interface{}{"ref": "main"}},
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{
+		"git.repo": {ID: 5, Version: map[string]interface{}{"ref": "main"}},
 	}, nil)
 	s.Builds.EXPECT().AggregateStatusByVersionIDs(ctx, []uint32{5}).Return(nil, nil)
 
@@ -4433,9 +4422,12 @@ func TestListPipelineJobs_NoBuilds(t *testing.T) {
 			{ID: 2, Name: "job-b"},
 		},
 	}
+	activeStatuses := []build.Status{build.Started, build.Pending}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, tc, pn, "job-a", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
-	s.Builds.EXPECT().Filter(ctx, tc, pn, "job-b", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, completedStatuses).Return(map[string][]*build.Build{}, nil)
 
 	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
 	require.NoError(t, err)
@@ -4460,9 +4452,13 @@ func TestListPipelineJobs_SucceededBuild(t *testing.T) {
 		ID: 1, Name: pn, Canonical: pn,
 		Jobs: []job.Job{{ID: 1, Name: "build"}},
 	}
+	activeStatuses := []build.Status{build.Started, build.Pending}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, tc, pn, "build", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
-		{ID: 1, BuildNumber: "1", Status: build.Succeeded, Duration: time.Second, StartedAt: startedAt},
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, completedStatuses).Return(map[string][]*build.Build{
+		"build": {{ID: 1, BuildNumber: "1", Status: build.Succeeded, Duration: time.Second, StartedAt: startedAt}},
 	}, nil)
 
 	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
@@ -4487,9 +4483,13 @@ func TestListPipelineJobs_FailedBuild(t *testing.T) {
 		ID: 1, Name: pn, Canonical: pn,
 		Jobs: []job.Job{{ID: 1, Name: "test"}},
 	}
+	activeStatuses := []build.Status{build.Started, build.Pending}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, tc, pn, "test", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
-		{ID: 1, BuildNumber: "1", Status: build.Failed, Duration: 2 * time.Second, StartedAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)},
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, completedStatuses).Return(map[string][]*build.Build{
+		"test": {{ID: 1, BuildNumber: "1", Status: build.Failed, Duration: 2 * time.Second, StartedAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)}},
 	}, nil)
 
 	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
@@ -4510,10 +4510,14 @@ func TestListPipelineJobs_RunningBuild(t *testing.T) {
 		ID: 1, Name: pn, Canonical: pn,
 		Jobs: []job.Job{{ID: 1, Name: "deploy"}},
 	}
+	activeStatuses := []build.Status{build.Started, build.Pending}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, tc, pn, "deploy", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
-		{ID: 1, BuildNumber: "1", Status: build.Started},
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{
+		"deploy": {{ID: 1, BuildNumber: "1", Status: build.Started}},
 	}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, completedStatuses).Return(map[string][]*build.Build{}, nil)
 
 	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
 	require.NoError(t, err)
@@ -4534,10 +4538,14 @@ func TestListPipelineJobs_PendingBuild(t *testing.T) {
 		ID: 1, Name: pn, Canonical: pn,
 		Jobs: []job.Job{{ID: 1, Name: "gen"}},
 	}
+	activeStatuses := []build.Status{build.Started, build.Pending}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, tc, pn, "gen", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
-		{ID: 1, BuildNumber: "1", Status: build.Pending},
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{
+		"gen": {{ID: 1, BuildNumber: "1", Status: build.Pending}},
 	}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, completedStatuses).Return(map[string][]*build.Build{}, nil)
 
 	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
 	require.NoError(t, err)
@@ -4560,12 +4568,14 @@ func TestListPipelineJobs_MixedStatuses(t *testing.T) {
 			{ID: 2, Name: "job-fail"},
 		},
 	}
+	activeStatuses := []build.Status{build.Started, build.Pending}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, tc, pn, "job-ok", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
-		{ID: 1, BuildNumber: "1", Status: build.Succeeded, StartedAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)},
-	}, nil)
-	s.Builds.EXPECT().Filter(ctx, tc, pn, "job-fail", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
-		{ID: 2, BuildNumber: "1", Status: build.Failed, StartedAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)},
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, completedStatuses).Return(map[string][]*build.Build{
+		"job-ok":   {{ID: 1, BuildNumber: "1", Status: build.Succeeded, StartedAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)}},
+		"job-fail": {{ID: 2, BuildNumber: "1", Status: build.Failed, StartedAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)}},
 	}, nil)
 
 	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
@@ -4587,10 +4597,13 @@ func TestListPipelineJobs_RetryBuild(t *testing.T) {
 		ID: 1, Name: pn, Canonical: pn,
 		Jobs: []job.Job{{ID: 1, Name: "build"}},
 	}
+	activeStatuses := []build.Status{build.Started, build.Pending}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, tc, pn, "build", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
-		{ID: 2, BuildNumber: "1.1", Status: build.Succeeded, Duration: 5 * time.Second, StartedAt: startedAt},
-		{ID: 1, BuildNumber: "1", Status: build.Failed, Duration: 3 * time.Second, StartedAt: startedAt},
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, completedStatuses).Return(map[string][]*build.Build{
+		"build": {{ID: 2, BuildNumber: "1.1", Status: build.Succeeded, Duration: 5 * time.Second, StartedAt: startedAt}},
 	}, nil)
 
 	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
@@ -4615,10 +4628,12 @@ func TestListPipelineJobs_JobOrder(t *testing.T) {
 			{ID: 3, Name: "third"},
 		},
 	}
+	activeStatuses := []build.Status{build.Started, build.Pending}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, tc, pn, "first", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
-	s.Builds.EXPECT().Filter(ctx, tc, pn, "second", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
-	s.Builds.EXPECT().Filter(ctx, tc, pn, "third", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, completedStatuses).Return(map[string][]*build.Build{}, nil)
 
 	result, err := s.S.ListPipelineJobs(ctx, tc, pn)
 	require.NoError(t, err)
@@ -4640,9 +4655,13 @@ func TestListPublicPipelineJobs_Success(t *testing.T) {
 		ID: 1, Name: pn, Canonical: pn,
 		Jobs: []job.Job{{ID: 1, Name: "build"}},
 	}
+	activeStatuses := []build.Status{build.Started, build.Pending}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+
 	s.Pipelines.EXPECT().FindPublic(ctx, tc, pn).Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, tc, pn, "build", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
-		{ID: 1, BuildNumber: "1", Status: build.Succeeded, Duration: time.Second, StartedAt: startedAt},
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, completedStatuses).Return(map[string][]*build.Build{
+		"build": {{ID: 1, BuildNumber: "1", Status: build.Succeeded, Duration: time.Second, StartedAt: startedAt}},
 	}, nil)
 
 	result, err := s.S.ListPublicPipelineJobs(ctx, tc, pn)
@@ -4695,10 +4714,8 @@ func TestGetPipelineImage_HideIntermediates(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "build", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "deploy", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "artifact.output", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", true, false, nil)
 	require.NoError(t, err)
@@ -4757,10 +4774,8 @@ func TestGetPipelineImage_GroupParallel(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "build", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "lint", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "vet", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, true, nil)
 	require.NoError(t, err)
@@ -4807,9 +4822,8 @@ func TestGetPipelineImage_GroupParallel_SingleJob(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "build", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "deploy", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, true, nil)
 	require.NoError(t, err)
@@ -4857,11 +4871,8 @@ func TestGetPipelineImage_GroupParallel_WithHideIntermediates(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "build", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "lint", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "vet", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "artifact.output", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", true, true, nil)
 	require.NoError(t, err)
@@ -4917,11 +4928,8 @@ func TestGetPipelineImage_GroupParallel_EdgeRemapping(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "build", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "lint", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "vet", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "release", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", true, true, nil)
 	require.NoError(t, err)
@@ -4997,9 +5005,8 @@ func TestGetPipelineImage_WithVersionFilter(t *testing.T) {
 	s.Builds.EXPECT().FindGetVersions(ctx, uint32(10)).Return(map[string]uint32{"repo": versionID}, nil)
 	s.Builds.EXPECT().FindGetVersions(ctx, uint32(11)).Return(map[string]uint32{"repo": versionID}, nil)
 
-	// generateImage: FilterVersions for all resources in the pipeline (used for tooltips)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	// generateImage: LatestVersionByResources for all resources in the pipeline (used for tooltips)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, false, &versionID)
 	require.NoError(t, err)
@@ -5064,8 +5071,7 @@ func TestGetPipelineImage_WithVersionFilter_DoesNotMutatePipeline(t *testing.T) 
 		nil,
 	)
 	s.Builds.EXPECT().FindGetVersions(ctx, uint32(10)).Return(map[string]uint32{"repo": versionID}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "cron.timer", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	_, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, false, &versionID)
 	require.NoError(t, err)
@@ -5113,11 +5119,8 @@ func TestGetPipelineImage_GroupParallel_RootJobs(t *testing.T) {
 	}
 
 	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
-	// resolveJobVisuals is called twice per grouped job (once for coloring, once for the group node label)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "unit", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "lint", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "vet", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{}, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, true, nil)
 	require.NoError(t, err)

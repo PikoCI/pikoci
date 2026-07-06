@@ -135,11 +135,10 @@ func TestListPipelineResources(t *testing.T) {
 		{Name: "res1", Canonical: "res1"},
 		{Name: "res2", Canonical: "res2"},
 	}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "res1", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return([]*resource.Version{
-		{ID: 10, Version: map[string]interface{}{"ref": "abc"}},
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{
+		"res1": {ID: 10, Version: map[string]interface{}{"ref": "abc"}},
 	}, nil)
 	s.Builds.EXPECT().AggregateStatusByVersionIDs(ctx, []uint32{10}).Return(map[uint32]string{10: "succeeded"}, nil)
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "res2", (*uint32)(nil), (*uint32)(nil), uint32(1)).Return(nil, nil)
 
 	rs, err := s.S.ListPipelineResources(ctx, "main", "my-pipeline")
 	require.NoError(t, err)
@@ -224,7 +223,7 @@ func TestPinResourceVersion(t *testing.T) {
 			},
 		},
 	}, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), []build.Status{build.Pending}).Return([]*build.Build{
 		{ID: 1, BuildNumber: "1", Status: build.Pending, ResourceCanonical: "git.repo", VersionID: 20},
 	}, nil)
 	// The mismatched pending build (version 20 != pinned 10) should be cancelled
@@ -596,7 +595,7 @@ func TestCancelMismatchedPendingBuilds_NoMismatch(t *testing.T) {
 			},
 		},
 	}, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*build.Build{
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), []build.Status{build.Pending}).Return([]*build.Build{
 		{ID: 1, BuildNumber: "1", Status: build.Pending, ResourceCanonical: "git.repo", VersionID: 10},
 	}, nil)
 	// No Update call — build matches pinned version

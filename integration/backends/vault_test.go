@@ -214,7 +214,7 @@ job "deploy" {
 	// Wait for the build to finish
 	var builds []*build.Build
 	require.Eventually(t, func() bool {
-		builds, _, err = svc.ListJobBuilds(ctx, "main", "vault-e2e", "deploy", nil, nil, 0)
+		builds, _, err = svc.ListJobBuilds(ctx, "main", "vault-e2e", "deploy", nil, nil, 0, nil)
 		if err != nil || len(builds) == 0 {
 			return false
 		}

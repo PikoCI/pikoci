@@ -101,15 +101,16 @@ func (q *PikoCI) ListPipelineResources(ctx context.Context, tc, pc string) ([]*r
 		return nil, fmt.Errorf("failed to list Pipeline Resources: %w", err)
 	}
 
-	// Fetch latest version for each resource
+	// Fetch latest version for each resource in a single batch query
 	var versionIDs []uint32
-	for _, r := range rs {
-		vers, err := q.Resources.FilterVersions(ctx, tc, pc, r.Canonical, nil, nil, 1)
-		if err != nil || len(vers) == 0 {
-			continue
+	latestVersions, err := q.Resources.LatestVersionByResources(ctx, tc, pc)
+	if err == nil {
+		for _, r := range rs {
+			if v, ok := latestVersions[r.Canonical]; ok {
+				r.LatestVersion = v
+				versionIDs = append(versionIDs, v.ID)
+			}
 		}
-		r.LatestVersion = vers[0]
-		versionIDs = append(versionIDs, vers[0].ID)
 	}
 
 	// Batch fetch aggregate build statuses for all latest versions
@@ -389,13 +390,13 @@ func (q *PikoCI) cancelMismatchedPendingBuilds(ctx context.Context, tc, pc, rCan
 			continue
 		}
 
-		// Fetch all builds for this job and cancel pending ones with wrong version.
-		builds, err := q.Builds.Filter(ctx, tc, pc, j.Name, nil, nil, 0)
+		// Fetch only pending builds for this job and cancel ones with wrong version.
+		builds, err := q.Builds.Filter(ctx, tc, pc, j.Name, nil, nil, 0, []build.Status{build.Pending})
 		if err != nil {
 			continue
 		}
 		for _, b := range builds {
-			if b.Status == build.Pending && b.ResourceCanonical == rCan && b.VersionID != pinnedVersionID {
+			if b.ResourceCanonical == rCan && b.VersionID != pinnedVersionID {
 				b.Status = build.Cancelled
 				_ = q.Builds.Update(ctx, tc, pc, j.Name, b.BuildNumber, *b)
 			}

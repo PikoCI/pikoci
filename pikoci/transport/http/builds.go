@@ -528,13 +528,21 @@ func listJobBuilds(s pikoci.Service) http.HandlerFunc {
 
 		before, after, limit := parsePaginationParams(r)
 
+		var statuses []build.Status
+		for _, sv := range r.URL.Query()["status"] {
+			st, sErr := build.StatusString(sv)
+			if sErr == nil {
+				statuses = append(statuses, st)
+			}
+		}
+
 		var builds []*build.Build
 		var hasMore bool
 		var err error
 		if isPublic, _ := ctx.Value(IsPublicAccessKey).(bool); isPublic {
-			builds, hasMore, err = s.ListPublicJobBuilds(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName, before, after, limit)
+			builds, hasMore, err = s.ListPublicJobBuilds(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName, before, after, limit, statuses)
 		} else {
-			builds, hasMore, err = s.ListJobBuilds(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName, before, after, limit)
+			builds, hasMore, err = s.ListJobBuilds(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName, before, after, limit, statuses)
 		}
 		var errs string
 		if err != nil {

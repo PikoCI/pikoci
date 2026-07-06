@@ -190,7 +190,7 @@ func TestDBBackends(t *testing.T) {
 				assert.Equal(t, "1", bn)
 
 				// Filter builds
-				builds, err := br.Filter(ctx, "main", "test-pipeline", "test-job", nil, nil, 0)
+				builds, err := br.Filter(ctx, "main", "test-pipeline", "test-job", nil, nil, 0, nil)
 				require.NoError(t, err)
 				assert.Len(t, builds, 1)
 				assert.Equal(t, build.Started, builds[0].Status)

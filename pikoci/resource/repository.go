@@ -39,6 +39,9 @@ type Repository interface {
 	// FindVersionByID retrieves a single version by its ID, also returning
 	// the resource canonical it belongs to.
 	FindVersionByID(ctx context.Context, versionID uint32) (*Version, string, error)
+	// LatestVersionByResources returns the latest version for each resource in a pipeline.
+	// The key is resource canonical → latest version.
+	LatestVersionByResources(ctx context.Context, tc, pn string) (map[string]*Version, error)
 }
 
 // ResourceWithPipeline embeds a Resource along with its owning team and pipeline canonicals.

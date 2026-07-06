@@ -224,12 +224,16 @@ func (r *JobRepository) Filter(ctx context.Context, tc, pn string) ([]*job.Job, 
 		return nil, fmt.Errorf("failed to filter jobs: %w", err)
 	}
 
+	jobIDs := make([]uint32, len(jobs))
+	for i, j := range jobs {
+		jobIDs[i] = j.ID
+	}
+	sgMap, err := r.loadSerialGroupsBatch(ctx, jobIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch load serial groups: %w", err)
+	}
 	for _, j := range jobs {
-		sgs, err := r.loadSerialGroups(ctx, j.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load serial groups for job %q: %w", j.Name, err)
-		}
-		j.SerialGroups = sgs
+		j.SerialGroups = sgMap[j.ID]
 	}
 
 	return jobs, nil
@@ -409,6 +413,36 @@ func (r *JobRepository) loadSerialGroups(ctx context.Context, jobID uint32) ([]s
 		groups = append(groups, sg)
 	}
 	return groups, rows.Err()
+}
+
+func (r *JobRepository) loadSerialGroupsBatch(ctx context.Context, jobIDs []uint32) (map[uint32][]string, error) {
+	if len(jobIDs) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(jobIDs))
+	args := make([]interface{}, len(jobIDs))
+	for i, id := range jobIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := r.querier.QueryContext(ctx,
+		`SELECT job_id, serial_group FROM job_serial_groups WHERE job_id IN (`+strings.Join(placeholders, ", ")+`) ORDER BY job_id, serial_group`,
+		args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch query serial groups: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[uint32][]string)
+	for rows.Next() {
+		var jobID uint32
+		var sg string
+		if err := rows.Scan(&jobID, &sg); err != nil {
+			return nil, fmt.Errorf("failed to scan serial group: %w", err)
+		}
+		result[jobID] = append(result[jobID], sg)
+	}
+	return result, rows.Err()
 }
 
 func (r *JobRepository) FilterByForEachGroup(ctx context.Context, tc, pn, group string) ([]*job.Job, error) {

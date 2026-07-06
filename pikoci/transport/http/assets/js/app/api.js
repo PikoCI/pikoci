@@ -127,7 +127,15 @@ export const unpauseJob = (tc, pn, jn) => api('/teams/' + tc + '/pipelines/' + p
 // --- Builds ---
 // Returns { data, meta: { has_more, newest_id, oldest_id } }
 export const fetchBuilds = (tc, pn, jn, params) => {
-  const qs = params ? '?' + new URLSearchParams(params) : '';
+  let qs = '';
+  if (params) {
+    const sp = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (Array.isArray(v)) { v.forEach(item => sp.append(k, item)); }
+      else { sp.append(k, v); }
+    }
+    qs = '?' + sp;
+  }
   return api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/builds' + qs);
 };
 export const cancelBuild = (tc, pn, jn, bid) =>

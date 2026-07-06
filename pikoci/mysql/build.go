@@ -244,7 +244,7 @@ func (r *BuildRepository) Find(ctx context.Context, tc, pn, jn string, buildNumb
 	return j, nil
 }
 
-func (r *BuildRepository) Filter(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, error) {
+func (r *BuildRepository) Filter(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, error) {
 	query := `
 		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical, b.retry_source_build_id
 		FROM builds AS b
@@ -256,6 +256,15 @@ func (r *BuildRepository) Filter(ctx context.Context, tc, pn, jn string, before 
 			ON p.team_id = t.id
 		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?`
 	args := []interface{}{tc, pn, jn}
+
+	if len(statuses) > 0 {
+		placeholders := make([]string, len(statuses))
+		for i, s := range statuses {
+			placeholders[i] = "?"
+			args = append(args, s.String())
+		}
+		query += ` AND b.status IN (` + strings.Join(placeholders, ", ") + `)`
+	}
 
 	if after != nil {
 		query += ` AND b.id > ?`
@@ -716,6 +725,63 @@ func (r *BuildRepository) FindByVersionAndJobs(ctx context.Context, tc, pn strin
 			}
 		}
 		result[jn] = append(main, retries...)
+	}
+
+	return result, nil
+}
+
+func (r *BuildRepository) FilterByPipeline(ctx context.Context, tc, pn string, statuses []build.Status) (map[string][]*build.Build, error) {
+	query := `
+		SELECT j.name, b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical, b.retry_source_build_id
+		FROM builds AS b
+		JOIN jobs AS j ON b.job_id = j.id
+		JOIN pipelines AS p ON j.pipeline_id = p.id
+		JOIN teams AS t ON p.team_id = t.id
+		WHERE t.canonical = ? AND p.canonical = ?`
+	args := []interface{}{tc, pn}
+
+	if len(statuses) > 0 {
+		placeholders := make([]string, len(statuses))
+		for i, s := range statuses {
+			placeholders[i] = "?"
+			args = append(args, s.String())
+		}
+		query += ` AND b.status IN (` + strings.Join(placeholders, ", ") + `)`
+	}
+
+	query += ` ORDER BY b.id DESC`
+
+	rows, err := r.querier.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter builds by pipeline: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string][]*build.Build)
+	for rows.Next() {
+		var dbb dbBuild
+		var jobName string
+		err := rows.Scan(
+			&jobName,
+			&dbb.ID,
+			&dbb.BuildNumber,
+			&dbb.Steps,
+			&dbb.Job,
+			&dbb.Status,
+			&dbb.Error,
+			&dbb.StartedAt,
+			&dbb.Duration,
+			&dbb.VersionID,
+			&dbb.ResourceCanonical,
+			&dbb.RetrySourceBuildID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan build: %w", err)
+		}
+		result[jobName] = append(result[jobName], dbb.toDomainEntity())
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate builds by pipeline: %w", err)
 	}
 
 	return result, nil

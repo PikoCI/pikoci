@@ -599,7 +599,7 @@ func TestListJobBuilds(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	builds, _, err := c.ListJobBuilds(context.Background(), "team", "pipe", "job1", nil, nil, 0)
+	builds, _, err := c.ListJobBuilds(context.Background(), "team", "pipe", "job1", nil, nil, 0, nil)
 	require.NoError(t, err)
 	assert.Len(t, builds, 2)
 }
@@ -945,7 +945,7 @@ func TestListPublicJobBuilds(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	builds, hasMore, err := c.ListPublicJobBuilds(context.Background(), "team", "pipe", "job1", nil, nil, 0)
+	builds, hasMore, err := c.ListPublicJobBuilds(context.Background(), "team", "pipe", "job1", nil, nil, 0, nil)
 	require.NoError(t, err)
 	assert.Len(t, builds, 2)
 	assert.False(t, hasMore)
@@ -2015,7 +2015,7 @@ func TestListJobBuilds_Error(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	_, _, err = c.ListJobBuilds(context.Background(), "team1", "pipe", "job1", nil, nil, 0)
+	_, _, err = c.ListJobBuilds(context.Background(), "team1", "pipe", "job1", nil, nil, 0, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "forbidden")
 }
@@ -2034,7 +2034,7 @@ func TestListJobBuilds_HasMore(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	builds, hasMore, err := c.ListJobBuilds(context.Background(), "team1", "pipe", "job1", nil, nil, 10)
+	builds, hasMore, err := c.ListJobBuilds(context.Background(), "team1", "pipe", "job1", nil, nil, 10, nil)
 	require.NoError(t, err)
 	assert.Len(t, builds, 1)
 	assert.True(t, hasMore)
@@ -2403,7 +2403,7 @@ func TestListPublicJobBuilds_DelegatesToListJobBuilds(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	builds, _, err := c.ListPublicJobBuilds(context.Background(), "team1", "pipe", "job1", nil, nil, 0)
+	builds, _, err := c.ListPublicJobBuilds(context.Background(), "team1", "pipe", "job1", nil, nil, 0, nil)
 	require.NoError(t, err)
 	assert.Len(t, builds, 1)
 }

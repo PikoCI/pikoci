@@ -590,7 +590,7 @@ func (w *Worker) checkPassedConstraints(ctx context.Context, m workitem.Body, b 
 		var intersection map[uint32]bool
 		var hasSucceeded bool
 		for _, p := range expandedPassed {
-			builds, _, err := w.pikoci.ListJobBuilds(ctx, m.TeamCanonical, m.PipelineCanonical, p, nil, nil, 0)
+			builds, _, err := w.pikoci.ListJobBuilds(ctx, m.TeamCanonical, m.PipelineCanonical, p, nil, nil, 0, nil)
 			if err != nil {
 				w.failBuild(ctx, m, *b, fmt.Errorf("failed to list builds for passed job %q: %w", p, err))
 				return false, nil

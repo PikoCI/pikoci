@@ -405,6 +405,35 @@ func (r *ResourceRepository) FilterVersions(ctx context.Context, tc, pn, rCan st
 	return rvs, nil
 }
 
+func (r *ResourceRepository) LatestVersionByResources(ctx context.Context, tc, pn string) (map[string]*resource.Version, error) {
+	rows, err := r.querier.QueryContext(ctx, `
+		SELECT r.canonical, rv.id, rv.version
+		FROM resource_versions AS rv
+		JOIN resources AS r ON rv.resource_id = r.id
+		JOIN pipelines AS p ON r.pipeline_id = p.id
+		JOIN teams AS t ON p.team_id = t.id
+		WHERE t.canonical = ? AND p.canonical = ?
+		AND rv.id = (
+			SELECT MAX(rv2.id) FROM resource_versions rv2 WHERE rv2.resource_id = rv.resource_id
+		)
+	`, tc, pn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query latest versions: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]*resource.Version)
+	for rows.Next() {
+		var canonical string
+		var dbrv dbResourceVersion
+		if err := rows.Scan(&canonical, &dbrv.ID, &dbrv.Version); err != nil {
+			return nil, fmt.Errorf("failed to scan: %w", err)
+		}
+		result[canonical] = dbrv.toDomainEntity()
+	}
+	return result, rows.Err()
+}
+
 // FindVersionByID retrieves a single version by its ID, returning the version
 // and the canonical of the resource it belongs to.
 func (r *ResourceRepository) FindVersionByID(ctx context.Context, versionID uint32) (*resource.Version, string, error) {

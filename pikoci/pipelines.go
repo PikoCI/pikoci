@@ -648,50 +648,6 @@ type jobNodeVisuals struct {
 	clusterBorderColor string
 }
 
-// resolveJobVisuals fetches builds for a job and computes its fill color,
-// border color, and cluster (running indicator) style.
-func (q *PikoCI) resolveJobVisuals(ctx context.Context, tc string, pp *pipeline.Pipeline, j job.Job) (jobNodeVisuals, error) {
-	builds, err := q.Builds.Filter(ctx, tc, pp.Canonical, j.Name, nil, nil, 0)
-	if err != nil {
-		return jobNodeVisuals{}, fmt.Errorf("failed to filter builds from Job %q: %w", j.Name, err)
-	}
-
-	color := colorDefault
-	borderColor := colorDefaultBorder
-
-	bs := resolveBuildStatus(builds)
-
-	if bs.completedBuild != nil {
-		if c, ok := jobColors[bs.completedBuild.Status]; ok {
-			color = c
-		}
-		if c, ok := jobBorderColors[bs.completedBuild.Status]; ok {
-			borderColor = c
-		}
-	}
-
-	if j.Paused {
-		color = colorPaused
-		borderColor = colorPausedBorder
-	}
-
-	clusterStyle := "invis"
-	clusterBorderColor := jobBorderColors[build.Started]
-	if bs.runningBuild != nil {
-		clusterStyle = `"dashed,bold"`
-		if bs.runningBuild.Status == build.Pending {
-			clusterBorderColor = colorDefaultBorder
-		}
-	}
-
-	return jobNodeVisuals{
-		color:              color,
-		borderColor:        borderColor,
-		clusterStyle:       clusterStyle,
-		clusterBorderColor: clusterBorderColor,
-	}, nil
-}
-
 // resolveJobVisualsFromBuilds computes job node visuals from a provided set of
 // builds rather than fetching from the database. Used when rendering a
 // version-scoped graph where only specific builds are relevant.
@@ -782,13 +738,14 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 	}
 	var resVersions []resVersion
 	var versionIDs []uint32
-	for _, r := range pp.Resources {
-		vers, err := q.Resources.FilterVersions(ctx, tc, pp.Canonical, r.Canonical, nil, nil, 1)
-		if err != nil || len(vers) == 0 {
-			continue
+	latestVersions, err := q.Resources.LatestVersionByResources(ctx, tc, pp.Canonical)
+	if err == nil {
+		for _, r := range pp.Resources {
+			if v, ok := latestVersions[r.Canonical]; ok {
+				resVersions = append(resVersions, resVersion{canonical: r.Canonical, version: v})
+				versionIDs = append(versionIDs, v.ID)
+			}
 		}
-		resVersions = append(resVersions, resVersion{canonical: r.Canonical, version: vers[0]})
-		versionIDs = append(versionIDs, vers[0].ID)
 	}
 	if len(versionIDs) > 0 {
 		statuses, err := q.Builds.AggregateStatusByVersionIDs(ctx, versionIDs)
@@ -941,6 +898,18 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		return fmt.Sprintf(`"%s"`, jobName)
 	}
 
+	// Pre-fetch all builds for all pipeline jobs in a single query when not
+	// using a version-scoped filter. This replaces per-job Filter calls in
+	// the non-parallel and parallel-group rendering below.
+	var pipelineBuilds map[string][]*build.Build
+	if versionFilter == nil {
+		var bErr error
+		pipelineBuilds, bErr = q.Builds.FilterByPipeline(ctx, tc, pp.Canonical, nil)
+		if bErr != nil {
+			return nil, fmt.Errorf("failed to pre-fetch pipeline builds: %w", bErr)
+		}
+	}
+
 	// Print all the Jobs and the connection to resources
 	for i, j := range pp.Jobs {
 		if _, grouped := jobToGroupNode[j.Name]; grouped {
@@ -952,11 +921,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 			// Use only the version-specific builds for coloring
 			vis = resolveJobVisualsFromBuilds(versionFilter.buildsByJob[j.Name], j)
 		} else {
-			var verr error
-			vis, verr = q.resolveJobVisuals(ctx, tc, pp, j)
-			if verr != nil {
-				return nil, verr
-			}
+			vis = resolveJobVisualsFromBuilds(pipelineBuilds[j.Name], j)
 		}
 
 		jg := fmt.Sprintf("cluster_%d", i)
@@ -1058,12 +1023,8 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 				vis = resolveJobVisualsFromBuilds(versionFilter.buildsByJob[j.Name], j)
 				jobBuilds = versionFilter.buildsByJob[j.Name]
 			} else {
-				var verr error
-				vis, verr = q.resolveJobVisuals(ctx, tc, pp, j)
-				if verr != nil {
-					return nil, verr
-				}
-				jobBuilds, _ = q.Builds.Filter(ctx, tc, pp.Canonical, j.Name, nil, nil, 0)
+				jobBuilds = pipelineBuilds[j.Name]
+				vis = resolveJobVisualsFromBuilds(jobBuilds, j)
 			}
 			dotColor := strings.Trim(vis.color, `"`)
 			if len(jobBuilds) > 0 {
@@ -1674,13 +1635,13 @@ func (q *PikoCI) GetPublicPipelineJob(ctx context.Context, tc, pCan, jn string) 
 
 // ListPublicJobBuilds returns paginated builds for a job on a public pipeline,
 // with secret step logs redacted for safety.
-func (q *PikoCI) ListPublicJobBuilds(ctx context.Context, tc, pCan, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error) {
+func (q *PikoCI) ListPublicJobBuilds(ctx context.Context, tc, pCan, jn string, before *uint32, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, bool, error) {
 	_, err := q.Pipelines.FindPublic(ctx, tc, pCan)
 	if err != nil {
 		return nil, false, fmt.Errorf("pipeline not found or not public: %w", err)
 	}
 
-	builds, hasMore, err := q.ListJobBuilds(ctx, tc, pCan, jn, before, after, limit)
+	builds, hasMore, err := q.ListJobBuilds(ctx, tc, pCan, jn, before, after, limit, statuses)
 	if err != nil {
 		return nil, false, err
 	}

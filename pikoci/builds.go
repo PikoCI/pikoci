@@ -75,7 +75,7 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 // pagination with before and after parameters. Results are returned in
 // newest-first order. The boolean return value indicates whether more results
 // exist beyond the requested page.
-func (q *PikoCI) ListJobBuilds(ctx context.Context, tc, pc, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error) {
+func (q *PikoCI) ListJobBuilds(ctx context.Context, tc, pc, jn string, before *uint32, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, bool, error) {
 	if !utils.ValidateCanonical(tc) {
 		return nil, false, fmt.Errorf("invalid Team Canonical format %q", tc)
 	} else if !utils.ValidateCanonical(pc) {
@@ -89,7 +89,7 @@ func (q *PikoCI) ListJobBuilds(ctx context.Context, tc, pc, jn string, before *u
 		fetchLimit = limit + 1
 	}
 
-	builds, err := q.Builds.Filter(ctx, tc, pc, jn, before, after, fetchLimit)
+	builds, err := q.Builds.Filter(ctx, tc, pc, jn, before, after, fetchLimit, statuses)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to list Builds: %w", err)
 	}
