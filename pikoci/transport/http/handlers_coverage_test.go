@@ -1095,6 +1095,29 @@ func TestListJobBuilds_WithPagination(t *testing.T) {
 	assert.True(t, got.Meta.HasMore)
 }
 
+func TestListJobBuilds_WithStatusFilter(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+	builds := []*build.Build{
+		{ID: 3, BuildNumber: "3", Status: build.Pending},
+		{ID: 2, BuildNumber: "2", Status: build.Started},
+	}
+	e.svc.EXPECT().ListJobBuilds(gomock.Any(), "main", "my-pipe", "build", gomock.Any(), gomock.Any(), uint32(50), []build.Status{build.Pending, build.Started}).Return(builds, false, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/pipelines/my-pipe/jobs/build/builds?status=pending&status=started", e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got ListJobBuildsResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Len(t, got.Builds, 2)
+	assert.NotNil(t, got.Meta)
+	assert.False(t, got.Meta.HasMore)
+	assert.Equal(t, uint32(3), got.Meta.NewestID)
+	assert.Equal(t, uint32(2), got.Meta.OldestID)
+}
+
 func TestGetJobBuild_Success(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectMemberAuth()

@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 )
@@ -866,4 +867,91 @@ func TestCountRunningInSerialGroups_Empty(t *testing.T) {
 	count, err := br.CountRunningInSerialGroups(ctx, "main", "pipe", []string{}, "job")
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
+}
+
+func TestFilterByPipeline(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'fbp-pipe', 'fbp-pipe')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'build')`, ppID)
+	require.NoError(t, err)
+	buildJobID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'test')`, ppID)
+	require.NoError(t, err)
+	testJobID, _ := res.LastInsertId()
+
+	// Insert builds for 'build' job: succeeded, pending
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'succeeded', '1')`, buildJobID)
+	require.NoError(t, err)
+	buildSucceededID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'pending', '2')`, buildJobID)
+	require.NoError(t, err)
+	buildPendingID, _ := res.LastInsertId()
+
+	// Insert builds for 'test' job: failed, pending
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'failed', '1')`, testJobID)
+	require.NoError(t, err)
+	testFailedID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'pending', '2')`, testJobID)
+	require.NoError(t, err)
+	testPendingID, _ := res.LastInsertId()
+
+	br := mysql.NewBuildRepository(db, mysql.Mem)
+
+	t.Run("no status filter returns all builds grouped by job", func(t *testing.T) {
+		result, err := br.FilterByPipeline(ctx, "main", "fbp-pipe", nil)
+		require.NoError(t, err)
+
+		assert.Contains(t, result, "build")
+		assert.Contains(t, result, "test")
+
+		buildBuilds := result["build"]
+		assert.Len(t, buildBuilds, 2)
+		// Ordered by id DESC: pending (higher id) first
+		assert.Equal(t, uint32(buildPendingID), buildBuilds[0].ID)
+		assert.Equal(t, uint32(buildSucceededID), buildBuilds[1].ID)
+
+		testBuilds := result["test"]
+		assert.Len(t, testBuilds, 2)
+		// Ordered by id DESC: pending (higher id) first
+		assert.Equal(t, uint32(testPendingID), testBuilds[0].ID)
+		assert.Equal(t, uint32(testFailedID), testBuilds[1].ID)
+	})
+
+	t.Run("status filter returns only matching builds", func(t *testing.T) {
+		result, err := br.FilterByPipeline(ctx, "main", "fbp-pipe", []build.Status{build.Pending})
+		require.NoError(t, err)
+
+		assert.Contains(t, result, "build")
+		assert.Contains(t, result, "test")
+
+		buildBuilds := result["build"]
+		assert.Len(t, buildBuilds, 1)
+		assert.Equal(t, uint32(buildPendingID), buildBuilds[0].ID)
+		assert.Equal(t, "pending", buildBuilds[0].Status.String())
+
+		testBuilds := result["test"]
+		assert.Len(t, testBuilds, 1)
+		assert.Equal(t, uint32(testPendingID), testBuilds[0].ID)
+		assert.Equal(t, "pending", testBuilds[0].Status.String())
+	})
+
+	t.Run("status filter with no matches returns empty map", func(t *testing.T) {
+		result, err := br.FilterByPipeline(ctx, "main", "fbp-pipe", []build.Status{build.Started})
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("different pipeline not included", func(t *testing.T) {
+		result, err := br.FilterByPipeline(ctx, "main", "other-pipe", nil)
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
 }
