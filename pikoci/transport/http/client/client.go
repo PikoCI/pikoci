@@ -422,8 +422,8 @@ func (cl *Client) GetPublicPipelineJob(ctx context.Context, tc, pn, jn string) (
 }
 
 // ListPublicJobBuilds lists builds for a job on a public pipeline. It delegates to ListJobBuilds.
-func (cl *Client) ListPublicJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error) {
-	return cl.ListJobBuilds(ctx, tc, pn, jn, before, after, limit)
+func (cl *Client) ListPublicJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, bool, error) {
+	return cl.ListJobBuilds(ctx, tc, pn, jn, before, after, limit, statuses)
 }
 
 // ListPublicPipelineResources lists resources for a public pipeline. It delegates to ListPipelineResources.
@@ -918,10 +918,15 @@ func (cl *Client) EvaluateDownstreamJobs(ctx context.Context, tc, pn, completedJ
 
 // ListJobBuilds always fetches all builds (limit=0) for CLI backward compat.
 // The before/after/limit params satisfy the Service interface but are not sent.
-func (cl *Client) ListJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error) {
+func (cl *Client) ListJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, bool, error) {
 	var resp thttp.ListJobBuildsResponse
 
-	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/builds?limit=0", cl.url, tc, pn, jn), nil, &resp)
+	u := fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/builds?limit=0", cl.url, tc, pn, jn)
+	for _, s := range statuses {
+		u += "&status=" + s.String()
+	}
+
+	err := cl.Request(ctx, http.MethodGet, u, nil, &resp)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to make request: %w", err)
 	}

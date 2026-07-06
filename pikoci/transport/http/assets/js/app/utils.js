@@ -1,6 +1,7 @@
 'use strict';
 
 export const fetchInterval = 2000;
+export const buildListCap = 500;
 
 export const durationToString = (duration) => {
   if (duration === 0) {

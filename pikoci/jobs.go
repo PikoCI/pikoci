@@ -132,34 +132,39 @@ func (q *PikoCI) ListPublicPipelineJobs(ctx context.Context, tc, pn string) ([]j
 }
 
 // enrichJobsWithStatus enriches a slice of jobs with build status information.
+// It pre-fetches active and completed builds for all jobs in two batch queries
+// instead of making per-job calls.
 func (q *PikoCI) enrichJobsWithStatus(ctx context.Context, tc, pn string, jobs []job.Job) ([]job.WithStatus, error) {
+	activeByJob, err := q.Builds.FilterByPipeline(ctx, tc, pn, []build.Status{build.Started, build.Pending})
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter active builds: %w", err)
+	}
+	completedByJob, err := q.Builds.FilterByPipeline(ctx, tc, pn, []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval})
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter completed builds: %w", err)
+	}
+
 	result := make([]job.WithStatus, 0, len(jobs))
 	for _, j := range jobs {
 		ws := job.WithStatus{Job: j}
 
-		builds, err := q.Builds.Filter(ctx, tc, pn, j.Name, nil, nil, 0)
-		if err != nil {
-			return nil, fmt.Errorf("failed to filter builds for job %q: %w", j.Name, err)
-		}
-
-		bs := resolveBuildStatus(builds)
-
-		if bs.completedBuild != nil {
-			ws.LatestStatus = bs.completedBuild.Status.String()
-			ws.LatestBuildNumber = bs.completedBuild.BuildNumber
-			ws.LatestBuildDuration = int64(bs.completedBuild.Duration)
-			if !bs.completedBuild.StartedAt.IsZero() {
-				t := bs.completedBuild.StartedAt
+		if completed := completedByJob[j.Name]; len(completed) > 0 {
+			cb := completed[0]
+			ws.LatestStatus = cb.Status.String()
+			ws.LatestBuildNumber = cb.BuildNumber
+			ws.LatestBuildDuration = int64(cb.Duration)
+			if !cb.StartedAt.IsZero() {
+				t := cb.StartedAt
 				ws.StartedAt = &t
 			}
 		}
 
-		if bs.runningBuild != nil {
+		if active := activeByJob[j.Name]; len(active) > 0 {
 			ws.HasRunning = true
-			if bs.completedBuild == nil {
-				ws.LatestBuildNumber = bs.runningBuild.BuildNumber
-				if !bs.runningBuild.StartedAt.IsZero() {
-					t := bs.runningBuild.StartedAt
+			if len(completedByJob[j.Name]) == 0 {
+				ws.LatestBuildNumber = active[0].BuildNumber
+				if !active[0].StartedAt.IsZero() {
+					t := active[0].StartedAt
 					ws.StartedAt = &t
 				}
 			}

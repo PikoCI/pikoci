@@ -114,7 +114,7 @@ type Service interface {
 	GetPublicPipelineJob(ctx context.Context, tc, pn, jn string) (*job.Job, error)
 	// ListPublicJobBuilds returns paginated builds for a job on a public pipeline,
 	// with secret step logs redacted.
-	ListPublicJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error)
+	ListPublicJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, bool, error)
 	// ListPublicPipelineResources returns all resources for a public pipeline with
 	// sensitive fields sanitized.
 	ListPublicPipelineResources(ctx context.Context, tc, pn string) ([]*resource.Resource, error)
@@ -162,8 +162,9 @@ type Service interface {
 	DeleteJobBuild(ctx context.Context, tc, pn, jn string, buildNumber string) error
 	// ListJobBuilds returns paginated builds for a job, supporting cursor-based
 	// pagination with before and after parameters. The boolean return value
-	// indicates whether more results exist.
-	ListJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*build.Build, bool, error)
+	// indicates whether more results exist. When statuses is non-empty, only
+	// builds matching one of the given statuses are returned.
+	ListJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, bool, error)
 	// GetJobBuild retrieves a single build by its build number.
 	GetJobBuild(ctx context.Context, tc, pn, jn string, buildNumber string) (*build.Build, error)
 	// CancelJobBuild cancels a running or pending build and notifies the next

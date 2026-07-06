@@ -47,20 +47,30 @@ export function usePolling(fn, interval, enabled = true) {
   useEffect(() => {
     if (!enabled) return;
 
-    let id = null;
+    let timeoutId = null;
+    let stopped = false;
+
+    const schedule = () => {
+      if (stopped) return;
+      timeoutId = setTimeout(tick, interval);
+    };
+
+    const tick = async () => {
+      if (stopped) return;
+      try { await fnRef.current(); } catch {}
+      schedule();
+    };
 
     const start = () => {
-      if (id !== null) return;
-      try { fnRef.current(); } catch {}
-      id = setInterval(() => {
-        try { fnRef.current(); } catch {}
-      }, interval);
+      if (timeoutId !== null) return;
+      // Fire immediately, then schedule next after completion
+      tick();
     };
 
     const stop = () => {
-      if (id !== null) {
-        clearInterval(id);
-        id = null;
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
       }
     };
 
@@ -78,6 +88,7 @@ export function usePolling(fn, interval, enabled = true) {
     }
 
     return () => {
+      stopped = true;
       stop();
       document.removeEventListener('visibilitychange', onVisibility);
     };

@@ -422,8 +422,8 @@ job "test-job" {
 
 	// --- Wait for both builds to complete ---
 	require.Eventually(t, func() bool {
-		alphaBuilds, _, _ := svc.ListJobBuilds(ctx, "alpha", "alpha-pipe", "test-job", nil, nil, 0)
-		betaBuilds, _, _ := svc.ListJobBuilds(ctx, "beta", "beta-pipe", "test-job", nil, nil, 0)
+		alphaBuilds, _, _ := svc.ListJobBuilds(ctx, "alpha", "alpha-pipe", "test-job", nil, nil, 0, nil)
+		betaBuilds, _, _ := svc.ListJobBuilds(ctx, "beta", "beta-pipe", "test-job", nil, nil, 0, nil)
 		if len(alphaBuilds) == 0 || len(betaBuilds) == 0 {
 			return false
 		}
@@ -463,7 +463,7 @@ job "test-job" {
 	// team worker must NOT pick it up.
 	time.Sleep(2 * time.Second)
 
-	betaBuilds, _, err := svc.ListJobBuilds(ctx, "beta", "beta-pipe", "test-job", nil, nil, 0)
+	betaBuilds, _, err := svc.ListJobBuilds(ctx, "beta", "beta-pipe", "test-job", nil, nil, 0, nil)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(betaBuilds), 2, "should have at least 2 beta builds")
 
@@ -479,7 +479,7 @@ job "test-job" {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		alphaBuilds, _, _ := svc.ListJobBuilds(ctx, "alpha", "alpha-pipe", "test-job", nil, nil, 0)
+		alphaBuilds, _, _ := svc.ListJobBuilds(ctx, "alpha", "alpha-pipe", "test-job", nil, nil, 0, nil)
 		if len(alphaBuilds) < 2 {
 			return false
 		}
@@ -488,7 +488,7 @@ job "test-job" {
 		"alpha build should succeed even without global worker")
 
 	// Re-check: beta build is STILL pending
-	betaBuilds, _, err = svc.ListJobBuilds(ctx, "beta", "beta-pipe", "test-job", nil, nil, 0)
+	betaBuilds, _, err = svc.ListJobBuilds(ctx, "beta", "beta-pipe", "test-job", nil, nil, 0, nil)
 	require.NoError(t, err)
 	assert.Equal(t, build.Pending, betaBuilds[0].Status,
 		"beta build must remain pending with only alpha team worker online")
@@ -516,7 +516,7 @@ job "test-job" {
 
 	// The pending beta build should now be picked up by the new global worker
 	require.Eventually(t, func() bool {
-		betaBuilds, _, _ := svc.ListJobBuilds(ctx, "beta", "beta-pipe", "test-job", nil, nil, 0)
+		betaBuilds, _, _ := svc.ListJobBuilds(ctx, "beta", "beta-pipe", "test-job", nil, nil, 0, nil)
 		if len(betaBuilds) < 2 {
 			return false
 		}

@@ -1039,7 +1039,7 @@ var buildsListCmd = &cobra.Command{
 			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
 		}
 
-		builds, _, err := c.ListJobBuilds(cmd.Context(), tc, pn, jn, nil, nil, 0)
+		builds, _, err := c.ListJobBuilds(cmd.Context(), tc, pn, jn, nil, nil, 0, nil)
 		if err != nil {
 			return fmt.Errorf("failed to list builds for job %q: %w", jn, err)
 		}

@@ -146,7 +146,7 @@ job "deploy" {
 		// Wait for the build triggered by the resource to finish
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
-			builds, _, err = svc.ListJobBuilds(ctx, "main", "secrets-e2e", "deploy", nil, nil, 0)
+			builds, _, err = svc.ListJobBuilds(ctx, "main", "secrets-e2e", "deploy", nil, nil, 0, nil)
 			if err != nil || len(builds) == 0 {
 				return false
 			}
@@ -245,7 +245,7 @@ job "deploy" {
 		// Wait for the build triggered by the resource to finish
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
-			builds, _, err = svc.ListJobBuilds(ctx, "main", "secrets-file-e2e", "deploy", nil, nil, 0)
+			builds, _, err = svc.ListJobBuilds(ctx, "main", "secrets-file-e2e", "deploy", nil, nil, 0, nil)
 			if err != nil || len(builds) == 0 {
 				return false
 			}
@@ -361,7 +361,7 @@ job "deploy" {
 		// Wait for the build triggered by the resource to finish
 		var builds []*build.Build
 		require.Eventually(t, func() bool {
-			builds, _, err = svc.ListJobBuilds(ctx, "main", "secrets-env-file-e2e", "deploy", nil, nil, 0)
+			builds, _, err = svc.ListJobBuilds(ctx, "main", "secrets-env-file-e2e", "deploy", nil, nil, 0, nil)
 			if err != nil || len(builds) == 0 {
 				return false
 			}

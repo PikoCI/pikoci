@@ -16,7 +16,8 @@ type Repository interface {
 	// Find retrieves a single build by team, pipeline, job, and build number.
 	Find(ctx context.Context, tc, pn, jn string, buildNumber string) (*Build, error)
 	// Filter returns a paginated list of builds for the given team, pipeline, and job.
-	Filter(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32) ([]*Build, error)
+	// When statuses is non-empty, only builds matching one of the given statuses are returned.
+	Filter(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32, statuses []Status) ([]*Build, error)
 	// Update updates an existing build identified by team, pipeline, job, and build number.
 	Update(ctx context.Context, tc, pn, jn string, buildNumber string, b Build) error
 	// Delete removes a build identified by team, pipeline, job, and build number.
@@ -46,6 +47,9 @@ type Repository interface {
 	// specified jobs, including retries of matched builds.
 	// The result maps job name to a slice of builds (main build first, retries after).
 	FindByVersionAndJobs(ctx context.Context, tc, pn string, versionID uint32, jobNames []string) (map[string][]*Build, error)
+	// FilterByPipeline returns builds across all jobs in a pipeline, optionally filtered by status.
+	// Results are grouped by job name and ordered by build ID descending within each job.
+	FilterByPipeline(ctx context.Context, tc, pn string, statuses []Status) (map[string][]*Build, error)
 	// CountStarted returns the total number of builds with status "started" across all jobs.
 	CountStarted(ctx context.Context) (int, error)
 	// FailStartedBuilds transitions all builds with status "started" to "failed" with the given reason.

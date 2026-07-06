@@ -81,7 +81,7 @@ function PipelineResourcesPanel({ tc, pn, resources, isMember, onClose, onTrackV
   // Poll expanded version lists periodically
   const hasExpanded = Object.keys(expandedResources).length > 0;
   const refreshExpanded = useCallback(() => {
-    Object.keys(expandedResources).forEach(canonical => fetchPanelVersions(canonical));
+    return Promise.all(Object.keys(expandedResources).map(canonical => fetchPanelVersions(canonical)));
   }, [expandedResources]);
   usePolling(refreshExpanded, fetchInterval, hasExpanded);
 

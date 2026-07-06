@@ -108,7 +108,7 @@ job "export-job" {
 
 	// Wait for build to complete
 	require.Eventually(t, func() bool {
-		builds, _, err := svc.ListJobBuilds(ctx, "main", "export-test", "export-job", nil, nil, 0)
+		builds, _, err := svc.ListJobBuilds(ctx, "main", "export-test", "export-job", nil, nil, 0, nil)
 		if err != nil || len(builds) == 0 {
 			return false
 		}

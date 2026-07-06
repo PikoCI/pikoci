@@ -385,7 +385,7 @@ func TestProcessJob_FailedPassedConstraint_NoBuilds(t *testing.T) {
 		Return(&pp.Jobs[0], nil)
 
 	// Passed check: upstream-job has no builds
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "upstream-job", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "upstream-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).
 		Return([]*build.Build{}, false, nil)
 
 	// Build should be deleted (not failed)
@@ -436,7 +436,7 @@ func TestProcessJob_FailedPassedConstraint_NotSucceeded(t *testing.T) {
 		Return(&pp.Jobs[0], nil)
 
 	// Passed check: upstream-job has a failed build
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "upstream-job", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "upstream-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).
 		Return([]*build.Build{{ID: 5, Status: build.Failed}}, false, nil)
 
 	// Build should be deleted
@@ -998,11 +998,11 @@ func TestCheckPassedConstraints_AllPassed(t *testing.T) {
 		},
 	}
 
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "job-a", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "job-a", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).
 		Return([]*build.Build{{ID: 1, Status: build.Succeeded, Steps: []build.Step{
 			{Type: "get", Name: "my-cron", VersionID: 5},
 		}}}, false, nil)
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "job-b", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "job-b", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).
 		Return([]*build.Build{{ID: 2, Status: build.Succeeded, Steps: []build.Step{
 			{Type: "get", Name: "my-cron", VersionID: 5},
 		}}}, false, nil)
@@ -1039,11 +1039,11 @@ func TestCheckPassedConstraints_NoCommonVersion(t *testing.T) {
 	}
 
 	// lint succeeded with version 5, test succeeded with version 6
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "lint", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "lint", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).
 		Return([]*build.Build{{ID: 10, Status: build.Succeeded, Steps: []build.Step{
 			{Type: "get", Name: "my-repo", VersionID: 5},
 		}}}, false, nil)
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "test", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "test", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).
 		Return([]*build.Build{{ID: 11, Status: build.Succeeded, Steps: []build.Step{
 			{Type: "get", Name: "my-repo", VersionID: 6},
 		}}}, false, nil)
@@ -1084,7 +1084,7 @@ func TestCheckPassedConstraints_PicksNewestCommon(t *testing.T) {
 	}
 
 	// lint has builds with versions {3, 5}
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "lint", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "lint", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).
 		Return([]*build.Build{
 			{ID: 10, Status: build.Succeeded, Steps: []build.Step{
 				{Type: "get", Name: "my-repo", VersionID: 5},
@@ -1094,7 +1094,7 @@ func TestCheckPassedConstraints_PicksNewestCommon(t *testing.T) {
 			}},
 		}, false, nil)
 	// test has builds with versions {5, 7}
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "test", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "test", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).
 		Return([]*build.Build{
 			{ID: 12, Status: build.Succeeded, Steps: []build.Step{
 				{Type: "get", Name: "my-repo", VersionID: 7},
@@ -1166,7 +1166,7 @@ func TestCheckPassedConstraints_PutStepSatisfiesPassed(t *testing.T) {
 	}
 
 	// The upstream job has a put step (not a get step) with the version
-	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "upstream-job", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "upstream-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).
 		Return([]*build.Build{{ID: 1, Status: build.Succeeded, Steps: []build.Step{
 			{Type: "put", Name: "my-artifact", VersionID: 7},
 		}}}, false, nil)

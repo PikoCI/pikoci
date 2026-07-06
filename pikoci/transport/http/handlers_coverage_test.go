@@ -1034,7 +1034,7 @@ func TestListJobBuilds_Success(t *testing.T) {
 		{ID: 2, BuildNumber: "2", Status: build.Succeeded},
 		{ID: 1, BuildNumber: "1", Status: build.Failed},
 	}
-	e.svc.EXPECT().ListJobBuilds(gomock.Any(), "main", "my-pipe", "build", gomock.Any(), gomock.Any(), uint32(50)).Return(builds, false, nil)
+	e.svc.EXPECT().ListJobBuilds(gomock.Any(), "main", "my-pipe", "build", gomock.Any(), gomock.Any(), uint32(50), gomock.Any()).Return(builds, false, nil)
 
 	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/pipelines/my-pipe/jobs/build/builds", e.memberJWT(t), "")
 	defer resp.Body.Close()
@@ -1053,7 +1053,7 @@ func TestListJobBuilds_Success(t *testing.T) {
 func TestListJobBuilds_Empty(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectMemberAuth()
-	e.svc.EXPECT().ListJobBuilds(gomock.Any(), "main", "my-pipe", "build", gomock.Any(), gomock.Any(), uint32(50)).Return(nil, false, nil)
+	e.svc.EXPECT().ListJobBuilds(gomock.Any(), "main", "my-pipe", "build", gomock.Any(), gomock.Any(), uint32(50), gomock.Any()).Return(nil, false, nil)
 
 	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/pipelines/my-pipe/jobs/build/builds", e.memberJWT(t), "")
 	defer resp.Body.Close()
@@ -1068,7 +1068,7 @@ func TestListJobBuilds_Empty(t *testing.T) {
 func TestListJobBuilds_Error(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectMemberAuth()
-	e.svc.EXPECT().ListJobBuilds(gomock.Any(), "main", "my-pipe", "build", gomock.Any(), gomock.Any(), uint32(50)).Return(nil, false, fmt.Errorf("db error"))
+	e.svc.EXPECT().ListJobBuilds(gomock.Any(), "main", "my-pipe", "build", gomock.Any(), gomock.Any(), uint32(50), gomock.Any()).Return(nil, false, fmt.Errorf("db error"))
 
 	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/pipelines/my-pipe/jobs/build/builds", e.memberJWT(t), "")
 	defer resp.Body.Close()
@@ -1083,7 +1083,7 @@ func TestListJobBuilds_WithPagination(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectMemberAuth()
 	builds := []*build.Build{{ID: 5, BuildNumber: "5"}}
-	e.svc.EXPECT().ListJobBuilds(gomock.Any(), "main", "my-pipe", "build", gomock.Any(), gomock.Any(), uint32(10)).Return(builds, true, nil)
+	e.svc.EXPECT().ListJobBuilds(gomock.Any(), "main", "my-pipe", "build", gomock.Any(), gomock.Any(), uint32(10), gomock.Any()).Return(builds, true, nil)
 
 	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/pipelines/my-pipe/jobs/build/builds?limit=10&before=6", e.memberJWT(t), "")
 	defer resp.Body.Close()
@@ -2251,7 +2251,7 @@ func TestListJobBuilds_PublicFallback(t *testing.T) {
 	pp := &pipeline.Pipeline{Name: "public-pipe", Canonical: "public-pipe", Public: true}
 	builds := []*build.Build{{ID: 1, BuildNumber: "1"}}
 	e.svc.EXPECT().GetPublicPipeline(gomock.Any(), "main", "public-pipe").Return(pp, nil)
-	e.svc.EXPECT().ListPublicJobBuilds(gomock.Any(), "main", "public-pipe", "build", gomock.Any(), gomock.Any(), uint32(50)).Return(builds, false, nil)
+	e.svc.EXPECT().ListPublicJobBuilds(gomock.Any(), "main", "public-pipe", "build", gomock.Any(), gomock.Any(), uint32(50), gomock.Any()).Return(builds, false, nil)
 
 	resp := doRequest(t, http.MethodGet, e.server.URL+"/teams/main/pipelines/public-pipe/jobs/build/builds", "", "")
 	defer resp.Body.Close()

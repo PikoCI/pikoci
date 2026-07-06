@@ -6,7 +6,7 @@ import { route } from 'preact-router';
 import { isLoggedIn, hasTeamRole, session } from '../state.js';
 import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, approveBuild, rejectBuild, fetchBuildReport, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchResourceVersions, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
 import { useLoading, usePolling } from '../hooks.js';
-import { sortBuilds, selectActiveBuild, durationToString, processLogs, pikoTimeAgo, fetchInterval } from '../utils.js';
+import { sortBuilds, selectActiveBuild, durationToString, processLogs, pikoTimeAgo, fetchInterval, buildListCap } from '../utils.js';
 import { showToast } from '../toast.js';
 import { Breadcrumb } from './Layout.js';
 
@@ -314,7 +314,9 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
       }
     };
     update();
-    const id = setInterval(update, 1000);
+    const id = setInterval(() => {
+      if (!document.hidden) update();
+    }, 1000);
     return () => clearInterval(id);
   }, [rawBuild.status, rawBuild.started_at, rawBuild.duration]);
 
@@ -566,33 +568,35 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
     try {
       const resources = await fetchResources(tc, pn);
       if (!resources) return;
-      for (const res of resources) {
-        try {
-          const pathResp = await fetchVersionPath(tc, pn, res.canonical, trackedVersionID, { silent: true });
-          if (pathResp.data && pathResp.data.path && pathResp.data.path.length > 0) {
-            const ids = {};
-            for (const entry of pathResp.data.path) {
-              if (entry.job_name === jn && entry.build) {
-                ids[entry.build.id] = true;
-                if (entry.retries) {
-                  for (const r of entry.retries) {
-                    ids[r.id] = true;
-                  }
+      const results = await Promise.allSettled(
+        resources.map(res => fetchVersionPath(tc, pn, res.canonical, trackedVersionID, { silent: true }))
+      );
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].status !== 'fulfilled') continue;
+        const pathResp = results[i].value;
+        if (pathResp.data && pathResp.data.path && pathResp.data.path.length > 0) {
+          const ids = {};
+          for (const entry of pathResp.data.path) {
+            if (entry.job_name === jn && entry.build) {
+              ids[entry.build.id] = true;
+              if (entry.retries) {
+                for (const r of entry.retries) {
+                  ids[r.id] = true;
                 }
               }
             }
-            trackedBuildIDsRef.current = ids;
-
-            // Set banner info
-            const v = pathResp.data.resource.version || {};
-            const ref = v.ref || v.digest || v.tag || (() => {
-              for (const k in v) { if (v.hasOwnProperty(k)) return k + ': ' + v[k]; }
-              return '';
-            })();
-            setVersionBanner({ resource: pathResp.data.resource.canonical, ref });
-            return;
           }
-        } catch { /* try next resource */ }
+          trackedBuildIDsRef.current = ids;
+
+          // Set banner info
+          const v = pathResp.data.resource.version || {};
+          const ref = v.ref || v.digest || v.tag || (() => {
+            for (const k in v) { if (v.hasOwnProperty(k)) return k + ': ' + v[k]; }
+            return '';
+          })();
+          setVersionBanner({ resource: pathResp.data.resource.canonical, ref });
+          return;
+        }
       }
     } catch { /* ignore */ }
   }, [tc, pn, jn, trackedVersionID]);
@@ -642,7 +646,14 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
         setBuilds(prev => {
           const existing = new Set(prev.map(b => b.id));
           const newOnes = resp.data.filter(b => !existing.has(b.id));
-          return sortBuilds([...prev, ...newOnes]);
+          const merged = sortBuilds([...prev, ...newOnes]);
+          if (merged.length <= buildListCap) return merged;
+          // Trim oldest terminal builds first to stay under cap
+          const terminal = new Set(['succeeded', 'failed', 'cancelled']);
+          const active = merged.filter(b => !terminal.has(b.status));
+          const done = merged.filter(b => terminal.has(b.status));
+          const keep = [...active, ...done].slice(0, buildListCap);
+          return sortBuilds(keep);
         });
       }
     } catch { /* ignore */ }
@@ -662,29 +673,18 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
     return active;
   }, [tc, pn, jn, embedded, trackedVersionID]);
 
-  // Fetch the active build to get fresh data (for running builds)
-  const refreshActiveBuild = useCallback(async (buildList) => {
-    const active = buildList.find(b => b.id === (activeBuildID || (selectActiveBuild(buildList)?.id)));
-    if (active) {
-      const status = active.status;
-      if (status !== 'succeeded' && status !== 'failed' && status !== 'cancelled') {
-        try {
-          const fresh = await fetchBuild(tc, pn, jn, active.build_number);
-          setBuilds(prev => sortBuilds(prev.map(b => b.id === fresh.id ? fresh : b)));
-        } catch { /* ignore */ }
+  // Fetch all non-terminal builds in a single batch request
+  const refreshActiveBuild = useCallback(async () => {
+    try {
+      const resp = await fetchBuilds(tc, pn, jn, {
+        status: ['pending', 'started', 'waiting_for_approval'],
+      });
+      if (resp.data && resp.data.length > 0) {
+        const freshMap = new Map(resp.data.map(b => [b.id, b]));
+        setBuilds(prev => sortBuilds(prev.map(b => freshMap.get(b.id) || b)));
       }
-    }
-    // Also refresh other non-terminal builds
-    for (const b of buildList) {
-      if (b.id === active?.id) continue;
-      if (b.status === 'started' || b.status === 'pending' || b.status === 'waiting_for_approval') {
-        try {
-          const fresh = await fetchBuild(tc, pn, jn, b.build_number);
-          setBuilds(prev => sortBuilds(prev.map(x => x.id === fresh.id ? fresh : x)));
-        } catch { /* ignore */ }
-      }
-    }
-  }, [tc, pn, jn, activeBuildID]);
+    } catch { /* ignore */ }
+  }, [tc, pn, jn]);
 
   // Initial load
   useEffect(() => {
@@ -757,12 +757,8 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
       });
     }
 
-    // Refresh active build
-    setBuilds(prev => {
-      // Trigger a refresh for non-terminal builds asynchronously
-      refreshActiveBuild(prev);
-      return prev;
-    });
+    // Refresh non-terminal builds in a single batch request
+    await refreshActiveBuild();
   }, [trackedVersionID, fetchNewBuilds, fetchTrackedBuilds, filterByTracked, refreshActiveBuild]);
   usePolling(pollBuilds, fetchInterval);
 

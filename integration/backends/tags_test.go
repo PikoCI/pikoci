@@ -109,7 +109,7 @@ job "gpu-job" {
 
 	// Wait a bit — the build should stay pending because no matching worker
 	time.Sleep(3 * time.Second)
-	builds, _, err := svc.ListJobBuilds(ctx, "main", "tags-test", "gpu-job", nil, nil, 0)
+	builds, _, err := svc.ListJobBuilds(ctx, "main", "tags-test", "gpu-job", nil, nil, 0, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, builds, "build should exist")
 	assert.Equal(t, build.Pending, builds[0].Status, "build should stay pending without a gpu worker")
@@ -120,14 +120,14 @@ job "gpu-job" {
 	go func() { defer wg.Done(); gpuWorker.Run(ctx) }()
 
 	require.Eventually(t, func() bool {
-		builds, _, err := svc.ListJobBuilds(ctx, "main", "tags-test", "gpu-job", nil, nil, 0)
+		builds, _, err := svc.ListJobBuilds(ctx, "main", "tags-test", "gpu-job", nil, nil, 0, nil)
 		if err != nil || len(builds) == 0 {
 			return false
 		}
 		return builds[0].Status == build.Succeeded || builds[0].Status == build.Failed
 	}, 20*time.Second, 200*time.Millisecond, "gpu worker should complete the build")
 
-	builds, _, _ = svc.ListJobBuilds(ctx, "main", "tags-test", "gpu-job", nil, nil, 0)
+	builds, _, _ = svc.ListJobBuilds(ctx, "main", "tags-test", "gpu-job", nil, nil, 0, nil)
 	assert.Equal(t, build.Succeeded, builds[0].Status)
 
 	cancel()
@@ -197,18 +197,18 @@ job "gpu-job" {
 
 	// Wait for the gpu-job to complete
 	require.Eventually(t, func() bool {
-		builds, _, err := svc.ListJobBuilds(ctx, "main", "excl-test", "gpu-job", nil, nil, 0)
+		builds, _, err := svc.ListJobBuilds(ctx, "main", "excl-test", "gpu-job", nil, nil, 0, nil)
 		if err != nil || len(builds) == 0 {
 			return false
 		}
 		return builds[0].Status == build.Succeeded || builds[0].Status == build.Failed
 	}, 20*time.Second, 200*time.Millisecond, "exclusive worker should complete gpu-job")
 
-	gpuBuilds, _, _ := svc.ListJobBuilds(ctx, "main", "excl-test", "gpu-job", nil, nil, 0)
+	gpuBuilds, _, _ := svc.ListJobBuilds(ctx, "main", "excl-test", "gpu-job", nil, nil, 0, nil)
 	assert.Equal(t, build.Succeeded, gpuBuilds[0].Status)
 
 	// The untagged job should still be pending — exclusive worker skips it
-	untaggedBuilds, _, err := svc.ListJobBuilds(ctx, "main", "excl-test", "untagged-job", nil, nil, 0)
+	untaggedBuilds, _, err := svc.ListJobBuilds(ctx, "main", "excl-test", "untagged-job", nil, nil, 0, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, untaggedBuilds, "untagged build should exist")
 	assert.Equal(t, build.Pending, untaggedBuilds[0].Status, "untagged job should remain pending with exclusive worker")

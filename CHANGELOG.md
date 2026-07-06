@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Build polling fan-out CPU spike**: Jobs view now fetches all non-terminal builds in a single `?status=` request instead of one HTTP call per build every 2s. Added in-flight guard and `setTimeout`-based scheduling to `usePolling` to prevent overlapping request storms.
+- **N+1 query elimination**: Pipeline image, job list, and resource list endpoints now use batch queries (`FilterByPipeline`, `LatestVersionByResources`, batch serial-group loading) instead of per-item DB calls.
+
 ### Changed
 
 - **Role rename**: Viewer→Read, Operator→Write, Maintainer→Maintain to match GitHub's model. DB migration auto-renames stored values. CLI, UI, and docs updated.

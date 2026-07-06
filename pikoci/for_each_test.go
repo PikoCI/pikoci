@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
@@ -538,11 +539,11 @@ job "deploy" {
 }
 `)
 
-	// Expect Build.Filter for each expanded job + regular jobs
-	s.Builds.EXPECT().Filter(ctx, "main", "pikoci", gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil, nil).AnyTimes()
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "pikoci", gomock.Any(), (*uint32)(nil), (*uint32)(nil), uint32(1)).
-		Return([]*resource.Version{}, nil).AnyTimes()
+	// Expect FilterByPipeline for all jobs in a single query
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "pikoci", ([]build.Status)(nil)).
+		Return(nil, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "pikoci").
+		Return(map[string]*resource.Version{}, nil)
 
 	img, err := s.S.CreatePipelineImage(ctx, "main", hclConfig, nil, "dot")
 	require.NoError(t, err)
