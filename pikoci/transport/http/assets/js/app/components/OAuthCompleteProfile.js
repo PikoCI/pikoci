@@ -9,17 +9,25 @@ import { useLoading } from '../hooks.js';
 import { showToast } from '../toast.js';
 
 export function OAuthCompleteProfile() {
-  const params = new URLSearchParams(window.location.search);
-  const [username, setUsername] = useState(params.get('username') || '');
-  const [fullName, setFullName] = useState(params.get('full_name') || '');
-  const token = params.get('token') || '';
-  const email = params.get('email') || '';
+  // Read params once on mount via useState initializer — survives re-renders
+  const [initParams] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    // Strip sensitive params from URL
+    if (window.location.search) {
+      window.history.replaceState(null, '', '/auth/complete-profile');
+    }
+    return {
+      token: p.get('token') || '',
+      username: p.get('username') || '',
+      fullName: p.get('full_name') || '',
+      email: p.get('email') || '',
+    };
+  });
+  const [username, setUsername] = useState(initParams.username);
+  const [fullName, setFullName] = useState(initParams.fullName);
+  const token = initParams.token;
+  const email = initParams.email;
   const [loading, withLoading] = useLoading();
-
-  // Strip sensitive params from URL immediately
-  if (window.location.search) {
-    window.history.replaceState(null, '', '/auth/complete-profile');
-  }
 
   if (!token) {
     route('/login', true);
