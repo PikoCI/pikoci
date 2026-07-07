@@ -506,20 +506,13 @@ func (q *PikoCI) OAuthCompleteProfile(ctx context.Context, tempToken, username, 
 		return nil, "", fmt.Errorf("provider not found: %w", err)
 	}
 
-	// Create user without password (OAuth-only)
-	randomPass, err := GenerateState()
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to generate random password: %w", err)
-	}
-	hash, err := utils.HashPassword(randomPass)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to hash password: %w", err)
-	}
-
+	// Create user with empty password sentinel (OAuth-only users).
+	// Empty string is not a valid bcrypt hash, so local login is impossible
+	// until the user explicitly sets a password via ChangePassword.
 	u := user.User{
 		Username: username,
 		FullName: fullName,
-		Password: hash,
+		Password: "",
 	}
 
 	id, err := q.Users.Create(ctx, u)

@@ -637,16 +637,15 @@ func TestOAuthCompleteProfile_DuplicateUsername(t *testing.T) {
 	assert.Contains(t, err.Error(), "UNIQUE constraint failed")
 }
 
-func TestChangePassword_OAuthUserNoCurrentPassword(t *testing.T) {
+func TestChangePassword_OAuthUserFirstPassword(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s, opr := newServiceWithOAuth(ctrl)
 	ctx := context.TODO()
 
-	hash, _ := utils.HashPassword("randompass")
+	// OAuth user with empty password sentinel — never set a password
 	s.Users.EXPECT().Find(ctx, "oauthuser").Return(&user.User{
-		ID: 5, Username: "oauthuser", Password: hash,
+		ID: 5, Username: "oauthuser", Password: "",
 	}, nil)
-	// User has OAuth links — skip old password check
 	opr.EXPECT().FindUserLinksByUser(ctx, uint32(5)).Return([]*oauthprovider.UserLink{
 		{ID: 1, UserID: 5, ProviderID: 1},
 	}, nil)
@@ -656,15 +655,31 @@ func TestChangePassword_OAuthUserNoCurrentPassword(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestChangePassword_OAuthUserAfterPasswordSet(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, _ := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	hash, _ := utils.HashPassword("mypassword")
+	// OAuth user who already set a password — old password required
+	s.Users.EXPECT().Find(ctx, "oauthuser").Return(&user.User{
+		ID: 5, Username: "oauthuser", Password: hash,
+	}, nil)
+
+	err := s.S.ChangePassword(ctx, "oauthuser", "", "newpassword")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "current password is incorrect")
+}
+
 func TestChangePassword_LocalUserRequiresCurrentPassword(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s, opr := newServiceWithOAuth(ctrl)
 	ctx := context.TODO()
 
+	// Local user with empty password but no OAuth links — rejected
 	s.Users.EXPECT().Find(ctx, "localuser").Return(&user.User{
-		ID: 6, Username: "localuser", Password: "somehash",
+		ID: 6, Username: "localuser", Password: "",
 	}, nil)
-	// User has no OAuth links — current password required
 	opr.EXPECT().FindUserLinksByUser(ctx, uint32(6)).Return([]*oauthprovider.UserLink{}, nil)
 
 	err := s.S.ChangePassword(ctx, "localuser", "", "newpassword")

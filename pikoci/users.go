@@ -278,15 +278,16 @@ func (q *PikoCI) ChangePassword(ctx context.Context, un, oldPassword, newPasswor
 		return fmt.Errorf("failed to Find User: %w", err)
 	}
 
-	// If old password is empty, allow it only for OAuth-only users (they have
-	// a random password they don't know). Check if the user has OAuth links.
-	if oldPassword == "" {
+	// OAuth users are created with an empty password sentinel. They can set
+	// their first password without providing the old one. Once set, the old
+	// password is always required.
+	if existing.Password == "" {
+		// No password set yet — only allow if user has OAuth links
 		if q.OAuthProviders != nil {
 			links, err := q.OAuthProviders.FindUserLinksByUser(ctx, existing.ID)
 			if err != nil || len(links) == 0 {
 				return fmt.Errorf("current password is required")
 			}
-			// OAuth user setting their first password — allowed
 		} else {
 			return fmt.Errorf("current password is required")
 		}
