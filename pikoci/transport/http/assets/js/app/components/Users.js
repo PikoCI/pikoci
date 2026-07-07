@@ -660,7 +660,7 @@ function LinkedAccountsTab() {
           <tbody>
             ${accounts.map(a => html`
               <tr key=${a.provider_canonical}>
-                <td class="d-flex align-items-center gap-2">${getProviderIcon(a.provider_canonical)} ${a.provider_name}</td>
+                <td><span class="d-inline-flex align-items-center gap-2">${getProviderIcon(a.provider_canonical)} ${a.provider_name}</span></td>
                 <td>${a.email || '\u2014'}</td>
                 <td>
                   <button class="btn btn-outline-danger btn-sm" onClick=${() => onUnlink(a.provider_canonical)}>

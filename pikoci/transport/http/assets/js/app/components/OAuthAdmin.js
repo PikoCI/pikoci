@@ -102,7 +102,7 @@ export function OAuthAdmin() {
           <tbody>
             ${providers.map(p => html`
               <tr key=${p.canonical}>
-                <td class="d-flex align-items-center gap-2">${getProviderIcon(p.canonical)} ${p.name}</td>
+                <td><span class="d-inline-flex align-items-center gap-2">${getProviderIcon(p.canonical)} ${p.name}</span></td>
                 <td><code>${p.canonical}</code></td>
                 <td><span class="badge ${p.type === 'oidc' ? 'bg-primary' : 'bg-info'}">${p.type.toUpperCase()}</span></td>
                 <td>${p.enabled
