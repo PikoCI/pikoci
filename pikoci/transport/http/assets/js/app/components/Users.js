@@ -340,6 +340,13 @@ function PasswordTab({ mustChange }) {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [pwLoading, withPwLoading] = useLoading();
+  const [hasOAuthLinks, setHasOAuthLinks] = useState(false);
+
+  useEffect(() => {
+    fetchLinkedAccounts().then(data => {
+      if (data && data.length > 0) setHasOAuthLinks(true);
+    }).catch(() => {});
+  }, []);
 
   const onChangePassword = (e) => {
     e.preventDefault();
@@ -371,9 +378,15 @@ function PasswordTab({ mustChange }) {
 
   return html`
     <form id="change-password-form" onSubmit=${onChangePassword}>
+      ${hasOAuthLinks && !currentPassword ? html`
+        <div class="alert alert-info small mb-3">
+          <i class="bi bi-info-circle"></i> You signed in via OAuth. Leave current password empty to set your first local password.
+        </div>
+      ` : null}
       <div class="mb-3">
         <label for="current_password" class="form-label">Current Password</label>
-        <input type="password" class="form-control" id="current_password" placeholder="Enter current password"
+        <input type="password" class="form-control" id="current_password"
+          placeholder=${hasOAuthLinks ? 'Leave empty if signed in via OAuth' : 'Enter current password'}
           value=${currentPassword} onInput=${(e) => setCurrentPassword(e.target.value)} />
       </div>
       <div class="mb-3">
