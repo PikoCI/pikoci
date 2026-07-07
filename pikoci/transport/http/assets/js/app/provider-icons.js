@@ -8,7 +8,6 @@ const providerIcons = {
   gitlab: html`<svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="m15.734 6.1-.022-.058L13.534.358a.57.57 0 0 0-.563-.356.583.583 0 0 0-.328.122.582.582 0 0 0-.193.294l-1.47 4.499H5.025L3.555.418a.57.57 0 0 0-.193-.295.583.583 0 0 0-.89.236L.293 6.04l-.022.058a4.044 4.044 0 0 0 1.34 4.669l.008.006.021.015 3.318 2.484 1.641 1.242 1 .755a.672.672 0 0 0 .814 0l1-.755 1.64-1.242 3.338-2.5.009-.006a4.046 4.046 0 0 0 1.334-4.666z"/></svg>`,
   bitbucket: html`<svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M.778 1.213a.768.768 0 0 0-.768.892l2.17 13.095a.768.768 0 0 0 .768.644h9.608a.563.563 0 0 0 .558-.476l2.172-13.263a.768.768 0 0 0-.768-.892H.778zm8.024 9.386H6.96L6.313 6.677h3.138l-.649 3.922z"/></svg>`,
   microsoft: html`<svg width="20" height="20" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>`,
-  keycloak: html`<svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1L1 5v6l7 4 7-4V5L8 1zm0 1.236L13.09 5.5 8 8.764 2.91 5.5 8 2.236zM2.5 6.382l5 2.854v5.382l-5-2.854V6.382zm11 0v5.382l-5 2.854V9.236l5-2.854z"/></svg>`,
 };
 
 export function getProviderIcon(canonical) {
