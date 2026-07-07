@@ -13,7 +13,7 @@ import (
 
 func TestOAuthLoginWithKeycloak(t *testing.T) {
 	if os.Getenv("KEYCLOAK_URL") == "" {
-		t.Skip("KEYCLOAK_URL not set, skipping OAuth integration test")
+		t.Fatal("KEYCLOAK_URL env var is required for OAuth integration tests")
 	}
 
 	wd := getRemote(t)
