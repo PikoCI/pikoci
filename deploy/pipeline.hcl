@@ -719,7 +719,7 @@ service_type "keycloak" {
 
   ready_check "exec" {
     path     = "/bin/sh"
-    args     = ["-ec", "curl -sf http://127.0.0.1:$param_port/realms/master"]
+    args     = ["-ec", "curl -sf http://127.0.0.1:$param_port/realms/pikoci"]
     interval = "3s"
     timeout  = "120s"
   }
