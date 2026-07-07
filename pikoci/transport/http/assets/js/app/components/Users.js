@@ -13,6 +13,7 @@ import {
 import { session, login, setNoticeError, isAdmin } from '../state.js';
 import { useLoading, useRequireAuth } from '../hooks.js';
 import { showToast } from '../toast.js';
+import { getProviderIcon } from '../provider-icons.js';
 
 // --- UsersList ---
 
@@ -659,7 +660,7 @@ function LinkedAccountsTab() {
           <tbody>
             ${accounts.map(a => html`
               <tr key=${a.provider_canonical}>
-                <td>${a.provider_name}</td>
+                <td class="d-flex align-items-center gap-2">${getProviderIcon(a.provider_canonical)} ${a.provider_name}</td>
                 <td>${a.email || '\u2014'}</td>
                 <td>
                   <button class="btn btn-outline-danger btn-sm" onClick=${() => onUnlink(a.provider_canonical)}>
@@ -678,9 +679,9 @@ function LinkedAccountsTab() {
       <div class="mt-3">
         <h6 class="text-muted">Link an account</h6>
         ${unlinkableProviders.map(p => html`
-          <button key=${p.canonical} class="btn btn-outline-secondary btn-sm me-2 mb-2"
+          <button key=${p.canonical} class="btn btn-outline-secondary btn-sm me-2 mb-2 d-inline-flex align-items-center gap-1"
             onClick=${() => onLink(p.canonical)}>
-            <i class="bi bi-link-45deg"></i> Link ${p.name}
+            ${getProviderIcon(p.canonical)} Link ${p.name}
           </button>
         `)}
       </div>

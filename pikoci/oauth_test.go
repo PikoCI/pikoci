@@ -260,6 +260,13 @@ func TestUpdateAuthSettings_CanDisableWithProviders(t *testing.T) {
 	opr.EXPECT().FilterEnabledProviders(ctx).Return([]*oauthprovider.Provider{
 		{ID: 1, Canonical: "github", Name: "GitHub", Enabled: true},
 	}, nil)
+	// Admin user with a linked OAuth account
+	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
+		{ID: 1, Username: "admin", Admin: true},
+	}, nil)
+	opr.EXPECT().FindUserLinksByUser(ctx, uint32(1)).Return([]*oauthprovider.UserLink{
+		{ID: 1, UserID: 1, ProviderID: 1, Subject: "sub-123"},
+	}, nil)
 	opr.EXPECT().UpdateAuthSettings(ctx, oauthprovider.AuthSettings{
 		ID:               1,
 		LocalAuthEnabled: false,
@@ -267,6 +274,53 @@ func TestUpdateAuthSettings_CanDisableWithProviders(t *testing.T) {
 
 	err := s.S.UpdateAuthSettings(ctx, oauthprovider.AuthSettings{LocalAuthEnabled: false})
 	require.NoError(t, err)
+}
+
+func TestUpdateAuthSettings_CannotDisableWithoutAdminLink(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	opr.EXPECT().GetAuthSettings(ctx).Return(&oauthprovider.AuthSettings{
+		ID:               1,
+		LocalAuthEnabled: true,
+	}, nil)
+	opr.EXPECT().FilterEnabledProviders(ctx).Return([]*oauthprovider.Provider{
+		{ID: 1, Canonical: "github", Name: "GitHub", Enabled: true},
+	}, nil)
+	// Admin user with NO linked OAuth account
+	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
+		{ID: 1, Username: "admin", Admin: true},
+	}, nil)
+	opr.EXPECT().FindUserLinksByUser(ctx, uint32(1)).Return([]*oauthprovider.UserLink{}, nil)
+
+	err := s.S.UpdateAuthSettings(ctx, oauthprovider.AuthSettings{LocalAuthEnabled: false})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no admin user has a linked OAuth account")
+}
+
+func TestUpdateAuthSettings_NonAdminLinkDoesNotCount(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	opr.EXPECT().GetAuthSettings(ctx).Return(&oauthprovider.AuthSettings{
+		ID:               1,
+		LocalAuthEnabled: true,
+	}, nil)
+	opr.EXPECT().FilterEnabledProviders(ctx).Return([]*oauthprovider.Provider{
+		{ID: 1, Canonical: "github", Name: "GitHub", Enabled: true},
+	}, nil)
+	// Non-admin has a link, admin does not
+	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
+		{ID: 1, Username: "admin", Admin: true},
+		{ID: 2, Username: "regular", Admin: false},
+	}, nil)
+	opr.EXPECT().FindUserLinksByUser(ctx, uint32(1)).Return([]*oauthprovider.UserLink{}, nil)
+
+	err := s.S.UpdateAuthSettings(ctx, oauthprovider.AuthSettings{LocalAuthEnabled: false})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no admin user has a linked OAuth account")
 }
 
 func TestOAuthCompleteProfile_Valid(t *testing.T) {

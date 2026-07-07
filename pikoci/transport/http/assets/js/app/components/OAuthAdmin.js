@@ -8,6 +8,7 @@ import {
 } from '../api.js';
 import { useRequireAuth, useLoading } from '../hooks.js';
 import { showToast } from '../toast.js';
+import { getProviderIcon } from '../provider-icons.js';
 
 export function OAuthAdmin() {
   useRequireAuth({ adminOnly: true });
@@ -101,7 +102,7 @@ export function OAuthAdmin() {
           <tbody>
             ${providers.map(p => html`
               <tr key=${p.canonical}>
-                <td>${p.name}</td>
+                <td class="d-flex align-items-center gap-2">${getProviderIcon(p.canonical)} ${p.name}</td>
                 <td><code>${p.canonical}</code></td>
                 <td><span class="badge ${p.type === 'oidc' ? 'bg-primary' : 'bg-info'}">${p.type.toUpperCase()}</span></td>
                 <td>${p.enabled

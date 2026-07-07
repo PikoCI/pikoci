@@ -259,11 +259,31 @@ func (q *PikoCI) UpdateAuthSettings(ctx context.Context, settings oauthprovider.
 	}
 	settings.ID = existing.ID
 
-	// Safety: cannot disable local auth if there are no enabled OAuth providers
+	// Safety: cannot disable local auth unless an admin user has a linked OAuth account
 	if !settings.LocalAuthEnabled {
 		providers, err := q.OAuthProviders.FilterEnabledProviders(ctx)
 		if err != nil || len(providers) == 0 {
 			return fmt.Errorf("cannot disable local auth: no enabled OAuth providers configured")
+		}
+
+		// Check that at least one admin has a linked OAuth account
+		admins, err := q.Users.Filter(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to list users: %w", err)
+		}
+		adminHasLink := false
+		for _, u := range admins {
+			if !u.Admin {
+				continue
+			}
+			links, err := q.OAuthProviders.FindUserLinksByUser(ctx, u.ID)
+			if err == nil && len(links) > 0 {
+				adminHasLink = true
+				break
+			}
+		}
+		if !adminHasLink {
+			return fmt.Errorf("cannot disable local auth: no admin user has a linked OAuth account")
 		}
 	}
 
