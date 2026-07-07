@@ -246,7 +246,7 @@ function ProviderForm({ provider, onDone, onCancel }) {
               <div class="d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1 ${!selectedPreset ? 'active' : ''}"
                   onClick=${() => { setSelectedPreset(''); onPresetChange(''); }}>
-                  <i class="bi bi-gear"></i> Other
+                  <i class="bi bi-shield-lock"></i> Other
                 </button>
                 ${Object.entries(PROVIDER_PRESETS).map(([key, p]) => html`
                   <button key=${key} type="button"
