@@ -341,7 +341,19 @@ function PasswordTab({ mustChange }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [pwLoading, withPwLoading] = useLoading();
   const u = session.value.user || {};
-  const hasPassword = !!u.has_password;
+  // If has_password is missing from JWT (old session), refresh to get it
+  const [hasPassword, setHasPassword] = useState(u.has_password !== undefined ? u.has_password : true);
+
+  useEffect(() => {
+    if (u.has_password === undefined) {
+      postRefreshToken().then(resp => {
+        if (resp.data && resp.data.jwt) {
+          login(resp.data.jwt, resp.data.user);
+          setHasPassword(resp.data.user.has_password !== false);
+        }
+      }).catch(() => {});
+    }
+  }, []);
 
   const onChangePassword = (e) => {
     e.preventDefault();
