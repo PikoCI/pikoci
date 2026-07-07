@@ -368,10 +368,20 @@ function PasswordTab({ mustChange }) {
       } catch {
         return;
       }
-      const currentUser = session.value.user;
-      if (currentUser) {
-        const updatedUser = { ...currentUser, must_change_password: false };
-        login(session.value.jwt, updatedUser);
+      // Refresh JWT to update has_password and must_change_password flags
+      try {
+        const resp = await postRefreshToken();
+        if (resp.data && resp.data.jwt) {
+          login(resp.data.jwt, resp.data.user);
+          setHasPassword(resp.data.user.has_password !== false);
+        }
+      } catch {
+        // Fallback: update locally
+        const currentUser = session.value.user;
+        if (currentUser) {
+          login(session.value.jwt, { ...currentUser, must_change_password: false, has_password: true });
+          setHasPassword(true);
+        }
       }
       setCurrentPassword('');
       setNewPassword('');
