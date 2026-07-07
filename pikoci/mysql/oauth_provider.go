@@ -90,7 +90,7 @@ func newDBUserLink(l oauthprovider.UserLink) dbUserLink {
 		UserID:     toNullInt64(int(l.UserID)),
 		ProviderID: toNullInt64(int(l.ProviderID)),
 		Subject:    toNullString(l.Subject),
-		Email:      toNullString(l.Email),
+		Email:      sql.NullString{String: l.Email, Valid: true},
 	}
 }
 

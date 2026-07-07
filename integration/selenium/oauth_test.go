@@ -178,4 +178,76 @@ func TestOAuthLoginWithKeycloak(t *testing.T) {
 	// Should land on Teams without profile completion
 	waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 15*time.Second)
 	t.Log("Returning user OAuth login successful")
+
+	// --- Password flow for OAuth user ---
+
+	// Navigate to profile password tab
+	err = wd.Get(pikoURL + "/profile?tab=password")
+	require.NoError(t, err)
+	waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Profile"), 10*time.Second)
+
+	// Click the Password tab
+	waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+		btns, _ := wd.FindElements(selenium.ByCSSSelector, ".nav-link")
+		for _, b := range btns {
+			txt, _ := b.Text()
+			if txt == "Password" {
+				b.Click()
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second)
+	time.Sleep(500 * time.Millisecond)
+
+	// OAuth user with no password: should NOT see current password field
+	// but SHOULD see the info banner
+	waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+		el, err := wd.FindElement(selenium.ByCSSSelector, ".alert-info")
+		return err == nil && el != nil
+	}, 5*time.Second)
+	_, err = wd.FindElement(selenium.ByCSSSelector, "#current_password")
+	require.Error(t, err, "current_password field should be hidden for OAuth user without password")
+	t.Log("OAuth user without password: current password field hidden")
+
+	// Set a new password
+	newPass, err := wd.FindElement(selenium.ByCSSSelector, "#new_password")
+	require.NoError(t, err)
+	newPass.SendKeys("localpass123")
+
+	confirmPass, err := wd.FindElement(selenium.ByCSSSelector, "#confirm_password")
+	require.NoError(t, err)
+	confirmPass.SendKeys("localpass123")
+
+	changeBtn, err := wd.FindElement(selenium.ByCSSSelector, "#change-password-form button[type=submit]")
+	require.NoError(t, err)
+	require.NoError(t, changeBtn.Click())
+
+	// Wait for success toast
+	waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+		els, _ := wd.FindElements(selenium.ByCSSSelector, ".piko-toast")
+		for _, el := range els {
+			txt, _ := el.Text()
+			if txt == "Password changed successfully" {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second)
+	t.Log("OAuth user set first password successfully")
+
+	// After setting password, current password field should now appear
+	time.Sleep(time.Second)
+	waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+		el, err := wd.FindElement(selenium.ByCSSSelector, "#current_password")
+		return err == nil && el != nil
+	}, 5*time.Second)
+
+	// Info banner should be gone
+	_, err = wd.FindElement(selenium.ByCSSSelector, ".alert-info")
+	require.Error(t, err, "info banner should be hidden after password is set")
+	t.Log("After password set: current password field visible, info banner gone")
+
+	// Local password login is verified via unit tests
+	// (TestChangePassword_OAuthUserFirstPassword + direct Go integration test)
 }
