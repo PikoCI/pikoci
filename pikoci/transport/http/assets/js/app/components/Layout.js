@@ -191,7 +191,7 @@ export const Layout = ({ children }) => {
     <header>
       <${Header} />
     </header>
-    <main class="container">
+    <main class="container pt-4">
       <${Notice} />
       <div id="breadcrumb-container"></div>
       ${children}
