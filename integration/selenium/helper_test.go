@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	port = 8080
+	port = 4444
 )
 
 var geckoDriverPath string

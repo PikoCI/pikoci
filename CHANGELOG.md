@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Build status not updating in UI**: Active build view now detects when a build transitions to a terminal state (succeeded/failed/cancelled) and re-fetches it, instead of requiring a manual page reload.
 - **Build polling fan-out CPU spike**: Jobs view now fetches all non-terminal builds in a single `?status=` request instead of one HTTP call per build every 2s. Added in-flight guard and `setTimeout`-based scheduling to `usePolling` to prevent overlapping request storms.
 - **N+1 query elimination**: Pipeline image, job list, and resource list endpoints now use batch queries (`FilterByPipeline`, `LatestVersionByResources`, batch serial-group loading) instead of per-item DB calls.
 
