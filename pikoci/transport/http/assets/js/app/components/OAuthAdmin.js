@@ -197,6 +197,7 @@ function ProviderForm({ provider, onDone, onCancel }) {
   const [usernameClaim, setUsernameClaim] = useState(provider?.username_claim || '');
   const [enabled, setEnabled] = useState(provider?.enabled ?? true);
   const [loading, withLoading] = useLoading();
+  const [selectedPreset, setSelectedPreset] = useState('');
 
   const onPresetChange = (key) => {
     const preset = key ? PROVIDER_PRESETS[key] : null;
@@ -242,13 +243,20 @@ function ProviderForm({ provider, onDone, onCancel }) {
           ${!isEdit ? html`
             <div class="mb-3">
               <label class="form-label">Provider Template</label>
-              <select class="form-select" onChange=${(e) => onPresetChange(e.target.value)}>
-                <option value="">Other (manual configuration)</option>
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1 ${!selectedPreset ? 'active' : ''}"
+                  onClick=${() => { setSelectedPreset(''); onPresetChange(''); }}>
+                  <i class="bi bi-gear"></i> Other
+                </button>
                 ${Object.entries(PROVIDER_PRESETS).map(([key, p]) => html`
-                  <option key=${key} value=${key}>${p.label}</option>
+                  <button key=${key} type="button"
+                    class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1 ${selectedPreset === key ? 'active' : ''}"
+                    onClick=${() => { setSelectedPreset(key); onPresetChange(key); }}>
+                    ${getProviderIcon(key)} ${p.label}
+                  </button>
                 `)}
-              </select>
-              <div class="form-text">Select a provider to pre-fill URLs, scopes, and type. You can edit all fields after.</div>
+              </div>
+              <div class="form-text mt-1">Select a provider to pre-fill URLs, scopes, and type. You can edit all fields after.</div>
             </div>
           ` : null}
           <div class="row mb-3">
