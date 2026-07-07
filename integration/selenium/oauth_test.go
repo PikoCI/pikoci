@@ -87,8 +87,22 @@ func TestOAuthLoginWithKeycloak(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, submitBtn.Click())
 
-	// Wait for Teams page
-	waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 10*time.Second)
+	// Wait for Teams page — allow extra time for the POST + redirect
+	waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+		curURL, _ := wd.CurrentURL()
+		el, err := wd.FindElement(selenium.ByCSSSelector, "#breadcrumb")
+		if err != nil {
+			h1, _ := wd.FindElement(selenium.ByCSSSelector, "h1")
+			h1txt := ""
+			if h1 != nil {
+				h1txt, _ = h1.Text()
+			}
+			t.Logf("waiting for Teams: url=%s h1=%s", curURL, h1txt)
+			return false
+		}
+		txt, _ := el.Text()
+		return txt == "Teams"
+	}, 15*time.Second)
 
 	t.Log("New user OAuth login successful")
 
