@@ -15,6 +15,12 @@ import (
 const defaultAdminUsername = "admin"
 const defaultAdmin123Hash = "$2a$14$FoV/2Z0CRgQyiDJLMcErd.cC/DtWCKMWtxZEaL6HQd/rrtU2DZpAu"
 
+// setHasPassword sets the HasPassword flag based on whether the user has a
+// non-empty password hash (empty = OAuth-only, never set a local password).
+func setHasPassword(um *user.WithMemberships) {
+	um.HasPassword = um.Password != ""
+}
+
 // UserLogin authenticates a user by username and password. On success, it returns
 // the user with team memberships and a signed JWT token. If the user is the
 // migration-seeded admin with the default password, the MustChangePassword flag
@@ -45,6 +51,7 @@ func (q *PikoCI) UserLogin(ctx context.Context, un, pass string) (*user.WithMemb
 	if um.Username == defaultAdminUsername && um.Password == defaultAdmin123Hash {
 		um.MustChangePassword = true
 	}
+	setHasPassword(um)
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user": um,
@@ -67,6 +74,7 @@ func (q *PikoCI) RefreshToken(ctx context.Context, un string) (*user.WithMembers
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to Find User: %w", err)
 	}
+	setHasPassword(um)
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user": um,

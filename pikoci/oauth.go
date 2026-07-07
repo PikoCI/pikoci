@@ -234,8 +234,34 @@ func (q *PikoCI) UpdateOAuthProvider(ctx context.Context, canonical string, p oa
 }
 
 // DeleteOAuthProvider deletes an OAuth provider by canonical.
+// It prevents deletion if any user relies on this provider as their only
+// authentication method (no local password and no other OAuth links).
 func (q *PikoCI) DeleteOAuthProvider(ctx context.Context, canonical string) error {
-	err := q.OAuthProviders.DeleteProvider(ctx, canonical)
+	provider, err := q.OAuthProviders.FindProviderByCanonical(ctx, canonical)
+	if err != nil {
+		return fmt.Errorf("failed to find OAuth provider: %w", err)
+	}
+
+	// Check if any user would be locked out
+	users, err := q.Users.Filter(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list users: %w", err)
+	}
+	for _, u := range users {
+		if u.Password != "" {
+			continue // has local password, won't be locked out
+		}
+		links, err := q.OAuthProviders.FindUserLinksByUser(ctx, u.ID)
+		if err != nil || len(links) == 0 {
+			continue
+		}
+		// Check if this provider is their only link
+		if len(links) == 1 && links[0].ProviderID == provider.ID {
+			return fmt.Errorf("cannot delete provider %q: user %q has no local password and no other OAuth links", canonical, u.Username)
+		}
+	}
+
+	err = q.OAuthProviders.DeleteProvider(ctx, canonical)
 	if err != nil {
 		return fmt.Errorf("failed to delete OAuth provider: %w", err)
 	}
@@ -536,6 +562,7 @@ func (q *PikoCI) OAuthCompleteProfile(ctx context.Context, tempToken, username, 
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to find user: %w", err)
 	}
+	um.HasPassword = um.Password != ""
 
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user": um,

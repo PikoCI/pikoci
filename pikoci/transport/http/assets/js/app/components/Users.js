@@ -340,13 +340,8 @@ function PasswordTab({ mustChange }) {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [pwLoading, withPwLoading] = useLoading();
-  const [hasOAuthLinks, setHasOAuthLinks] = useState(false);
-
-  useEffect(() => {
-    fetchLinkedAccounts().then(data => {
-      if (data && data.length > 0) setHasOAuthLinks(true);
-    }).catch(() => {});
-  }, []);
+  const u = session.value.user || {};
+  const hasPassword = !!u.has_password;
 
   const onChangePassword = (e) => {
     e.preventDefault();
@@ -378,17 +373,18 @@ function PasswordTab({ mustChange }) {
 
   return html`
     <form id="change-password-form" onSubmit=${onChangePassword}>
-      ${hasOAuthLinks && !currentPassword ? html`
+      ${!hasPassword ? html`
         <div class="alert alert-info small mb-3">
-          <i class="bi bi-info-circle"></i> You signed in via OAuth. Leave current password empty to set your first local password.
+          <i class="bi bi-info-circle"></i> You don't have a local password yet. Set one below to enable username/password login.
         </div>
-      ` : null}
-      <div class="mb-3">
-        <label for="current_password" class="form-label">Current Password</label>
-        <input type="password" class="form-control" id="current_password"
-          placeholder=${hasOAuthLinks ? 'Leave empty if signed in via OAuth' : 'Enter current password'}
-          value=${currentPassword} onInput=${(e) => setCurrentPassword(e.target.value)} />
-      </div>
+      ` : html`
+        <div class="mb-3">
+          <label for="current_password" class="form-label">Current Password</label>
+          <input type="password" class="form-control" id="current_password"
+            placeholder="Enter current password"
+            value=${currentPassword} onInput=${(e) => setCurrentPassword(e.target.value)} />
+        </div>
+      `}
       <div class="mb-3">
         <label for="new_password" class="form-label">New Password</label>
         <input type="password" class="form-control" id="new_password" placeholder="Enter new password"

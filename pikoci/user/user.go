@@ -22,6 +22,7 @@ type WithMemberships struct {
 
 	Memberships        []Member `json:"memberships"`
 	MustChangePassword bool     `json:"must_change_password,omitempty"`
+	HasPassword        bool     `json:"has_password,omitempty"`
 }
 
 // Member represents a user's membership in a specific team, identified by the

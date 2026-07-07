@@ -686,3 +686,65 @@ func TestChangePassword_LocalUserRequiresCurrentPassword(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "current password is required")
 }
+
+func TestDeleteOAuthProvider_BlockedByOnlyAuth(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
+		ID: 1, Canonical: "github",
+	}, nil)
+	// User with no local password and only this provider linked
+	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
+		{ID: 5, Username: "oauthonly", Password: ""},
+	}, nil)
+	opr.EXPECT().FindUserLinksByUser(ctx, uint32(5)).Return([]*oauthprovider.UserLink{
+		{ID: 1, UserID: 5, ProviderID: 1},
+	}, nil)
+
+	err := s.S.DeleteOAuthProvider(ctx, "github")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot delete provider")
+	assert.Contains(t, err.Error(), "oauthonly")
+}
+
+func TestDeleteOAuthProvider_AllowedWhenUserHasPassword(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
+		ID: 1, Canonical: "github",
+	}, nil)
+	hash, _ := utils.HashPassword("localpass")
+	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
+		{ID: 5, Username: "bothauth", Password: hash},
+	}, nil)
+	opr.EXPECT().DeleteProvider(ctx, "github").Return(nil)
+
+	err := s.S.DeleteOAuthProvider(ctx, "github")
+	require.NoError(t, err)
+}
+
+func TestDeleteOAuthProvider_AllowedWhenUserHasOtherLinks(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
+		ID: 1, Canonical: "github",
+	}, nil)
+	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
+		{ID: 5, Username: "multiauth", Password: ""},
+	}, nil)
+	// User has two OAuth links — deleting one is fine
+	opr.EXPECT().FindUserLinksByUser(ctx, uint32(5)).Return([]*oauthprovider.UserLink{
+		{ID: 1, UserID: 5, ProviderID: 1},
+		{ID: 2, UserID: 5, ProviderID: 2},
+	}, nil)
+	opr.EXPECT().DeleteProvider(ctx, "github").Return(nil)
+
+	err := s.S.DeleteOAuthProvider(ctx, "github")
+	require.NoError(t, err)
+}
