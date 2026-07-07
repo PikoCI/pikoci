@@ -171,7 +171,7 @@ func runLocal(ctx context.Context, logger *slog.Logger, pipelineConfig, jobName 
 
 	// Create service (do NOT start scheduler)
 	jwtSecret := []byte("local-run-secret")
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, nil, suow, jwtSecret, notifier.New(), logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, nil, nil, suow, jwtSecret, notifier.New(), logger)
 
 	// Create pipeline
 	pp, err := svc.CreatePipeline(ctx, mainTeamCanonical, "local", hclBytes, vars)

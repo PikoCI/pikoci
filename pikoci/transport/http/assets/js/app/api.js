@@ -207,6 +207,22 @@ export const fetchAuditLog = (tc, params) => {
   return api('/teams/' + tc + '/audit' + (qs ? '?' + qs : ''));
 };
 
+// --- OAuth ---
+export const fetchAuthMethods = () => api('/auth/methods', { silent: true }).catch(() => ({ data: { local_auth_enabled: true, providers: [] } })).then(r => r.data);
+export const postOAuthCompleteProfile = (data) => api('/auth/oauth/complete-profile', { method: 'POST', body: JSON.stringify(data) });
+
+// --- OAuth Admin ---
+export const fetchOAuthProviders = () => api('/admin/oauth-providers').then(r => r.data);
+export const createOAuthProvider = (data) => api('/admin/oauth-providers', { method: 'POST', body: JSON.stringify(data) });
+export const updateOAuthProvider = (canonical, data) => api('/admin/oauth-providers/' + canonical, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteOAuthProvider = (canonical) => api('/admin/oauth-providers/' + canonical, { method: 'DELETE' });
+export const fetchAdminAuthSettings = () => api('/admin/auth-settings').then(r => r.data);
+export const updateAdminAuthSettings = (data) => api('/admin/auth-settings', { method: 'PUT', body: JSON.stringify(data) });
+
+// --- Linked Accounts ---
+export const fetchLinkedAccounts = () => api('/profile/linked-accounts').then(r => r.data);
+export const unlinkAccount = (canonical) => api('/profile/linked-accounts/' + canonical, { method: 'DELETE' });
+
 // --- Local Editor Mode ---
 export const fetchLocalConfig = () => fetch('/local/config').then(r => r.json());
 export const saveLocalConfig = (data) => api('/local/save', { method: 'POST', body: JSON.stringify(data) });

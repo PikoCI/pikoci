@@ -24,6 +24,7 @@ pikoci server [flags]
 | `--concurrency` | | `1` | no | Number of worker goroutines |
 | `--drain-timeout` | | `10m` | no | Max time to wait for in-flight jobs during graceful shutdown (`SIGQUIT`) |
 | `--log-level` | | `info` | no | Log level: `debug`, `info`, `warn`, `error` |
+| `--external-url` | | | no | Public URL for OAuth callbacks (e.g., `https://ci.example.com`). Required for OAuth/OIDC. |
 | `--config` | `-c` | | no | Path to a config file |
 | `--team-canonical` | | `main` | no | Team to use for `--pipeline-*` flags |
 | `--pipeline-config` | | | no | Load a pipeline config file at startup |

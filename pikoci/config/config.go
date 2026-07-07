@@ -28,6 +28,8 @@ type Config struct {
 
 	LogLevel string `mapstructure:"log-level"`
 
+	ExternalURL string `mapstructure:"external-url"`
+
 	TeamCanonical       string `mapstructure:"team-canonical"`
 	PipelineDisplayName string `mapstructure:"pipeline-name"`
 	PipelineConfig      string `mapstructure:"pipeline-config"`

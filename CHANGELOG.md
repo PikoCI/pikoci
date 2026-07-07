@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **OIDC/OAuth2 authentication**: Single sign-on with GitHub, Google, GitLab, Keycloak, Microsoft, or any OIDC/OAuth2 provider. Admin UI with provider templates, account linking, and local auth toggle ([#249](https://github.com/PikoCI/pikoci/issues/249)).
 - **Secret chaining**: Secret `path`/`key` fields and `secret_type` config can now reference other variables, resolved in dependency order with cycle detection ([#248](https://github.com/PikoCI/pikoci/issues/248)).
 - **Approval gates**: `approve` HCL block on jobs creates a human approval gate. Purple "Waiting for Approval" status, approve/reject UI+CLI+API (Maintain+), configurable count, notifications, version pinning, audit events ([#152](https://github.com/PikoCI/pikoci/issues/152)).
 - **Version pinning at build creation**: Downstream builds snapshot triggered resource versions at creation time, matching Concourse CI behavior.

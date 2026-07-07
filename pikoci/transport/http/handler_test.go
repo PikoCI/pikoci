@@ -30,7 +30,7 @@ func TestSPAFallback_BrowserNavigation(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -239,7 +239,7 @@ func TestUpdatePipeline_TeamCanonicalFromURL(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -279,7 +279,7 @@ func TestRefreshTokenEndpoint(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -323,7 +323,7 @@ func TestGetVersion(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "v0.2.1", "b17daa3")
+	handler := Handler(s, secret, logger, nil, "", "v0.2.1", "b17daa3", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -356,7 +356,7 @@ func TestExportDatabase_AdminAllowed(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	handler := Handler(s, secret, logger, db, "mem", "test", "abc1234")
+	handler := Handler(s, secret, logger, db, "mem", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -387,7 +387,7 @@ func TestExportDatabase_NonAdminForbidden(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -416,7 +416,7 @@ func TestExportDatabase_UnauthenticatedForbidden(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -441,7 +441,7 @@ func TestExportDatabase_ResponseHeaders(t *testing.T) {
 	require.NoError(t, err)
 	defer memDB.Close()
 
-	handler := Handler(s, secret, logger, memDB, "mem", "test", "abc1234")
+	handler := Handler(s, secret, logger, memDB, "mem", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -476,7 +476,7 @@ func TestXRefreshTokenHeader(t *testing.T) {
 	t.Run("header set when memberships differ", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		s := mock.NewService(ctrl)
-		handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+		handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -510,7 +510,7 @@ func TestXRefreshTokenHeader(t *testing.T) {
 	t.Run("header not set when memberships match", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		s := mock.NewService(ctrl)
-		handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+		handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -538,7 +538,7 @@ func TestXRefreshTokenHeader(t *testing.T) {
 	t.Run("header not set for worker tokens", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		s := mock.NewService(ctrl)
-		handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+		handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -570,7 +570,7 @@ func TestGetPipelineImage_DOT_ReturnsJSON(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -608,7 +608,7 @@ func TestGetPipelineImage_SVG_ReturnsRawSVG(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -644,7 +644,7 @@ func TestGetPipelineImage_PNG_ReturnsRawPNG(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -680,7 +680,7 @@ func TestGetPipelineImage_SVG_NoJSONHeaderRequired(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -713,7 +713,7 @@ func TestGetPipelineImage_PublicFallback_SVG(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -745,7 +745,7 @@ func TestGetPipelineImage_Error_ReturnsJSON(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -781,7 +781,7 @@ func TestGetBuildReport_Success(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -833,7 +833,7 @@ func TestGetBuildReport_Error_NoContentDisposition(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -870,7 +870,7 @@ func TestGetBuildReport_UnauthenticatedDenied(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -891,7 +891,7 @@ func TestWorkerHeartbeat_WithWorkerToken(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -935,7 +935,7 @@ func TestListWorkers_AdminAllowed(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -966,7 +966,7 @@ func TestListWorkers_NonAdminForbidden(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -996,7 +996,7 @@ func TestWorkersHealth_AdminAllowed(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -1032,7 +1032,7 @@ func TestDeleteWorker_AdminAllowed(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -1067,7 +1067,7 @@ func TestDeleteWorker_NonAdminForbidden(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -1097,7 +1097,7 @@ func TestGetResourceVersionPath_Success(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -1147,7 +1147,7 @@ func TestGetResourceVersionPath_InvalidVersionID(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -1183,7 +1183,7 @@ func TestGetResourceVersionPath_PublicFallback(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -1227,7 +1227,7 @@ func TestGetResourceVersionPath_Error(t *testing.T) {
 	secret := []byte("test-secret")
 	logger := slog.Default()
 
-	handler := Handler(s, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 

@@ -99,6 +99,21 @@ func (r *UserRepository) Find(ctx context.Context, un string) (*user.User, error
 	return u, nil
 }
 
+func (r *UserRepository) FindByID(ctx context.Context, id uint32) (*user.User, error) {
+	row := r.querier.QueryRowContext(ctx, `
+		SELECT u.id, u.full_name, u.username, u.password, u.admin
+		FROM users AS u
+		WHERE u.id = ?
+	`, id)
+
+	u, err := scanUser(row)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan User: %w", err)
+	}
+
+	return u, nil
+}
+
 func (r *UserRepository) FindWithMemberships(ctx context.Context, un string) (*user.WithMemberships, error) {
 	rows, err := r.querier.QueryContext(ctx, `
 		SELECT u.id, u.full_name, u.username, u.password, u.admin,

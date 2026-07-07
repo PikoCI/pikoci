@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
+	"github.com/pikoci/pikoci/pikoci/oauthprovider"
 	tshttp "github.com/pikoci/pikoci/pikoci/transport/http"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -60,16 +62,43 @@ func runTests(m *testing.M) int {
 	suow := unitwork.NewStartUnitOfWork(db, mysql.Mem)
 	wn := notifier.New()
 	alr := mysql.NewAuditLogRepository(db)
-	var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, alr, suow, jwtSecret, wn, logger)
+	opr := mysql.NewOAuthProviderRepository(db)
+	var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, alr, opr, suow, jwtSecret, wn, logger)
 	svc.StartScheduler(ctx)
-	var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.Mem, "test", "abc1234")
-	server := httptest.NewServer(handler)
+
+	oauthStateStore := pikoci.NewOAuthStateStore(ctx)
+
+	// Create a placeholder handler that will be replaced once we know the external URL.
+	// We use a mux so we can swap the inner handler after getting the server URL.
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
 	pikoURL = server.URL
 	defer server.Close()
+
+	// Now build the real handler with the correct external URL for OAuth callbacks
+	var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.Mem, "test", "abc1234", pikoURL, oauthStateStore)
+	mux.Handle("/", handler)
 
 	isHash := true
 	_, _ = svc.CreateUser(ctx, user.User{FullName: "pepito", Username: "pepito", Password: "$2a$14$rwQk8Qvc2rij7qhFO4P1W.OiSF6AkgVU1RCrLaY2wawJcpkPEKwbm"}, isHash)
 	_, _ = svc.CreateUser(ctx, user.User{FullName: "grillo", Username: "grillo", Password: "$2a$14$SvWir17.jlXxiZfe0pJuDedznetc/HWKv43YPsQQNo6MJiuypS2q6"}, isHash)
+
+	// Create Keycloak OIDC provider for OAuth integration tests.
+	// Only if KEYCLOAK_URL is set (e.g., http://localhost:8180).
+	if kcURL := os.Getenv("KEYCLOAK_URL"); kcURL != "" {
+		_, _ = svc.CreateOAuthProvider(ctx, oauthprovider.Provider{
+			Name:          "Keycloak",
+			Canonical:     "keycloak",
+			Type:          "oidc",
+			IssuerURL:     kcURL + "/realms/pikoci",
+			ClientID:      "pikoci",
+			ClientSecret:  "test-client-secret",
+			Scopes:        "openid email profile",
+			UsernameClaim: "preferred_username",
+			Enabled:       true,
+		})
+	}
+
 	go func() {
 		runWorker(ctx, svc, 1, "DEBUG")
 	}()

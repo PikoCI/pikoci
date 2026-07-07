@@ -8,6 +8,7 @@ import {
   updateProfile, changePassword, postRefreshToken,
   fetchApiTokens, createApiToken, deleteApiToken,
   fetchTeams,
+  fetchLinkedAccounts, unlinkAccount, fetchAuthMethods,
 } from '../api.js';
 import { session, login, setNoticeError, isAdmin } from '../state.js';
 import { useLoading, useRequireAuth } from '../hooks.js';
@@ -276,10 +277,15 @@ export function Profile() {
         <button class="nav-link ${activeTab === 'tokens' ? 'active' : ''}"
           onClick=${() => switchTab('tokens')}>API Tokens</button>
       </li>
+      <li class="nav-item">
+        <button class="nav-link ${activeTab === 'linked' ? 'active' : ''}"
+          onClick=${() => switchTab('linked')}>Linked Accounts</button>
+      </li>
     </ul>
     ${activeTab === 'profile' ? html`<${ProfileTab} />` : null}
     ${activeTab === 'password' ? html`<${PasswordTab} mustChange=${mustChange} />` : null}
     ${activeTab === 'tokens' ? html`<${ApiTokensTab} />` : null}
+    ${activeTab === 'linked' ? html`<${LinkedAccountsTab} />` : null}
   `;
 }
 
@@ -606,6 +612,77 @@ function ApiTokensTab() {
             `)}
           </tbody>
         </table>
+      </div>
+    ` : null}
+  `;
+}
+
+function LinkedAccountsTab() {
+  const [accounts, setAccounts] = useState([]);
+  const [providers, setProviders] = useState([]);
+
+  useEffect(() => {
+    fetchLinkedAccounts().then(data => setAccounts(data || [])).catch(() => {});
+    fetchAuthMethods().then(data => setProviders((data && data.providers) || [])).catch(() => {});
+
+    // Link success toast is handled by app.js on initial load
+  }, []);
+
+  const onUnlink = async (canonical) => {
+    if (!confirm('Are you sure you want to unlink this account?')) return;
+    try {
+      await unlinkAccount(canonical);
+      setAccounts(accounts.filter(a => a.provider_canonical !== canonical));
+      showToast('Account unlinked', 'success');
+    } catch {}
+  };
+
+  const onLink = (canonical) => {
+    const jwt = session.value.jwt;
+    window.location.href = '/auth/oauth/' + canonical + '?link=true&token=' + encodeURIComponent(jwt);
+  };
+
+  const linkedCanonicals = new Set(accounts.map(a => a.provider_canonical));
+  const unlinkableProviders = providers.filter(p => !linkedCanonicals.has(p.canonical));
+
+  return html`
+    ${accounts.length > 0 ? html`
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>Email</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${accounts.map(a => html`
+              <tr key=${a.provider_canonical}>
+                <td>${a.provider_name}</td>
+                <td>${a.email || '\u2014'}</td>
+                <td>
+                  <button class="btn btn-outline-danger btn-sm" onClick=${() => onUnlink(a.provider_canonical)}>
+                    <i class="bi bi-x-circle"></i> Unlink
+                  </button>
+                </td>
+              </tr>
+            `)}
+          </tbody>
+        </table>
+      </div>
+    ` : html`
+      <div class="text-muted text-center py-3">No linked accounts.</div>
+    `}
+    ${unlinkableProviders.length > 0 ? html`
+      <div class="mt-3">
+        <h6 class="text-muted">Link an account</h6>
+        ${unlinkableProviders.map(p => html`
+          <button key=${p.canonical} class="btn btn-outline-secondary btn-sm me-2 mb-2"
+            onClick=${() => onLink(p.canonical)}>
+            <i class="bi bi-link-45deg"></i> Link ${p.name}
+          </button>
+        `)}
       </div>
     ` : null}
   `;

@@ -177,20 +177,55 @@ job "test-integration" {
       ]
     }
   }
+  task "start-keycloak" {
+    run "shell" {
+      cmd = <<-EOT
+        NAME="pikoci-integration-keycloak"
+        docker rm -f $NAME 2>/dev/null || true
+        docker run -d --name $NAME \
+          -p 8180:8080 \
+          -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+          -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+          quay.io/keycloak/keycloak:26.0 \
+          start-dev --import-realm
+        docker exec $NAME mkdir -p /opt/keycloak/data/import
+        docker cp ${var.git_name}/integration/fixtures/keycloak/pikoci-realm.json $NAME:/opt/keycloak/data/import/pikoci-realm.json
+        docker restart $NAME
+        for i in $(seq 1 40); do
+          if curl -sf http://127.0.0.1:8180/realms/pikoci > /dev/null 2>&1; then
+            echo "Keycloak ready"
+            exit 0
+          fi
+          sleep 3
+        done
+        echo "Keycloak failed to start" >&2
+        exit 1
+      EOT
+    }
+  }
   task "make" {
     run "docker" {
       image = "ghcr.io/xescugc/pikoci-integration:latest"
       cmd   = <<-EOT
         export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH
+        export KEYCLOAK_URL=http://127.0.0.1:8180
         cd ${var.git_name}
         cp /usr/local/bin/geckodriver integration/vendor/geckodriver
         make test-integration
       EOT
       args  = [
+        "--network=host",
         "-v", "pikoci-go-mod:/go/pkg/mod",
         "-v", "pikoci-build:/root/.cache/go-build",
         "-v", "pikoci-tools:/pikoci-tools",
       ]
+    }
+  }
+  ensure {
+    task "stop-keycloak" {
+      run "shell" {
+        cmd = "docker rm -f pikoci-integration-keycloak 2>/dev/null || true"
+      }
     }
   }
   on_success {

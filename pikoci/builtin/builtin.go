@@ -28,6 +28,9 @@ var runnerFS embed.FS
 //go:embed secret_types/*.hcl
 var secretTypeFS embed.FS
 
+//go:embed services/*.hcl
+var serviceFS embed.FS
+
 type hclResourceType struct {
 	ResourceTypes []restype.ResourceType `hcl:"resource_type,block"`
 }
@@ -173,8 +176,10 @@ func NotificationTypeHCL(name string) ([]byte, bool) {
 }
 
 // ServiceHCL returns the raw HCL bytes for a built-in service, if it exists.
-// No built-in services are shipped yet, but this supports the source resolution
-// pipeline for future additions and for https:// sources.
 func ServiceHCL(name string) ([]byte, bool) {
-	return nil, false
+	data, err := serviceFS.ReadFile("services/" + name + ".hcl")
+	if err != nil {
+		return nil, false
+	}
+	return data, true
 }

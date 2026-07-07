@@ -18,6 +18,7 @@ import (
 	auditlog "github.com/pikoci/pikoci/pikoci/auditlog"
 	build "github.com/pikoci/pikoci/pikoci/build"
 	job "github.com/pikoci/pikoci/pikoci/job"
+	oauthprovider "github.com/pikoci/pikoci/pikoci/oauthprovider"
 	pipeline "github.com/pikoci/pikoci/pikoci/pipeline"
 	resource "github.com/pikoci/pikoci/pikoci/resource"
 	role "github.com/pikoci/pikoci/pikoci/role"
@@ -122,6 +123,36 @@ func (m *Service) CreateJobBuild(ctx context.Context, tc, pn, jn string, b build
 func (mr *ServiceMockRecorder) CreateJobBuild(ctx, tc, pn, jn, b any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateJobBuild", reflect.TypeOf((*Service)(nil).CreateJobBuild), ctx, tc, pn, jn, b)
+}
+
+// CreateOAuthProvider mocks base method.
+func (m *Service) CreateOAuthProvider(ctx context.Context, p oauthprovider.Provider) (*oauthprovider.Provider, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateOAuthProvider", ctx, p)
+	ret0, _ := ret[0].(*oauthprovider.Provider)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateOAuthProvider indicates an expected call of CreateOAuthProvider.
+func (mr *ServiceMockRecorder) CreateOAuthProvider(ctx, p any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOAuthProvider", reflect.TypeOf((*Service)(nil).CreateOAuthProvider), ctx, p)
+}
+
+// CreateOAuthUserLink mocks base method.
+func (m *Service) CreateOAuthUserLink(ctx context.Context, link oauthprovider.UserLink) (uint32, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateOAuthUserLink", ctx, link)
+	ret0, _ := ret[0].(uint32)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateOAuthUserLink indicates an expected call of CreateOAuthUserLink.
+func (mr *ServiceMockRecorder) CreateOAuthUserLink(ctx, link any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOAuthUserLink", reflect.TypeOf((*Service)(nil).CreateOAuthUserLink), ctx, link)
 }
 
 // CreatePipeline mocks base method.
@@ -272,6 +303,20 @@ func (mr *ServiceMockRecorder) DeleteJobBuild(ctx, tc, pn, jn, buildNumber any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteJobBuild", reflect.TypeOf((*Service)(nil).DeleteJobBuild), ctx, tc, pn, jn, buildNumber)
 }
 
+// DeleteOAuthProvider mocks base method.
+func (m *Service) DeleteOAuthProvider(ctx context.Context, canonical string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteOAuthProvider", ctx, canonical)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteOAuthProvider indicates an expected call of DeleteOAuthProvider.
+func (mr *ServiceMockRecorder) DeleteOAuthProvider(ctx, canonical any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteOAuthProvider", reflect.TypeOf((*Service)(nil).DeleteOAuthProvider), ctx, canonical)
+}
+
 // DeletePipeline mocks base method.
 func (m *Service) DeletePipeline(ctx context.Context, tc, pn string) error {
 	m.ctrl.T.Helper()
@@ -386,6 +431,21 @@ func (mr *ServiceMockRecorder) FindBuildGetVersions(ctx, tc, pn, jn, buildID any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindBuildGetVersions", reflect.TypeOf((*Service)(nil).FindBuildGetVersions), ctx, tc, pn, jn, buildID)
 }
 
+// FindOAuthUserLink mocks base method.
+func (m *Service) FindOAuthUserLink(ctx context.Context, providerID uint32, subject string) (*oauthprovider.UserLink, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindOAuthUserLink", ctx, providerID, subject)
+	ret0, _ := ret[0].(*oauthprovider.UserLink)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindOAuthUserLink indicates an expected call of FindOAuthUserLink.
+func (mr *ServiceMockRecorder) FindOAuthUserLink(ctx, providerID, subject any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindOAuthUserLink", reflect.TypeOf((*Service)(nil).FindOAuthUserLink), ctx, providerID, subject)
+}
+
 // FindOldestPendingBuild mocks base method.
 func (m *Service) FindOldestPendingBuild(ctx context.Context, tc, pn, jn string) (*build.Build, error) {
 	m.ctrl.T.Helper()
@@ -401,6 +461,21 @@ func (mr *ServiceMockRecorder) FindOldestPendingBuild(ctx, tc, pn, jn any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindOldestPendingBuild", reflect.TypeOf((*Service)(nil).FindOldestPendingBuild), ctx, tc, pn, jn)
 }
 
+// FindUserByID mocks base method.
+func (m *Service) FindUserByID(ctx context.Context, userID uint32) (*user.User, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindUserByID", ctx, userID)
+	ret0, _ := ret[0].(*user.User)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindUserByID indicates an expected call of FindUserByID.
+func (mr *ServiceMockRecorder) FindUserByID(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindUserByID", reflect.TypeOf((*Service)(nil).FindUserByID), ctx, userID)
+}
+
 // GenerateTeamWorkerToken mocks base method.
 func (m *Service) GenerateTeamWorkerToken(ctx context.Context, tc string) (string, error) {
 	m.ctrl.T.Helper()
@@ -414,6 +489,36 @@ func (m *Service) GenerateTeamWorkerToken(ctx context.Context, tc string) (strin
 func (mr *ServiceMockRecorder) GenerateTeamWorkerToken(ctx, tc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateTeamWorkerToken", reflect.TypeOf((*Service)(nil).GenerateTeamWorkerToken), ctx, tc)
+}
+
+// GetAuthMethods mocks base method.
+func (m *Service) GetAuthMethods(ctx context.Context) (*oauthprovider.AuthMethods, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAuthMethods", ctx)
+	ret0, _ := ret[0].(*oauthprovider.AuthMethods)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAuthMethods indicates an expected call of GetAuthMethods.
+func (mr *ServiceMockRecorder) GetAuthMethods(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAuthMethods", reflect.TypeOf((*Service)(nil).GetAuthMethods), ctx)
+}
+
+// GetAuthSettings mocks base method.
+func (m *Service) GetAuthSettings(ctx context.Context) (*oauthprovider.AuthSettings, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAuthSettings", ctx)
+	ret0, _ := ret[0].(*oauthprovider.AuthSettings)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAuthSettings indicates an expected call of GetAuthSettings.
+func (mr *ServiceMockRecorder) GetAuthSettings(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAuthSettings", reflect.TypeOf((*Service)(nil).GetAuthSettings), ctx)
 }
 
 // GetBuildReport mocks base method.
@@ -444,6 +549,21 @@ func (m *Service) GetJobBuild(ctx context.Context, tc, pn, jn, buildNumber strin
 func (mr *ServiceMockRecorder) GetJobBuild(ctx, tc, pn, jn, buildNumber any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetJobBuild", reflect.TypeOf((*Service)(nil).GetJobBuild), ctx, tc, pn, jn, buildNumber)
+}
+
+// GetOAuthProvider mocks base method.
+func (m *Service) GetOAuthProvider(ctx context.Context, canonical string) (*oauthprovider.Provider, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOAuthProvider", ctx, canonical)
+	ret0, _ := ret[0].(*oauthprovider.Provider)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOAuthProvider indicates an expected call of GetOAuthProvider.
+func (mr *ServiceMockRecorder) GetOAuthProvider(ctx, canonical any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOAuthProvider", reflect.TypeOf((*Service)(nil).GetOAuthProvider), ctx, canonical)
 }
 
 // GetPipeline mocks base method.
@@ -702,6 +822,36 @@ func (mr *ServiceMockRecorder) ListJobBuilds(ctx, tc, pn, jn, before, after, lim
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListJobBuilds", reflect.TypeOf((*Service)(nil).ListJobBuilds), ctx, tc, pn, jn, before, after, limit, statuses)
 }
 
+// ListLinkedAccounts mocks base method.
+func (m *Service) ListLinkedAccounts(ctx context.Context, userID uint32) ([]*oauthprovider.LinkedAccount, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListLinkedAccounts", ctx, userID)
+	ret0, _ := ret[0].([]*oauthprovider.LinkedAccount)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListLinkedAccounts indicates an expected call of ListLinkedAccounts.
+func (mr *ServiceMockRecorder) ListLinkedAccounts(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListLinkedAccounts", reflect.TypeOf((*Service)(nil).ListLinkedAccounts), ctx, userID)
+}
+
+// ListOAuthProviders mocks base method.
+func (m *Service) ListOAuthProviders(ctx context.Context) ([]*oauthprovider.Provider, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOAuthProviders", ctx)
+	ret0, _ := ret[0].([]*oauthprovider.Provider)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOAuthProviders indicates an expected call of ListOAuthProviders.
+func (mr *ServiceMockRecorder) ListOAuthProviders(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOAuthProviders", reflect.TypeOf((*Service)(nil).ListOAuthProviders), ctx)
+}
+
 // ListPipelineJobs mocks base method.
 func (m *Service) ListPipelineJobs(ctx context.Context, tc, pn string) ([]job.WithStatus, error) {
 	m.ctrl.T.Helper()
@@ -897,6 +1047,22 @@ func (mr *ServiceMockRecorder) NotifySerialGroupPendingBuilds(ctx, tc, pn, jn an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifySerialGroupPendingBuilds", reflect.TypeOf((*Service)(nil).NotifySerialGroupPendingBuilds), ctx, tc, pn, jn)
 }
 
+// OAuthCompleteProfile mocks base method.
+func (m *Service) OAuthCompleteProfile(ctx context.Context, tempToken, username, fullName string) (*user.WithMemberships, string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OAuthCompleteProfile", ctx, tempToken, username, fullName)
+	ret0, _ := ret[0].(*user.WithMemberships)
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// OAuthCompleteProfile indicates an expected call of OAuthCompleteProfile.
+func (mr *ServiceMockRecorder) OAuthCompleteProfile(ctx, tempToken, username, fullName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OAuthCompleteProfile", reflect.TypeOf((*Service)(nil).OAuthCompleteProfile), ctx, tempToken, username, fullName)
+}
+
 // PauseJob mocks base method.
 func (m *Service) PauseJob(ctx context.Context, tc, pCan, jn string) error {
 	m.ctrl.T.Helper()
@@ -1069,6 +1235,20 @@ func (mr *ServiceMockRecorder) TriggerResourceVersion(ctx, tc, pn, rCan, version
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TriggerResourceVersion", reflect.TypeOf((*Service)(nil).TriggerResourceVersion), ctx, tc, pn, rCan, versionID)
 }
 
+// UnlinkAccount mocks base method.
+func (m *Service) UnlinkAccount(ctx context.Context, userID uint32, canonical string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnlinkAccount", ctx, userID, canonical)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UnlinkAccount indicates an expected call of UnlinkAccount.
+func (mr *ServiceMockRecorder) UnlinkAccount(ctx, userID, canonical any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnlinkAccount", reflect.TypeOf((*Service)(nil).UnlinkAccount), ctx, userID, canonical)
+}
+
 // UnpauseJob mocks base method.
 func (m *Service) UnpauseJob(ctx context.Context, tc, pCan, jn string) error {
 	m.ctrl.T.Helper()
@@ -1123,6 +1303,20 @@ func (mr *ServiceMockRecorder) UpdateApiTokenLastUsed(ctx, tokenID any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateApiTokenLastUsed", reflect.TypeOf((*Service)(nil).UpdateApiTokenLastUsed), ctx, tokenID)
 }
 
+// UpdateAuthSettings mocks base method.
+func (m *Service) UpdateAuthSettings(ctx context.Context, settings oauthprovider.AuthSettings) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateAuthSettings", ctx, settings)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateAuthSettings indicates an expected call of UpdateAuthSettings.
+func (mr *ServiceMockRecorder) UpdateAuthSettings(ctx, settings any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAuthSettings", reflect.TypeOf((*Service)(nil).UpdateAuthSettings), ctx, settings)
+}
+
 // UpdateJobBuild mocks base method.
 func (m *Service) UpdateJobBuild(ctx context.Context, tc, pn, jn, buildNumber string, b build.Build) error {
 	m.ctrl.T.Helper()
@@ -1135,6 +1329,21 @@ func (m *Service) UpdateJobBuild(ctx context.Context, tc, pn, jn, buildNumber st
 func (mr *ServiceMockRecorder) UpdateJobBuild(ctx, tc, pn, jn, buildNumber, b any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateJobBuild", reflect.TypeOf((*Service)(nil).UpdateJobBuild), ctx, tc, pn, jn, buildNumber, b)
+}
+
+// UpdateOAuthProvider mocks base method.
+func (m *Service) UpdateOAuthProvider(ctx context.Context, canonical string, p oauthprovider.Provider) (*oauthprovider.Provider, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateOAuthProvider", ctx, canonical, p)
+	ret0, _ := ret[0].(*oauthprovider.Provider)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateOAuthProvider indicates an expected call of UpdateOAuthProvider.
+func (mr *ServiceMockRecorder) UpdateOAuthProvider(ctx, canonical, p any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOAuthProvider", reflect.TypeOf((*Service)(nil).UpdateOAuthProvider), ctx, canonical, p)
 }
 
 // UpdatePipeline mocks base method.

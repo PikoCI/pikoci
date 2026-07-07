@@ -118,6 +118,7 @@ const Header = () => {
                 ${admin && html`
                   <li><a class="dropdown-item" id="nav-users" href="/users" data-native onClick=${e => navLink(e, '/users')}><i class="bi bi-people"></i> Users <span class="badge bg-secondary ms-1">Admin</span></a></li>
                   <li><a class="dropdown-item" id="nav-workers" href="/workers" data-native onClick=${e => navLink(e, '/workers')}><i class="bi bi-cpu"></i> Workers <span class="badge bg-secondary ms-1">Admin</span></a></li>
+                  <li><a class="dropdown-item" id="nav-auth" href="/admin/auth" data-native onClick=${e => navLink(e, '/admin/auth')}><i class="bi bi-shield-lock"></i> Authentication <span class="badge bg-secondary ms-1">Admin</span></a></li>
                   <li><a class="dropdown-item" id="nav-export-db" href="#" onClick=${handleExportDb}><i class="bi bi-download"></i> Export Database <span class="badge bg-secondary ms-1">Admin</span></a></li>
                 `}
                 <li><hr class="dropdown-divider" /></li>

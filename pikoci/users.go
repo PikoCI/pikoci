@@ -20,6 +20,14 @@ const defaultAdmin123Hash = "$2a$14$FoV/2Z0CRgQyiDJLMcErd.cC/DtWCKMWtxZEaL6HQd/r
 // migration-seeded admin with the default password, the MustChangePassword flag
 // is set.
 func (q *PikoCI) UserLogin(ctx context.Context, un, pass string) (*user.WithMemberships, string, error) {
+	// Check if local auth is enabled
+	if q.OAuthProviders != nil {
+		settings, err := q.OAuthProviders.GetAuthSettings(ctx)
+		if err == nil && !settings.LocalAuthEnabled {
+			return nil, "", fmt.Errorf("local authentication is disabled")
+		}
+	}
+
 	if !utils.ValidateCanonical(un) {
 		return nil, "", fmt.Errorf("invalid Username format %q", un)
 	}

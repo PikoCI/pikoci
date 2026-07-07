@@ -85,6 +85,24 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 		{"global admin can create team", http.MethodPost, "/teams", role.Admin, true, true},
 		{"global admin can list workers", http.MethodGet, "/workers", role.Admin, true, true},
 		{"non-global-admin denied list workers", http.MethodGet, "/workers", role.Admin, false, false},
+
+		// --- OAuth admin routes: global admin only ---
+		{"global admin can list oauth providers", http.MethodGet, "/admin/oauth-providers", role.Admin, true, true},
+		{"non-global-admin denied list oauth providers", http.MethodGet, "/admin/oauth-providers", role.Admin, false, false},
+		{"global admin can create oauth provider", http.MethodPost, "/admin/oauth-providers", role.Admin, true, true},
+		{"non-global-admin denied create oauth provider", http.MethodPost, "/admin/oauth-providers", role.Admin, false, false},
+		{"global admin can update oauth provider", http.MethodPut, "/admin/oauth-providers/github", role.Admin, true, true},
+		{"non-global-admin denied update oauth provider", http.MethodPut, "/admin/oauth-providers/github", role.Admin, false, false},
+		{"global admin can delete oauth provider", http.MethodDelete, "/admin/oauth-providers/github", role.Admin, true, true},
+		{"non-global-admin denied delete oauth provider", http.MethodDelete, "/admin/oauth-providers/github", role.Admin, false, false},
+		{"global admin can get auth settings", http.MethodGet, "/admin/auth-settings", role.Admin, true, true},
+		{"non-global-admin denied get auth settings", http.MethodGet, "/admin/auth-settings", role.Admin, false, false},
+		{"global admin can update auth settings", http.MethodPut, "/admin/auth-settings", role.Admin, true, true},
+		{"non-global-admin denied update auth settings", http.MethodPut, "/admin/auth-settings", role.Admin, false, false},
+
+		// --- Profile linked accounts: any authenticated user (role.Read) ---
+		{"viewer can list linked accounts", http.MethodGet, "/profile/linked-accounts", role.Read, false, true},
+		{"viewer can unlink account", http.MethodDelete, "/profile/linked-accounts/github", role.Read, false, true},
 	}
 
 	for _, tt := range tests {
@@ -92,7 +110,7 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			svc := mock.NewService(ctrl)
 			secret := []byte("test-secret")
-			handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+			handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 			server := httptest.NewServer(handler)
 			defer server.Close()
 
@@ -126,6 +144,14 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 			svc.EXPECT().GetBuildReport(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 			svc.EXPECT().GenerateTeamWorkerToken(gomock.Any(), gomock.Any()).Return("token", nil).AnyTimes()
 			svc.EXPECT().GetTeamWorkerToken(gomock.Any(), gomock.Any()).Return("token", nil).AnyTimes()
+			svc.EXPECT().ListOAuthProviders(gomock.Any()).Return(nil, nil).AnyTimes()
+			svc.EXPECT().CreateOAuthProvider(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+			svc.EXPECT().UpdateOAuthProvider(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+			svc.EXPECT().DeleteOAuthProvider(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().GetAuthSettings(gomock.Any()).Return(nil, nil).AnyTimes()
+			svc.EXPECT().UpdateAuthSettings(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().ListLinkedAccounts(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+			svc.EXPECT().UnlinkAccount(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 			// Sign JWT
 			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user": um})
@@ -160,7 +186,7 @@ func TestUnauthenticatedPublicPipelineAccess(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -181,7 +207,7 @@ func TestUnauthenticatedPublicPipelineAccess(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -203,7 +229,7 @@ func TestWorkerJWTBypassesAuthorization(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := mock.NewService(ctrl)
 	secret := []byte("test-secret")
-	handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+	handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -244,7 +270,7 @@ func TestApiTokenAuth(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -276,7 +302,7 @@ func TestApiTokenAuth(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -309,7 +335,7 @@ func TestApiTokenAuth(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -344,7 +370,7 @@ func TestApiTokenAuth(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -378,7 +404,7 @@ func TestApiTokenAuth(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -412,7 +438,7 @@ func TestApiTokenAuth(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -441,7 +467,7 @@ func TestApiTokenAuth(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -472,7 +498,7 @@ func TestApiTokenAuth(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -499,7 +525,7 @@ func TestApiTokenAuth(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -526,7 +552,7 @@ func TestApiTokenAuth(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -546,7 +572,7 @@ func TestApiTokenAuth(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -579,7 +605,7 @@ func TestApiTokenAuth(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -611,7 +637,7 @@ func TestApiTokenAuth(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -708,7 +734,7 @@ func TestApiTokenAuth_PersonalTokenMultiTeam(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -729,7 +755,7 @@ func TestApiTokenAuth_PersonalTokenMultiTeam(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -750,7 +776,7 @@ func TestApiTokenAuth_PersonalTokenMultiTeam(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -770,7 +796,7 @@ func TestApiTokenAuth_PersonalTokenMultiTeam(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		svc := mock.NewService(ctrl)
 		secret := []byte("test-secret")
-		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+		handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -797,7 +823,7 @@ func TestApiTokenAuth_UserRemovedFromTeam(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := mock.NewService(ctrl)
 	secret := []byte("test-secret")
-	handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+	handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -847,7 +873,7 @@ func TestApiTokenAuth_TeamScopedTokenVariousRoutes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			svc := mock.NewService(ctrl)
 			secret := []byte("test-secret")
-			handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc")
+			handler := Handler(svc, secret, slog.Default(), nil, "", "test", "abc", "", nil)
 			server := httptest.NewServer(handler)
 			defer server.Close()
 

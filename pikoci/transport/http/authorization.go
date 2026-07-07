@@ -15,11 +15,15 @@ type authorizationFn func(ctx context.Context, s pikoci.Service, un, tc string) 
 var (
 	routeAuthorization = map[RouteName]authorizationFn{
 		// No auth required
-		UserLogin:       nothing,
-		RefreshToken:    nothing,
-		WebhookTrigger:  nothing,
-		WorkerHeartbeat: nothing,
-		GetVersion:      nothing,
+		UserLogin:            nothing,
+		RefreshToken:         nothing,
+		WebhookTrigger:       nothing,
+		WorkerHeartbeat:      nothing,
+		GetVersion:           nothing,
+		GetAuthMethods:       nothing,
+		OAuthStart:           nothing,
+		OAuthCallback:        nothing,
+		OAuthCompleteProfile: nothing,
 
 		// Public-level routes: unauthenticated access to public pipelines
 		GetPipeline:          requirePublicOrRole(role.Read),
@@ -38,8 +42,10 @@ var (
 		GetTeam:          requireRole(role.Read),
 		GetJobBuild:      requireRole(role.Read),
 		GetBuildReport:   requireRole(role.Read),
-		ChangePassword:   requireRole(role.Read),
-		UpdateProfile:    requireRole(role.Read),
+		ChangePassword:     requireRole(role.Read),
+		UpdateProfile:      requireRole(role.Read),
+		ListLinkedAccounts: requireRole(role.Read),
+		UnlinkAccount:      requireRole(role.Read),
 		ListTriggersAfter: requireRole(role.Read),
 
 		ListAuditLog:     requireRole(role.Read),
@@ -102,7 +108,13 @@ var (
 		ListWorkers:    globalAdmin,
 		WorkersHealth:  globalAdmin,
 		DeleteWorker:   globalAdmin,
-		ExportDatabase: globalAdmin,
+		ExportDatabase:         globalAdmin,
+		ListOAuthProviders:     globalAdmin,
+		CreateOAuthProvider:    globalAdmin,
+		UpdateOAuthProvider:    globalAdmin,
+		DeleteOAuthProvider:    globalAdmin,
+		GetAdminAuthSettings:   globalAdmin,
+		UpdateAdminAuthSettings: globalAdmin,
 
 		// API token management routes (JWT only — tokens cannot manage tokens)
 		CreateApiToken: jwtOnly(requireRole(role.Read)),

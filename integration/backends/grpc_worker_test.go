@@ -79,7 +79,7 @@ func TestGRPCWorkerFullFlow(t *testing.T) {
 
 	jwtSecret := []byte("test-secret")
 	wn := notifier.New()
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, nil, suow, jwtSecret, wn, logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, nil, nil, suow, jwtSecret, wn, logger)
 	svc.StartScheduler(ctx)
 
 	// Create admin user (ignore error if already exists from migrations)
@@ -96,7 +96,7 @@ func TestGRPCWorkerFullFlow(t *testing.T) {
 	workerv1.RegisterWorkerServiceServer(grpcSrv, grpcServer)
 	svc.GRPCServer = grpcServer
 
-	httpHandler := tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.SQLite, "test", "test")
+	httpHandler := tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.SQLite, "test", "test", "", nil)
 	httpSrv := &http.Server{Handler: handlers.CombinedLoggingHandler(os.Stderr, httpHandler)}
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -245,7 +245,7 @@ func TestStartupRecoveryFailsOrphanedBuilds(t *testing.T) {
 
 	jwtSecret := []byte("test-secret")
 	wn := notifier.New()
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, nil, suow, jwtSecret, wn, logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, nil, nil, suow, jwtSecret, wn, logger)
 
 	// Create a pipeline + job so we can create builds
 	hclConfig := []byte(`
@@ -362,7 +362,7 @@ func TestServerDrainWaitsForSeparatedWorkerBuilds(t *testing.T) {
 
 	jwtSecret := []byte("test-secret")
 	wn := notifier.New()
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, nil, suow, jwtSecret, wn, logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, nil, nil, suow, jwtSecret, wn, logger)
 	svc.StartScheduler(ctx)
 
 	// Create admin user
@@ -379,7 +379,7 @@ func TestServerDrainWaitsForSeparatedWorkerBuilds(t *testing.T) {
 	workerv1.RegisterWorkerServiceServer(grpcSrv, grpcServer)
 	svc.GRPCServer = grpcServer
 
-	httpHandler := tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.SQLite, "test", "test")
+	httpHandler := tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.SQLite, "test", "test", "", nil)
 	httpSrv := &http.Server{Handler: handlers.CombinedLoggingHandler(os.Stderr, httpHandler)}
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
