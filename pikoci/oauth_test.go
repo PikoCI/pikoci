@@ -861,3 +861,124 @@ func TestUpdateOAuthProvider_CanDisableWhenUsersHavePassword(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+func TestOAuthStateStore(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store := pikoci.NewOAuthStateStore(ctx)
+
+	// Set and Get
+	store.Set("state1", &pikoci.OAuthState{Nonce: "nonce1", CreatedAt: time.Now()})
+	got, ok := store.Get("state1")
+	require.True(t, ok)
+	assert.Equal(t, "nonce1", got.Nonce)
+
+	// Consumed on read
+	_, ok = store.Get("state1")
+	assert.False(t, ok, "state should be consumed after first Get")
+
+	// Non-existent
+	_, ok = store.Get("nonexistent")
+	assert.False(t, ok)
+
+	// Expired state
+	store.Set("expired", &pikoci.OAuthState{CreatedAt: time.Now().Add(-10 * time.Minute)})
+	_, ok = store.Get("expired")
+	assert.False(t, ok, "expired state should not be returned")
+}
+
+func TestGenerateState(t *testing.T) {
+	s1, err := pikoci.GenerateState()
+	require.NoError(t, err)
+	assert.Len(t, s1, 64) // 32 bytes hex = 64 chars
+
+	s2, err := pikoci.GenerateState()
+	require.NoError(t, err)
+	assert.NotEqual(t, s1, s2, "states should be unique")
+}
+
+func TestGetOAuthProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	expected := &oauthprovider.Provider{ID: 1, Canonical: "github", Name: "GitHub"}
+	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(expected, nil)
+
+	got, err := s.S.GetOAuthProvider(ctx, "github")
+	require.NoError(t, err)
+	assert.Equal(t, "github", got.Canonical)
+}
+
+func TestListOAuthProviders(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	opr.EXPECT().FilterProviders(ctx).Return([]*oauthprovider.Provider{
+		{ID: 1, Canonical: "github"},
+		{ID: 2, Canonical: "google"},
+	}, nil)
+
+	ps, err := s.S.ListOAuthProviders(ctx)
+	require.NoError(t, err)
+	assert.Len(t, ps, 2)
+}
+
+func TestGetAuthSettings(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	opr.EXPECT().GetAuthSettings(ctx).Return(&oauthprovider.AuthSettings{
+		ID: 1, LocalAuthEnabled: true,
+	}, nil)
+
+	settings, err := s.S.GetAuthSettings(ctx)
+	require.NoError(t, err)
+	assert.True(t, settings.LocalAuthEnabled)
+}
+
+func TestFindOAuthUserLink(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	opr.EXPECT().FindUserLink(ctx, uint32(1), "sub-123").Return(&oauthprovider.UserLink{
+		ID: 1, UserID: 5, ProviderID: 1, Subject: "sub-123",
+	}, nil)
+
+	link, err := s.S.FindOAuthUserLink(ctx, 1, "sub-123")
+	require.NoError(t, err)
+	assert.Equal(t, uint32(5), link.UserID)
+}
+
+func TestCreateOAuthUserLink(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	opr.EXPECT().CreateUserLink(ctx, oauthprovider.UserLink{
+		UserID: 5, ProviderID: 1, Subject: "sub-123",
+	}).Return(uint32(1), nil)
+
+	id, err := s.S.CreateOAuthUserLink(ctx, oauthprovider.UserLink{
+		UserID: 5, ProviderID: 1, Subject: "sub-123",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, uint32(1), id)
+}
+
+func TestFindUserByID(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, _ := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	s.Users.EXPECT().FindByID(ctx, uint32(5)).Return(&user.User{
+		ID: 5, Username: "testuser",
+	}, nil)
+
+	u, err := s.S.FindUserByID(ctx, 5)
+	require.NoError(t, err)
+	assert.Equal(t, "testuser", u.Username)
+}
