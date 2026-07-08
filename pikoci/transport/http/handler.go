@@ -86,6 +86,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 				un           string
 				isFromWorker bool
 				userClaim    map[string]interface{}
+				jwtClaims    jwt.MapClaims
 			)
 
 			if !authFailed {
@@ -122,6 +123,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 							l.Error("invalid token claims")
 							authFailed = true
 						} else {
+							jwtClaims = claims
 							userClaim, ok = claims["user"].(map[string]interface{})
 							if !ok {
 								isFromWorker, _ = claims["is_from_worker"].(bool)
@@ -217,8 +219,26 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 				// Check if JWT claims are stale compared to DB (skip for API tokens)
 				if un != "" && userClaim != nil {
 					um, err := s.GetUser(rr.Context(), un)
-					if err == nil && membershipsDiffer(userClaim, um) {
-						rw.Header().Set("X-Refresh-Token", "true")
+					if err != nil {
+						l.Error("failed to fetch user for stale-check", "username", un, "error", err)
+					} else {
+						// Reject tokens with stale token_gen (password changed).
+						// Missing token_gen claim (pre-deployment tokens) is treated as 0.
+						if jwtClaims != nil {
+							var claimGen uint32
+							if tg, ok := jwtClaims["token_gen"]; ok {
+								if v, ok := tg.(float64); ok {
+									claimGen = uint32(v)
+								}
+							}
+							if claimGen != um.TokenGen {
+								encodeError("Authentication required", rw)
+								return
+							}
+						}
+						if membershipsDiffer(userClaim, um) {
+							rw.Header().Set("X-Refresh-Token", "true")
+						}
 					}
 				}
 			}

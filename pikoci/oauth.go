@@ -599,9 +599,14 @@ func (q *PikoCI) OAuthCompleteProfile(ctx context.Context, tempToken, username, 
 	}
 	um.HasPassword = um.Password != ""
 
-	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user": um,
-	})
+	oauthClaims := jwt.MapClaims{
+		"user":      um,
+		"token_gen": um.TokenGen,
+	}
+	if q.SessionLifetime > 0 {
+		oauthClaims["exp"] = time.Now().Add(q.SessionLifetime).Unix()
+	}
+	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, oauthClaims)
 	tokenString, err := jwtToken.SignedString(q.JWTSecret)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to sign token: %w", err)

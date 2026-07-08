@@ -154,7 +154,7 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 			svc.EXPECT().UnlinkAccount(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 			// Sign JWT
-			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user": um})
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user": um, "token_gen": um.TokenGen})
 			jwtStr, err := token.SignedString(secret)
 			require.NoError(t, err)
 

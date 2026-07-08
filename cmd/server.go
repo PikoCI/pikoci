@@ -26,6 +26,7 @@ import (
 	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/config"
+	"github.com/xescugc/duration"
 	pikogrpc "github.com/pikoci/pikoci/pikoci/grpc"
 	"github.com/pikoci/pikoci/pikoci/notifier"
 	"github.com/pikoci/pikoci/pikoci/mysql"
@@ -132,6 +133,15 @@ var serverCmd = &cobra.Command{
 
 		logger.Info("initializing service")
 		var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, alr, opr, suow, jwtSecret, wn, logger)
+
+		if cfg.SessionLifetime != "" && cfg.SessionLifetime != "0" {
+			d, err := duration.Parse(cfg.SessionLifetime)
+			if err != nil {
+				return fmt.Errorf("invalid --session-lifetime value %q: %w", cfg.SessionLifetime, err)
+			}
+			svc.SessionLifetime = d
+			logger.Info("session lifetime configured", "duration", d)
+		}
 
 		// Recover builds orphaned by a previous crash or unclean shutdown.
 		if n, err := svc.RecoverOrphanedBuilds(ctx); err != nil {
@@ -409,6 +419,7 @@ func init() {
 	serverCmd.Flags().String("drain-timeout", "10m", "Maximum time to wait for in-flight jobs to finish during graceful shutdown (SIGQUIT)")
 	serverCmd.Flags().String("log-level", "info", "Sets the log level ('debug', 'info', 'warn', 'error')")
 	serverCmd.Flags().String("external-url", "", "External URL for OAuth callbacks (e.g. https://ci.pikoci.com)")
+	serverCmd.Flags().String("session-lifetime", "0", "Maximum session duration before re-login is required (e.g. 24h, 7d, 30d). 0 means sessions never expire")
 	serverCmd.Flags().String("team-canonical", mainTeamCanonical, "Team Canonical to scope the action")
 	serverCmd.Flags().String("pipeline-config", "", "Path to the Pipeline config file")
 	serverCmd.Flags().StringP("vars", "v", "", "Path to the Pipeline var file (JSON)")

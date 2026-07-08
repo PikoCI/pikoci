@@ -343,6 +343,9 @@ type PikoCI struct {
 
 	// JWTSecret is the signing key used for JWT token generation and validation.
 	JWTSecret []byte
+	// SessionLifetime is the maximum duration a session token is valid.
+	// Zero means sessions never expire.
+	SessionLifetime time.Duration
 
 	// GRPCServer is set by the server command to enable cancellation routing
 	// via gRPC streams. It is nil when no gRPC server is running.

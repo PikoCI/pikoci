@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -403,4 +405,173 @@ func TestUpdateProfile(t *testing.T) {
 	u, err := s.S.UpdateProfile(ctx, "admin", "New Name", "admin")
 	require.NoError(t, err)
 	assert.Equal(t, "New Name", u.FullName)
+}
+
+func TestUserLogin_JWTContainsTokenGen(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hash := testHashPassword("secretpw")
+	um := &user.WithMemberships{
+		User: user.User{ID: 1, Username: "admin", Password: hash, TokenGen: 5},
+	}
+	s.Users.EXPECT().FindWithMemberships(ctx, "admin").Return(um, nil)
+
+	_, tokenString, err := s.S.UserLogin(ctx, "admin", "secretpw")
+	require.NoError(t, err)
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
+		return []byte("test-secret"), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	require.NoError(t, err)
+
+	claims := token.Claims.(jwt.MapClaims)
+	tg, ok := claims["token_gen"]
+	require.True(t, ok, "JWT should contain token_gen claim")
+	assert.Equal(t, float64(5), tg)
+}
+
+func TestChangePassword_IncrementsTokenGen(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hash := testHashPassword("oldpasswd")
+	existing := &user.User{ID: 1, Username: "admin", Password: hash, TokenGen: 3}
+	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
+	s.Users.EXPECT().Update(ctx, "admin", gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ string, u user.User) error {
+			assert.Equal(t, uint32(4), u.TokenGen)
+			return nil
+		},
+	)
+
+	err := s.S.ChangePassword(ctx, "admin", "oldpasswd", "newpasswd")
+	require.NoError(t, err)
+}
+
+func TestUpdateUser_PasswordChangeIncrementsTokenGen(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	existing := &user.User{ID: 1, Username: "admin", FullName: "Admin", Admin: true, Password: "old-hash", TokenGen: 2}
+	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
+	s.Users.EXPECT().Update(ctx, "admin", gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ string, u user.User) error {
+			assert.Equal(t, uint32(3), u.TokenGen)
+			return nil
+		},
+	)
+
+	_, err := s.S.UpdateUser(ctx, "admin", user.User{
+		Password: "newpassword",
+		Admin:    true,
+	}, false)
+	require.NoError(t, err)
+}
+
+func TestUserLogin_SessionLifetimeAddsExp(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.P.SessionLifetime = 1 * time.Hour
+
+	hash := testHashPassword("secretpw")
+	um := &user.WithMemberships{
+		User: user.User{ID: 1, Username: "admin", Password: hash},
+	}
+	s.Users.EXPECT().FindWithMemberships(ctx, "admin").Return(um, nil)
+
+	_, tokenString, err := s.S.UserLogin(ctx, "admin", "secretpw")
+	require.NoError(t, err)
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
+		return []byte("test-secret"), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	require.NoError(t, err)
+
+	claims := token.Claims.(jwt.MapClaims)
+	exp, err := claims.GetExpirationTime()
+	require.NoError(t, err)
+	require.NotNil(t, exp)
+	assert.True(t, exp.After(time.Now()))
+	assert.True(t, exp.Before(time.Now().Add(2*time.Hour)))
+}
+
+func TestUserLogin_NoSessionLifetimeNoExp(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hash := testHashPassword("secretpw")
+	um := &user.WithMemberships{
+		User: user.User{ID: 1, Username: "admin", Password: hash},
+	}
+	s.Users.EXPECT().FindWithMemberships(ctx, "admin").Return(um, nil)
+
+	_, tokenString, err := s.S.UserLogin(ctx, "admin", "secretpw")
+	require.NoError(t, err)
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
+		return []byte("test-secret"), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	require.NoError(t, err)
+
+	claims := token.Claims.(jwt.MapClaims)
+	_, ok := claims["exp"]
+	assert.False(t, ok, "JWT should not contain exp claim when SessionLifetime is 0")
+}
+
+func TestRefreshToken_JWTContainsTokenGen(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	um := &user.WithMemberships{
+		User: user.User{ID: 1, Username: "admin", TokenGen: 7},
+	}
+	s.Users.EXPECT().FindWithMemberships(ctx, "admin").Return(um, nil)
+
+	_, tokenString, err := s.S.RefreshToken(ctx, "admin")
+	require.NoError(t, err)
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
+		return []byte("test-secret"), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	require.NoError(t, err)
+
+	claims := token.Claims.(jwt.MapClaims)
+	tg, ok := claims["token_gen"]
+	require.True(t, ok, "JWT should contain token_gen claim")
+	assert.Equal(t, float64(7), tg)
+}
+
+func TestRefreshToken_SessionLifetimeAddsExp(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.P.SessionLifetime = 2 * time.Hour
+
+	um := &user.WithMemberships{
+		User: user.User{ID: 1, Username: "admin"},
+	}
+	s.Users.EXPECT().FindWithMemberships(ctx, "admin").Return(um, nil)
+
+	_, tokenString, err := s.S.RefreshToken(ctx, "admin")
+	require.NoError(t, err)
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
+		return []byte("test-secret"), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	require.NoError(t, err)
+
+	claims := token.Claims.(jwt.MapClaims)
+	exp, err := claims.GetExpirationTime()
+	require.NoError(t, err)
+	require.NotNil(t, exp)
+	assert.True(t, exp.After(time.Now()))
 }

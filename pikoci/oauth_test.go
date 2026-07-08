@@ -366,6 +366,16 @@ func TestOAuthCompleteProfile_Valid(t *testing.T) {
 	require.NotNil(t, um)
 	assert.Equal(t, "testuser", um.Username)
 	assert.NotEmpty(t, jwtToken)
+
+	// Verify JWT contains token_gen claim
+	parsedToken, err := jwt.Parse(jwtToken, func(token *jwt.Token) (any, error) {
+		return []byte("test-secret"), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	require.NoError(t, err)
+	claims := parsedToken.Claims.(jwt.MapClaims)
+	tg, ok := claims["token_gen"]
+	require.True(t, ok, "JWT should contain token_gen claim")
+	assert.Equal(t, float64(0), tg)
 }
 
 func TestOAuthCompleteProfile_InvalidToken(t *testing.T) {

@@ -25,6 +25,7 @@ pikoci server [flags]
 | `--drain-timeout` | | `10m` | no | Max time to wait for in-flight jobs during graceful shutdown (`SIGQUIT`) |
 | `--log-level` | | `info` | no | Log level: `debug`, `info`, `warn`, `error` |
 | `--external-url` | | | no | Public URL for OAuth callbacks (e.g., `https://ci.example.com`). Required for OAuth/OIDC. |
+| `--session-lifetime` | | `0` | no | Maximum session duration before re-login is required. Supports Go duration syntax plus days/weeks/months (e.g. `24h`, `7d`, `30d`). `0` means sessions never expire. |
 | `--config` | `-c` | | no | Path to a config file |
 | `--team-canonical` | | `main` | no | Team to use for `--pipeline-*` flags |
 | `--pipeline-config` | | | no | Load a pipeline config file at startup |

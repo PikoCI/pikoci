@@ -34,4 +34,6 @@ type Config struct {
 	PipelineDisplayName string `mapstructure:"pipeline-name"`
 	PipelineConfig      string `mapstructure:"pipeline-config"`
 	PipelineVars        string `mapstructure:"vars"`
+
+	SessionLifetime string `mapstructure:"session-lifetime"`
 }
