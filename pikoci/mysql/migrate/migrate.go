@@ -75,6 +75,8 @@ func adaptSQL(sql, system string) string {
 		sql = strings.ReplaceAll(sql, "id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,", "id SERIAL PRIMARY KEY,")
 		sql = strings.ReplaceAll(sql, "INT UNSIGNED NOT NULL", "INTEGER NOT NULL")
 		sql = strings.ReplaceAll(sql, "INT UNSIGNED", "INTEGER")
+		// PostgreSQL uses TIMESTAMP instead of DATETIME
+		sql = strings.ReplaceAll(sql, "DATETIME", "TIMESTAMP")
 		// Replace backtick-quoted identifiers with double-quote-quoted ones
 		sql = strings.ReplaceAll(sql, "`type`", `"type"`)
 		sql = strings.ReplaceAll(sql, "`check`", `"check"`)
