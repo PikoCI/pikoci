@@ -24,10 +24,10 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 		password string
 		role     string
 	}{
-		{"rbac-viewer", "pass123", "read"},
-		{"rbac-operator", "pass123", "write"},
-		{"rbac-maintainer", "pass123", "maintain"},
-		{"rbac-admin", "pass123", "admin"},
+		{"rbac-viewer", "pass1234", "read"},
+		{"rbac-operator", "pass1234", "write"},
+		{"rbac-maintainer", "pass1234", "maintain"},
+		{"rbac-admin", "pass1234", "admin"},
 	}
 
 	for _, r := range roles {
@@ -175,7 +175,7 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 			requireOK(t, resp)
 
 			// Refresh JWT to get updated memberships
-			freshJWT := loginAndGetJWT(t, pikoURL, "rbac-admin", "pass123")
+			freshJWT := loginAndGetJWT(t, pikoURL, "rbac-admin", "pass1234")
 
 			resp = doJSONRequest(t, http.MethodDelete, pikoURL+"/teams/disposable", freshJWT, "")
 			defer resp.Body.Close()
@@ -194,7 +194,7 @@ func TestRBAC_PerRoleAccess(t *testing.T) {
 		require.Empty(t, ur.Err)
 
 		// Get fresh JWT for the upgraded user
-		upgradedJWT := loginAndGetJWT(t, pikoURL, "rbac-viewer", "pass123")
+		upgradedJWT := loginAndGetJWT(t, pikoURL, "rbac-viewer", "pass1234")
 
 		// Now viewer-turned-operator can pause
 		resp2 := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/pipelines/rbac-pipe/pause", upgradedJWT, "")

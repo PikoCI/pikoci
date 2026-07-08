@@ -106,11 +106,12 @@ func (q *PikoCI) GetUser(ctx context.Context, un string) (*user.WithMemberships,
 func (q *PikoCI) CreateUser(ctx context.Context, u user.User, isHash bool) (*user.User, error) {
 	if !utils.ValidateCanonical(u.Username) {
 		return nil, fmt.Errorf("invalid Username format %q", u.Username)
-	} else if u.Password == "" {
-		return nil, fmt.Errorf("invalid empty Password")
 	}
 
 	if !isHash {
+		if err := utils.ValidatePassword(u.Password); err != nil {
+			return nil, err
+		}
 		hash, err := utils.HashPassword(u.Password)
 		if err != nil {
 			return nil, fmt.Errorf("failed to hash Passowrd: %w", err)
@@ -203,6 +204,9 @@ func (q *PikoCI) UpdateUser(ctx context.Context, un string, u user.User, isHash 
 	}
 	if u.Password != "" {
 		if !isHash {
+			if err := utils.ValidatePassword(u.Password); err != nil {
+				return nil, err
+			}
 			hash, err := utils.HashPassword(u.Password)
 			if err != nil {
 				return nil, fmt.Errorf("failed to hash Password: %w", err)
@@ -303,8 +307,8 @@ func (q *PikoCI) ChangePassword(ctx context.Context, un, oldPassword, newPasswor
 		return fmt.Errorf("current password is incorrect")
 	}
 
-	if newPassword == "" {
-		return fmt.Errorf("new password cannot be empty")
+	if err := utils.ValidatePassword(newPassword); err != nil {
+		return err
 	}
 
 	hash, err := utils.HashPassword(newPassword)

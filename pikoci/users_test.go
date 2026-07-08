@@ -19,14 +19,14 @@ func TestCreateUser(t *testing.T) {
 
 	s.Users.EXPECT().Create(ctx, gomock.Any()).Return(uint32(1), nil)
 
-	u, err := s.S.CreateUser(ctx, user.User{Username: "admin", Password: "secret"}, false)
+	u, err := s.S.CreateUser(ctx, user.User{Username: "admin", Password: "secretpw"}, false)
 	require.NoError(t, err)
 	require.NotNil(t, u)
 	assert.Equal(t, uint32(1), u.ID)
 	assert.Equal(t, "admin", u.Username)
 	// Password should be hashed
-	assert.NotEqual(t, "secret", u.Password)
-	assert.True(t, utils.CheckPasswordHash("secret", u.Password))
+	assert.NotEqual(t, "secretpw", u.Password)
+	assert.True(t, utils.CheckPasswordHash("secretpw", u.Password))
 }
 
 func TestCreateUser_Hashed(t *testing.T) {
@@ -34,7 +34,7 @@ func TestCreateUser_Hashed(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	hash := testHashPassword("secret")
+	hash := testHashPassword("secretpw")
 
 	s.Users.EXPECT().Create(ctx, gomock.Any()).Return(uint32(2), nil)
 
@@ -51,12 +51,12 @@ func TestCreateOrUpdateUser_CreatesNew(t *testing.T) {
 	s.Users.EXPECT().Find(ctx, "newuser").Return(nil, fmt.Errorf("not found"))
 	s.Users.EXPECT().Create(ctx, gomock.Any()).Return(uint32(1), nil)
 
-	u, err := s.P.CreateOrUpdateUser(ctx, user.User{Username: "newuser", Password: "secret"}, false)
+	u, err := s.P.CreateOrUpdateUser(ctx, user.User{Username: "newuser", Password: "secretpw"}, false)
 	require.NoError(t, err)
 	require.NotNil(t, u)
 	assert.Equal(t, uint32(1), u.ID)
 	assert.Equal(t, "newuser", u.Username)
-	assert.True(t, utils.CheckPasswordHash("secret", u.Password))
+	assert.True(t, utils.CheckPasswordHash("secretpw", u.Password))
 }
 
 func TestCreateOrUpdateUser_UpdatesExistingWithDefaultPassword(t *testing.T) {
@@ -100,7 +100,7 @@ func TestCreateUser_InvalidUsername(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	_, err := s.S.CreateUser(ctx, user.User{Username: "INVALID USER", Password: "secret"}, false)
+	_, err := s.S.CreateUser(ctx, user.User{Username: "INVALID USER", Password: "secretpw"}, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid Username format")
 }
@@ -112,7 +112,17 @@ func TestCreateUser_EmptyPassword(t *testing.T) {
 
 	_, err := s.S.CreateUser(ctx, user.User{Username: "admin", Password: ""}, false)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid empty Password")
+	assert.Contains(t, err.Error(), "password must be at least 8 characters")
+}
+
+func TestCreateUser_ShortPassword(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	_, err := s.S.CreateUser(ctx, user.User{Username: "admin", Password: "short"}, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "password must be at least 8 characters")
 }
 
 func TestGetUser(t *testing.T) {
@@ -157,13 +167,13 @@ func TestUserLogin(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	hash := testHashPassword("secret")
+	hash := testHashPassword("secretpw")
 	um := &user.WithMemberships{
 		User: user.User{ID: 1, Username: "admin", Password: hash},
 	}
 	s.Users.EXPECT().FindWithMemberships(ctx, "admin").Return(um, nil)
 
-	u, jwt, err := s.S.UserLogin(ctx, "admin", "secret")
+	u, jwt, err := s.S.UserLogin(ctx, "admin", "secretpw")
 	require.NoError(t, err)
 	require.NotNil(t, u)
 	assert.NotEmpty(t, jwt)
@@ -175,13 +185,13 @@ func TestUserLogin_WrongPassword(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	hash := testHashPassword("secret")
+	hash := testHashPassword("secretpw")
 	um := &user.WithMemberships{
 		User: user.User{ID: 1, Username: "admin", Password: hash},
 	}
 	s.Users.EXPECT().FindWithMemberships(ctx, "admin").Return(um, nil)
 
-	_, _, err := s.S.UserLogin(ctx, "admin", "wrong")
+	_, _, err := s.S.UserLogin(ctx, "admin", "wrongpwd")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "wrong")
 }
@@ -240,6 +250,22 @@ func TestUpdateUser(t *testing.T) {
 	assert.True(t, u.Admin)
 }
 
+func TestUpdateUser_ShortPassword(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	existing := &user.User{ID: 1, Username: "admin", FullName: "Admin", Admin: true, Password: "old-hash"}
+	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
+
+	_, err := s.S.UpdateUser(ctx, "admin", user.User{
+		Password: "short",
+		Admin:    true,
+	}, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "password must be at least 8 characters")
+}
+
 func TestUpdateUser_LastAdmin(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
@@ -290,12 +316,12 @@ func TestChangePassword(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	hash := testHashPassword("oldpass")
+	hash := testHashPassword("oldpasswd")
 	existing := &user.User{ID: 1, Username: "admin", Password: hash}
 	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
 	s.Users.EXPECT().Update(ctx, "admin", gomock.Any()).Return(nil)
 
-	err := s.S.ChangePassword(ctx, "admin", "oldpass", "newpass")
+	err := s.S.ChangePassword(ctx, "admin", "oldpasswd", "newpasswd")
 	require.NoError(t, err)
 }
 
@@ -304,13 +330,27 @@ func TestChangePassword_WrongOld(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	hash := testHashPassword("oldpass")
+	hash := testHashPassword("oldpasswd")
 	existing := &user.User{ID: 1, Username: "admin", Password: hash}
 	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
 
-	err := s.S.ChangePassword(ctx, "admin", "wrongpass", "newpass")
+	err := s.S.ChangePassword(ctx, "admin", "wrongpass1", "newpasswd")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "current password is incorrect")
+}
+
+func TestChangePassword_ShortNewPassword(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hash := testHashPassword("oldpasswd")
+	existing := &user.User{ID: 1, Username: "admin", Password: hash}
+	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
+
+	err := s.S.ChangePassword(ctx, "admin", "oldpasswd", "short")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "password must be at least 8 characters")
 }
 
 func TestRefreshToken(t *testing.T) {

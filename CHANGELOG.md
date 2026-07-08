@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Password strength validation**: Enforce minimum 8-character passwords with inline frontend hints ([#597](https://github.com/PikoCI/pikoci/issues/597)).
+
 ### Fixed
 
 - **Build status not updating in UI**: Active build view now detects when a build transitions to a terminal state (succeeded/failed/cancelled) and re-fetches it, instead of requiring a manual page reload.

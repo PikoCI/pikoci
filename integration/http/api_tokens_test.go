@@ -181,7 +181,7 @@ func TestApiTokens_MembershipCleanup(t *testing.T) {
 
 	// Create a user
 	resp := doJSONRequest(t, http.MethodPost, pikoURL+"/users", adminJWT,
-		`{"username":"token-test-user","password":"pass123","full_name":"Token Test"}`)
+		`{"username":"token-test-user","password":"pass1234","full_name":"Token Test"}`)
 	resp.Body.Close()
 
 	// Add user to main team as operator
@@ -190,7 +190,7 @@ func TestApiTokens_MembershipCleanup(t *testing.T) {
 	resp.Body.Close()
 
 	// Login as the new user and create a team-scoped token
-	userJWT := loginAndGetJWT(t, pikoURL, "token-test-user", "pass123")
+	userJWT := loginAndGetJWT(t, pikoURL, "token-test-user", "pass1234")
 
 	var userToken apitoken.WithPlaintext
 	resp = doJSONRequest(t, http.MethodPost, pikoURL+"/api-tokens", userJWT,
@@ -227,7 +227,7 @@ func TestApiTokens_MembershipCleanup(t *testing.T) {
 		`{"role":"read","user":{"username":"token-test-user"}}`)
 	resp.Body.Close()
 
-	userJWT = loginAndGetJWT(t, pikoURL, "token-test-user", "pass123")
+	userJWT = loginAndGetJWT(t, pikoURL, "token-test-user", "pass1234")
 
 	var personalToken apitoken.WithPlaintext
 	resp = doJSONRequest(t, http.MethodPost, pikoURL+"/api-tokens", userJWT,
@@ -256,7 +256,7 @@ func TestApiTokens_RoleDowngrade(t *testing.T) {
 
 	// Create a user with maintainer role
 	resp := doJSONRequest(t, http.MethodPost, pikoURL+"/users", adminJWT,
-		`{"username":"downgrade-user","password":"pass123","full_name":"Downgrade User"}`)
+		`{"username":"downgrade-user","password":"pass1234","full_name":"Downgrade User"}`)
 	resp.Body.Close()
 
 	resp = doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/members", adminJWT,
@@ -264,7 +264,7 @@ func TestApiTokens_RoleDowngrade(t *testing.T) {
 	resp.Body.Close()
 
 	// Login and create a maintainer-scoped token
-	userJWT := loginAndGetJWT(t, pikoURL, "downgrade-user", "pass123")
+	userJWT := loginAndGetJWT(t, pikoURL, "downgrade-user", "pass1234")
 
 	var token apitoken.WithPlaintext
 	resp = doJSONRequest(t, http.MethodPost, pikoURL+"/api-tokens", userJWT,

@@ -91,7 +91,7 @@ func TestCreateUser(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	u, err := c.CreateUser(context.Background(), user.User{Username: "newuser", Password: "pass"}, false)
+	u, err := c.CreateUser(context.Background(), user.User{Username: "newuser", Password: "password"}, false)
 	require.NoError(t, err)
 	assert.Equal(t, "newuser", u.Username)
 }
