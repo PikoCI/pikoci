@@ -341,6 +341,7 @@ func TestChangePassword_Success(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectMemberAuth()
 	e.svc.EXPECT().ChangePassword(gomock.Any(), "member", "old", "new").Return(nil)
+	e.svc.EXPECT().RefreshToken(gomock.Any(), "member").Return(e.memberUM, signJWT(t, e.secret, e.memberUM), nil)
 
 	body := `{"old_password":"old","new_password":"new"}`
 	resp := doRequest(t, http.MethodPost, e.server.URL+"/users/change-password", e.memberJWT(t), body)
@@ -350,6 +351,8 @@ func TestChangePassword_Success(t *testing.T) {
 	var got ChangePasswordResponse
 	json.NewDecoder(resp.Body).Decode(&got)
 	assert.Empty(t, got.Err)
+	assert.NotEmpty(t, got.Data.JWT)
+	assert.Equal(t, "member", got.Data.User.Username)
 }
 
 func TestChangePassword_BadJSON(t *testing.T) {
