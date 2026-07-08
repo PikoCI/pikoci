@@ -3,6 +3,7 @@ package pikoci
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 
@@ -53,12 +54,17 @@ func (q *PikoCI) UserLogin(ctx context.Context, un, pass string) (*user.WithMemb
 	}
 	setHasPassword(um)
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user": um,
-	})
+	claims := jwt.MapClaims{
+		"user":      um,
+		"token_gen": um.TokenGen,
+	}
+	if q.SessionLifetime > 0 {
+		claims["exp"] = time.Now().Add(q.SessionLifetime).Unix()
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(q.JWTSecret)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to Find User: %w", err)
+		return nil, "", fmt.Errorf("failed to sign token: %w", err)
 	}
 
 	return um, tokenString, nil
@@ -76,9 +82,14 @@ func (q *PikoCI) RefreshToken(ctx context.Context, un string) (*user.WithMembers
 	}
 	setHasPassword(um)
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user": um,
-	})
+	claims := jwt.MapClaims{
+		"user":      um,
+		"token_gen": um.TokenGen,
+	}
+	if q.SessionLifetime > 0 {
+		claims["exp"] = time.Now().Add(q.SessionLifetime).Unix()
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(q.JWTSecret)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to sign token: %w", err)
@@ -215,6 +226,7 @@ func (q *PikoCI) UpdateUser(ctx context.Context, un string, u user.User, isHash 
 		} else {
 			existing.Password = u.Password
 		}
+		existing.TokenGen++
 	}
 
 	// Prevent demoting the last admin
@@ -316,6 +328,7 @@ func (q *PikoCI) ChangePassword(ctx context.Context, un, oldPassword, newPasswor
 		return fmt.Errorf("failed to hash Password: %w", err)
 	}
 	existing.Password = hash
+	existing.TokenGen++
 
 	err = q.Users.Update(ctx, un, *existing)
 	if err != nil {

@@ -255,7 +255,11 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"new_password"`
 }
 type ChangePasswordResponse struct {
-	Err string `json:"error,omitempty"`
+	Err  string `json:"error,omitempty"`
+	Data struct {
+		User *user.WithMemberships `json:"user,omitempty"`
+		JWT  string                `json:"jwt,omitempty"`
+	} `json:"data,omitempty"`
 }
 
 func (r ChangePasswordResponse) Error() string {
@@ -281,11 +285,22 @@ func changePassword(s pikoci.Service) http.HandlerFunc {
 		}
 
 		err = s.ChangePassword(ctx, un, req.OldPassword, req.NewPassword)
-		var errs string
 		if err != nil {
-			errs = err.Error()
+			encodeResponse(ChangePasswordResponse{Err: err.Error()}, w)
+			return
 		}
-		encodeResponse(ChangePasswordResponse{Err: errs}, w)
+
+		// Return a refreshed JWT so the current session survives the token_gen bump.
+		u, jwt, err := s.RefreshToken(ctx, un)
+		if err != nil {
+			encodeResponse(ChangePasswordResponse{Err: err.Error()}, w)
+			return
+		}
+
+		resp := ChangePasswordResponse{}
+		resp.Data.User = u
+		resp.Data.JWT = jwt
+		encodeResponse(resp, w)
 	}
 }
 

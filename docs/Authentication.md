@@ -271,4 +271,16 @@ Changes take effect immediately — no server restart needed.
 - **Callback URLs**: Built from the `--external-url` flag to prevent open redirect attacks.
 - **Lockout prevention**: PikoCI prevents actions that would lock users out of their accounts — disabling local auth, disabling/deleting a provider, or unlinking an account are all blocked if any user would be left with no way to log in.
 
+### Session Lifetime
+
+The `--session-lifetime` flag controls how long a user session remains valid after login. By default it is `0`, meaning sessions never expire (backward compatible).
+
+When set, a JWT `exp` claim is added to all session tokens. After the session expires, the user must re-login. The flag accepts Go duration syntax plus day/week/month/year units (e.g. `24h`, `7d`, `30d`, `1M`).
+
+Password changes immediately invalidate all existing sessions for that user. Admin password resets also invalidate the user's sessions. This is done via a generation counter (`token_gen`) embedded in the JWT — when the counter doesn't match the database, the session is rejected.
+
+```bash
+pikoci server --jwt-secret my-secret --session-lifetime 24h
+```
+
 See also: [Roles & Permissions](Roles.md) · [API Tokens](API-Tokens.md) · [Server Configuration](Server.md)

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **JWT session expiration**: Configurable `--session-lifetime` flag (e.g. `24h`, `7d`, `30d`) adds `exp` claim to session tokens. Default `0` preserves current behavior (no expiry) ([#599](https://github.com/PikoCI/pikoci/issues/599)).
+- **Password-change session invalidation**: Changing a password (self or admin reset) immediately invalidates all existing sessions for that user via a `token_gen` generation counter ([#599](https://github.com/PikoCI/pikoci/issues/599)).
 - **Password strength validation**: Enforce minimum 8-character passwords with inline frontend hints ([#597](https://github.com/PikoCI/pikoci/issues/597)).
 
 ### Fixed

@@ -13,6 +13,7 @@ type User struct {
 	Username string `json:"username"`
 	Password string `json:"-"`
 	Admin    bool   `json:"admin"`
+	TokenGen uint32 `json:"-"`
 }
 
 // WithMemberships embeds a User along with their team memberships and a flag

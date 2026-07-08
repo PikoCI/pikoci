@@ -1,7 +1,8 @@
 'use strict';
 
-import { session, apiNotice, login } from './state.js';
+import { session, apiNotice, login, logout } from './state.js';
 import { showToast } from './toast.js';
+import { route } from 'preact-router';
 
 export class ApiError extends Error {
   constructor(response, body) {
@@ -40,6 +41,13 @@ export async function api(url, opts = {}) {
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const err = new ApiError(res, body);
+
+    // Session expired or invalidated — force re-login
+    if (err.message === 'Authentication required' && session.value.jwt) {
+      logout();
+      route('/login');
+      throw err;
+    }
 
     if (opts.isInterval && apiNotice.value.error !== '') {
       // Already showing an error — don't overwrite during polling

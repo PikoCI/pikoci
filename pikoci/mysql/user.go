@@ -26,6 +26,7 @@ type dbUser struct {
 	Username sql.NullString
 	Password sql.NullString
 	Admin    sql.NullBool
+	TokenGen sql.NullInt64
 }
 
 func newDBUser(u user.User) dbUser {
@@ -34,6 +35,7 @@ func newDBUser(u user.User) dbUser {
 		Username: toNullString(u.Username),
 		Password: toNullString(u.Password),
 		Admin:    toNullBool(u.Admin),
+		TokenGen: sql.NullInt64{Int64: int64(u.TokenGen), Valid: true},
 	}
 }
 
@@ -44,15 +46,16 @@ func (dbu *dbUser) toDomainEntity() *user.User {
 		Username: dbu.Username.String,
 		Password: dbu.Password.String,
 		Admin:    dbu.Admin.Bool,
+		TokenGen: uint32(dbu.TokenGen.Int64),
 	}
 }
 
 func (r *UserRepository) Create(ctx context.Context, u user.User) (uint32, error) {
 	dbu := newDBUser(u)
 	res, err := r.querier.ExecContext(ctx, `
-		INSERT INTO users(full_name, username, password, admin)
-		VALUES (?, ?, ?, ?)
-	`, dbu.FullName, dbu.Username, dbu.Password, dbu.Admin)
+		INSERT INTO users(full_name, username, password, admin, token_gen)
+		VALUES (?, ?, ?, ?, ?)
+	`, dbu.FullName, dbu.Username, dbu.Password, dbu.Admin, dbu.TokenGen)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -69,9 +72,9 @@ func (r *UserRepository) Update(ctx context.Context, un string, u user.User) err
 	dbu := newDBUser(u)
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE users AS u
-		SET full_name = ?, username = ?, password = ?, admin = ?
+		SET full_name = ?, username = ?, password = ?, admin = ?, token_gen = ?
 		WHERE u.username = ?
-	`, dbu.FullName, dbu.Username, dbu.Password, dbu.Admin, un)
+	`, dbu.FullName, dbu.Username, dbu.Password, dbu.Admin, dbu.TokenGen, un)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -86,7 +89,7 @@ func (r *UserRepository) Update(ctx context.Context, un string, u user.User) err
 
 func (r *UserRepository) Find(ctx context.Context, un string) (*user.User, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT u.id, u.full_name, u.username, u.password, u.admin
+		SELECT u.id, u.full_name, u.username, u.password, u.admin, u.token_gen
 		FROM users AS u
 		WHERE u.username = ?
 	`, un)
@@ -101,7 +104,7 @@ func (r *UserRepository) Find(ctx context.Context, un string) (*user.User, error
 
 func (r *UserRepository) FindByID(ctx context.Context, id uint32) (*user.User, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT u.id, u.full_name, u.username, u.password, u.admin
+		SELECT u.id, u.full_name, u.username, u.password, u.admin, u.token_gen
 		FROM users AS u
 		WHERE u.id = ?
 	`, id)
@@ -116,7 +119,7 @@ func (r *UserRepository) FindByID(ctx context.Context, id uint32) (*user.User, e
 
 func (r *UserRepository) FindWithMemberships(ctx context.Context, un string) (*user.WithMemberships, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT u.id, u.full_name, u.username, u.password, u.admin,
+		SELECT u.id, u.full_name, u.username, u.password, u.admin, u.token_gen,
 			tu.role, t.id, t.name, t.canonical
 		FROM users AS u
 		LEFT JOIN teams_users AS tu
@@ -139,7 +142,7 @@ func (r *UserRepository) FindWithMemberships(ctx context.Context, un string) (*u
 
 func (r *UserRepository) Filter(ctx context.Context) ([]*user.User, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT u.id, u.full_name, u.username, u.password, u.admin
+		SELECT u.id, u.full_name, u.username, u.password, u.admin, u.token_gen
 		FROM users AS u
 	`)
 	if err != nil {
@@ -181,6 +184,7 @@ func scanUser(s sqlr.Scanner) (*user.User, error) {
 		&u.Username,
 		&u.Password,
 		&u.Admin,
+		&u.TokenGen,
 	)
 
 	if err != nil {
@@ -224,6 +228,7 @@ func scanUserWithMemberships(rows *sql.Rows) (*user.WithMemberships, error) {
 			&du.Username,
 			&du.Password,
 			&du.Admin,
+			&du.TokenGen,
 			&roleStr,
 			&dt.ID,
 			&dt.Name,

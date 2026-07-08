@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
@@ -226,7 +227,8 @@ func TestMembershipsDiffer(t *testing.T) {
 func signJWT(t *testing.T, secret []byte, um *user.WithMemberships) string {
 	t.Helper()
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user": um,
+		"user":      um,
+		"token_gen": um.TokenGen,
 	})
 	s, err := token.SignedString(secret)
 	require.NoError(t, err)
@@ -1255,4 +1257,231 @@ func TestGetResourceVersionPath_Error(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
 	assert.NotEmpty(t, result.Err)
+}
+
+func TestTokenGen_StaleTokenRejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	// JWT has token_gen=0 but DB has token_gen=1 (password was changed)
+	um := &user.WithMemberships{
+		User:        user.User{Username: "pepito", TokenGen: 0},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	dbUM := &user.WithMemberships{
+		User:        user.User{Username: "pepito", TokenGen: 1},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
+	}
+	// member() authz calls GetUser, then middleware stale-check calls GetUser
+	s.EXPECT().GetUser(gomock.Any(), "pepito").Return(dbUM, nil).Times(2)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams", nil)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var body map[string]string
+	json.NewDecoder(resp.Body).Decode(&body)
+	assert.Equal(t, "Authentication required", body["error"])
+}
+
+func TestTokenGen_MatchingTokenAccepted(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	um := &user.WithMemberships{
+		User:        user.User{Username: "pepito", TokenGen: 3},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	// member() authz and stale-check both call GetUser
+	s.EXPECT().GetUser(gomock.Any(), "pepito").Return(um, nil).Times(2)
+	s.EXPECT().ListTeams(gomock.Any(), "pepito").Return(nil, nil)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams", nil)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestExpiredJWT_Rejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	// Create a JWT with exp in the past
+	um := &user.WithMemberships{
+		User:        user.User{Username: "pepito"},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user":      um,
+		"token_gen": um.TokenGen,
+		"exp":       time.Now().Add(-10 * time.Minute).Unix(),
+	})
+	expiredToken, err := token.SignedString(secret)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams", nil)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+expiredToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var body map[string]string
+	json.NewDecoder(resp.Body).Decode(&body)
+	assert.Equal(t, "Authentication required", body["error"])
+}
+
+func TestLegacyToken_NoTokenGenClaim_AcceptedWhenDBIsZero(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	// Simulate a pre-deployment JWT without token_gen claim
+	um := &user.WithMemberships{
+		User:        user.User{Username: "pepito"},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user": um,
+		// no token_gen claim
+	})
+	legacyToken, err := token.SignedString(secret)
+	require.NoError(t, err)
+
+	// DB user has TokenGen=0 (never changed password) — should be accepted
+	s.EXPECT().GetUser(gomock.Any(), "pepito").Return(um, nil).Times(2)
+	s.EXPECT().ListTeams(gomock.Any(), "pepito").Return(nil, nil)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams", nil)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+legacyToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestLegacyToken_NoTokenGenClaim_RejectedWhenDBIncremented(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	// Simulate a pre-deployment JWT without token_gen claim
+	um := &user.WithMemberships{
+		User:        user.User{Username: "pepito"},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user": um,
+		// no token_gen claim — treated as 0
+	})
+	legacyToken, err := token.SignedString(secret)
+	require.NoError(t, err)
+
+	// DB user has TokenGen=1 (password was changed after deployment) — should be rejected
+	dbUM := &user.WithMemberships{
+		User:        user.User{Username: "pepito", TokenGen: 1},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
+	}
+	s.EXPECT().GetUser(gomock.Any(), "pepito").Return(dbUM, nil).Times(2)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams", nil)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+legacyToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var body map[string]string
+	json.NewDecoder(resp.Body).Decode(&body)
+	assert.Equal(t, "Authentication required", body["error"])
+}
+
+func TestPasswordChange_InvalidatesOldToken(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := mock.NewService(ctrl)
+	secret := []byte("test-secret")
+	logger := slog.Default()
+
+	handler := Handler(s, secret, logger, nil, "", "test", "abc1234", "", nil)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	// Create a JWT with token_gen=2 (the value before password change)
+	um := &user.WithMemberships{
+		User:        user.User{Username: "pepito", TokenGen: 2},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
+	}
+	jwtToken := signJWT(t, secret, um)
+
+	// After password change, DB has token_gen=3
+	dbUM := &user.WithMemberships{
+		User:        user.User{Username: "pepito", TokenGen: 3},
+		Memberships: []user.Member{{TeamCanonical: "main", Role: role.Write}},
+	}
+	// member() authz calls GetUser, then stale-check calls GetUser
+	s.EXPECT().GetUser(gomock.Any(), "pepito").Return(dbUM, nil).Times(2)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams", nil)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var body map[string]string
+	json.NewDecoder(resp.Body).Decode(&body)
+	assert.Equal(t, "Authentication required", body["error"])
 }

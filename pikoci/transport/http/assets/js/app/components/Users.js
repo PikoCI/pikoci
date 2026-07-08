@@ -369,25 +369,16 @@ function PasswordTab({ mustChange }) {
       return;
     }
     withPwLoading(async () => {
+      let resp;
       try {
-        await changePassword({ old_password: currentPassword, new_password: newPassword });
+        resp = await changePassword({ old_password: currentPassword, new_password: newPassword });
       } catch {
         return;
       }
-      // Refresh JWT to update has_password and must_change_password flags
-      try {
-        const resp = await postRefreshToken();
-        if (resp.data && resp.data.jwt) {
-          login(resp.data.jwt, resp.data.user);
-          setHasPassword(resp.data.user.has_password !== false);
-        }
-      } catch {
-        // Fallback: update locally
-        const currentUser = session.value.user;
-        if (currentUser) {
-          login(session.value.jwt, { ...currentUser, must_change_password: false, has_password: true });
-          setHasPassword(true);
-        }
+      // Use the refreshed JWT returned by changePassword to survive the token_gen bump
+      if (resp.data && resp.data.jwt) {
+        login(resp.data.jwt, resp.data.user);
+        setHasPassword(resp.data.user.has_password !== false);
       }
       setCurrentPassword('');
       setNewPassword('');
