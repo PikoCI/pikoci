@@ -598,13 +598,16 @@ func TestUnlinkAccount(t *testing.T) {
 	ctx := context.TODO()
 
 	userID := uint32(42)
+	hash, _ := utils.HashPassword("haslocal")
 
 	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
 		ID:        10,
 		Canonical: "github",
 		Name:      "GitHub",
 	}, nil)
-
+	s.Users.EXPECT().FindByID(ctx, userID).Return(&user.User{
+		ID: userID, Username: "testuser", Password: hash,
+	}, nil)
 	opr.EXPECT().DeleteUserLinkByUserAndProvider(ctx, userID, uint32(10)).Return(nil)
 
 	err := s.S.UnlinkAccount(ctx, userID, "github")
@@ -746,5 +749,68 @@ func TestDeleteOAuthProvider_AllowedWhenUserHasOtherLinks(t *testing.T) {
 	opr.EXPECT().DeleteProvider(ctx, "github").Return(nil)
 
 	err := s.S.DeleteOAuthProvider(ctx, "github")
+	require.NoError(t, err)
+}
+
+func TestUnlinkAccount_BlockedWhenOnlyAuth(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
+		ID: 1, Canonical: "github",
+	}, nil)
+	// User with no local password
+	s.Users.EXPECT().FindByID(ctx, uint32(5)).Return(&user.User{
+		ID: 5, Username: "oauthonly", Password: "",
+	}, nil)
+	// Only one link — this provider
+	opr.EXPECT().FindUserLinksByUser(ctx, uint32(5)).Return([]*oauthprovider.UserLink{
+		{ID: 1, UserID: 5, ProviderID: 1},
+	}, nil)
+
+	err := s.S.UnlinkAccount(ctx, 5, "github")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot unlink")
+	assert.Contains(t, err.Error(), "only authentication method")
+}
+
+func TestUnlinkAccount_AllowedWhenHasPassword(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	hash, _ := utils.HashPassword("localpass")
+	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
+		ID: 1, Canonical: "github",
+	}, nil)
+	s.Users.EXPECT().FindByID(ctx, uint32(5)).Return(&user.User{
+		ID: 5, Username: "withpass", Password: hash,
+	}, nil)
+	opr.EXPECT().DeleteUserLinkByUserAndProvider(ctx, uint32(5), uint32(1)).Return(nil)
+
+	err := s.S.UnlinkAccount(ctx, 5, "github")
+	require.NoError(t, err)
+}
+
+func TestUnlinkAccount_AllowedWhenHasOtherLinks(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
+		ID: 1, Canonical: "github",
+	}, nil)
+	// No local password but has another OAuth link
+	s.Users.EXPECT().FindByID(ctx, uint32(5)).Return(&user.User{
+		ID: 5, Username: "multiauth", Password: "",
+	}, nil)
+	opr.EXPECT().FindUserLinksByUser(ctx, uint32(5)).Return([]*oauthprovider.UserLink{
+		{ID: 1, UserID: 5, ProviderID: 1},
+		{ID: 2, UserID: 5, ProviderID: 2},
+	}, nil)
+	opr.EXPECT().DeleteUserLinkByUserAndProvider(ctx, uint32(5), uint32(1)).Return(nil)
+
+	err := s.S.UnlinkAccount(ctx, 5, "github")
 	require.NoError(t, err)
 }

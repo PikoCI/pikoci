@@ -343,12 +343,37 @@ func (q *PikoCI) ListLinkedAccounts(ctx context.Context, userID uint32) ([]*oaut
 	return accounts, nil
 }
 
-// UnlinkAccount removes an OAuth link for a user.
+// UnlinkAccount removes an OAuth link for a user. It prevents unlinking
+// if it would leave the user with no way to log in (no local password
+// and no other OAuth links).
 func (q *PikoCI) UnlinkAccount(ctx context.Context, userID uint32, canonical string) error {
 	provider, err := q.OAuthProviders.FindProviderByCanonical(ctx, canonical)
 	if err != nil {
 		return fmt.Errorf("failed to find provider: %w", err)
 	}
+
+	// Check if unlinking would lock the user out
+	u, err := q.Users.FindByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to find user: %w", err)
+	}
+	if u.Password == "" {
+		// No local password — check if they have other OAuth links
+		links, err := q.OAuthProviders.FindUserLinksByUser(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("failed to check user links: %w", err)
+		}
+		otherLinks := 0
+		for _, l := range links {
+			if l.ProviderID != provider.ID {
+				otherLinks++
+			}
+		}
+		if otherLinks == 0 {
+			return fmt.Errorf("cannot unlink: this is your only authentication method. Set a local password first or link another provider")
+		}
+	}
+
 	err = q.OAuthProviders.DeleteUserLinkByUserAndProvider(ctx, userID, provider.ID)
 	if err != nil {
 		return fmt.Errorf("failed to unlink account: %w", err)
