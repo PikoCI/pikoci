@@ -120,6 +120,41 @@ func (q *PikoCI) GetAuthMethods(ctx context.Context) (*oauthprovider.AuthMethods
 	}, nil
 }
 
+// checkAuthLockout verifies that no user would be locked out of their account.
+// removingProviderID: if non-zero, simulate removing this provider's links.
+// disablingLocal: if true, simulate disabling local password auth.
+// Returns an error describing the first user who would be locked out.
+func (q *PikoCI) checkAuthLockout(ctx context.Context, removingProviderID uint32, disablingLocal bool) error {
+	users, err := q.Users.Filter(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list users: %w", err)
+	}
+	for _, u := range users {
+		hasLocal := u.Password != "" && !disablingLocal
+		if hasLocal {
+			continue
+		}
+		links, err := q.OAuthProviders.FindUserLinksByUser(ctx, u.ID)
+		if err != nil || len(links) == 0 {
+			if disablingLocal && u.Password != "" {
+				// User only has local auth and we're disabling it
+				return fmt.Errorf("cannot proceed: user %q has only local auth", u.Username)
+			}
+			continue
+		}
+		remaining := 0
+		for _, l := range links {
+			if l.ProviderID != removingProviderID {
+				remaining++
+			}
+		}
+		if remaining == 0 {
+			return fmt.Errorf("cannot proceed: user %q would have no way to log in", u.Username)
+		}
+	}
+	return nil
+}
+
 // GetOAuthProvider retrieves a single OAuth provider by canonical.
 func (q *PikoCI) GetOAuthProvider(ctx context.Context, canonical string) (*oauthprovider.Provider, error) {
 	p, err := q.OAuthProviders.FindProviderByCanonical(ctx, canonical)
@@ -215,6 +250,12 @@ func (q *PikoCI) UpdateOAuthProvider(ctx context.Context, canonical string, p oa
 	if p.UsernameClaim != "" {
 		existing.UsernameClaim = p.UsernameClaim
 	}
+	// If disabling a previously enabled provider, check for lockout
+	if existing.Enabled && !p.Enabled {
+		if err := q.checkAuthLockout(ctx, existing.ID, false); err != nil {
+			return nil, fmt.Errorf("cannot disable provider %q: %w", canonical, err)
+		}
+	}
 	existing.Enabled = p.Enabled
 
 	// Re-validate after merge
@@ -242,23 +283,8 @@ func (q *PikoCI) DeleteOAuthProvider(ctx context.Context, canonical string) erro
 		return fmt.Errorf("failed to find OAuth provider: %w", err)
 	}
 
-	// Check if any user would be locked out
-	users, err := q.Users.Filter(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to list users: %w", err)
-	}
-	for _, u := range users {
-		if u.Password != "" {
-			continue // has local password, won't be locked out
-		}
-		links, err := q.OAuthProviders.FindUserLinksByUser(ctx, u.ID)
-		if err != nil || len(links) == 0 {
-			continue
-		}
-		// Check if this provider is their only link
-		if len(links) == 1 && links[0].ProviderID == provider.ID {
-			return fmt.Errorf("cannot delete provider %q: user %q has no local password and no other OAuth links", canonical, u.Username)
-		}
+	if err := q.checkAuthLockout(ctx, provider.ID, false); err != nil {
+		return fmt.Errorf("cannot delete provider %q: %w", canonical, err)
 	}
 
 	err = q.OAuthProviders.DeleteProvider(ctx, canonical)
@@ -285,31 +311,15 @@ func (q *PikoCI) UpdateAuthSettings(ctx context.Context, settings oauthprovider.
 	}
 	settings.ID = existing.ID
 
-	// Safety: cannot disable local auth unless an admin user has a linked OAuth account
+	// Safety: cannot disable local auth if any user would be locked out
 	if !settings.LocalAuthEnabled {
 		providers, err := q.OAuthProviders.FilterEnabledProviders(ctx)
 		if err != nil || len(providers) == 0 {
 			return fmt.Errorf("cannot disable local auth: no enabled OAuth providers configured")
 		}
 
-		// Check that at least one admin has a linked OAuth account
-		admins, err := q.Users.Filter(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to list users: %w", err)
-		}
-		adminHasLink := false
-		for _, u := range admins {
-			if !u.Admin {
-				continue
-			}
-			links, err := q.OAuthProviders.FindUserLinksByUser(ctx, u.ID)
-			if err == nil && len(links) > 0 {
-				adminHasLink = true
-				break
-			}
-		}
-		if !adminHasLink {
-			return fmt.Errorf("cannot disable local auth: no admin user has a linked OAuth account")
+		if err := q.checkAuthLockout(ctx, 0, true); err != nil {
+			return fmt.Errorf("cannot disable local auth: %w", err)
 		}
 	}
 

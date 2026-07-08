@@ -276,11 +276,12 @@ func TestUpdateAuthSettings_CanDisableWithProviders(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestUpdateAuthSettings_CannotDisableWithoutAdminLink(t *testing.T) {
+func TestUpdateAuthSettings_CannotDisableWhenUserHasOnlyLocal(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s, opr := newServiceWithOAuth(ctrl)
 	ctx := context.TODO()
 
+	hash, _ := utils.HashPassword("adminpass")
 	opr.EXPECT().GetAuthSettings(ctx).Return(&oauthprovider.AuthSettings{
 		ID:               1,
 		LocalAuthEnabled: true,
@@ -288,18 +289,18 @@ func TestUpdateAuthSettings_CannotDisableWithoutAdminLink(t *testing.T) {
 	opr.EXPECT().FilterEnabledProviders(ctx).Return([]*oauthprovider.Provider{
 		{ID: 1, Canonical: "github", Name: "GitHub", Enabled: true},
 	}, nil)
-	// Admin user with NO linked OAuth account
+	// Admin has a password but no OAuth links — would be locked out
 	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
-		{ID: 1, Username: "admin", Admin: true},
+		{ID: 1, Username: "admin", Admin: true, Password: hash},
 	}, nil)
 	opr.EXPECT().FindUserLinksByUser(ctx, uint32(1)).Return([]*oauthprovider.UserLink{}, nil)
 
 	err := s.S.UpdateAuthSettings(ctx, oauthprovider.AuthSettings{LocalAuthEnabled: false})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no admin user has a linked OAuth account")
+	assert.Contains(t, err.Error(), "only local auth")
 }
 
-func TestUpdateAuthSettings_NonAdminLinkDoesNotCount(t *testing.T) {
+func TestUpdateAuthSettings_CannotDisableWhenOAuthUserHasNoLinks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s, opr := newServiceWithOAuth(ctrl)
 	ctx := context.TODO()
@@ -311,16 +312,17 @@ func TestUpdateAuthSettings_NonAdminLinkDoesNotCount(t *testing.T) {
 	opr.EXPECT().FilterEnabledProviders(ctx).Return([]*oauthprovider.Provider{
 		{ID: 1, Canonical: "github", Name: "GitHub", Enabled: true},
 	}, nil)
-	// Non-admin has a link, admin does not
+	// Admin with password but no links — would be locked out
+	hash, _ := utils.HashPassword("adminpass")
 	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
-		{ID: 1, Username: "admin", Admin: true},
-		{ID: 2, Username: "regular", Admin: false},
+		{ID: 1, Username: "admin", Admin: true, Password: hash},
+		{ID: 2, Username: "oauthghost", Admin: false, Password: ""},
 	}, nil)
 	opr.EXPECT().FindUserLinksByUser(ctx, uint32(1)).Return([]*oauthprovider.UserLink{}, nil)
 
 	err := s.S.UpdateAuthSettings(ctx, oauthprovider.AuthSettings{LocalAuthEnabled: false})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no admin user has a linked OAuth account")
+	assert.Contains(t, err.Error(), "admin")
 }
 
 func TestOAuthCompleteProfile_Valid(t *testing.T) {
@@ -511,6 +513,8 @@ func TestUpdateOAuthProvider_MergeLogic(t *testing.T) {
 	}
 
 	opr.EXPECT().FindProviderByCanonical(ctx, "my-provider").Return(existing, nil)
+	// Lockout check — no users would be affected
+	s.Users.EXPECT().Filter(ctx).Return([]*user.User{}, nil)
 
 	opr.EXPECT().UpdateProvider(ctx, "my-provider", gomock.Any()).DoAndReturn(
 		func(_ context.Context, canonical string, updated oauthprovider.Provider) error {
@@ -812,5 +816,48 @@ func TestUnlinkAccount_AllowedWhenHasOtherLinks(t *testing.T) {
 	opr.EXPECT().DeleteUserLinkByUserAndProvider(ctx, uint32(5), uint32(1)).Return(nil)
 
 	err := s.S.UnlinkAccount(ctx, 5, "github")
+	require.NoError(t, err)
+}
+
+func TestUpdateOAuthProvider_CannotDisableWhenOnlyAuth(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
+		ID: 1, Canonical: "github", Name: "GitHub", Type: "oauth2",
+		AuthURL: "http://x", TokenURL: "http://x", Enabled: true,
+	}, nil)
+	// User with no password and only this provider
+	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
+		{ID: 5, Username: "oauthonly", Password: ""},
+	}, nil)
+	opr.EXPECT().FindUserLinksByUser(ctx, uint32(5)).Return([]*oauthprovider.UserLink{
+		{ID: 1, UserID: 5, ProviderID: 1},
+	}, nil)
+
+	_, err := s.S.UpdateOAuthProvider(ctx, "github", oauthprovider.Provider{Enabled: false})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot disable provider")
+}
+
+func TestUpdateOAuthProvider_CanDisableWhenUsersHavePassword(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s, opr := newServiceWithOAuth(ctrl)
+	ctx := context.TODO()
+
+	hash, _ := utils.HashPassword("pass")
+	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
+		ID: 1, Canonical: "github", Name: "GitHub", Type: "oauth2",
+		AuthURL: "http://x", TokenURL: "http://x", Enabled: true,
+	}, nil)
+	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
+		{ID: 5, Username: "withpass", Password: hash},
+	}, nil)
+	opr.EXPECT().UpdateProvider(ctx, "github", gomock.Any()).Return(nil)
+
+	_, err := s.S.UpdateOAuthProvider(ctx, "github", oauthprovider.Provider{
+		AuthURL: "http://x", TokenURL: "http://x", Enabled: false,
+	})
 	require.NoError(t, err)
 }
