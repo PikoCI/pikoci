@@ -34,8 +34,10 @@ PikoCI supports two authentication methods: local username/password and OAuth/OI
 Go to the user menu (top right) and click **Authentication**. From there:
 
 1. Click **Add Provider**.
-2. Fill in the provider details (see provider-specific guides below).
-3. Click **Create Provider**.
+2. Select a **Provider Template** (GitHub, Google, GitLab, etc.) to auto-fill URLs, scopes, and type. Or select **Other** for manual configuration.
+3. The **Callback URL** is displayed automatically — copy it and paste it into your provider's redirect URI settings.
+4. Fill in your **Client ID** and **Client Secret**.
+5. Click **Create Provider**.
 
 The provider appears on the login page immediately — no server restart needed.
 
@@ -67,20 +69,7 @@ GitHub does not support OIDC, so use the **OAuth2** type.
 
 ### 2. Add to PikoCI
 
-In the Authentication admin page:
-
-| Field | Value |
-|-------|-------|
-| Display Name | `GitHub` |
-| Canonical | `github` |
-| Type | OAuth2 |
-| Authorization URL | `https://github.com/login/oauth/authorize` |
-| Token URL | `https://github.com/login/oauth/access_token` |
-| Userinfo URL | `https://api.github.com/user` |
-| Client ID | *(from GitHub)* |
-| Client Secret | *(from GitHub)* |
-| Scopes | `user:email` |
-| Username Claim | `login` |
+In the Authentication admin page, click **Add Provider**, select **GitHub** from the template (all URLs and settings are pre-filled), then paste your **Client ID** and **Client Secret**.
 
 !!! note
     Set **Username Claim** to `login` to use the GitHub username. Set it to `email` to use the email prefix instead.
@@ -106,16 +95,7 @@ Google supports OpenID Connect, so use the **OIDC** type.
 
 ### 2. Add to PikoCI
 
-| Field | Value |
-|-------|-------|
-| Display Name | `Google` |
-| Canonical | `google` |
-| Type | OIDC |
-| Issuer URL | `https://accounts.google.com` |
-| Client ID | *(from Google)* |
-| Client Secret | *(from Google)* |
-| Scopes | `openid email profile` |
-| Username Claim | `email` |
+In the Authentication admin page, click **Add Provider**, select **Google** from the template (issuer URL and settings are pre-filled), then paste your **Client ID** and **Client Secret**.
 
 ---
 
@@ -134,16 +114,7 @@ Works with both GitLab.com and self-hosted GitLab.
 
 ### 2. Add to PikoCI
 
-| Field | Value |
-|-------|-------|
-| Display Name | `GitLab` |
-| Canonical | `gitlab` |
-| Type | OIDC |
-| Issuer URL | `https://gitlab.com` (or your self-hosted URL) |
-| Client ID | *(Application ID)* |
-| Client Secret | *(Secret)* |
-| Scopes | `openid email profile` |
-| Username Claim | `preferred_username` |
+In the Authentication admin page, click **Add Provider**, select **GitLab** from the template, then paste your **Client ID** and **Client Secret**. For self-hosted GitLab, change the **Issuer URL** to your instance's URL.
 
 ---
 
@@ -159,16 +130,7 @@ Works with both GitLab.com and self-hosted GitLab.
 
 ### 2. Add to PikoCI
 
-| Field | Value |
-|-------|-------|
-| Display Name | `Keycloak` |
-| Canonical | `keycloak` |
-| Type | OIDC |
-| Issuer URL | `https://keycloak.example.com/realms/your-realm` |
-| Client ID | `pikoci` |
-| Client Secret | *(from Keycloak)* |
-| Scopes | `openid email profile` |
-| Username Claim | `preferred_username` |
+In the Authentication admin page, click **Add Provider**, select **Keycloak** from the template, then set the **Issuer URL** to `https://keycloak.example.com/realms/your-realm` and paste your **Client ID** and **Client Secret**.
 
 ---
 
@@ -183,24 +145,13 @@ Works with both GitLab.com and self-hosted GitLab.
 
 ### 2. Add to PikoCI
 
-| Field | Value |
-|-------|-------|
-| Display Name | `Microsoft` |
-| Canonical | `microsoft` |
-| Type | OIDC |
-| Issuer URL | `https://login.microsoftonline.com/{tenant-id}/v2.0` |
-| Client ID | *(Application ID)* |
-| Client Secret | *(Client secret value)* |
-| Scopes | `openid email profile` |
-| Username Claim | `email` |
-
-Replace `{tenant-id}` with your Azure AD tenant ID.
+In the Authentication admin page, click **Add Provider**, select **Microsoft** from the template, then set the **Issuer URL** to `https://login.microsoftonline.com/{tenant-id}/v2.0` (replace `{tenant-id}` with your Azure AD tenant ID) and paste your **Client ID** and **Client Secret**.
 
 ---
 
 ## Login Flow
 
-When OAuth providers are configured, the login page shows a button for each enabled provider above the local login form.
+When OAuth providers are configured, the login page shows the local login form followed by OAuth provider buttons below an "or" divider.
 
 ### New Users
 
@@ -247,12 +198,16 @@ Existing local users can link OAuth identities from **Profile → Linked Account
 
 To unlink, click the **Unlink** button next to the provider.
 
+!!! warning
+    You cannot unlink a provider if it is your only authentication method. Set a local password first or link another provider before unlinking.
+
 ## Setting a Local Password for OAuth Users
 
 OAuth users are created without a local password. To enable local login:
 
 1. Go to **Profile → Password** tab.
-2. Set a new password.
+2. Since no password has been set yet, the "Current Password" field is hidden. Enter your new password and confirm it.
+3. After setting a password, the "Current Password" field will appear for future changes.
 
 This allows logging in with either OAuth or username/password.
 
@@ -263,16 +218,19 @@ This allows logging in with either OAuth or username/password.
 Global admins can disable local username/password login from the **Authentication** admin page by toggling **Enable local username/password login** off.
 
 !!! warning
-    Local auth cannot be disabled unless at least one enabled OAuth provider is configured. This prevents locking everyone out.
+    Local auth cannot be disabled if any user relies solely on local password authentication. All users must have at least one OAuth provider linked before local auth can be turned off.
 
 ### Managing Providers
 
 From the Authentication admin page, you can:
 
-- **Add** new providers
+- **Add** new providers using preset templates or manual configuration
 - **Edit** existing providers (client secret is preserved if left empty)
 - **Enable/disable** providers without deleting them
 - **Delete** providers
+
+!!! warning
+    You cannot disable or delete a provider if any user relies on it as their only authentication method (no local password and no other OAuth links). The affected username is shown in the error message.
 
 Changes take effect immediately — no server restart needed.
 
@@ -311,5 +269,6 @@ Changes take effect immediately — no server restart needed.
 - **Token security**: OAuth callback tokens are short-lived (5 minutes) and single-use.
 - **Client secrets**: Stored in the database (same security model as pipeline secrets). Never exposed in API responses.
 - **Callback URLs**: Built from the `--external-url` flag to prevent open redirect attacks.
+- **Lockout prevention**: PikoCI prevents actions that would lock users out of their accounts — disabling local auth, disabling/deleting a provider, or unlinking an account are all blocked if any user would be left with no way to log in.
 
 See also: [Roles & Permissions](Roles.md) · [API Tokens](API-Tokens.md) · [Server Configuration](Server.md)
