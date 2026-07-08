@@ -203,6 +203,9 @@ func TestRetryJobBuild_SkipsApprovalGate(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
+	// Called twice: once in RetryJobBuild, once in CreateRetryJobBuild
+	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(&job.Job{Name: "jn"}, nil).Times(2)
+
 	// Original build was rejected (failed)
 	s.Builds.EXPECT().Find(ctx, "main", "pp", "jn", "1").Return(&build.Build{
 		ID: 1, BuildNumber: "1", Status: build.Failed,

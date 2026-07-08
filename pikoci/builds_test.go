@@ -152,6 +152,8 @@ func TestRetryJobBuild_BaseBuild(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
+	// Called twice: once in RetryJobBuild, once in CreateRetryJobBuild
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job"}, nil).Times(2)
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3").
 		Return(&build.Build{ID: 5, BuildNumber: "3", Status: build.Succeeded}, nil).Times(2)
 	// RetryJobBuild now creates a pending build with RetrySourceBuildID set
@@ -170,6 +172,8 @@ func TestRetryJobBuild_RetryOfRetry(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
+	// Called twice: once in RetryJobBuild, once in CreateRetryJobBuild
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job"}, nil).Times(2)
 	// Retrying "3.1" should extract parent "3"
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "3.1").
 		Return(&build.Build{ID: 7, BuildNumber: "3.1", Status: build.Failed}, nil)
@@ -192,6 +196,7 @@ func TestRetryJobBuild_RunningBuildFails(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job"}, nil)
 	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "1").
 		Return(&build.Build{ID: 1, BuildNumber: "1", Status: build.Started}, nil)
 
@@ -205,6 +210,7 @@ func TestCreateRetryJobBuild(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job"}, nil)
 	s.Builds.EXPECT().CreateRetry(ctx, "main", "my-pipeline", "my-job", "3", gomock.Any()).
 		Return(uint32(8), "3.1", nil)
 
@@ -1185,4 +1191,28 @@ func TestNextWork_NonRetryBuildNoRetryFields(t *testing.T) {
 	assert.Equal(t, "job", item.Type)
 	assert.Equal(t, uint32(0), item.Body.RetryBuildID)
 	assert.Equal(t, "", item.Body.RetryBuildNumber)
+}
+
+func TestRetryJobBuild_DisableRetry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
+		Return(&job.Job{Name: "my-job", DisableRetry: true}, nil)
+
+	err := s.S.RetryJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
+	require.ErrorIs(t, err, pikoci.ErrRetryDisabled)
+}
+
+func TestCreateRetryJobBuild_DisableRetry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
+		Return(&job.Job{Name: "my-job", DisableRetry: true}, nil)
+
+	_, err := s.S.CreateRetryJobBuild(ctx, "main", "my-pipeline", "my-job", "3", build.Build{})
+	require.ErrorIs(t, err, pikoci.ErrRetryDisabled)
 }

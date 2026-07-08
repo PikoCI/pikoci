@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`disable_retry` on jobs**: Prevents build retries via API and hides the retry button in the UI ([#617](https://github.com/PikoCI/pikoci/issues/617)).
+
 ## [0.7.0] - 2026-07-08
 
 ### Added
