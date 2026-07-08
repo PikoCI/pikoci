@@ -7,7 +7,14 @@ import (
 	"github.com/pikoci/pikoci/pikoci/mock"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"go.uber.org/mock/gomock"
+	"golang.org/x/crypto/bcrypt"
 )
+
+// testHashPassword hashes with bcrypt cost 4 (fast for tests, vs cost 14 in production).
+func testHashPassword(pass string) string {
+	b, _ := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.MinCost)
+	return string(b)
+}
 
 type MockService struct {
 	Users             *mock.UserRepository

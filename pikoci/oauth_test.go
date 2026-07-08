@@ -12,7 +12,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/oauthprovider"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
-	"github.com/pikoci/pikoci/pikoci/utils"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -281,7 +281,7 @@ func TestUpdateAuthSettings_CannotDisableWhenUserHasOnlyLocal(t *testing.T) {
 	s, opr := newServiceWithOAuth(ctrl)
 	ctx := context.TODO()
 
-	hash, _ := utils.HashPassword("adminpass")
+	hash := testHashPassword("adminpass")
 	opr.EXPECT().GetAuthSettings(ctx).Return(&oauthprovider.AuthSettings{
 		ID:               1,
 		LocalAuthEnabled: true,
@@ -313,7 +313,7 @@ func TestUpdateAuthSettings_CannotDisableWhenOAuthUserHasNoLinks(t *testing.T) {
 		{ID: 1, Canonical: "github", Name: "GitHub", Enabled: true},
 	}, nil)
 	// Admin with password but no links — would be locked out
-	hash, _ := utils.HashPassword("adminpass")
+	hash := testHashPassword("adminpass")
 	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
 		{ID: 1, Username: "admin", Admin: true, Password: hash},
 		{ID: 2, Username: "oauthghost", Admin: false, Password: ""},
@@ -468,8 +468,7 @@ func TestUserLogin_LocalAuthEnabled(t *testing.T) {
 	ctx := context.TODO()
 
 	plainPassword := "mysecretpassword"
-	hashedPassword, err := utils.HashPassword(plainPassword)
-	require.NoError(t, err)
+	hashedPassword := testHashPassword(plainPassword)
 
 	opr.EXPECT().GetAuthSettings(ctx).Return(&oauthprovider.AuthSettings{
 		ID:               1,
@@ -602,7 +601,7 @@ func TestUnlinkAccount(t *testing.T) {
 	ctx := context.TODO()
 
 	userID := uint32(42)
-	hash, _ := utils.HashPassword("haslocal")
+	hash := testHashPassword("haslocal")
 
 	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
 		ID:        10,
@@ -667,7 +666,7 @@ func TestChangePassword_OAuthUserAfterPasswordSet(t *testing.T) {
 	s, _ := newServiceWithOAuth(ctrl)
 	ctx := context.TODO()
 
-	hash, _ := utils.HashPassword("mypassword")
+	hash := testHashPassword("mypassword")
 	// OAuth user who already set a password — old password required
 	s.Users.EXPECT().Find(ctx, "oauthuser").Return(&user.User{
 		ID: 5, Username: "oauthuser", Password: hash,
@@ -724,7 +723,7 @@ func TestDeleteOAuthProvider_AllowedWhenUserHasPassword(t *testing.T) {
 	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
 		ID: 1, Canonical: "github",
 	}, nil)
-	hash, _ := utils.HashPassword("localpass")
+	hash := testHashPassword("localpass")
 	s.Users.EXPECT().Filter(ctx).Return([]*user.User{
 		{ID: 5, Username: "bothauth", Password: hash},
 	}, nil)
@@ -784,7 +783,7 @@ func TestUnlinkAccount_AllowedWhenHasPassword(t *testing.T) {
 	s, opr := newServiceWithOAuth(ctrl)
 	ctx := context.TODO()
 
-	hash, _ := utils.HashPassword("localpass")
+	hash := testHashPassword("localpass")
 	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
 		ID: 1, Canonical: "github",
 	}, nil)
@@ -846,7 +845,7 @@ func TestUpdateOAuthProvider_CanDisableWhenUsersHavePassword(t *testing.T) {
 	s, opr := newServiceWithOAuth(ctrl)
 	ctx := context.TODO()
 
-	hash, _ := utils.HashPassword("pass")
+	hash := testHashPassword("pass")
 	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
 		ID: 1, Canonical: "github", Name: "GitHub", Type: "oauth2",
 		AuthURL: "http://x", TokenURL: "http://x", Enabled: true,

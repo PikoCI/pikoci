@@ -34,7 +34,7 @@ func TestCreateUser_Hashed(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	hash, _ := utils.HashPassword("secret")
+	hash := testHashPassword("secret")
 
 	s.Users.EXPECT().Create(ctx, gomock.Any()).Return(uint32(2), nil)
 
@@ -69,7 +69,7 @@ func TestCreateOrUpdateUser_UpdatesExistingWithDefaultPassword(t *testing.T) {
 	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
 	s.Users.EXPECT().Update(ctx, "admin", gomock.Any()).Return(nil)
 
-	newHash, _ := utils.HashPassword("newsecret")
+	newHash := testHashPassword("newsecret")
 	u, err := s.P.CreateOrUpdateUser(ctx, user.User{Username: "admin", Password: newHash}, true)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(1), u.ID)
@@ -84,11 +84,11 @@ func TestCreateOrUpdateUser_SkipsExistingWithChangedPassword(t *testing.T) {
 	ctx := context.TODO()
 
 	// User already changed their password — should NOT be updated
-	customHash, _ := utils.HashPassword("custom-password")
+	customHash := testHashPassword("custom-password")
 	existing := &user.User{ID: 1, Username: "admin", Password: customHash, FullName: "Admin", Admin: true}
 	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
 
-	newHash, _ := utils.HashPassword("newsecret")
+	newHash := testHashPassword("newsecret")
 	u, err := s.P.CreateOrUpdateUser(ctx, user.User{Username: "admin", Password: newHash}, true)
 	require.NoError(t, err)
 	// Password should NOT be changed
@@ -157,7 +157,7 @@ func TestUserLogin(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	hash, _ := utils.HashPassword("secret")
+	hash := testHashPassword("secret")
 	um := &user.WithMemberships{
 		User: user.User{ID: 1, Username: "admin", Password: hash},
 	}
@@ -175,7 +175,7 @@ func TestUserLogin_WrongPassword(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	hash, _ := utils.HashPassword("secret")
+	hash := testHashPassword("secret")
 	um := &user.WithMemberships{
 		User: user.User{ID: 1, Username: "admin", Password: hash},
 	}
@@ -290,7 +290,7 @@ func TestChangePassword(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	hash, _ := utils.HashPassword("oldpass")
+	hash := testHashPassword("oldpass")
 	existing := &user.User{ID: 1, Username: "admin", Password: hash}
 	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
 	s.Users.EXPECT().Update(ctx, "admin", gomock.Any()).Return(nil)
@@ -304,7 +304,7 @@ func TestChangePassword_WrongOld(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	hash, _ := utils.HashPassword("oldpass")
+	hash := testHashPassword("oldpass")
 	existing := &user.User{ID: 1, Username: "admin", Password: hash}
 	s.Users.EXPECT().Find(ctx, "admin").Return(existing, nil)
 
