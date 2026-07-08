@@ -20,7 +20,7 @@ export function TeamsView() {
   const [teams, setTeams] = useState([]);
 
   useEffect(() => {
-    fetchTeams().then(setTeams);
+    fetchTeams().then(data => setTeams(data || [])).catch(() => {});
   }, []);
 
   const onDelete = (tc) => {

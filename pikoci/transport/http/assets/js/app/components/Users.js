@@ -8,10 +8,12 @@ import {
   updateProfile, changePassword, postRefreshToken,
   fetchApiTokens, createApiToken, deleteApiToken,
   fetchTeams,
+  fetchLinkedAccounts, unlinkAccount, fetchAuthMethods,
 } from '../api.js';
 import { session, login, setNoticeError, isAdmin } from '../state.js';
 import { useLoading, useRequireAuth } from '../hooks.js';
 import { showToast } from '../toast.js';
+import { getProviderIcon } from '../provider-icons.js';
 
 // --- UsersList ---
 
@@ -276,10 +278,15 @@ export function Profile() {
         <button class="nav-link ${activeTab === 'tokens' ? 'active' : ''}"
           onClick=${() => switchTab('tokens')}>API Tokens</button>
       </li>
+      <li class="nav-item">
+        <button class="nav-link ${activeTab === 'linked' ? 'active' : ''}"
+          onClick=${() => switchTab('linked')}>Linked Accounts</button>
+      </li>
     </ul>
     ${activeTab === 'profile' ? html`<${ProfileTab} />` : null}
     ${activeTab === 'password' ? html`<${PasswordTab} mustChange=${mustChange} />` : null}
     ${activeTab === 'tokens' ? html`<${ApiTokensTab} />` : null}
+    ${activeTab === 'linked' ? html`<${LinkedAccountsTab} />` : null}
   `;
 }
 
@@ -333,6 +340,20 @@ function PasswordTab({ mustChange }) {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [pwLoading, withPwLoading] = useLoading();
+  const u = session.value.user || {};
+  // If has_password is missing from JWT (old session), refresh to get it
+  const [hasPassword, setHasPassword] = useState(u.has_password !== undefined ? u.has_password : true);
+
+  useEffect(() => {
+    if (u.has_password === undefined) {
+      postRefreshToken().then(resp => {
+        if (resp.data && resp.data.jwt) {
+          login(resp.data.jwt, resp.data.user);
+          setHasPassword(resp.data.user.has_password !== false);
+        }
+      }).catch(() => {});
+    }
+  }, []);
 
   const onChangePassword = (e) => {
     e.preventDefault();
@@ -347,10 +368,20 @@ function PasswordTab({ mustChange }) {
       } catch {
         return;
       }
-      const currentUser = session.value.user;
-      if (currentUser) {
-        const updatedUser = { ...currentUser, must_change_password: false };
-        login(session.value.jwt, updatedUser);
+      // Refresh JWT to update has_password and must_change_password flags
+      try {
+        const resp = await postRefreshToken();
+        if (resp.data && resp.data.jwt) {
+          login(resp.data.jwt, resp.data.user);
+          setHasPassword(resp.data.user.has_password !== false);
+        }
+      } catch {
+        // Fallback: update locally
+        const currentUser = session.value.user;
+        if (currentUser) {
+          login(session.value.jwt, { ...currentUser, must_change_password: false, has_password: true });
+          setHasPassword(true);
+        }
       }
       setCurrentPassword('');
       setNewPassword('');
@@ -364,11 +395,18 @@ function PasswordTab({ mustChange }) {
 
   return html`
     <form id="change-password-form" onSubmit=${onChangePassword}>
-      <div class="mb-3">
-        <label for="current_password" class="form-label">Current Password</label>
-        <input type="password" class="form-control" id="current_password" placeholder="Enter current password"
-          value=${currentPassword} onInput=${(e) => setCurrentPassword(e.target.value)} />
-      </div>
+      ${!hasPassword ? html`
+        <div class="alert alert-info small mb-3">
+          <i class="bi bi-info-circle"></i> You don't have a local password yet. Set one below to enable username/password login.
+        </div>
+      ` : html`
+        <div class="mb-3">
+          <label for="current_password" class="form-label">Current Password</label>
+          <input type="password" class="form-control" id="current_password"
+            placeholder="Enter current password"
+            value=${currentPassword} onInput=${(e) => setCurrentPassword(e.target.value)} />
+        </div>
+      `}
       <div class="mb-3">
         <label for="new_password" class="form-label">New Password</label>
         <input type="password" class="form-control" id="new_password" placeholder="Enter new password"
@@ -606,6 +644,77 @@ function ApiTokensTab() {
             `)}
           </tbody>
         </table>
+      </div>
+    ` : null}
+  `;
+}
+
+function LinkedAccountsTab() {
+  const [accounts, setAccounts] = useState([]);
+  const [providers, setProviders] = useState([]);
+
+  useEffect(() => {
+    fetchLinkedAccounts().then(data => setAccounts(data || [])).catch(() => {});
+    fetchAuthMethods().then(data => setProviders((data && data.providers) || [])).catch(() => {});
+
+    // Link success toast is handled by app.js on initial load
+  }, []);
+
+  const onUnlink = async (canonical) => {
+    if (!confirm('Are you sure you want to unlink this account?')) return;
+    try {
+      await unlinkAccount(canonical);
+      setAccounts(accounts.filter(a => a.provider_canonical !== canonical));
+      showToast('Account unlinked', 'success');
+    } catch {}
+  };
+
+  const onLink = (canonical) => {
+    const jwt = session.value.jwt;
+    window.location.href = '/auth/oauth/' + canonical + '?link=true&token=' + encodeURIComponent(jwt);
+  };
+
+  const linkedCanonicals = new Set(accounts.map(a => a.provider_canonical));
+  const unlinkableProviders = providers.filter(p => !linkedCanonicals.has(p.canonical));
+
+  return html`
+    ${accounts.length > 0 ? html`
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>Email</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${accounts.map(a => html`
+              <tr key=${a.provider_canonical}>
+                <td><span class="d-inline-flex align-items-center gap-2">${getProviderIcon(a.provider_canonical)} ${a.provider_name}</span></td>
+                <td>${a.email || '\u2014'}</td>
+                <td>
+                  <button class="btn btn-outline-danger btn-sm" onClick=${() => onUnlink(a.provider_canonical)}>
+                    <i class="bi bi-x-circle"></i> Unlink
+                  </button>
+                </td>
+              </tr>
+            `)}
+          </tbody>
+        </table>
+      </div>
+    ` : html`
+      <div class="text-muted text-center py-3">No linked accounts.</div>
+    `}
+    ${unlinkableProviders.length > 0 ? html`
+      <div class="mt-3">
+        <h6 class="text-muted">Link an account</h6>
+        ${unlinkableProviders.map(p => html`
+          <button key=${p.canonical} class="btn btn-outline-secondary btn-sm me-2 mb-2 d-inline-flex align-items-center gap-1"
+            onClick=${() => onLink(p.canonical)}>
+            ${getProviderIcon(p.canonical)} Link ${p.name}
+          </button>
+        `)}
       </div>
     ` : null}
   `;

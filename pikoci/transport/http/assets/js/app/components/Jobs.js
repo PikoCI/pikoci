@@ -679,12 +679,29 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
       const resp = await fetchBuilds(tc, pn, jn, {
         status: ['pending', 'started', 'waiting_for_approval'],
       });
-      if (resp.data && resp.data.length > 0) {
-        const freshMap = new Map(resp.data.map(b => [b.id, b]));
-        setBuilds(prev => sortBuilds(prev.map(b => freshMap.get(b.id) || b)));
-      }
+      const freshMap = new Map((resp.data || []).map(b => [b.id, b]));
+
+      // If the active build was non-terminal but is missing from the refresh,
+      // it transitioned to a terminal state — re-fetch it individually.
+      setBuilds(prev => {
+        const activeB = prev.find(b => b.id === activeBuildID);
+        const needsRefetch = activeB
+          && ['pending', 'started', 'waiting_for_approval'].includes(activeB.status)
+          && !freshMap.has(activeB.id);
+
+        if (needsRefetch) {
+          fetchBuild(tc, pn, jn, activeB.build_number)
+            .then(b => { if (b) setBuilds(p => sortBuilds(p.map(x => x.id === b.id ? b : x))); })
+            .catch(() => {});
+        }
+
+        if (freshMap.size > 0) {
+          return sortBuilds(prev.map(b => freshMap.get(b.id) || b));
+        }
+        return prev;
+      });
     } catch { /* ignore */ }
-  }, [tc, pn, jn]);
+  }, [tc, pn, jn, activeBuildID]);
 
   // Initial load
   useEffect(() => {

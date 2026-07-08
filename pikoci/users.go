@@ -15,11 +15,25 @@ import (
 const defaultAdminUsername = "admin"
 const defaultAdmin123Hash = "$2a$14$FoV/2Z0CRgQyiDJLMcErd.cC/DtWCKMWtxZEaL6HQd/rrtU2DZpAu"
 
+// setHasPassword sets the HasPassword flag based on whether the user has a
+// non-empty password hash (empty = OAuth-only, never set a local password).
+func setHasPassword(um *user.WithMemberships) {
+	um.HasPassword = um.Password != ""
+}
+
 // UserLogin authenticates a user by username and password. On success, it returns
 // the user with team memberships and a signed JWT token. If the user is the
 // migration-seeded admin with the default password, the MustChangePassword flag
 // is set.
 func (q *PikoCI) UserLogin(ctx context.Context, un, pass string) (*user.WithMemberships, string, error) {
+	// Check if local auth is enabled
+	if q.OAuthProviders != nil {
+		settings, err := q.OAuthProviders.GetAuthSettings(ctx)
+		if err == nil && !settings.LocalAuthEnabled {
+			return nil, "", fmt.Errorf("local authentication is disabled")
+		}
+	}
+
 	if !utils.ValidateCanonical(un) {
 		return nil, "", fmt.Errorf("invalid Username format %q", un)
 	}
@@ -37,6 +51,7 @@ func (q *PikoCI) UserLogin(ctx context.Context, un, pass string) (*user.WithMemb
 	if um.Username == defaultAdminUsername && um.Password == defaultAdmin123Hash {
 		um.MustChangePassword = true
 	}
+	setHasPassword(um)
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user": um,
@@ -59,6 +74,7 @@ func (q *PikoCI) RefreshToken(ctx context.Context, un string) (*user.WithMembers
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to Find User: %w", err)
 	}
+	setHasPassword(um)
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user": um,
@@ -270,7 +286,20 @@ func (q *PikoCI) ChangePassword(ctx context.Context, un, oldPassword, newPasswor
 		return fmt.Errorf("failed to Find User: %w", err)
 	}
 
-	if !utils.CheckPasswordHash(oldPassword, existing.Password) {
+	// OAuth users are created with an empty password sentinel. They can set
+	// their first password without providing the old one. Once set, the old
+	// password is always required.
+	if existing.Password == "" {
+		// No password set yet — only allow if user has OAuth links
+		if q.OAuthProviders != nil {
+			links, err := q.OAuthProviders.FindUserLinksByUser(ctx, existing.ID)
+			if err != nil || len(links) == 0 {
+				return fmt.Errorf("current password is required")
+			}
+		} else {
+			return fmt.Errorf("current password is required")
+		}
+	} else if !utils.CheckPasswordHash(oldPassword, existing.Password) {
 		return fmt.Errorf("current password is incorrect")
 	}
 

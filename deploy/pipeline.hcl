@@ -155,6 +155,15 @@ job "test-integration" {
     trigger = true
   }
   notify "github-check" "ci" { status = "in_progress" }
+
+  service "keycloak" {
+    version        = "26.0"
+    port           = "8180"
+    admin_user     = "admin"
+    admin_password = "admin"
+    realm_json     = "pikoci/integration/fixtures/keycloak/pikoci-realm.json"
+  }
+
   task "install-tools" {
     run "docker" {
       image = "ghcr.io/xescugc/pikoci-integration:latest"
@@ -182,11 +191,13 @@ job "test-integration" {
       image = "ghcr.io/xescugc/pikoci-integration:latest"
       cmd   = <<-EOT
         export PATH=/pikoci-tools:$PATH LD_LIBRARY_PATH=/pikoci-tools:$LD_LIBRARY_PATH
+        export KEYCLOAK_URL=http://127.0.0.1:8180
         cd ${var.git_name}
         cp /usr/local/bin/geckodriver integration/vendor/geckodriver
         make test-integration
       EOT
       args  = [
+        "--network=host",
         "-v", "pikoci-go-mod:/go/pkg/mod",
         "-v", "pikoci-build:/root/.cache/go-build",
         "-v", "pikoci-tools:/pikoci-tools",
@@ -681,6 +692,46 @@ service_type "postgresql" {
 
 service_type "vault" {
   source = "pikoci://vault"
+}
+
+service_type "keycloak" {
+  params = ["version", "port", "admin_user", "admin_password", "realm_json"]
+
+  start "exec" {
+    path = "/bin/sh"
+    args = ["-ec", <<-EOT
+      NAME="pikoci-$BUILD_PIPELINE_NAME-$BUILD_JOB_NAME-keycloak"
+      docker rm -f $NAME 2>/dev/null || true
+      docker run -d --name $NAME \
+        -p $param_port:8080 \
+        -e KC_BOOTSTRAP_ADMIN_USERNAME=$param_admin_user \
+        -e KC_BOOTSTRAP_ADMIN_PASSWORD=$param_admin_password \
+        quay.io/keycloak/keycloak:$param_version \
+        start-dev --import-realm
+      if [ -n "$param_realm_json" ] && [ -f "$param_realm_json" ]; then
+        docker exec $NAME mkdir -p /opt/keycloak/data/import
+        docker cp "$param_realm_json" $NAME:/opt/keycloak/data/import/realm.json
+        docker restart $NAME
+      fi
+    EOT
+    ]
+  }
+
+  ready_check "exec" {
+    path     = "/bin/sh"
+    args     = ["-ec", "curl -sf http://127.0.0.1:$param_port/realms/pikoci"]
+    interval = "3s"
+    timeout  = "120s"
+  }
+
+  stop "exec" {
+    path = "/bin/sh"
+    args = ["-ec", <<-EOT
+      NAME="pikoci-$BUILD_PIPELINE_NAME-$BUILD_JOB_NAME-keycloak"
+      docker rm -f $NAME 2>/dev/null || true
+    EOT
+    ]
+  }
 }
 
 # --- Secrets and Variables ---

@@ -176,4 +176,29 @@ const (
 	GenerateTeamWorkerToken
 	// GetTeamWorkerToken is the route for retrieving the current team worker token.
 	GetTeamWorkerToken
+
+	// GetAuthMethods is the route for listing available auth methods.
+	GetAuthMethods
+	// OAuthStart is the route for starting an OAuth flow.
+	OAuthStart
+	// OAuthCallback is the route for handling OAuth provider callbacks.
+	OAuthCallback
+	// OAuthCompleteProfile is the route for completing profile after OAuth login.
+	OAuthCompleteProfile
+	// ListOAuthProviders is the route for listing all OAuth providers (admin).
+	ListOAuthProviders
+	// CreateOAuthProvider is the route for creating an OAuth provider (admin).
+	CreateOAuthProvider
+	// UpdateOAuthProvider is the route for updating an OAuth provider (admin).
+	UpdateOAuthProvider
+	// DeleteOAuthProvider is the route for deleting an OAuth provider (admin).
+	DeleteOAuthProvider
+	// GetAdminAuthSettings is the route for getting auth settings (admin).
+	GetAdminAuthSettings
+	// UpdateAdminAuthSettings is the route for updating auth settings (admin).
+	UpdateAdminAuthSettings
+	// ListLinkedAccounts is the route for listing user's linked OAuth accounts.
+	ListLinkedAccounts
+	// UnlinkAccount is the route for unlinking an OAuth account.
+	UnlinkAccount
 )

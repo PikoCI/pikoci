@@ -60,7 +60,7 @@ func newTeamIsolationTestService(t *testing.T, ctx context.Context, logger *slog
 	tgr := mysql.NewTriggerRepository(db)
 	suow := unitwork.NewStartUnitOfWork(db, mysql.SQLite)
 
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, nil, suow, []byte("test"), notifier.New(), logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, nil, nil, suow, []byte("test"), notifier.New(), logger)
 	svc.StartScheduler(ctx)
 
 	_, _ = svc.CreateUser(ctx, user.User{
@@ -306,7 +306,7 @@ func TestTeamIsolation_FullGRPCFlow(t *testing.T) {
 
 	jwtSecret := []byte("test-secret")
 	wn := notifier.New()
-	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, nil, suow, jwtSecret, wn, logger)
+	svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, nil, nil, suow, jwtSecret, wn, logger)
 	svc.StartScheduler(ctx)
 
 	svc.CreateUser(ctx, user.User{
@@ -322,7 +322,7 @@ func TestTeamIsolation_FullGRPCFlow(t *testing.T) {
 	svc.GRPCServer = grpcServer
 	svc.TeamWorkerChecker = streamMgr
 
-	httpHandler := tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.SQLite, "test", "test")
+	httpHandler := tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.SQLite, "test", "test", "", nil)
 	httpSrv := &http.Server{Handler: handlers.CombinedLoggingHandler(os.Stderr, httpHandler)}
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")

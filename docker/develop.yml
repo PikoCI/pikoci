@@ -51,3 +51,13 @@ services:
       - SKIP_SETCAP=1
     cap_add:
       - IPC_LOCK
+
+  keycloak:
+    ports:
+      - '8180:8080'
+    environment:
+      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
+    command: start-dev --import-realm
+    volumes:
+      - ../integration/fixtures/keycloak:/opt/keycloak/data/import

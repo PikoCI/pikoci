@@ -15,6 +15,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/mock"
+	"github.com/pikoci/pikoci/pikoci/oauthprovider"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/role"
@@ -47,7 +48,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	svc := mock.NewService(ctrl)
 	secret := []byte("test-secret")
 	logger := slog.Default()
-	handler := Handler(svc, secret, logger, nil, "", "test", "abc1234")
+	handler := Handler(svc, secret, logger, nil, "", "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
@@ -2798,4 +2799,130 @@ func TestWorkerHeartbeat_GlobalWorker(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+// ===== OAuth Handler Tests =====
+
+func TestGetAuthMethodsHandler(t *testing.T) {
+	e := newTestEnv(t)
+	methods := &oauthprovider.AuthMethods{
+		LocalAuthEnabled: true,
+		Providers: []oauthprovider.PublicProvider{
+			{Canonical: "github", Name: "GitHub"},
+		},
+	}
+	e.svc.EXPECT().GetAuthMethods(gomock.Any()).Return(methods, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/auth/methods", "", "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got GetAuthMethodsResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.True(t, got.Data.LocalAuthEnabled)
+	assert.Len(t, got.Data.Providers, 1)
+}
+
+func TestListOAuthProvidersHandler(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	providers := []*oauthprovider.Provider{
+		{ID: 1, Name: "GitHub", Canonical: "github", Type: "oauth2"},
+	}
+	e.svc.EXPECT().ListOAuthProviders(gomock.Any()).Return(providers, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/admin/oauth-providers", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got ListOAuthProvidersResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Len(t, got.Data, 1)
+	assert.Equal(t, "github", got.Data[0].Canonical)
+}
+
+func TestCreateOAuthProviderHandler(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	created := &oauthprovider.Provider{ID: 1, Name: "GitHub", Canonical: "github", Type: "oauth2"}
+	e.svc.EXPECT().CreateOAuthProvider(gomock.Any(), gomock.Any()).Return(created, nil)
+
+	body := `{"name":"GitHub","canonical":"github","type":"oauth2","client_id":"cid","client_secret":"csec"}`
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/admin/oauth-providers", e.adminJWT(t), body)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got CreateOAuthProviderResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Equal(t, "github", got.Data.Canonical)
+}
+
+func TestDeleteOAuthProviderHandler(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	e.svc.EXPECT().DeleteOAuthProvider(gomock.Any(), "github").Return(nil)
+
+	resp := doRequest(t, http.MethodDelete, e.server.URL+"/admin/oauth-providers/github", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got DeleteOAuthProviderResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+}
+
+func TestGetAdminAuthSettingsHandler(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	settings := &oauthprovider.AuthSettings{ID: 1, LocalAuthEnabled: true}
+	e.svc.EXPECT().GetAuthSettings(gomock.Any()).Return(settings, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/admin/auth-settings", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got GetAdminAuthSettingsResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.True(t, got.Data.LocalAuthEnabled)
+}
+
+func TestListLinkedAccountsHandler(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+	accounts := []*oauthprovider.LinkedAccount{
+		{ProviderCanonical: "github", ProviderName: "GitHub", Subject: "12345"},
+	}
+	e.svc.EXPECT().ListLinkedAccounts(gomock.Any(), e.memberUM.ID).Return(accounts, nil)
+
+	resp := doRequest(t, http.MethodGet, e.server.URL+"/profile/linked-accounts", e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got ListLinkedAccountsResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Len(t, got.Data, 1)
+	assert.Equal(t, "github", got.Data[0].ProviderCanonical)
+}
+
+func TestOAuthCompleteProfileHandler(t *testing.T) {
+	e := newTestEnv(t)
+	um := &user.WithMemberships{
+		User: user.User{Username: "newuser", FullName: "New User"},
+	}
+	e.svc.EXPECT().OAuthCompleteProfile(gomock.Any(), "temp-token-123", "newuser", "New User").Return(um, "jwt-token-456", nil)
+
+	body := `{"token":"temp-token-123","username":"newuser","full_name":"New User"}`
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/auth/oauth/complete-profile", "", body)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got OAuthCompleteProfileResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+	assert.Equal(t, "jwt-token-456", got.Data.JWT)
 }

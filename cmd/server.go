@@ -124,13 +124,14 @@ var serverCmd = &cobra.Command{
 		wr := mysql.NewWorkerRepository(querier, cfg.DBSystem)
 		atr := mysql.NewApiTokenRepository(querier)
 		alr := mysql.NewAuditLogRepository(querier)
+		opr := mysql.NewOAuthProviderRepository(querier)
 
 		suow := unitwork.NewStartUnitOfWork(db, cfg.DBSystem)
 
 		wn := notifier.New()
 
 		logger.Info("initializing service")
-		var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, alr, suow, jwtSecret, wn, logger)
+		var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, alr, opr, suow, jwtSecret, wn, logger)
 
 		// Recover builds orphaned by a previous crash or unclean shutdown.
 		if n, err := svc.RecoverOrphanedBuilds(ctx); err != nil {
@@ -142,8 +143,10 @@ var serverCmd = &cobra.Command{
 		svc.StartScheduler(ctx)
 		logger.Info("initialized service")
 
+		oauthStateStore := pikoci.NewOAuthStateStore(ctx)
+
 		logger.Info("initializing http handlers")
-		var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, cfg.DBSystem, Version, Commit)
+		var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, cfg.DBSystem, Version, Commit, cfg.ExternalURL, oauthStateStore)
 		logger.Info("initialized http handlers")
 
 		reg := prometheus.NewRegistry()
@@ -405,6 +408,7 @@ func init() {
 	serverCmd.Flags().Int("concurrency", 1, "Number of workers to start in one instance")
 	serverCmd.Flags().String("drain-timeout", "10m", "Maximum time to wait for in-flight jobs to finish during graceful shutdown (SIGQUIT)")
 	serverCmd.Flags().String("log-level", "info", "Sets the log level ('debug', 'info', 'warn', 'error')")
+	serverCmd.Flags().String("external-url", "", "External URL for OAuth callbacks (e.g. https://ci.pikoci.com)")
 	serverCmd.Flags().String("team-canonical", mainTeamCanonical, "Team Canonical to scope the action")
 	serverCmd.Flags().String("pipeline-config", "", "Path to the Pipeline config file")
 	serverCmd.Flags().StringP("vars", "v", "", "Path to the Pipeline var file (JSON)")

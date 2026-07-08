@@ -12,6 +12,8 @@ type Repository interface {
 	Update(ctx context.Context, un string, u User) error
 	// Find retrieves a user by username.
 	Find(ctx context.Context, un string) (*User, error)
+	// FindByID retrieves a user by ID.
+	FindByID(ctx context.Context, id uint32) (*User, error)
 	// FindWithMemberships retrieves a user by username along with all team memberships.
 	FindWithMemberships(ctx context.Context, un string) (*WithMemberships, error)
 	// Filter returns all users in the system.

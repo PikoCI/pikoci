@@ -71,7 +71,7 @@ test: test-mock test-http test-js test-integration test-backends ## Runs all tes
 
 .PHONY: test-mock
 test-mock: ## Runs unit/mock tests (no services needed)
-	go test ./... -timeout 120s -coverprofile=coverage.out
+	go test ./... -v -timeout 120s -coverprofile=coverage.out
 
 .PHONY: test-http
 test-http: ## Runs HTTP API integration tests (no browser needed)
@@ -80,14 +80,14 @@ test-http: ## Runs HTTP API integration tests (no browser needed)
 .PHONY: test-integration
 test-integration: ## Runs UI and backend integration tests (requires geckodriver + Xvfb + Firefox)
 	@PIKOCI_TEST_DB_SYSTEMS=$${PIKOCI_TEST_DB_SYSTEMS:-mem,sqlite} \
-	go test -tags integration ./integration/selenium/
+	go test -tags integration ./integration/selenium/ -v
 
 .PHONY: test-backends
 test-backends: ## Runs integration tests with all backends (requires test-services-up)
 	@PIKOCI_TEST_DB_SYSTEMS=mem,sqlite,mysql,postgresql \
 	PIKOCI_TEST_VAULT=1 \
 	PIKOCI_TEST_VAULT_ADDR=http://127.0.0.1:8200 \
-	go test -tags integration ./integration/backends/... -coverprofile=coverage-backends.out
+	go test -tags integration ./integration/backends/... -v -coverprofile=coverage-backends.out
 
 .PHONY: test-js
 test-js: ## Run JavaScript unit tests

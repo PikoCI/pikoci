@@ -14,6 +14,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/auditlog"
+	"github.com/pikoci/pikoci/pikoci/oauthprovider"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
@@ -1381,4 +1382,50 @@ func (cl *Client) GetTeamWorkerToken(ctx context.Context, tc string) (string, er
 		return "", fmt.Errorf("error from request: %s", resp.Err)
 	}
 	return resp.Token, nil
+}
+
+// OAuth stubs — the HTTP client is only used for worker and CLI operations,
+// not for OAuth flows.
+
+func (cl *Client) GetAuthMethods(ctx context.Context) (*oauthprovider.AuthMethods, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (cl *Client) GetOAuthProvider(ctx context.Context, canonical string) (*oauthprovider.Provider, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (cl *Client) CreateOAuthProvider(ctx context.Context, p oauthprovider.Provider) (*oauthprovider.Provider, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (cl *Client) ListOAuthProviders(ctx context.Context) ([]*oauthprovider.Provider, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (cl *Client) UpdateOAuthProvider(ctx context.Context, canonical string, p oauthprovider.Provider) (*oauthprovider.Provider, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (cl *Client) DeleteOAuthProvider(ctx context.Context, canonical string) error {
+	return fmt.Errorf("not implemented")
+}
+func (cl *Client) GetAuthSettings(ctx context.Context) (*oauthprovider.AuthSettings, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (cl *Client) UpdateAuthSettings(ctx context.Context, settings oauthprovider.AuthSettings) error {
+	return fmt.Errorf("not implemented")
+}
+func (cl *Client) ListLinkedAccounts(ctx context.Context, userID uint32) ([]*oauthprovider.LinkedAccount, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (cl *Client) UnlinkAccount(ctx context.Context, userID uint32, canonical string) error {
+	return fmt.Errorf("not implemented")
+}
+func (cl *Client) OAuthCompleteProfile(ctx context.Context, tempToken, username, fullName string) (*user.WithMemberships, string, error) {
+	return nil, "", fmt.Errorf("not implemented")
+}
+func (cl *Client) FindOAuthUserLink(ctx context.Context, providerID uint32, subject string) (*oauthprovider.UserLink, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (cl *Client) CreateOAuthUserLink(ctx context.Context, link oauthprovider.UserLink) (uint32, error) {
+	return 0, fmt.Errorf("not implemented")
+}
+func (cl *Client) FindUserByID(ctx context.Context, userID uint32) (*user.User, error) {
+	return nil, fmt.Errorf("not implemented")
 }

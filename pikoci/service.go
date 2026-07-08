@@ -14,6 +14,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/notifier"
+	"github.com/pikoci/pikoci/pikoci/oauthprovider"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
@@ -269,6 +270,35 @@ type Service interface {
 	// GetTeamWorkerToken returns the current team worker token, or empty string
 	// if none has been generated.
 	GetTeamWorkerToken(ctx context.Context, tc string) (string, error)
+
+	// GetAuthMethods returns the enabled auth methods for the login page.
+	GetAuthMethods(ctx context.Context) (*oauthprovider.AuthMethods, error)
+	// GetOAuthProvider retrieves a single OAuth provider by canonical.
+	GetOAuthProvider(ctx context.Context, canonical string) (*oauthprovider.Provider, error)
+	// CreateOAuthProvider creates a new OAuth provider configuration.
+	CreateOAuthProvider(ctx context.Context, p oauthprovider.Provider) (*oauthprovider.Provider, error)
+	// ListOAuthProviders returns all OAuth provider configurations.
+	ListOAuthProviders(ctx context.Context) ([]*oauthprovider.Provider, error)
+	// UpdateOAuthProvider updates an existing OAuth provider.
+	UpdateOAuthProvider(ctx context.Context, canonical string, p oauthprovider.Provider) (*oauthprovider.Provider, error)
+	// DeleteOAuthProvider deletes an OAuth provider by canonical.
+	DeleteOAuthProvider(ctx context.Context, canonical string) error
+	// GetAuthSettings returns the global auth settings.
+	GetAuthSettings(ctx context.Context) (*oauthprovider.AuthSettings, error)
+	// UpdateAuthSettings updates the global auth settings.
+	UpdateAuthSettings(ctx context.Context, settings oauthprovider.AuthSettings) error
+	// ListLinkedAccounts returns the OAuth links for a user.
+	ListLinkedAccounts(ctx context.Context, userID uint32) ([]*oauthprovider.LinkedAccount, error)
+	// UnlinkAccount removes an OAuth link for a user.
+	UnlinkAccount(ctx context.Context, userID uint32, canonical string) error
+	// OAuthCompleteProfile creates a user from a temp OAuth token and links the account.
+	OAuthCompleteProfile(ctx context.Context, tempToken, username, fullName string) (*user.WithMemberships, string, error)
+	// FindOAuthUserLink looks up an OAuth user link by provider ID and subject.
+	FindOAuthUserLink(ctx context.Context, providerID uint32, subject string) (*oauthprovider.UserLink, error)
+	// CreateOAuthUserLink creates a new OAuth user link.
+	CreateOAuthUserLink(ctx context.Context, link oauthprovider.UserLink) (uint32, error)
+	// FindUserByID retrieves a user by their ID.
+	FindUserByID(ctx context.Context, userID uint32) (*user.User, error)
 }
 
 // PikoCI is the primary implementation of the Service interface. It coordinates
@@ -304,6 +334,8 @@ type PikoCI struct {
 	ApiTokens     apitoken.Repository
 	// AuditLogs is the repository for audit log persistence.
 	AuditLogs     auditlog.Repository
+	// OAuthProviders is the repository for OAuth provider persistence.
+	OAuthProviders oauthprovider.Repository
 	// StartUoW begins a new unit of work for transactional operations.
 	StartUoW      unitwork.StartUnitOfWork
 	// Ctx is the root context for the service.
@@ -332,7 +364,7 @@ type PikoCI struct {
 // New creates a new PikoCI service instance with all required dependencies. It
 // initializes the internal scheduler for periodic resource checks and returns
 // the configured service ready for use.
-func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, wr wkr.Repository, atr apitoken.Repository, alr auditlog.Repository, suow unitwork.StartUnitOfWork, js []byte, wn *notifier.WorkNotifier, l *slog.Logger) *PikoCI {
+func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipeline.Repository, jr job.Repository, rr resource.Repository, rt restype.Repository, br build.Repository, rur runner.Repository, str sectype.Repository, tgr trigger.Repository, wr wkr.Repository, atr apitoken.Repository, alr auditlog.Repository, opr oauthprovider.Repository, suow unitwork.StartUnitOfWork, js []byte, wn *notifier.WorkNotifier, l *slog.Logger) *PikoCI {
 	if l == nil {
 		l = slog.Default()
 	}
@@ -353,6 +385,7 @@ func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipelin
 		Workers:       wr,
 		ApiTokens:     atr,
 		AuditLogs:     alr,
+		OAuthProviders: opr,
 		StartUoW:      suow,
 		JWTSecret:     js,
 		logger:        l,

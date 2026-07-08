@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Build status not updating in UI**: Active build view now detects when a build transitions to a terminal state (succeeded/failed/cancelled) and re-fetches it, instead of requiring a manual page reload.
 - **Build polling fan-out CPU spike**: Jobs view now fetches all non-terminal builds in a single `?status=` request instead of one HTTP call per build every 2s. Added in-flight guard and `setTimeout`-based scheduling to `usePolling` to prevent overlapping request storms.
 - **N+1 query elimination**: Pipeline image, job list, and resource list endpoints now use batch queries (`FilterByPipeline`, `LatestVersionByResources`, batch serial-group loading) instead of per-item DB calls.
 
@@ -19,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **OIDC/OAuth2 authentication**: Single sign-on with GitHub, Google, GitLab, Keycloak, Microsoft, or any OIDC/OAuth2 provider. Admin UI with provider templates, account linking, and local auth toggle ([#249](https://github.com/PikoCI/pikoci/issues/249)).
 - **Secret chaining**: Secret `path`/`key` fields and `secret_type` config can now reference other variables, resolved in dependency order with cycle detection ([#248](https://github.com/PikoCI/pikoci/issues/248)).
 - **Approval gates**: `approve` HCL block on jobs creates a human approval gate. Purple "Waiting for Approval" status, approve/reject UI+CLI+API (Maintain+), configurable count, notifications, version pinning, audit events ([#152](https://github.com/PikoCI/pikoci/issues/152)).
 - **Version pinning at build creation**: Downstream builds snapshot triggered resource versions at creation time, matching Concourse CI behavior.
