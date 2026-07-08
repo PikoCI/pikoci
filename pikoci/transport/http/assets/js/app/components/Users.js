@@ -100,13 +100,16 @@ export function UserNew() {
         <label for="password" class="form-label">Password</label>
         <input type="password" class="form-control" id="password" placeholder="Enter password"
           value=${password} onInput=${(e) => setPassword(e.target.value)} />
+        ${password.length > 0 && password.length < 8 ? html`
+          <div class="form-text text-danger">Password must be at least 8 characters</div>
+        ` : null}
       </div>
       <div class="mb-3 form-check">
         <input type="checkbox" class="form-check-input" id="admin"
           checked=${admin} onChange=${(e) => setAdmin(e.target.checked)} />
         <label class="form-check-label" for="admin">Global Admin</label>
       </div>
-      <button type="submit" class="btn btn-primary" disabled=${loading}>
+      <button type="submit" class="btn btn-primary" disabled=${loading || (password.length > 0 && password.length < 8)}>
         ${loading ? 'Creating...' : 'Create User'}
       </button>
     </form>
@@ -225,8 +228,11 @@ export function UserShow({ username: usernameParam }) {
         <label for="new_password" class="form-label">New Password</label>
         <input type="password" class="form-control" id="new_password" placeholder="Enter new password"
           value=${newPassword} onInput=${(e) => setNewPassword(e.target.value)} />
+        ${newPassword.length > 0 && newPassword.length < 8 ? html`
+          <div class="form-text text-danger">Password must be at least 8 characters</div>
+        ` : null}
       </div>
-      <button type="submit" class="btn btn-warning" disabled=${resetLoading}>
+      <button type="submit" class="btn btn-warning" disabled=${resetLoading || (newPassword.length > 0 && newPassword.length < 8)}>
         ${resetLoading ? 'Resetting...' : 'Reset Password'}
       </button>
     </form>
@@ -411,13 +417,16 @@ function PasswordTab({ mustChange }) {
         <label for="new_password" class="form-label">New Password</label>
         <input type="password" class="form-control" id="new_password" placeholder="Enter new password"
           value=${newPassword} onInput=${(e) => setNewPassword(e.target.value)} />
+        ${newPassword.length > 0 && newPassword.length < 8 ? html`
+          <div class="form-text text-danger">Password must be at least 8 characters</div>
+        ` : null}
       </div>
       <div class="mb-3">
         <label for="confirm_password" class="form-label">Confirm New Password</label>
         <input type="password" class="form-control" id="confirm_password" placeholder="Confirm new password"
           value=${confirmPassword} onInput=${(e) => setConfirmPassword(e.target.value)} />
       </div>
-      <button type="submit" class="btn btn-warning" disabled=${pwLoading}>
+      <button type="submit" class="btn btn-warning" disabled=${pwLoading || (newPassword.length > 0 && newPassword.length < 8)}>
         ${pwLoading ? 'Changing...' : 'Change Password'}
       </button>
     </form>

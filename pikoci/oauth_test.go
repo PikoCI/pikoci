@@ -845,7 +845,7 @@ func TestUpdateOAuthProvider_CanDisableWhenUsersHavePassword(t *testing.T) {
 	s, opr := newServiceWithOAuth(ctrl)
 	ctx := context.TODO()
 
-	hash := testHashPassword("pass")
+	hash := testHashPassword("password")
 	opr.EXPECT().FindProviderByCanonical(ctx, "github").Return(&oauthprovider.Provider{
 		ID: 1, Canonical: "github", Name: "GitHub", Type: "oauth2",
 		AuthURL: "http://x", TokenURL: "http://x", Enabled: true,
