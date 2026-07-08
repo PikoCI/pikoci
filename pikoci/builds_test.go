@@ -1193,26 +1193,26 @@ func TestNextWork_NonRetryBuildNoRetryFields(t *testing.T) {
 	assert.Equal(t, "", item.Body.RetryBuildNumber)
 }
 
-func TestRetryJobBuild_DisableRerun(t *testing.T) {
+func TestRetryJobBuild_DisableRetry(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
 	ctx := context.TODO()
 
 	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
-		Return(&job.Job{Name: "my-job", DisableRerun: true}, nil)
+		Return(&job.Job{Name: "my-job", DisableRetry: true}, nil)
 
 	err := s.S.RetryJobBuild(ctx, "main", "my-pipeline", "my-job", "1")
-	require.ErrorIs(t, err, pikoci.ErrRerunDisabled)
+	require.ErrorIs(t, err, pikoci.ErrRetryDisabled)
 }
 
-func TestCreateRetryJobBuild_DisableRerun(t *testing.T) {
+func TestCreateRetryJobBuild_DisableRetry(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
 	ctx := context.TODO()
 
 	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
-		Return(&job.Job{Name: "my-job", DisableRerun: true}, nil)
+		Return(&job.Job{Name: "my-job", DisableRetry: true}, nil)
 
 	_, err := s.S.CreateRetryJobBuild(ctx, "main", "my-pipeline", "my-job", "3", build.Build{})
-	require.ErrorIs(t, err, pikoci.ErrRerunDisabled)
+	require.ErrorIs(t, err, pikoci.ErrRetryDisabled)
 }

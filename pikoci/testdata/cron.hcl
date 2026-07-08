@@ -32,7 +32,7 @@ job "gen" {
 }
 
 job "deploy-staging" {
-  disable_rerun = true
+  disable_retry = true
   get "artifact" "cron_output" {
     trigger = true
     passed  = ["gen"]
@@ -47,7 +47,7 @@ job "deploy-staging" {
 }
 
 job "deploy-prod" {
-  disable_rerun = true
+  disable_retry = true
   get "artifact" "cron_output" {
     trigger = true
     passed  = ["gen"]

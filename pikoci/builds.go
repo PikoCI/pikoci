@@ -27,9 +27,9 @@ var (
 	// ErrSerialGroupLimit is returned when a build cannot be started because
 	// another job in the same serial group already has a running build.
 	ErrSerialGroupLimit = errors.New("serial group limit reached")
-	// ErrRerunDisabled is returned when attempting to retry a build for a job
-	// that has disable_rerun = true.
-	ErrRerunDisabled = errors.New("reruns are disabled for this job")
+	// ErrRetryDisabled is returned when attempting to retry a build for a job
+	// that has disable_retry = true.
+	ErrRetryDisabled = errors.New("retries are disabled for this job")
 )
 
 // CreateJobBuild creates a new pending build for the specified job within a unit
@@ -325,8 +325,8 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 	if err != nil {
 		return fmt.Errorf("failed to Find Job: %w", err)
 	}
-	if j.DisableRerun {
-		return ErrRerunDisabled
+	if j.DisableRetry {
+		return ErrRetryDisabled
 	}
 
 	b, err := q.Builds.Find(ctx, tc, pc, jn, buildNumber)
@@ -378,8 +378,8 @@ func (q *PikoCI) CreateRetryJobBuild(ctx context.Context, tc, pc, jn, parentBuil
 	if jErr != nil {
 		return nil, fmt.Errorf("failed to Find Job: %w", jErr)
 	}
-	if j.DisableRerun {
-		return nil, ErrRerunDisabled
+	if j.DisableRetry {
+		return nil, ErrRetryDisabled
 	}
 
 	b.Status = build.Pending

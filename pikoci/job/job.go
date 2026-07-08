@@ -48,7 +48,7 @@ type Job struct {
 	SerialGroups []string      `json:"serial_groups,omitempty"`
 	Tags         []string      `json:"tags,omitempty"`
 	Paused       bool          `json:"paused"`
-	DisableRerun bool          `json:"disable_rerun,omitempty"`
+	DisableRetry bool          `json:"disable_retry,omitempty"`
 	Timeout      time.Duration `json:"timeout,omitempty"`
 	Plan         []PlanStep    `json:"plan"`
 

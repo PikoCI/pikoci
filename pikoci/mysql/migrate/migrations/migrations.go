@@ -65,5 +65,5 @@ var Migrations = [49]Migration{
 	V45TeamWorkerIsolation,
 	V46OAuthProviders,
 	V47TokenGen,
-	V48DisableRerun,
+	V48DisableRetry,
 }
