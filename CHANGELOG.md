@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`disable_retry` flag on jobs**: HCL boolean flag that prevents build retries for specific jobs. When `true`, the retry button is hidden in the UI and the retry API returns an error. Designed for production deploy jobs that should not be accidentally rerun ([#617](https://github.com/PikoCI/pikoci/issues/617)).
+
 ## [0.7.0] - 2026-07-08
 
 ### Added
