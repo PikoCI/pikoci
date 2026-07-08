@@ -4,11 +4,18 @@ import { html } from 'htm/preact';
 import { useState, useEffect } from 'preact/hooks';
 import { route } from 'preact-router';
 import { postLogin, fetchAuthMethods } from '../api.js';
-import { login } from '../state.js';
+import { login, isLoggedIn } from '../state.js';
 import { useLoading } from '../hooks.js';
 import { getProviderIcon } from '../provider-icons.js';
 
 export function Login() {
+  // Redirect to home if already logged in
+  useEffect(() => {
+    if (isLoggedIn.value) {
+      route('/', true);
+    }
+  }, []);
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, withLoading] = useLoading();
