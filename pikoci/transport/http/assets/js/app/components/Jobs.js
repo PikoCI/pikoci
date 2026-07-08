@@ -484,7 +484,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
           </span>
         ` : html`
           <span style="margin-left:auto;display:flex;gap:6px;align-items:center;">
-            ${isOperator && !isWaitingApproval ? html`
+            ${isOperator && !isWaitingApproval && !(jobData && jobData.disable_rerun) ? html`
               <button type="button" class="btn btn-sm btn-outline-warning piko-retry-build" title="Retry build" onClick=${handleRetry} disabled=${retryLoading}>
                 <i class="bi bi-arrow-clockwise"></i> ${retryLoading ? 'Retrying...' : 'Retry'}
               </button>

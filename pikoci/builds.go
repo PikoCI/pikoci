@@ -27,6 +27,9 @@ var (
 	// ErrSerialGroupLimit is returned when a build cannot be started because
 	// another job in the same serial group already has a running build.
 	ErrSerialGroupLimit = errors.New("serial group limit reached")
+	// ErrRerunDisabled is returned when attempting to retry a build for a job
+	// that has disable_rerun = true.
+	ErrRerunDisabled = errors.New("reruns are disabled for this job")
 )
 
 // CreateJobBuild creates a new pending build for the specified job within a unit
@@ -318,6 +321,14 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 		return fmt.Errorf("invalid Job Name format %q", jn)
 	}
 
+	j, err := q.Jobs.Find(ctx, tc, pc, jn)
+	if err != nil {
+		return fmt.Errorf("failed to Find Job: %w", err)
+	}
+	if j.DisableRerun {
+		return ErrRerunDisabled
+	}
+
 	b, err := q.Builds.Find(ctx, tc, pc, jn, buildNumber)
 	if err != nil {
 		return fmt.Errorf("failed to Find Build: %w", err)
@@ -361,6 +372,14 @@ func (q *PikoCI) CreateRetryJobBuild(ctx context.Context, tc, pc, jn, parentBuil
 		return nil, fmt.Errorf("invalid Pipeline Canonical format %q", pc)
 	} else if !utils.ValidateCanonical(jn) {
 		return nil, fmt.Errorf("invalid Job Name format %q", jn)
+	}
+
+	j, jErr := q.Jobs.Find(ctx, tc, pc, jn)
+	if jErr != nil {
+		return nil, fmt.Errorf("failed to Find Job: %w", jErr)
+	}
+	if j.DisableRerun {
+		return nil, ErrRerunDisabled
 	}
 
 	b.Status = build.Pending

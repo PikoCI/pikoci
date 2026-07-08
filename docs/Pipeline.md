@@ -266,6 +266,7 @@ The optional `timeout` attribute limits the total wall-clock time for a build's 
 | `timeout` | no | Max wall-clock time for the build (Go duration string) |
 | `tags` | no | Route to workers with matching tags |
 | `serial_groups` | no | Cross-job mutual exclusion groups |
+| `disable_rerun` | no | When `true`, prevents build reruns (default `false`) |
 | `for_each` | no | Generate job instances from a set or map |
 | `matrix` | no | Generate job instances from cartesian product (mutually exclusive with `for_each`) |
 | `get` | no | Step block — fetches a resource version |
