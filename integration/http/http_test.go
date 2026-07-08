@@ -140,7 +140,7 @@ func TestHTTPEndpoints(t *testing.T) {
 			// Create a temp user, then delete
 			body, _ := json.Marshal(thttp.CreateUserRequest{
 				Username: "temp-user",
-				Password: "temp123",
+				Password: "temp1234",
 				FullName: "Temp User",
 			})
 			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/users", adminJWT, string(body))
