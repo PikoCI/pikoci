@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`allow_failure` on jobs**: When `true`, a failed build is marked as `warning` (salmon) instead of `failed`, unblocking downstream jobs. Any failed build can also be manually marked as warning via a UI button (requires Maintain role) ([#610](https://github.com/PikoCI/pikoci/issues/610)).
 - **`disable_retry` on jobs**: Prevents build retries via API and hides the retry button in the UI ([#617](https://github.com/PikoCI/pikoci/issues/617)).
+- **Notification integration tests**: Worker-level tests with mock HTTP server verifying notify steps, auto-notification lifecycle filtering (`on`, `jobs`, `exclude`), and message interpolation ([#608](https://github.com/PikoCI/pikoci/issues/608)).
 
 ### Fixed
 

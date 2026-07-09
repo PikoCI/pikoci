@@ -285,10 +285,14 @@ func TestFireApproveNotifications(t *testing.T) {
 
 	// Set up a test HTTP server to receive the webhook
 	var mu sync.Mutex
+	var receivedMethod string
+	var receivedContentType string
 	var receivedBody map[string]string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
+		receivedMethod = r.Method
+		receivedContentType = r.Header.Get("Content-Type")
 		json.NewDecoder(r.Body).Decode(&receivedBody)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -321,6 +325,8 @@ func TestFireApproveNotifications(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
+	assert.Equal(t, "POST", receivedMethod)
+	assert.Equal(t, "application/json", receivedContentType)
 	require.NotNil(t, receivedBody)
 	assert.Equal(t, "Build #5 needs approval", receivedBody["content"])
 }
@@ -494,3 +500,4 @@ func TestGetJobBuild_WithPinnedVersions(t *testing.T) {
 	require.NotNil(t, b.PinnedVersions)
 	assert.Equal(t, map[string]interface{}{"ref": "abc123"}, b.PinnedVersions["git.repo"])
 }
+
