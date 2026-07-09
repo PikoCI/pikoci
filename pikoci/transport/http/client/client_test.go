@@ -2925,3 +2925,34 @@ func TestGetTeamWorkerToken_Error(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
+
+func TestMarkBuildAsWarning(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/pipelines/{pc}/jobs/{jn}/builds/{bn}/warning", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.MarkBuildAsWarningResponse{})
+	}).Methods("PUT")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	err = c.MarkBuildAsWarning(context.Background(), "main", "my-pipe", "build", "1")
+	require.NoError(t, err)
+}
+
+func TestMarkBuildAsWarning_Error(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/pipelines/{pc}/jobs/{jn}/builds/{bn}/warning", func(w http.ResponseWriter, req *http.Request) {
+		jsonHandler(w, thttp.MarkBuildAsWarningResponse{Err: "not failed"})
+	}).Methods("PUT")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	err = c.MarkBuildAsWarning(context.Background(), "main", "my-pipe", "build", "1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not failed")
+}
