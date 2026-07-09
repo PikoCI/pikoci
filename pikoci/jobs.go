@@ -139,7 +139,7 @@ func (q *PikoCI) enrichJobsWithStatus(ctx context.Context, tc, pn string, jobs [
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter active builds: %w", err)
 	}
-	completedByJob, err := q.Builds.FilterByPipeline(ctx, tc, pn, []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval})
+	completedByJob, err := q.Builds.FilterByPipeline(ctx, tc, pn, []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval, build.Warning})
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter completed builds: %w", err)
 	}

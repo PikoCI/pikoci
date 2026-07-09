@@ -541,17 +541,29 @@ func (w *Worker) processJob(ctx context.Context, m workitem.Body, cwd string, pp
 		}
 		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnSuccess, "on_success", resolved, exportedVars, "succeeded")
 	} else {
-		// Ensure local b reflects the Failed status set by failBuild (which
-		// operates on a copy) so that any subsequent updateBuild calls from
-		// hooks don't overwrite the DB status back to Started.
-		if b.Status != build.Failed {
+		// Ensure local b reflects the Failed/Warning status set by failBuild
+		// (which operates on a copy) so that any subsequent updateBuild calls
+		// from hooks don't overwrite the DB status back to Started.
+		if j.AllowFailure {
+			b.Status = build.Warning
+			if err := w.updateBuild(ctx, m, b); err != nil {
+				return
+			}
+			// Warning builds unblock downstream just like success
+			if err := w.pikoci.EvaluateDownstreamJobs(ctx, m.TeamCanonical, m.PipelineCanonical, j.Name); err != nil {
+				w.logger.Error("failed to evaluate downstream jobs",
+					"pipeline", m.PipelineCanonical, "job", j.Name, "error", err)
+			}
+		} else if b.Status != build.Failed {
 			b.Status = build.Failed
 		}
-		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnFailure, "on_failure", resolved, exportedVars, "failed")
+		w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.OnFailure, "on_failure", resolved, exportedVars, b.Status.String())
 	}
 	status := "succeeded"
 	if b.Status == build.Failed {
 		status = "failed"
+	} else if b.Status == build.Warning {
+		status = "warning"
 	}
 	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", j.Ensure, "ensure", resolved, exportedVars, status)
 
@@ -599,7 +611,7 @@ func (w *Worker) checkPassedConstraints(ctx context.Context, m workitem.Body, b 
 			// Collect version IDs from successful builds where a get step matches this resource
 			versionSet := make(map[uint32]bool)
 			for _, bu := range builds {
-				if bu.Status != build.Succeeded {
+				if bu.Status != build.Succeeded && bu.Status != build.Warning {
 					continue
 				}
 				hasSucceeded = true

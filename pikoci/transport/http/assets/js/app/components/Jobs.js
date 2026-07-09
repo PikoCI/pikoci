@@ -4,7 +4,7 @@ import { html } from 'htm/preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { route } from 'preact-router';
 import { isLoggedIn, hasTeamRole, session } from '../state.js';
-import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, approveBuild, rejectBuild, fetchBuildReport, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchResourceVersions, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
+import { fetchBuilds, fetchBuild, cancelBuild, retryBuild, approveBuild, rejectBuild, markBuildAsWarning, fetchBuildReport, triggerJob, pauseJob, unpauseJob, fetchJob, fetchResources, fetchResourceVersions, fetchVersionPath, fetchTeam, fetchPipeline } from '../api.js';
 import { useLoading, usePolling } from '../hooks.js';
 import { sortBuilds, selectActiveBuild, durationToString, processLogs, pikoTimeAgo, fetchInterval, buildListCap } from '../utils.js';
 import { showToast } from '../toast.js';
@@ -29,6 +29,7 @@ function statusBadge(status, hasLogs) {
   if (status === 'started') return html`<span class="piko-badge piko-badge-started">running</span>`;
   if (status === 'pending') return html`<span class="piko-badge piko-badge-pending">pending</span>`;
   if (status === 'cancelled') return html`<span class="piko-badge piko-badge-cancelled">cancel</span>`;
+  if (status === 'warning') return html`<span class="piko-badge piko-badge-warning">warn</span>`;
   if (status === 'succeeded' || hasLogs) return html`<span class="piko-badge piko-badge-succeeded">ok</span>`;
   return null;
 }
@@ -40,6 +41,7 @@ function buildStatusBadge(status) {
   if (status === 'cancelled') return html`<span class="piko-badge piko-badge-cancelled">Cancelled</span>`;
   if (status === 'pending') return html`<span class="piko-badge piko-badge-pending">Pending</span>`;
   if (status === 'waiting_for_approval') return html`<span class="piko-badge piko-badge-waiting_for_approval">Waiting for Approval</span>`;
+  if (status === 'warning') return html`<span class="piko-badge piko-badge-warning">Warning</span>`;
   return null;
 }
 
@@ -253,6 +255,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
   const [exportLoading, withExportLoading] = useLoading();
   const [approveLoading, withApproveLoading] = useLoading();
   const [rejectLoading, withRejectLoading] = useLoading();
+  const [warningLoading, withWarningLoading] = useLoading();
   const initializedRef = useRef(false);
 
   // Fetch full build detail to get approvals (not in list endpoint).
@@ -489,6 +492,18 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
                 <i class="bi bi-arrow-clockwise"></i> ${retryLoading ? 'Retrying...' : 'Retry'}
               </button>
             ` : null}
+            ${isMaintainer && build.status === 'failed' ? html`
+              <button type="button" class="btn btn-sm btn-outline-secondary" title="Mark as warning" onClick=${() => {
+                withWarningLoading(async () => {
+                  await markBuildAsWarning(tc, pn, jn, build.build_number);
+                  showToast('Build marked as warning', 'success');
+                  refreshFullBuild();
+                  if (onRetry) onRetry();
+                });
+              }} disabled=${warningLoading}>
+                <i class="bi bi-exclamation-triangle"></i> ${warningLoading ? 'Marking...' : 'Mark Warning'}
+              </button>
+            ` : null}
             ${isReader ? html`
               <button type="button" class="btn btn-sm btn-outline-secondary" title="Export build report" onClick=${onExport} disabled=${exportLoading}>
                 <i class="bi bi-download"></i> ${exportLoading ? 'Exporting...' : 'Export'}
@@ -676,21 +691,19 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
   // Fetch all non-terminal builds in a single batch request
   const refreshActiveBuild = useCallback(async () => {
     try {
+      const nonTerminal = ['pending', 'started', 'waiting_for_approval'];
       const resp = await fetchBuilds(tc, pn, jn, {
-        status: ['pending', 'started', 'waiting_for_approval'],
+        status: nonTerminal,
       });
       const freshMap = new Map((resp.data || []).map(b => [b.id, b]));
 
-      // If the active build was non-terminal but is missing from the refresh,
-      // it transitioned to a terminal state — re-fetch it individually.
+      // Builds that were non-terminal in prev but are missing from freshMap
+      // have transitioned to a terminal state — re-fetch them individually
+      // so their tabs update immediately.
       setBuilds(prev => {
-        const activeB = prev.find(b => b.id === activeBuildID);
-        const needsRefetch = activeB
-          && ['pending', 'started', 'waiting_for_approval'].includes(activeB.status)
-          && !freshMap.has(activeB.id);
-
-        if (needsRefetch) {
-          fetchBuild(tc, pn, jn, activeB.build_number)
+        const stale = prev.filter(b => nonTerminal.includes(b.status) && !freshMap.has(b.id));
+        for (const s of stale) {
+          fetchBuild(tc, pn, jn, s.build_number)
             .then(b => { if (b) setBuilds(p => sortBuilds(p.map(x => x.id === b.id ? b : x))); })
             .catch(() => {});
         }
@@ -701,7 +714,7 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
         return prev;
       });
     } catch { /* ignore */ }
-  }, [tc, pn, jn, activeBuildID]);
+  }, [tc, pn, jn]);
 
   // Initial load
   useEffect(() => {
@@ -838,7 +851,15 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
         return sortBuilds([...fresh, ...prev]);
       });
     }
-  }, [fetchNewBuilds]);
+
+    // Re-fetch the active build so the tab reflects status changes (e.g. mark as warning)
+    const activeB = builds.find(b => b.id === activeBuildID);
+    if (activeB) {
+      fetchBuild(tc, pn, jn, activeB.build_number)
+        .then(b => { if (b) setBuilds(p => sortBuilds(p.map(x => x.id === b.id ? b : x))); })
+        .catch(() => {});
+    }
+  }, [fetchNewBuilds, builds, activeBuildID, tc, pn, jn]);
 
   // Back to pipeline (version tracking)
   const onBackToPipeline = useCallback((e) => {

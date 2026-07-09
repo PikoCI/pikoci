@@ -172,6 +172,9 @@ const (
 	// RejectBuild is the route for rejecting a build waiting for approval.
 	RejectBuild
 
+	// MarkBuildAsWarning is the route for marking a failed build as warning.
+	MarkBuildAsWarning
+
 	// GenerateTeamWorkerToken is the route for generating a team worker token.
 	GenerateTeamWorkerToken
 	// GetTeamWorkerToken is the route for retrieving the current team worker token.

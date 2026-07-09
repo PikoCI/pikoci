@@ -2929,3 +2929,41 @@ func TestOAuthCompleteProfileHandler(t *testing.T) {
 	assert.Empty(t, got.Err)
 	assert.Equal(t, "jwt-token-456", got.Data.JWT)
 }
+
+func TestMarkBuildAsWarning_Handler_Success(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	e.svc.EXPECT().MarkBuildAsWarning(gomock.Any(), "main", "my-pipe", "build", "1").Return(nil)
+
+	resp := doRequest(t, http.MethodPut, e.server.URL+"/teams/main/pipelines/my-pipe/jobs/build/builds/1/warning", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got MarkBuildAsWarningResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+}
+
+func TestMarkBuildAsWarning_Handler_Error(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	e.svc.EXPECT().MarkBuildAsWarning(gomock.Any(), "main", "my-pipe", "build", "1").Return(fmt.Errorf("not failed"))
+
+	resp := doRequest(t, http.MethodPut, e.server.URL+"/teams/main/pipelines/my-pipe/jobs/build/builds/1/warning", e.adminJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	var got MarkBuildAsWarningResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Equal(t, "not failed", got.Err)
+}
+
+func TestMarkBuildAsWarning_Handler_Unauthorized(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+
+	resp := doRequest(t, http.MethodPut, e.server.URL+"/teams/main/pipelines/my-pipe/jobs/build/builds/1/warning", e.memberJWT(t), "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}

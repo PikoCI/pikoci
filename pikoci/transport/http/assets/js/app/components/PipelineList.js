@@ -134,18 +134,21 @@ function PipelineCard({ pipeline, tc, liveEnabled }) {
 
 function updateStatusFromSVG(svg, lastBuildAt, setStatusHtml) {
   if (!svg) return;
-  let hasFailed = false, hasRunning = false, hasSucceeded = false;
+  let hasFailed = false, hasRunning = false, hasSucceeded = false, hasWarning = false;
   svg.querySelectorAll('polygon, rect, ellipse, path').forEach(el => {
     const fill = (el.getAttribute('fill') || '').toLowerCase();
     if (fill === '#ff004d') hasFailed = true;
     if (fill === '#ffa300') hasRunning = true;
     if (fill === '#00a83a') hasSucceeded = true;
+    if (fill === '#fa8072') hasWarning = true;
   });
   const timeAgo = lastBuildAt ? ' \u00b7 ' + pikoTimeAgo(lastBuildAt) : '';
   if (hasFailed) {
     setStatusHtml(html`<span class="piko-card-status-dot" style="background:var(--status-failed);"></span> Last build failed${timeAgo}`);
   } else if (hasRunning) {
     setStatusHtml(html`<span class="piko-card-status-dot" style="background:var(--status-started);"></span> Running${timeAgo}`);
+  } else if (hasWarning) {
+    setStatusHtml(html`<span class="piko-card-status-dot" style="background:var(--status-warning);"></span> Last build warning${timeAgo}`);
   } else if (hasSucceeded) {
     setStatusHtml(html`<span class="piko-card-status-dot" style="background:var(--status-succeeded);"></span> Last build passed${timeAgo}`);
   } else {

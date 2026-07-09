@@ -725,3 +725,38 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 	}
 	return nil
 }
+
+// MarkBuildAsWarning changes a failed build's status to warning and triggers
+// downstream job evaluation to unblock downstream jobs.
+func (q *PikoCI) MarkBuildAsWarning(ctx context.Context, tc, pc, jn, buildNumber string) error {
+	if !utils.ValidateCanonical(tc) {
+		return fmt.Errorf("invalid Team Canonical format %q", tc)
+	} else if !utils.ValidateCanonical(pc) {
+		return fmt.Errorf("invalid Pipeline Canonical format %q", pc)
+	} else if !utils.ValidateCanonical(jn) {
+		return fmt.Errorf("invalid Job Name format %q", jn)
+	}
+
+	b, err := q.Builds.Find(ctx, tc, pc, jn, buildNumber)
+	if err != nil {
+		return fmt.Errorf("failed to Find Build: %w", err)
+	}
+	if b.Status != build.Failed {
+		return fmt.Errorf("build %s is not failed (status: %s)", buildNumber, b.Status)
+	}
+
+	b.Status = build.Warning
+	if err := q.Builds.Update(ctx, tc, pc, jn, buildNumber, *b); err != nil {
+		return fmt.Errorf("failed to Update Build: %w", err)
+	}
+
+	// Unblock downstream jobs
+	if err := q.EvaluateDownstreamJobs(ctx, tc, pc, jn); err != nil {
+		q.logger.Error("failed to evaluate downstream jobs after marking warning",
+			"pipeline", pc, "job", jn, "error", err)
+	}
+
+	q.audit(ctx, tc, auditlog.BuildMarkedWarning, "job", pc+"/"+jn,
+		map[string]interface{}{"pipeline": pc, "build_number": buildNumber})
+	return nil
+}
