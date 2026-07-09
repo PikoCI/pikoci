@@ -515,6 +515,30 @@ func rejectBuild(s pikoci.Service) http.HandlerFunc {
 	}
 }
 
+// MarkBuildAsWarningResponse is the response body for the mark-as-warning endpoint.
+type MarkBuildAsWarningResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r MarkBuildAsWarningResponse) Error() string { return r.Err }
+
+func markBuildAsWarning(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		jn := vars["job_name"]
+		bn := vars["build_number"]
+		err := s.MarkBuildAsWarning(ctx, tc, pc, jn, bn)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(MarkBuildAsWarningResponse{Err: errs}, w)
+	}
+}
+
 func listJobBuilds(s pikoci.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (

@@ -1035,6 +1035,20 @@ func (mr *ServiceMockRecorder) ListWorkers(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkers", reflect.TypeOf((*Service)(nil).ListWorkers), ctx)
 }
 
+// MarkBuildAsWarning mocks base method.
+func (m *Service) MarkBuildAsWarning(ctx context.Context, tc, pc, jn, buildNumber string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBuildAsWarning", ctx, tc, pc, jn, buildNumber)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MarkBuildAsWarning indicates an expected call of MarkBuildAsWarning.
+func (mr *ServiceMockRecorder) MarkBuildAsWarning(ctx, tc, pc, jn, buildNumber any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBuildAsWarning", reflect.TypeOf((*Service)(nil).MarkBuildAsWarning), ctx, tc, pc, jn, buildNumber)
+}
+
 // NotifySerialGroupPendingBuilds mocks base method.
 func (m *Service) NotifySerialGroupPendingBuilds(ctx context.Context, tc, pn, jn string) {
 	m.ctrl.T.Helper()

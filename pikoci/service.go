@@ -259,6 +259,9 @@ type Service interface {
 	ApproveBuild(ctx context.Context, tc, pc, jn, buildNumber, username, message string) error
 	// RejectBuild records a rejection vote and immediately fails the build.
 	RejectBuild(ctx context.Context, tc, pc, jn, buildNumber, username, message string) error
+	// MarkBuildAsWarning changes a failed build to warning status and triggers
+	// downstream job evaluation.
+	MarkBuildAsWarning(ctx context.Context, tc, pc, jn, buildNumber string) error
 
 	// ListAuditLog returns audit log entries for the given team matching the
 	// filter options. The boolean return value indicates whether more results exist.

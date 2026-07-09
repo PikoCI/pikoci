@@ -156,6 +156,8 @@ export const approveBuild = (tc, pn, jn, bid, message) =>
   api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/builds/' + bid + '/approve', { method: 'POST', body: JSON.stringify({ message }) });
 export const rejectBuild = (tc, pn, jn, bid, message) =>
   api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/builds/' + bid + '/reject', { method: 'POST', body: JSON.stringify({ message }) });
+export const markBuildAsWarning = (tc, pn, jn, bid) =>
+  api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/builds/' + bid + '/warning', { method: 'PUT' });
 export const fetchBuildReport = (tc, pn, jn, bid) =>
   api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/builds/' + bid + '/report');
 

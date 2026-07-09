@@ -86,8 +86,9 @@ var (
 		FindBuildGetVersions:           requireRole(role.Maintain),
 
 		// Approval routes (Maintain+)
-		ApproveBuild: requireRole(role.Maintain),
-		RejectBuild:  requireRole(role.Maintain),
+		ApproveBuild:       requireRole(role.Maintain),
+		RejectBuild:        requireRole(role.Maintain),
+		MarkBuildAsWarning: requireRole(role.Maintain),
 
 		// Admin routes
 		CreateTeamMember:        requireRole(role.Admin),

@@ -398,7 +398,7 @@ func (r *BuildRepository) FindReadyDownstreamVersion(ctx context.Context, tc, pn
 		JOIN jobs j ON b.job_id = j.id
 		JOIN pipelines p ON j.pipeline_id = p.id
 		JOIN teams t ON p.team_id = t.id
-		WHERE t.canonical = ? AND p.canonical = ? AND b.status = 'succeeded'
+		WHERE t.canonical = ? AND p.canonical = ? AND b.status IN ('succeeded', 'warning')
 		  AND j.name IN (` + strings.Join(placeholders, ", ") + `)
 		  AND bgv.step_name = ?
 		  ` + baselineClause + `

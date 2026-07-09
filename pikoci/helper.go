@@ -88,6 +88,7 @@ type hclJob struct {
 	SerialGroups []string         `hcl:"serial_groups,optional"`
 	Timeout      string           `hcl:"timeout,optional"`
 	DisableRetry bool             `hcl:"disable_retry,optional"`
+	AllowFailure bool             `hcl:"allow_failure,optional"`
 	Get          []hclGetStep     `hcl:"get,block"`
 	Task         []hclTaskStep    `hcl:"task,block"`
 	Put          []hclPutStep     `hcl:"put,block"`
@@ -663,7 +664,7 @@ var (
 	taskStepKnownAttrs = []string{"timeout", "attempts", "inputs", "outputs"}
 	putStepKnownAttrs  = []string{"timeout", "attempts"}
 	notifyStepKnownAttrs = []string{"message"}
-	jobKnownAttrs          = []string{"concurrency", "serial_groups", "timeout", "disable_retry"}
+	jobKnownAttrs          = []string{"concurrency", "serial_groups", "timeout", "disable_retry", "allow_failure"}
 	inParallelKnownAttrs   = []string{"limit", "fail_fast"}
 	inParallelBlocks       = map[string]bool{
 		"get": true, "task": true, "put": true, "notify": true,
@@ -1452,6 +1453,7 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 			SerialGroups: hj.SerialGroups,
 			Timeout:      jobTimeout,
 			DisableRetry: hj.DisableRetry,
+			AllowFailure: hj.AllowFailure,
 			Plan:         jobPlans[hj.Name],
 			OnSuccess:    jh.OnSuccess,
 			OnFailure:    jh.OnFailure,

@@ -1216,3 +1216,48 @@ func TestCreateRetryJobBuild_DisableRetry(t *testing.T) {
 	_, err := s.S.CreateRetryJobBuild(ctx, "main", "my-pipeline", "my-job", "3", build.Build{})
 	require.ErrorIs(t, err, pikoci.ErrRetryDisabled)
 }
+
+func TestMarkBuildAsWarning_HappyPath(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "1").
+		Return(&build.Build{ID: 1, BuildNumber: "1", Status: build.Failed}, nil)
+	s.Builds.EXPECT().Update(ctx, "main", "my-pipeline", "my-job", "1", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			assert.Equal(t, build.Warning, b.Status)
+			return nil
+		})
+
+	// EvaluateDownstreamJobs needs pipeline
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
+		Name: "my-pipeline",
+		Jobs: []job.Job{{Name: "my-job"}},
+	}, nil)
+
+	err := s.S.MarkBuildAsWarning(ctx, "main", "my-pipeline", "my-job", "1")
+	require.NoError(t, err)
+}
+
+func TestMarkBuildAsWarning_NotFailed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Builds.EXPECT().Find(ctx, "main", "my-pipeline", "my-job", "1").
+		Return(&build.Build{ID: 1, BuildNumber: "1", Status: build.Succeeded}, nil)
+
+	err := s.S.MarkBuildAsWarning(ctx, "main", "my-pipeline", "my-job", "1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not failed")
+}
+
+func TestMarkBuildAsWarning_InvalidCanonical(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	err := s.S.MarkBuildAsWarning(ctx, "INVALID", "my-pipeline", "my-job", "1")
+	require.Error(t, err)
+}
