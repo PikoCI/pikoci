@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -9362,4 +9365,484 @@ func TestUpdateBuild_SuppressUpdates(t *testing.T) {
 	err := w.updateBuild(context.Background(), m, b)
 	assert.NoError(t, err)
 	assert.True(t, called, "OnUpdate should have been called")
+}
+
+// --- webhookRecorder: reusable mock HTTP server for notification tests ---
+
+type recordedRequest struct {
+	Method  string
+	Headers http.Header
+	Body    string
+}
+
+type webhookRecorder struct {
+	server   *httptest.Server
+	mu       sync.Mutex
+	requests []recordedRequest
+}
+
+func newWebhookRecorder() *webhookRecorder {
+	rec := &webhookRecorder{}
+	rec.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		rec.mu.Lock()
+		rec.requests = append(rec.requests, recordedRequest{
+			Method:  r.Method,
+			Headers: r.Header.Clone(),
+			Body:    string(body),
+		})
+		rec.mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	return rec
+}
+
+func (r *webhookRecorder) URL() string     { return r.server.URL }
+func (r *webhookRecorder) Close()          { r.server.Close() }
+func (r *webhookRecorder) Reset()          { r.mu.Lock(); r.requests = nil; r.mu.Unlock() }
+func (r *webhookRecorder) Requests() []recordedRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cp := make([]recordedRequest, len(r.requests))
+	copy(cp, r.requests)
+	return cp
+}
+
+// webhookNotifType returns a notification type that uses curl to POST $NOTIFY_MESSAGE
+// to the URL provided by param_webhook_url.
+// Note: the shell-expanded $NOTIFY_MESSAGE is safe for simple ASCII test messages only.
+func webhookNotifType() notiftype.NotificationType {
+	return notiftype.NotificationType{
+		ID:   1,
+		Name: "webhook",
+		Notify: &utils.RunnerCommand{
+			Runner: "exec",
+			Args:   []string{"-c", `curl -s -X POST -H "Content-Type:application/json" -d "$NOTIFY_MESSAGE" "$param_webhook_url"`},
+			Params: map[string]string{"path": "/bin/sh"},
+		},
+		Params: []string{"webhook_url"},
+	}
+}
+
+// webhookNotification returns a notification instance pointing at the given URL.
+func webhookNotification(url string, opts ...func(*notification.Notification)) notification.Notification {
+	n := notification.Notification{
+		ID:        1,
+		Type:      "webhook",
+		Name:      "test-hook",
+		Canonical: "webhook.test-hook",
+		Params:    &notification.Params{Params: map[string]string{"webhook_url": url}},
+	}
+	for _, o := range opts {
+		o(&n)
+	}
+	return n
+}
+
+func TestNotifyStep_MockHTTP_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	rec := newWebhookRecorder()
+	defer rec.Close()
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "webhook-job",
+		BuildID:           10,
+		BuildNumber:       "500",
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "webhook-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeNotify,
+						Notify: &job.NotifyStep{
+							Type:    "webhook",
+							Name:    "test-hook",
+							Message: "hello from notify step",
+						},
+					},
+				},
+			},
+		},
+		Notifications:     []notification.Notification{webhookNotification(rec.URL())},
+		NotificationTypes: []notiftype.NotificationType{webhookNotifType()},
+		Runners:           []runner.Runner{{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}}},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "500", gomock.Any()).
+		Return(nil).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	reqs := rec.Requests()
+	require.Len(t, reqs, 1, "mock server should have received exactly 1 request")
+	assert.Equal(t, "POST", reqs[0].Method)
+	assert.Contains(t, reqs[0].Body, "hello from notify step")
+}
+
+func TestAutoNotification_OnSuccess(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	rec := newWebhookRecorder()
+	defer rec.Close()
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "auto-success-job",
+		BuildID:           10,
+		BuildNumber:       "501",
+	}
+
+	notif := webhookNotification(rec.URL(), func(n *notification.Notification) {
+		n.On = []string{"success"}
+		n.Message = "build_status=$notify_build_status"
+	})
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "auto-success-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"ok"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications:     []notification.Notification{notif},
+		NotificationTypes: []notiftype.NotificationType{webhookNotifType()},
+		Runners:           []runner.Runner{{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}}},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "501", gomock.Any()).
+		Return(nil).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	reqs := rec.Requests()
+	require.Len(t, reqs, 1, "mock server should have received the success notification")
+	assert.Equal(t, "POST", reqs[0].Method)
+	assert.Contains(t, reqs[0].Body, "build_status=success")
+}
+
+func TestAutoNotification_OnFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	rec := newWebhookRecorder()
+	defer rec.Close()
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "auto-fail-http-job",
+		BuildID:           10,
+		BuildNumber:       "502",
+	}
+
+	notif := webhookNotification(rec.URL(), func(n *notification.Notification) {
+		n.On = []string{"failure"}
+		n.Message = "build_status=$notify_build_status"
+	})
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "auto-fail-http-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "fail",
+							Run:  utils.RunnerCommand{Runner: "exec", Params: map[string]string{"path": "false"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications:     []notification.Notification{notif},
+		NotificationTypes: []notiftype.NotificationType{webhookNotifType()},
+		Runners:           []runner.Runner{{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}}},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "502", gomock.Any()).
+		Return(nil).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	reqs := rec.Requests()
+	require.Len(t, reqs, 1, "mock server should have received the failure notification")
+	assert.Equal(t, "POST", reqs[0].Method)
+	assert.Contains(t, reqs[0].Body, "build_status=failure")
+}
+
+func TestAutoNotification_OnFailure_SkipsSuccess(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	rec := newWebhookRecorder()
+	defer rec.Close()
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "skip-success-job",
+		BuildID:           10,
+		BuildNumber:       "503",
+	}
+
+	notif := webhookNotification(rec.URL(), func(n *notification.Notification) {
+		n.On = []string{"failure"}
+	})
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "skip-success-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"ok"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications:     []notification.Notification{notif},
+		NotificationTypes: []notiftype.NotificationType{webhookNotifType()},
+		Runners:           []runner.Runner{{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}}},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "503", gomock.Any()).
+		Return(nil).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	reqs := rec.Requests()
+	assert.Len(t, reqs, 0, "mock server should have received NO requests when on=[failure] and build succeeds")
+}
+
+func TestAutoNotification_JobsFilter(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	rec := newWebhookRecorder()
+	defer rec.Close()
+
+	ctx := context.Background()
+
+	notif := webhookNotification(rec.URL(), func(n *notification.Notification) {
+		n.On = []string{"success"}
+		n.Jobs = []string{"target-job"}
+		n.Message = "job-filter hit"
+	})
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{ID: 1, Name: "other-job", Plan: []job.PlanStep{{
+				Type: job.StepTypeTask,
+				Task: &job.TaskStep{Name: "echo", Run: utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}}},
+			}}},
+			{ID: 2, Name: "target-job", Plan: []job.PlanStep{{
+				Type: job.StepTypeTask,
+				Task: &job.TaskStep{Name: "echo", Run: utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}}},
+			}}},
+		},
+		Notifications:     []notification.Notification{notif},
+		NotificationTypes: []notiftype.NotificationType{webhookNotifType()},
+		Runners:           []runner.Runner{{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}}},
+	}
+
+	// Run "other-job" — should NOT trigger notification
+	m1 := workitem.Body{
+		TeamCanonical: "main", PipelineCanonical: "test-pipeline",
+		JobName: "other-job", BuildID: 10, BuildNumber: "504",
+	}
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m1.TeamCanonical, m1.PipelineCanonical, m1.JobName).
+		Return(&pp.Jobs[0], nil)
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m1.TeamCanonical, m1.PipelineCanonical, m1.JobName, "504", gomock.Any()).
+		Return(nil).AnyTimes()
+	w.processJob(ctx, m1, t.TempDir(), pp)
+
+	assert.Len(t, rec.Requests(), 0, "notification should NOT fire for other-job")
+
+	// Run "target-job" — should trigger notification
+	rec.Reset()
+	m2 := workitem.Body{
+		TeamCanonical: "main", PipelineCanonical: "test-pipeline",
+		JobName: "target-job", BuildID: 10, BuildNumber: "505",
+	}
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m2.TeamCanonical, m2.PipelineCanonical, m2.JobName).
+		Return(&pp.Jobs[1], nil)
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m2.TeamCanonical, m2.PipelineCanonical, m2.JobName, "505", gomock.Any()).
+		Return(nil).AnyTimes()
+	w.processJob(ctx, m2, t.TempDir(), pp)
+
+	reqs := rec.Requests()
+	require.Len(t, reqs, 1, "notification should fire for target-job")
+	assert.Contains(t, reqs[0].Body, "job-filter hit")
+}
+
+func TestAutoNotification_ExcludeFilter(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	rec := newWebhookRecorder()
+	defer rec.Close()
+
+	ctx := context.Background()
+
+	notif := webhookNotification(rec.URL(), func(n *notification.Notification) {
+		n.On = []string{"success"}
+		n.Exclude = []string{"excluded-job"}
+		n.Message = "exclude-filter hit"
+	})
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{ID: 1, Name: "excluded-job", Plan: []job.PlanStep{{
+				Type: job.StepTypeTask,
+				Task: &job.TaskStep{Name: "echo", Run: utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}}},
+			}}},
+			{ID: 2, Name: "included-job", Plan: []job.PlanStep{{
+				Type: job.StepTypeTask,
+				Task: &job.TaskStep{Name: "echo", Run: utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}}},
+			}}},
+		},
+		Notifications:     []notification.Notification{notif},
+		NotificationTypes: []notiftype.NotificationType{webhookNotifType()},
+		Runners:           []runner.Runner{{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}}},
+	}
+
+	// Run "excluded-job" — should NOT trigger notification
+	m1 := workitem.Body{
+		TeamCanonical: "main", PipelineCanonical: "test-pipeline",
+		JobName: "excluded-job", BuildID: 10, BuildNumber: "506",
+	}
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m1.TeamCanonical, m1.PipelineCanonical, m1.JobName).
+		Return(&pp.Jobs[0], nil)
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m1.TeamCanonical, m1.PipelineCanonical, m1.JobName, "506", gomock.Any()).
+		Return(nil).AnyTimes()
+	w.processJob(ctx, m1, t.TempDir(), pp)
+
+	assert.Len(t, rec.Requests(), 0, "notification should NOT fire for excluded-job")
+
+	// Run "included-job" — should trigger notification
+	rec.Reset()
+	m2 := workitem.Body{
+		TeamCanonical: "main", PipelineCanonical: "test-pipeline",
+		JobName: "included-job", BuildID: 10, BuildNumber: "507",
+	}
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m2.TeamCanonical, m2.PipelineCanonical, m2.JobName).
+		Return(&pp.Jobs[1], nil)
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m2.TeamCanonical, m2.PipelineCanonical, m2.JobName, "507", gomock.Any()).
+		Return(nil).AnyTimes()
+	w.processJob(ctx, m2, t.TempDir(), pp)
+
+	reqs := rec.Requests()
+	require.Len(t, reqs, 1, "notification should fire for included-job")
+	assert.Contains(t, reqs[0].Body, "exclude-filter hit")
+}
+
+func TestAutoNotification_MessageInterpolation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	rec := newWebhookRecorder()
+	defer rec.Close()
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "my-job",
+		BuildID:           10,
+		BuildNumber:       "508",
+	}
+
+	notif := webhookNotification(rec.URL(), func(n *notification.Notification) {
+		n.On = []string{"success"}
+		n.Message = "Job $BUILD_JOB_NAME in $BUILD_PIPELINE_NAME: $notify_build_status"
+	})
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "my-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"done"}, Params: map[string]string{"path": "echo"}},
+						},
+					},
+				},
+			},
+		},
+		Notifications:     []notification.Notification{notif},
+		NotificationTypes: []notiftype.NotificationType{webhookNotifType()},
+		Runners:           []runner.Runner{{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}}},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "508", gomock.Any()).
+		Return(nil).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	reqs := rec.Requests()
+	require.Len(t, reqs, 1, "mock server should have received the notification")
+	assert.Contains(t, reqs[0].Body, "Job my-job in test-pipeline: success", "message should have interpolated $BUILD_JOB_NAME, $BUILD_PIPELINE_NAME, and $notify_build_status")
 }
