@@ -653,6 +653,10 @@ export function PipelineShow({ tc, pn }) {
             Waiting for approval
           </span>
           <span class="piko-graph-legend-item">
+            <span class="piko-graph-legend-swatch" style="background:var(--status-warning);"></span>
+            Warning
+          </span>
+          <span class="piko-graph-legend-item">
             <span class="piko-graph-legend-swatch" style="background:var(--primary);"></span>
             Paused
           </span>

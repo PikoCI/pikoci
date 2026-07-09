@@ -446,6 +446,102 @@ func TestProcessJob_FailedPassedConstraint_NotSucceeded(t *testing.T) {
 	w.processJob(ctx, m, cwd, pp)
 }
 
+func TestProcessJob_PassedConstraint_AcceptsWarningBuilds(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "downstream-job",
+		BuildID:           10,
+		BuildNumber:       "22",
+		VersionID:         1,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   2,
+				Name: "downstream-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get: &job.GetStep{
+							Type:    "cron",
+							Name:    "my-cron",
+							Passed:  []string{"upstream-job"},
+							Trigger: true,
+						},
+					},
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"downstream ran"},
+								Params: map[string]string{"path": "echo"},
+							},
+						},
+					},
+				},
+			},
+		},
+		Resources: []resource.Resource{
+			{ID: 1, Name: "my-cron", Type: "cron", Canonical: "cron.my-cron", Params: &resource.Params{}},
+		},
+		ResourceTypes: []restype.ResourceType{
+			{
+				ID: 1, Name: "cron", Params: []string{},
+				Check: &utils.RunnerCommand{Runner: "exec", Args: []string{"-ec", `echo "[{\"date\":\"now\"}]"`}, Params: map[string]string{"path": "/bin/sh"}},
+				Pull:  &utils.RunnerCommand{Runner: "exec", Params: map[string]string{}},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	// Upstream job has a WARNING build (from allow_failure) — should be treated as success
+	svc.EXPECT().ListJobBuilds(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "upstream-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).
+		Return([]*build.Build{{
+			ID:     5,
+			Status: build.Warning,
+			Steps: []build.Step{
+				{Type: "get", Name: "my-cron", VersionID: 42},
+			},
+		}}, false, nil)
+
+	// checkVersionAvailability needs resource versions
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+		Return([]*resource.Version{
+			{ID: 42, Version: map[string]interface{}{"date": "now"}},
+		}, false, nil).AnyTimes()
+
+	// Build should proceed (not be deleted)
+	var capturedStatuses []build.Status
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "22", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedStatuses = append(capturedStatuses, b.Status)
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	// The build should NOT have been deleted — it should run
+	require.NotEmpty(t, capturedStatuses, "build should have been updated (not deleted), meaning passed constraints accepted warning builds")
+	assert.Equal(t, build.Succeeded, capturedStatuses[len(capturedStatuses)-1], "downstream build should succeed")
+}
+
 func TestProcessJob_TaskFailure_RunsHooks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc := newTestWorker(ctrl)
@@ -9115,6 +9211,144 @@ func TestFailBuildWithRetry(t *testing.T) {
 	)
 
 	w.failBuild(ctx, m, b, fmt.Errorf("step failed"))
+}
+
+func TestProcessJob_AllowFailure_SetsWarningAndTriggersDownstream(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "allow-fail-job",
+		BuildID:           10,
+		BuildNumber:       "500",
+		VersionID:         1,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:           1,
+				Name:         "allow-fail-job",
+				AllowFailure: true,
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "will-fail",
+							Run:  utils.RunnerCommand{Runner: "exec", Params: map[string]string{"path": "false"}},
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedStatuses []build.Status
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "500", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedStatuses = append(capturedStatuses, b.Status)
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	// The last update should be Warning
+	require.NotEmpty(t, capturedStatuses)
+	assert.Equal(t, build.Warning, capturedStatuses[len(capturedStatuses)-1], "final build status should be warning")
+}
+
+func TestProcessJob_AllowFailure_OnFailureHookStillRuns(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "allow-fail-hooks-job",
+		BuildID:           10,
+		BuildNumber:       "501",
+		VersionID:         1,
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:           1,
+				Name:         "allow-fail-hooks-job",
+				AllowFailure: true,
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "will-fail",
+							Run:  utils.RunnerCommand{Runner: "exec", Params: map[string]string{"path": "false"}},
+						},
+					},
+				},
+				OnFailure: []job.HookStep{
+					runnerHook(utils.RunnerCommand{
+						Runner: "exec",
+						Args:   []string{"on_failure ran"},
+						Params: map[string]string{"path": "echo"},
+					}),
+				},
+				Ensure: []job.HookStep{
+					runnerHook(utils.RunnerCommand{
+						Runner: "exec",
+						Args:   []string{"ensure ran"},
+						Params: map[string]string{"path": "echo"},
+					}),
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "501", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Warning, capturedBuild.Status, "build should be warning")
+
+	// on_failure hooks should have run
+	foundOnFailure := false
+	foundEnsure := false
+	for _, step := range capturedBuild.Job {
+		if step.Type == "hook" && step.Name == "on_failure" {
+			foundOnFailure = true
+		}
+		if step.Type == "hook" && step.Name == "ensure" {
+			foundEnsure = true
+		}
+	}
+	assert.True(t, foundOnFailure, "on_failure hook should run for allow_failure builds")
+	assert.True(t, foundEnsure, "ensure hook should run for allow_failure builds")
 }
 
 func TestUpdateBuild_SuppressUpdates(t *testing.T) {

@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`allow_failure` on jobs**: When `true`, a failed build is marked as `warning` (salmon) instead of `failed`, unblocking downstream jobs. Any failed build can also be manually marked as warning via a UI button (requires Maintain role) ([#610](https://github.com/PikoCI/pikoci/issues/610)).
 - **`disable_retry` on jobs**: Prevents build retries via API and hides the retry button in the UI ([#617](https://github.com/PikoCI/pikoci/issues/617)).
+
+### Fixed
+
+- **Build list tabs show stale status**: Build tabs no longer stay stuck on "running" after a build completes — they now refresh automatically when a non-terminal build transitions to a terminal state.
 
 ## [0.7.0] - 2026-07-08
 

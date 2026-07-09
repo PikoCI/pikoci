@@ -1358,6 +1358,19 @@ func (cl *Client) RejectBuild(ctx context.Context, tc, pc, jn, buildNumber, user
 	return nil
 }
 
+func (cl *Client) MarkBuildAsWarning(ctx context.Context, tc, pc, jn, buildNumber string) error {
+	u := fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/builds/%s/warning", cl.url, tc, pc, jn, buildNumber)
+	var resp thttp.ErrorResponse
+	err := cl.Request(ctx, http.MethodPut, u, nil, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+	return nil
+}
+
 // GenerateTeamWorkerToken generates (or regenerates) a team-scoped worker token.
 func (cl *Client) GenerateTeamWorkerToken(ctx context.Context, tc string) (string, error) {
 	var resp thttp.GenerateTeamWorkerTokenResponse

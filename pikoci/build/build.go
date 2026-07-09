@@ -30,6 +30,9 @@ const (
 	Pending
 	// WaitingForApproval indicates the build is waiting for human approval before starting.
 	WaitingForApproval
+	// Warning indicates the build failed but the job has allow_failure enabled,
+	// so downstream jobs are not blocked.
+	Warning
 )
 
 // Approval represents a single approve/reject vote on a build.

@@ -4423,7 +4423,7 @@ func TestListPipelineJobs_NoBuilds(t *testing.T) {
 		},
 	}
 	activeStatuses := []build.Status{build.Started, build.Pending}
-	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval, build.Warning}
 
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
 	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)
@@ -4453,7 +4453,7 @@ func TestListPipelineJobs_SucceededBuild(t *testing.T) {
 		Jobs: []job.Job{{ID: 1, Name: "build"}},
 	}
 	activeStatuses := []build.Status{build.Started, build.Pending}
-	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval, build.Warning}
 
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
 	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)
@@ -4484,7 +4484,7 @@ func TestListPipelineJobs_FailedBuild(t *testing.T) {
 		Jobs: []job.Job{{ID: 1, Name: "test"}},
 	}
 	activeStatuses := []build.Status{build.Started, build.Pending}
-	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval, build.Warning}
 
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
 	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)
@@ -4511,7 +4511,7 @@ func TestListPipelineJobs_RunningBuild(t *testing.T) {
 		Jobs: []job.Job{{ID: 1, Name: "deploy"}},
 	}
 	activeStatuses := []build.Status{build.Started, build.Pending}
-	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval, build.Warning}
 
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
 	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{
@@ -4539,7 +4539,7 @@ func TestListPipelineJobs_PendingBuild(t *testing.T) {
 		Jobs: []job.Job{{ID: 1, Name: "gen"}},
 	}
 	activeStatuses := []build.Status{build.Started, build.Pending}
-	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval, build.Warning}
 
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
 	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{
@@ -4569,7 +4569,7 @@ func TestListPipelineJobs_MixedStatuses(t *testing.T) {
 		},
 	}
 	activeStatuses := []build.Status{build.Started, build.Pending}
-	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval, build.Warning}
 
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
 	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)
@@ -4598,7 +4598,7 @@ func TestListPipelineJobs_RetryBuild(t *testing.T) {
 		Jobs: []job.Job{{ID: 1, Name: "build"}},
 	}
 	activeStatuses := []build.Status{build.Started, build.Pending}
-	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval, build.Warning}
 
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
 	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)
@@ -4629,7 +4629,7 @@ func TestListPipelineJobs_JobOrder(t *testing.T) {
 		},
 	}
 	activeStatuses := []build.Status{build.Started, build.Pending}
-	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval, build.Warning}
 
 	s.Pipelines.EXPECT().Find(ctx, tc, pn).Return(pp, nil)
 	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)
@@ -4656,7 +4656,7 @@ func TestListPublicPipelineJobs_Success(t *testing.T) {
 		Jobs: []job.Job{{ID: 1, Name: "build"}},
 	}
 	activeStatuses := []build.Status{build.Started, build.Pending}
-	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval}
+	completedStatuses := []build.Status{build.Succeeded, build.Failed, build.Cancelled, build.WaitingForApproval, build.Warning}
 
 	s.Pipelines.EXPECT().FindPublic(ctx, tc, pn).Return(pp, nil)
 	s.Builds.EXPECT().FilterByPipeline(ctx, tc, pn, activeStatuses).Return(map[string][]*build.Build{}, nil)

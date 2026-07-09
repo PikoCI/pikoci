@@ -107,6 +107,7 @@ job "validate-report" {
 }
 
 job "failing" {
+  allow_failure = true
   get "cron" "my_cron" {
     trigger = true
     passed  = ["gen"]
@@ -115,6 +116,19 @@ job "failing" {
     run "exec" {
       path = "/bin/sh"
       args = ["-ec", "echo 'about to fail' && sleep 10 && exit 1"]
+    }
+  }
+}
+
+job "after-failing" {
+  get "cron" "my_cron" {
+    trigger = true
+    passed  = ["failing"]
+  }
+  task "run" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo 'runs after failing (which has allow_failure=true)'"]
     }
   }
 }

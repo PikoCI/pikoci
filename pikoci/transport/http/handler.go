@@ -320,6 +320,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_number}/retry").Name(RetryJobBuild.String()).Handler(retryJobBuild(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_number}/approve").Name(ApproveBuild.String()).Handler(approveBuild(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_number}/reject").Name(RejectBuild.String()).Handler(rejectBuild(s))
+	api.Methods(http.MethodPut).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/{build_number}/warning").Name(MarkBuildAsWarning.String()).Handler(markBuildAsWarning(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/start-pending").Name(StartPendingBuild.String()).Handler(startPendingBuild(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/builds/oldest-pending").Name(FindOldestPendingBuild.String()).Handler(findOldestPendingBuild(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/jobs/{job_name}/notify-serial-groups").Name(NotifySerialGroupPendingBuilds.String()).Handler(notifySerialGroupPendingBuilds(s))
