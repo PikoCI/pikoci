@@ -268,6 +268,7 @@ The optional `timeout` attribute limits the total wall-clock time for a build's 
 | `serial_groups` | no | Cross-job mutual exclusion groups |
 | `disable_retry` | no | When `true`, prevents build retries (default `false`) |
 | `allow_failure` | no | When `true`, a failed build is marked as `warning` instead of `failed`, unblocking downstream jobs (default `false`) |
+| `interruptible` | no | When `true`, creating a new build automatically cancels all older running, pending, and waiting-for-approval builds (default `false`) |
 | `for_each` | no | Generate job instances from a set or map |
 | `matrix` | no | Generate job instances from cartesian product (mutually exclusive with `for_each`) |
 | `get` | no | Step block — fetches a resource version |
