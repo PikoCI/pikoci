@@ -31,6 +31,20 @@ job "gen" {
   }
 }
 
+job "slow-build" {
+  interruptible = true
+  get "cron" "my_cron" {
+    trigger = true
+    passed  = ["gen"]
+  }
+  task "build" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo 'building...' && sleep 30 && echo 'done'"]
+    }
+  }
+}
+
 job "deploy-staging" {
   disable_retry = true
   get "artifact" "cron_output" {

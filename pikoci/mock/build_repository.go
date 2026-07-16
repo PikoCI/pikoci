@@ -237,6 +237,21 @@ func (mr *BuildRepositoryMockRecorder) Find(ctx, tc, pn, jn, buildNumber any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Find", reflect.TypeOf((*BuildRepository)(nil).Find), ctx, tc, pn, jn, buildNumber)
 }
 
+// FindActiveBuilds mocks base method.
+func (m *BuildRepository) FindActiveBuilds(ctx context.Context, tc, pn, jn string, beforeBuildID uint32) ([]*build.Build, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindActiveBuilds", ctx, tc, pn, jn, beforeBuildID)
+	ret0, _ := ret[0].([]*build.Build)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindActiveBuilds indicates an expected call of FindActiveBuilds.
+func (mr *BuildRepositoryMockRecorder) FindActiveBuilds(ctx, tc, pn, jn, beforeBuildID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindActiveBuilds", reflect.TypeOf((*BuildRepository)(nil).FindActiveBuilds), ctx, tc, pn, jn, beforeBuildID)
+}
+
 // FindApprovals mocks base method.
 func (m *BuildRepository) FindApprovals(ctx context.Context, buildID uint32) ([]build.Approval, error) {
 	m.ctrl.T.Helper()
