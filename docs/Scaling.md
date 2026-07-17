@@ -8,7 +8,7 @@ PikoCI is designed to grow with your needs. You can start with a single binary
 and zero external dependencies, then scale to distributed workers and
 production-grade databases without changing your pipeline config.
 
-<!-- TODO: add screenshot of architecture diagram -->
+![Scaling architecture: from single binary to distributed workers](images/scaling-architecture.svg)
 
 ---
 
