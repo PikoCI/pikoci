@@ -5,7 +5,7 @@ description: "HCL pipeline configuration reference for PikoCI. Define resources,
 
 Pipelines are defined in [HCL](https://github.com/hashicorp/hcl). A pipeline file contains `variable`, `resource_type`, `resource`, `notification_type`, `notification`, `runner`, `secret_type`, `secret`, `service`, and `job` blocks.
 
-<!-- TODO: add screenshot of pipeline graph showing jobs and resources -->
+![Pipeline graph showing jobs and resources](images/pipeline-graph.png)
 
 ## variable
 
