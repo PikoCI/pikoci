@@ -145,6 +145,9 @@ const (
 	// GetVersion is the route for retrieving the application version.
 	GetVersion
 
+	// GetHealth is the route for the unauthenticated health check endpoint.
+	GetHealth
+
 	// WorkerHeartbeat is the route for worker heartbeat registration.
 	WorkerHeartbeat
 	// ListWorkers is the route for listing all registered workers.

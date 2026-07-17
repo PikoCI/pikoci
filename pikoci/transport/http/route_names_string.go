@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-const _RouteNameName = "user_loginrefresh_tokencreate_userlist_usersget_userupdate_userdelete_userchange_passwordupdate_profilecreate_teamlist_teamsget_teamupdate_teamdelete_teamcreate_team_memberupdate_team_memberdelete_team_membercreate_pipelineupdate_pipelineget_pipelinedelete_pipelinelist_pipelinesget_pipeline_imagecreate_pipeline_imagetrigger_pipeline_joblist_pipeline_jobsget_pipeline_jobcreate_job_buildcreate_retry_job_buildupdate_job_builddelete_job_buildlist_job_buildsinsert_build_get_versionfind_build_get_versionsget_job_buildcancel_job_buildretry_job_buildstart_pending_buildfind_oldest_pending_buildnotify_serial_group_pending_buildsevaluate_downstream_jobslist_pipeline_resourcesget_pipeline_resourceupdate_pipeline_resourcetrigger_pipeline_resourcecreate_resource_versionlist_resource_versionspin_resource_versionunpin_resource_versiontrigger_resource_versionget_resource_version_pathwebhook_triggerregenerate_webhook_tokencreate_triggerlist_triggers_afterexport_databasepause_pipelineunpause_pipelinepause_jobunpause_jobget_versionworker_heartbeatlist_workersworkers_healthdelete_workercreate_api_tokenlist_api_tokensdelete_api_tokenlist_audit_logget_build_reportapprove_buildreject_buildmark_build_as_warninggenerate_team_worker_tokenget_team_worker_tokenget_auth_methodso_auth_starto_auth_callbacko_auth_complete_profilelist_o_auth_providerscreate_o_auth_providerupdate_o_auth_providerdelete_o_auth_providerget_admin_auth_settingsupdate_admin_auth_settingslist_linked_accountsunlink_account"
+const _RouteNameName = "user_loginrefresh_tokencreate_userlist_usersget_userupdate_userdelete_userchange_passwordupdate_profilecreate_teamlist_teamsget_teamupdate_teamdelete_teamcreate_team_memberupdate_team_memberdelete_team_membercreate_pipelineupdate_pipelineget_pipelinedelete_pipelinelist_pipelinesget_pipeline_imagecreate_pipeline_imagetrigger_pipeline_joblist_pipeline_jobsget_pipeline_jobcreate_job_buildcreate_retry_job_buildupdate_job_builddelete_job_buildlist_job_buildsinsert_build_get_versionfind_build_get_versionsget_job_buildcancel_job_buildretry_job_buildstart_pending_buildfind_oldest_pending_buildnotify_serial_group_pending_buildsevaluate_downstream_jobslist_pipeline_resourcesget_pipeline_resourceupdate_pipeline_resourcetrigger_pipeline_resourcecreate_resource_versionlist_resource_versionspin_resource_versionunpin_resource_versiontrigger_resource_versionget_resource_version_pathwebhook_triggerregenerate_webhook_tokencreate_triggerlist_triggers_afterexport_databasepause_pipelineunpause_pipelinepause_jobunpause_jobget_versionget_healthworker_heartbeatlist_workersworkers_healthdelete_workercreate_api_tokenlist_api_tokensdelete_api_tokenlist_audit_logget_build_reportapprove_buildreject_buildmark_build_as_warninggenerate_team_worker_tokenget_team_worker_tokenget_auth_methodso_auth_starto_auth_callbacko_auth_complete_profilelist_o_auth_providerscreate_o_auth_providerupdate_o_auth_providerdelete_o_auth_providerget_admin_auth_settingsupdate_admin_auth_settingslist_linked_accountsunlink_account"
 
-var _RouteNameIndex = [...]uint16{0, 10, 23, 34, 44, 52, 63, 74, 89, 103, 114, 124, 132, 143, 154, 172, 190, 208, 223, 238, 250, 265, 279, 297, 318, 338, 356, 372, 388, 410, 426, 442, 457, 481, 504, 517, 533, 548, 567, 592, 626, 650, 673, 694, 718, 743, 766, 788, 808, 830, 854, 879, 894, 918, 932, 951, 966, 980, 996, 1005, 1016, 1027, 1043, 1055, 1069, 1082, 1098, 1113, 1129, 1143, 1159, 1172, 1184, 1205, 1231, 1252, 1268, 1280, 1295, 1318, 1339, 1361, 1383, 1405, 1428, 1454, 1474, 1488}
+var _RouteNameIndex = [...]uint16{0, 10, 23, 34, 44, 52, 63, 74, 89, 103, 114, 124, 132, 143, 154, 172, 190, 208, 223, 238, 250, 265, 279, 297, 318, 338, 356, 372, 388, 410, 426, 442, 457, 481, 504, 517, 533, 548, 567, 592, 626, 650, 673, 694, 718, 743, 766, 788, 808, 830, 854, 879, 894, 918, 932, 951, 966, 980, 996, 1005, 1016, 1027, 1037, 1053, 1065, 1079, 1092, 1108, 1123, 1139, 1153, 1169, 1182, 1194, 1215, 1241, 1262, 1278, 1290, 1305, 1328, 1349, 1371, 1393, 1415, 1438, 1464, 1484, 1498}
 
-const _RouteNameLowerName = "user_loginrefresh_tokencreate_userlist_usersget_userupdate_userdelete_userchange_passwordupdate_profilecreate_teamlist_teamsget_teamupdate_teamdelete_teamcreate_team_memberupdate_team_memberdelete_team_membercreate_pipelineupdate_pipelineget_pipelinedelete_pipelinelist_pipelinesget_pipeline_imagecreate_pipeline_imagetrigger_pipeline_joblist_pipeline_jobsget_pipeline_jobcreate_job_buildcreate_retry_job_buildupdate_job_builddelete_job_buildlist_job_buildsinsert_build_get_versionfind_build_get_versionsget_job_buildcancel_job_buildretry_job_buildstart_pending_buildfind_oldest_pending_buildnotify_serial_group_pending_buildsevaluate_downstream_jobslist_pipeline_resourcesget_pipeline_resourceupdate_pipeline_resourcetrigger_pipeline_resourcecreate_resource_versionlist_resource_versionspin_resource_versionunpin_resource_versiontrigger_resource_versionget_resource_version_pathwebhook_triggerregenerate_webhook_tokencreate_triggerlist_triggers_afterexport_databasepause_pipelineunpause_pipelinepause_jobunpause_jobget_versionworker_heartbeatlist_workersworkers_healthdelete_workercreate_api_tokenlist_api_tokensdelete_api_tokenlist_audit_logget_build_reportapprove_buildreject_buildmark_build_as_warninggenerate_team_worker_tokenget_team_worker_tokenget_auth_methodso_auth_starto_auth_callbacko_auth_complete_profilelist_o_auth_providerscreate_o_auth_providerupdate_o_auth_providerdelete_o_auth_providerget_admin_auth_settingsupdate_admin_auth_settingslist_linked_accountsunlink_account"
+const _RouteNameLowerName = "user_loginrefresh_tokencreate_userlist_usersget_userupdate_userdelete_userchange_passwordupdate_profilecreate_teamlist_teamsget_teamupdate_teamdelete_teamcreate_team_memberupdate_team_memberdelete_team_membercreate_pipelineupdate_pipelineget_pipelinedelete_pipelinelist_pipelinesget_pipeline_imagecreate_pipeline_imagetrigger_pipeline_joblist_pipeline_jobsget_pipeline_jobcreate_job_buildcreate_retry_job_buildupdate_job_builddelete_job_buildlist_job_buildsinsert_build_get_versionfind_build_get_versionsget_job_buildcancel_job_buildretry_job_buildstart_pending_buildfind_oldest_pending_buildnotify_serial_group_pending_buildsevaluate_downstream_jobslist_pipeline_resourcesget_pipeline_resourceupdate_pipeline_resourcetrigger_pipeline_resourcecreate_resource_versionlist_resource_versionspin_resource_versionunpin_resource_versiontrigger_resource_versionget_resource_version_pathwebhook_triggerregenerate_webhook_tokencreate_triggerlist_triggers_afterexport_databasepause_pipelineunpause_pipelinepause_jobunpause_jobget_versionget_healthworker_heartbeatlist_workersworkers_healthdelete_workercreate_api_tokenlist_api_tokensdelete_api_tokenlist_audit_logget_build_reportapprove_buildreject_buildmark_build_as_warninggenerate_team_worker_tokenget_team_worker_tokenget_auth_methodso_auth_starto_auth_callbacko_auth_complete_profilelist_o_auth_providerscreate_o_auth_providerupdate_o_auth_providerdelete_o_auth_providerget_admin_auth_settingsupdate_admin_auth_settingslist_linked_accountsunlink_account"
 
 func (i RouteName) String() string {
 	if i < 0 || i >= RouteName(len(_RouteNameIndex)-1) {
@@ -85,35 +85,36 @@ func _RouteNameNoOp() {
 	_ = x[PauseJob-(58)]
 	_ = x[UnpauseJob-(59)]
 	_ = x[GetVersion-(60)]
-	_ = x[WorkerHeartbeat-(61)]
-	_ = x[ListWorkers-(62)]
-	_ = x[WorkersHealth-(63)]
-	_ = x[DeleteWorker-(64)]
-	_ = x[CreateApiToken-(65)]
-	_ = x[ListApiTokens-(66)]
-	_ = x[DeleteApiToken-(67)]
-	_ = x[ListAuditLog-(68)]
-	_ = x[GetBuildReport-(69)]
-	_ = x[ApproveBuild-(70)]
-	_ = x[RejectBuild-(71)]
-	_ = x[MarkBuildAsWarning-(72)]
-	_ = x[GenerateTeamWorkerToken-(73)]
-	_ = x[GetTeamWorkerToken-(74)]
-	_ = x[GetAuthMethods-(75)]
-	_ = x[OAuthStart-(76)]
-	_ = x[OAuthCallback-(77)]
-	_ = x[OAuthCompleteProfile-(78)]
-	_ = x[ListOAuthProviders-(79)]
-	_ = x[CreateOAuthProvider-(80)]
-	_ = x[UpdateOAuthProvider-(81)]
-	_ = x[DeleteOAuthProvider-(82)]
-	_ = x[GetAdminAuthSettings-(83)]
-	_ = x[UpdateAdminAuthSettings-(84)]
-	_ = x[ListLinkedAccounts-(85)]
-	_ = x[UnlinkAccount-(86)]
+	_ = x[GetHealth-(61)]
+	_ = x[WorkerHeartbeat-(62)]
+	_ = x[ListWorkers-(63)]
+	_ = x[WorkersHealth-(64)]
+	_ = x[DeleteWorker-(65)]
+	_ = x[CreateApiToken-(66)]
+	_ = x[ListApiTokens-(67)]
+	_ = x[DeleteApiToken-(68)]
+	_ = x[ListAuditLog-(69)]
+	_ = x[GetBuildReport-(70)]
+	_ = x[ApproveBuild-(71)]
+	_ = x[RejectBuild-(72)]
+	_ = x[MarkBuildAsWarning-(73)]
+	_ = x[GenerateTeamWorkerToken-(74)]
+	_ = x[GetTeamWorkerToken-(75)]
+	_ = x[GetAuthMethods-(76)]
+	_ = x[OAuthStart-(77)]
+	_ = x[OAuthCallback-(78)]
+	_ = x[OAuthCompleteProfile-(79)]
+	_ = x[ListOAuthProviders-(80)]
+	_ = x[CreateOAuthProvider-(81)]
+	_ = x[UpdateOAuthProvider-(82)]
+	_ = x[DeleteOAuthProvider-(83)]
+	_ = x[GetAdminAuthSettings-(84)]
+	_ = x[UpdateAdminAuthSettings-(85)]
+	_ = x[ListLinkedAccounts-(86)]
+	_ = x[UnlinkAccount-(87)]
 }
 
-var _RouteNameValues = []RouteName{UserLogin, RefreshToken, CreateUser, ListUsers, GetUser, UpdateUser, DeleteUser, ChangePassword, UpdateProfile, CreateTeam, ListTeams, GetTeam, UpdateTeam, DeleteTeam, CreateTeamMember, UpdateTeamMember, DeleteTeamMember, CreatePipeline, UpdatePipeline, GetPipeline, DeletePipeline, ListPipelines, GetPipelineImage, CreatePipelineImage, TriggerPipelineJob, ListPipelineJobs, GetPipelineJob, CreateJobBuild, CreateRetryJobBuild, UpdateJobBuild, DeleteJobBuild, ListJobBuilds, InsertBuildGetVersion, FindBuildGetVersions, GetJobBuild, CancelJobBuild, RetryJobBuild, StartPendingBuild, FindOldestPendingBuild, NotifySerialGroupPendingBuilds, EvaluateDownstreamJobs, ListPipelineResources, GetPipelineResource, UpdatePipelineResource, TriggerPipelineResource, CreateResourceVersion, ListResourceVersions, PinResourceVersion, UnpinResourceVersion, TriggerResourceVersion, GetResourceVersionPath, WebhookTrigger, RegenerateWebhookToken, CreateTrigger, ListTriggersAfter, ExportDatabase, PausePipeline, UnpausePipeline, PauseJob, UnpauseJob, GetVersion, WorkerHeartbeat, ListWorkers, WorkersHealth, DeleteWorker, CreateApiToken, ListApiTokens, DeleteApiToken, ListAuditLog, GetBuildReport, ApproveBuild, RejectBuild, MarkBuildAsWarning, GenerateTeamWorkerToken, GetTeamWorkerToken, GetAuthMethods, OAuthStart, OAuthCallback, OAuthCompleteProfile, ListOAuthProviders, CreateOAuthProvider, UpdateOAuthProvider, DeleteOAuthProvider, GetAdminAuthSettings, UpdateAdminAuthSettings, ListLinkedAccounts, UnlinkAccount}
+var _RouteNameValues = []RouteName{UserLogin, RefreshToken, CreateUser, ListUsers, GetUser, UpdateUser, DeleteUser, ChangePassword, UpdateProfile, CreateTeam, ListTeams, GetTeam, UpdateTeam, DeleteTeam, CreateTeamMember, UpdateTeamMember, DeleteTeamMember, CreatePipeline, UpdatePipeline, GetPipeline, DeletePipeline, ListPipelines, GetPipelineImage, CreatePipelineImage, TriggerPipelineJob, ListPipelineJobs, GetPipelineJob, CreateJobBuild, CreateRetryJobBuild, UpdateJobBuild, DeleteJobBuild, ListJobBuilds, InsertBuildGetVersion, FindBuildGetVersions, GetJobBuild, CancelJobBuild, RetryJobBuild, StartPendingBuild, FindOldestPendingBuild, NotifySerialGroupPendingBuilds, EvaluateDownstreamJobs, ListPipelineResources, GetPipelineResource, UpdatePipelineResource, TriggerPipelineResource, CreateResourceVersion, ListResourceVersions, PinResourceVersion, UnpinResourceVersion, TriggerResourceVersion, GetResourceVersionPath, WebhookTrigger, RegenerateWebhookToken, CreateTrigger, ListTriggersAfter, ExportDatabase, PausePipeline, UnpausePipeline, PauseJob, UnpauseJob, GetVersion, GetHealth, WorkerHeartbeat, ListWorkers, WorkersHealth, DeleteWorker, CreateApiToken, ListApiTokens, DeleteApiToken, ListAuditLog, GetBuildReport, ApproveBuild, RejectBuild, MarkBuildAsWarning, GenerateTeamWorkerToken, GetTeamWorkerToken, GetAuthMethods, OAuthStart, OAuthCallback, OAuthCompleteProfile, ListOAuthProviders, CreateOAuthProvider, UpdateOAuthProvider, DeleteOAuthProvider, GetAdminAuthSettings, UpdateAdminAuthSettings, ListLinkedAccounts, UnlinkAccount}
 
 var _RouteNameNameToValueMap = map[string]RouteName{
 	_RouteNameName[0:10]:           UserLogin,
@@ -238,58 +239,60 @@ var _RouteNameNameToValueMap = map[string]RouteName{
 	_RouteNameLowerName[1005:1016]: UnpauseJob,
 	_RouteNameName[1016:1027]:      GetVersion,
 	_RouteNameLowerName[1016:1027]: GetVersion,
-	_RouteNameName[1027:1043]:      WorkerHeartbeat,
-	_RouteNameLowerName[1027:1043]: WorkerHeartbeat,
-	_RouteNameName[1043:1055]:      ListWorkers,
-	_RouteNameLowerName[1043:1055]: ListWorkers,
-	_RouteNameName[1055:1069]:      WorkersHealth,
-	_RouteNameLowerName[1055:1069]: WorkersHealth,
-	_RouteNameName[1069:1082]:      DeleteWorker,
-	_RouteNameLowerName[1069:1082]: DeleteWorker,
-	_RouteNameName[1082:1098]:      CreateApiToken,
-	_RouteNameLowerName[1082:1098]: CreateApiToken,
-	_RouteNameName[1098:1113]:      ListApiTokens,
-	_RouteNameLowerName[1098:1113]: ListApiTokens,
-	_RouteNameName[1113:1129]:      DeleteApiToken,
-	_RouteNameLowerName[1113:1129]: DeleteApiToken,
-	_RouteNameName[1129:1143]:      ListAuditLog,
-	_RouteNameLowerName[1129:1143]: ListAuditLog,
-	_RouteNameName[1143:1159]:      GetBuildReport,
-	_RouteNameLowerName[1143:1159]: GetBuildReport,
-	_RouteNameName[1159:1172]:      ApproveBuild,
-	_RouteNameLowerName[1159:1172]: ApproveBuild,
-	_RouteNameName[1172:1184]:      RejectBuild,
-	_RouteNameLowerName[1172:1184]: RejectBuild,
-	_RouteNameName[1184:1205]:      MarkBuildAsWarning,
-	_RouteNameLowerName[1184:1205]: MarkBuildAsWarning,
-	_RouteNameName[1205:1231]:      GenerateTeamWorkerToken,
-	_RouteNameLowerName[1205:1231]: GenerateTeamWorkerToken,
-	_RouteNameName[1231:1252]:      GetTeamWorkerToken,
-	_RouteNameLowerName[1231:1252]: GetTeamWorkerToken,
-	_RouteNameName[1252:1268]:      GetAuthMethods,
-	_RouteNameLowerName[1252:1268]: GetAuthMethods,
-	_RouteNameName[1268:1280]:      OAuthStart,
-	_RouteNameLowerName[1268:1280]: OAuthStart,
-	_RouteNameName[1280:1295]:      OAuthCallback,
-	_RouteNameLowerName[1280:1295]: OAuthCallback,
-	_RouteNameName[1295:1318]:      OAuthCompleteProfile,
-	_RouteNameLowerName[1295:1318]: OAuthCompleteProfile,
-	_RouteNameName[1318:1339]:      ListOAuthProviders,
-	_RouteNameLowerName[1318:1339]: ListOAuthProviders,
-	_RouteNameName[1339:1361]:      CreateOAuthProvider,
-	_RouteNameLowerName[1339:1361]: CreateOAuthProvider,
-	_RouteNameName[1361:1383]:      UpdateOAuthProvider,
-	_RouteNameLowerName[1361:1383]: UpdateOAuthProvider,
-	_RouteNameName[1383:1405]:      DeleteOAuthProvider,
-	_RouteNameLowerName[1383:1405]: DeleteOAuthProvider,
-	_RouteNameName[1405:1428]:      GetAdminAuthSettings,
-	_RouteNameLowerName[1405:1428]: GetAdminAuthSettings,
-	_RouteNameName[1428:1454]:      UpdateAdminAuthSettings,
-	_RouteNameLowerName[1428:1454]: UpdateAdminAuthSettings,
-	_RouteNameName[1454:1474]:      ListLinkedAccounts,
-	_RouteNameLowerName[1454:1474]: ListLinkedAccounts,
-	_RouteNameName[1474:1488]:      UnlinkAccount,
-	_RouteNameLowerName[1474:1488]: UnlinkAccount,
+	_RouteNameName[1027:1037]:      GetHealth,
+	_RouteNameLowerName[1027:1037]: GetHealth,
+	_RouteNameName[1037:1053]:      WorkerHeartbeat,
+	_RouteNameLowerName[1037:1053]: WorkerHeartbeat,
+	_RouteNameName[1053:1065]:      ListWorkers,
+	_RouteNameLowerName[1053:1065]: ListWorkers,
+	_RouteNameName[1065:1079]:      WorkersHealth,
+	_RouteNameLowerName[1065:1079]: WorkersHealth,
+	_RouteNameName[1079:1092]:      DeleteWorker,
+	_RouteNameLowerName[1079:1092]: DeleteWorker,
+	_RouteNameName[1092:1108]:      CreateApiToken,
+	_RouteNameLowerName[1092:1108]: CreateApiToken,
+	_RouteNameName[1108:1123]:      ListApiTokens,
+	_RouteNameLowerName[1108:1123]: ListApiTokens,
+	_RouteNameName[1123:1139]:      DeleteApiToken,
+	_RouteNameLowerName[1123:1139]: DeleteApiToken,
+	_RouteNameName[1139:1153]:      ListAuditLog,
+	_RouteNameLowerName[1139:1153]: ListAuditLog,
+	_RouteNameName[1153:1169]:      GetBuildReport,
+	_RouteNameLowerName[1153:1169]: GetBuildReport,
+	_RouteNameName[1169:1182]:      ApproveBuild,
+	_RouteNameLowerName[1169:1182]: ApproveBuild,
+	_RouteNameName[1182:1194]:      RejectBuild,
+	_RouteNameLowerName[1182:1194]: RejectBuild,
+	_RouteNameName[1194:1215]:      MarkBuildAsWarning,
+	_RouteNameLowerName[1194:1215]: MarkBuildAsWarning,
+	_RouteNameName[1215:1241]:      GenerateTeamWorkerToken,
+	_RouteNameLowerName[1215:1241]: GenerateTeamWorkerToken,
+	_RouteNameName[1241:1262]:      GetTeamWorkerToken,
+	_RouteNameLowerName[1241:1262]: GetTeamWorkerToken,
+	_RouteNameName[1262:1278]:      GetAuthMethods,
+	_RouteNameLowerName[1262:1278]: GetAuthMethods,
+	_RouteNameName[1278:1290]:      OAuthStart,
+	_RouteNameLowerName[1278:1290]: OAuthStart,
+	_RouteNameName[1290:1305]:      OAuthCallback,
+	_RouteNameLowerName[1290:1305]: OAuthCallback,
+	_RouteNameName[1305:1328]:      OAuthCompleteProfile,
+	_RouteNameLowerName[1305:1328]: OAuthCompleteProfile,
+	_RouteNameName[1328:1349]:      ListOAuthProviders,
+	_RouteNameLowerName[1328:1349]: ListOAuthProviders,
+	_RouteNameName[1349:1371]:      CreateOAuthProvider,
+	_RouteNameLowerName[1349:1371]: CreateOAuthProvider,
+	_RouteNameName[1371:1393]:      UpdateOAuthProvider,
+	_RouteNameLowerName[1371:1393]: UpdateOAuthProvider,
+	_RouteNameName[1393:1415]:      DeleteOAuthProvider,
+	_RouteNameLowerName[1393:1415]: DeleteOAuthProvider,
+	_RouteNameName[1415:1438]:      GetAdminAuthSettings,
+	_RouteNameLowerName[1415:1438]: GetAdminAuthSettings,
+	_RouteNameName[1438:1464]:      UpdateAdminAuthSettings,
+	_RouteNameLowerName[1438:1464]: UpdateAdminAuthSettings,
+	_RouteNameName[1464:1484]:      ListLinkedAccounts,
+	_RouteNameLowerName[1464:1484]: ListLinkedAccounts,
+	_RouteNameName[1484:1498]:      UnlinkAccount,
+	_RouteNameLowerName[1484:1498]: UnlinkAccount,
 }
 
 var _RouteNameNames = []string{
@@ -354,32 +357,33 @@ var _RouteNameNames = []string{
 	_RouteNameName[996:1005],
 	_RouteNameName[1005:1016],
 	_RouteNameName[1016:1027],
-	_RouteNameName[1027:1043],
-	_RouteNameName[1043:1055],
-	_RouteNameName[1055:1069],
-	_RouteNameName[1069:1082],
-	_RouteNameName[1082:1098],
-	_RouteNameName[1098:1113],
-	_RouteNameName[1113:1129],
-	_RouteNameName[1129:1143],
-	_RouteNameName[1143:1159],
-	_RouteNameName[1159:1172],
-	_RouteNameName[1172:1184],
-	_RouteNameName[1184:1205],
-	_RouteNameName[1205:1231],
-	_RouteNameName[1231:1252],
-	_RouteNameName[1252:1268],
-	_RouteNameName[1268:1280],
-	_RouteNameName[1280:1295],
-	_RouteNameName[1295:1318],
-	_RouteNameName[1318:1339],
-	_RouteNameName[1339:1361],
-	_RouteNameName[1361:1383],
-	_RouteNameName[1383:1405],
-	_RouteNameName[1405:1428],
-	_RouteNameName[1428:1454],
-	_RouteNameName[1454:1474],
-	_RouteNameName[1474:1488],
+	_RouteNameName[1027:1037],
+	_RouteNameName[1037:1053],
+	_RouteNameName[1053:1065],
+	_RouteNameName[1065:1079],
+	_RouteNameName[1079:1092],
+	_RouteNameName[1092:1108],
+	_RouteNameName[1108:1123],
+	_RouteNameName[1123:1139],
+	_RouteNameName[1139:1153],
+	_RouteNameName[1153:1169],
+	_RouteNameName[1169:1182],
+	_RouteNameName[1182:1194],
+	_RouteNameName[1194:1215],
+	_RouteNameName[1215:1241],
+	_RouteNameName[1241:1262],
+	_RouteNameName[1262:1278],
+	_RouteNameName[1278:1290],
+	_RouteNameName[1290:1305],
+	_RouteNameName[1305:1328],
+	_RouteNameName[1328:1349],
+	_RouteNameName[1349:1371],
+	_RouteNameName[1371:1393],
+	_RouteNameName[1393:1415],
+	_RouteNameName[1415:1438],
+	_RouteNameName[1438:1464],
+	_RouteNameName[1464:1484],
+	_RouteNameName[1484:1498],
 }
 
 // RouteNameString retrieves an enum value from the enum constants string name.
