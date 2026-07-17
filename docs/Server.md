@@ -124,6 +124,43 @@ curl http://localhost:8080/metrics
 
 See [Deployment — Monitoring](Deployment.md#monitoring) for setting up Prometheus and Grafana.
 
+## Health check
+
+PikoCI exposes a `GET /health` endpoint that checks database connectivity and returns the server version. It requires no authentication, making it suitable for load balancers, Kubernetes probes, and uptime monitors.
+
+**Healthy response** (HTTP 200):
+
+```json
+{"status":"ok","db":"connected","version":"0.7.0"}
+```
+
+**Unhealthy response** (HTTP 503):
+
+```json
+{"status":"error","db":"disconnected","error":"...","version":"0.7.0"}
+```
+
+Usage examples:
+
+```bash
+curl http://localhost:8080/health
+```
+
+Kubernetes liveness/readiness probe:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+```
+
+Docker healthcheck:
+
+```dockerfile
+HEALTHCHECK CMD curl -f http://localhost:8080/health || exit 1
+```
+
 ## Signal handling
 
 PikoCI supports two shutdown modes:

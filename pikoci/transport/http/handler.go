@@ -259,6 +259,8 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	r.Methods(http.MethodGet).Path("/auth/methods").Handler(getAuthMethods(s))
 	r.Methods(http.MethodGet).Path("/auth/oauth/{canonical}").Name(OAuthStart.String()).Handler(oauthStart(s, externalURL, stateStore, ts))
 	r.Methods(http.MethodGet).Path("/auth/oauth/{canonical}/callback").Name(OAuthCallback.String()).Handler(oauthCallback(s, externalURL, stateStore, ts))
+	r.Methods(http.MethodGet).Path("/health").Name(GetHealth.String()).Handler(health(db, version))
+
 	jsonr.Methods(http.MethodGet).Path("/version").Name(GetVersion.String()).HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")

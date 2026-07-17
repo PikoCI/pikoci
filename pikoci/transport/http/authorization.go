@@ -20,6 +20,7 @@ var (
 		WebhookTrigger:       nothing,
 		WorkerHeartbeat:      nothing,
 		GetVersion:           nothing,
+		GetHealth:            nothing,
 		GetAuthMethods:       nothing,
 		OAuthStart:           nothing,
 		OAuthCallback:        nothing,

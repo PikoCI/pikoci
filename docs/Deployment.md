@@ -124,6 +124,7 @@ Verify it's running:
 
 ```bash
 systemctl status pikoci
+curl http://localhost:8080/health
 curl http://localhost:8080/metrics
 ```
 
