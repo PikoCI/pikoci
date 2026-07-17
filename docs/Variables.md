@@ -1,3 +1,7 @@
+---
+description: "Parameterize PikoCI pipelines with variables and secrets. Pass values at trigger time or from external secret providers."
+---
+
 # Variables and Secrets
 
 Pipeline variables let you parameterize your pipeline configuration.
@@ -66,7 +70,7 @@ task "build" {
 
 ## Secret-backed variables
 
-Variables can declare a `secret` block to resolve their value from a secret type at runtime. This lets secrets work everywhere variables work — resource params, task args, etc. — without hardcoding sensitive values.
+Variables can declare a `secret` block to resolve their value from a secret type at runtime. This lets secrets work everywhere variables work, including resource params and task args, without hardcoding sensitive values.
 
 ```hcl
 variable "git_token" {
@@ -165,7 +169,7 @@ variable "dynamic_secret" {
 }
 ```
 
-Dependencies are resolved automatically in the correct order — you don't need to worry about declaration order. Circular dependencies are detected with a clear error message. The maximum chain depth is 10 levels.
+Dependencies are resolved automatically in the correct order. You don't need to worry about declaration order. Circular dependencies are detected with a clear error message. The maximum chain depth is 10 levels.
 
 ### Full example
 

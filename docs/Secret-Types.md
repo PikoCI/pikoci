@@ -1,3 +1,7 @@
+---
+description: "Manage secrets in PikoCI pipelines. Built-in Vault and JSON file secret types, plus custom secret providers with masking support."
+---
+
 # Secret Types
 
 A secret type defines how PikoCI fetches secrets from an external system (e.g. Vault, a JSON file). It has one operation: **get** (fetch secret values). Connection config (address, token, etc.) is set on the secret_type block.
@@ -65,7 +69,7 @@ When `source` is set, you must not define an inline `get` block. PikoCI will err
 
 > **Note:** The source is resolved once when the pipeline is created or updated. If the remote HCL file changes, you must re-set the pipeline to pick up the new definition.
 
-You can override the runner used for the `get` command by adding a `runner` block. See [Runners — Type-level runner overrides](Runners.md#type-level-runner-overrides).
+You can override the runner used for the `get` command by adding a `runner` block. See [Runners: Type-level runner overrides](Runners.md#type-level-runner-overrides).
 
 ## Using secrets via variables
 
@@ -100,7 +104,7 @@ job "deploy" {
 }
 ```
 
-Secret-backed variables are resolved lazily at runtime — every resource check, get, task, or put execution fetches the latest secret value. This means rotated secrets are picked up automatically without pipeline updates.
+Secret-backed variables are resolved lazily at runtime. Every resource check, get, task, or put execution fetches the latest secret value. This means rotated secrets are picked up automatically without pipeline updates.
 
 ### Config chaining
 
@@ -302,7 +306,7 @@ When `format` is `"json"` (or inferred from a `.json` extension), the file must 
 {"username": "admin", "password": "s3cret", "host": "db.example.com"}
 ```
 
-Multi-line JSON is fully supported — the entire file content is parsed as a single JSON object.
+Multi-line JSON is fully supported. The entire file content is parsed as a single JSON object.
 
 ### YAML format
 

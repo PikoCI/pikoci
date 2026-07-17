@@ -1,3 +1,7 @@
+---
+description: Run ephemeral services alongside CI/CD jobs. Start databases, caches, or message brokers that run during task execution.
+---
+
 # Services
 
 A service type defines an ephemeral process that runs alongside a job's tasks. Services are started before tasks and stopped unconditionally after, regardless of whether the tasks succeed or fail. Common use cases include databases, caches, message brokers, or any dependency that needs to be running while tasks execute.
@@ -75,7 +79,7 @@ When `source` is set, you must not define inline `start`, `stop`, or `ready_chec
 
 > **Note:** The source is resolved once when the pipeline is created or updated. If the remote HCL file changes, you must re-set the pipeline to pick up the new definition.
 
-You can override the runner used for all commands (`start`, `stop`, `ready_check`) by adding a `runner` block. See [Runners — Type-level runner overrides](Runners.md#type-level-runner-overrides).
+You can override the runner used for all commands (`start`, `stop`, `ready_check`) by adding a `runner` block. See [Runners: Type-level runner overrides](Runners.md#type-level-runner-overrides).
 
 ## Referencing service types in jobs
 
@@ -153,7 +157,7 @@ docker rm -f $NAME 2>/dev/null || true   # kill orphan if exists
 docker run -d --name $NAME ...           # start fresh
 ```
 
-The `|| true` on the cleanup command means it never causes the start block to fail — only actual start failures will fail the job. The `stop` block should use the same pattern:
+The `|| true` on the cleanup command means it never causes the start block to fail. Only actual start failures will fail the job. The `stop` block should use the same pattern:
 
 ```bash
 NAME="pikoci-${BUILD_PIPELINE_NAME}-${BUILD_JOB_NAME}-postgres"

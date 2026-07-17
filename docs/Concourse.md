@@ -1,3 +1,7 @@
+---
+description: Migrate from Concourse CI to PikoCI. Key differences, equivalent concepts, and what changes in resource models and pipelines.
+---
+
 # Coming from Concourse
 
 PikoCI's resource model is directly inspired by [Concourse CI](https://concourse-ci.org). If you're familiar with Concourse, you'll find the concepts similar but with some key differences.

@@ -1,3 +1,7 @@
+---
+description: Built-in and custom resource types in PikoCI. Git, Docker image, S3, cron, and webhook resources with check, pull, and push operations.
+---
+
 # Resource Types
 
 A resource type defines how PikoCI interacts with an external system. It has three operations: **check** (detect new versions), **pull** (fetch a version), and **push** (publish to the resource).
@@ -90,7 +94,7 @@ When `source` is set, you must not define inline `check`, `pull`, or `push` bloc
 
 ## Runner overrides
 
-You can override the runner used for all commands of a resource type by adding a `runner` block. This lets you run sourced or inline exec commands inside Docker without modifying the type's command definitions. See [Runners — Type-level runner overrides](Runners.md#type-level-runner-overrides) for details.
+You can override the runner used for all commands of a resource type by adding a `runner` block. This lets you run sourced or inline exec commands inside Docker without modifying the type's command definitions. See [Runners: Type-level runner overrides](Runners.md#type-level-runner-overrides) for details.
 
 ## Overriding built-ins
 
@@ -188,7 +192,7 @@ When caching is enabled, PikoCI creates a persistent directory for each resource
 ~/.cache/pikoci/cache/{team}/{pipeline}/{resource_canonical}/
 ```
 
-Scripts are responsible for managing the cache contents. PikoCI only creates the directory and passes the path — it does not manage the data inside.
+Scripts are responsible for managing the cache contents. PikoCI only creates the directory and passes the path; it does not manage the data inside.
 
 ### Writing cache-aware scripts
 
@@ -218,7 +222,7 @@ The built-in `git` resource type has `cache = true` by default and uses this pat
 
 ### Notes
 
-- Each worker has its own cache — there is no shared state between workers.
+- Each worker has its own cache. There is no shared state between workers.
 - Cache directories persist indefinitely. No automatic cleanup is performed in the current version.
 - If `$CACHE_DIR` is not set (caching disabled), scripts should fall back to their normal behavior.
 
@@ -529,7 +533,7 @@ job "release" {
 
 The `trigger` resource type enables cross-pipeline and cross-job triggering without webhook tokens or external auth. It uses the internal database as a team-scoped event bus.
 
-You do not need to define the resource type — it is built in. Just declare a resource:
+You do not need to define the resource type; it is built in. Just declare a resource:
 
 ```hcl
 resource "trigger" "deploy" {}
@@ -539,11 +543,11 @@ Trigger resources are scoped by team and matched by their canonical name (`trigg
 
 ### How it works
 
-- **put** — inserts a trigger event into the database with the put step's params as the version payload
-- **check** — queries the database for trigger events newer than the last seen, creates resource versions, and triggers downstream jobs
-- **get** — no special handling; the standard resource version flow passes version fields as `$version_<key>` env vars
+- **put**: inserts a trigger event into the database with the put step's params as the version payload
+- **check**: queries the database for trigger events newer than the last seen, creates resource versions, and triggers downstream jobs
+- **get**: no special handling; the standard resource version flow passes version fields as `$version_<key>` env vars
 
-No container or script is executed for check/put — the worker handles these operations internally.
+No container or script is executed for check/put. The worker handles these operations internally.
 
 ### Data passing
 
@@ -561,7 +565,7 @@ The `trigger_pipeline`, `trigger_job`, and `trigger_build` fields are added auto
 
 ### Example: cross-pipeline triggering
 
-**Pipeline A** — fires the trigger after a successful build:
+**Pipeline A** fires the trigger after a successful build:
 
 ```hcl
 resource "trigger" "deploy" {}
@@ -585,7 +589,7 @@ job "build" {
 }
 ```
 
-**Pipeline B** — listens for the trigger and deploys:
+**Pipeline B** listens for the trigger and deploys:
 
 ```hcl
 resource "trigger" "deploy" {}
@@ -604,4 +608,4 @@ job "deploy" {
 
 ### Visibility
 
-Trigger events appear as resource versions in the existing resource versions UI. Each pipeline's `trigger.deploy` resource shows the trigger events just like any other resource — no dedicated trigger UI is needed.
+Trigger events appear as resource versions in the existing resource versions UI. Each pipeline's `trigger.deploy` resource shows the trigger events just like any other resource. No dedicated trigger UI is needed.

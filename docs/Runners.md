@@ -1,3 +1,7 @@
+---
+description: Configure how PikoCI executes jobs. Built-in exec and Docker runners, plus custom runners for any environment.
+---
+
 # Runners
 
 Runners define how commands are executed. A runner wraps process execution so you can run jobs on the host, inside Docker containers, or in any custom environment.
@@ -95,7 +99,7 @@ This replaces the built-in `docker` runner entirely for this pipeline.
 
 By default, a type's commands run using the runner specified in their command blocks (e.g. `check "exec" { ... }`). You can override this for all commands of a type by adding a `runner` block to the type definition.
 
-This is useful when a type uses `exec` to run commands directly on the host, but you want all its operations to run inside Docker — for example, to provide the right CLI tools without installing them on the host.
+This is useful when a type uses `exec` to run commands directly on the host, but you want all its operations to run inside Docker, for example, to provide the right CLI tools without installing them on the host.
 
 ### Resource type
 

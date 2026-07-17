@@ -1,6 +1,10 @@
+---
+description: "Role-based access control in PikoCI. Hierarchical team roles: read, write, maintain, and admin, with granular permissions."
+---
+
 # Roles & Permissions
 
-PikoCI uses role-based access control (RBAC) to manage what team members can do. Each team member is assigned a role, and roles are hierarchical — each role inherits all permissions of roles below it.
+PikoCI uses role-based access control (RBAC) to manage what team members can do. Each team member is assigned a role, and roles are hierarchical: each role inherits all permissions of roles below it.
 
 ## Role Hierarchy
 
@@ -109,7 +113,7 @@ Available roles: `read`, `write`, `maintain`, `admin`.
 
 ## API Tokens and Roles
 
-[API tokens](API-Tokens.md) can be scoped to a team with a maximum role. The effective role of a team-scoped token is always `min(user_role, token_role)` — if a user is demoted, the token's effective permissions are reduced immediately without any action needed. Personal tokens inherit all of the user's roles across all teams.
+[API tokens](API-Tokens.md) can be scoped to a team with a maximum role. The effective role of a team-scoped token is always `min(user_role, token_role)`: if a user is demoted, the token's effective permissions are reduced immediately without any action needed. Personal tokens inherit all of the user's roles across all teams.
 
 When a user is removed from a team, all their team-scoped tokens for that team are automatically deleted.
 
