@@ -96,7 +96,7 @@ Navigate to the job's builds page. Builds waiting for approval show a purple **W
 
 Read and Write users can see the approval panel and vote history but cannot vote.
 
-<!-- TODO: add screenshot of approval UI with approve/reject buttons -->
+![Approval gate UI with approve and reject buttons](images/approval-gates-ui.png)
 
 ### Via the CLI
 
