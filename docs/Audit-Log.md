@@ -15,7 +15,7 @@ Navigate to a team page and click the **Audit Log** tab. The URL is shareable:
 /teams/main/audit
 ```
 
-<!-- TODO: add screenshot of audit log UI with filters -->
+![Audit log UI with filters](images/audit-log-ui.png)
 
 ### CLI
 
