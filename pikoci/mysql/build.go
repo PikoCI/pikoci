@@ -851,6 +851,30 @@ func scanBuilds(rows *sql.Rows) ([]*build.Build, error) {
 	return bs, nil
 }
 
+func (r *BuildRepository) FindActiveBuilds(ctx context.Context, tc, pn, jn string, beforeBuildID uint32) ([]*build.Build, error) {
+	rows, err := r.querier.QueryContext(ctx, `
+		SELECT b.id, b.build_number, b.steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical, b.retry_source_build_id
+		FROM builds AS b
+		JOIN jobs AS j ON b.job_id = j.id
+		JOIN pipelines AS p ON j.pipeline_id = p.id
+		JOIN teams AS t ON p.team_id = t.id
+		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
+		  AND b.id < ?
+		  AND b.status IN ('started', 'pending', 'waiting_for_approval')
+		ORDER BY b.id ASC
+	`, tc, pn, jn, beforeBuildID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find active builds: %w", err)
+	}
+	defer rows.Close()
+
+	builds, err := scanBuilds(rows)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan active builds: %w", err)
+	}
+	return builds, nil
+}
+
 func (r *BuildRepository) CreateApproval(ctx context.Context, buildID uint32, username, action, message string) error {
 	_, err := r.querier.ExecContext(ctx, `
 		INSERT INTO build_approvals (build_id, username, action, message)

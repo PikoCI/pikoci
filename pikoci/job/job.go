@@ -49,7 +49,8 @@ type Job struct {
 	Tags         []string      `json:"tags,omitempty"`
 	Paused       bool          `json:"paused"`
 	DisableRetry bool          `json:"disable_retry,omitempty"`
-	AllowFailure bool          `json:"allow_failure,omitempty"`
+	AllowFailure    bool          `json:"allow_failure,omitempty"`
+	Interruptible   bool          `json:"interruptible,omitempty"`
 	Timeout      time.Duration `json:"timeout,omitempty"`
 	Plan         []PlanStep    `json:"plan"`
 

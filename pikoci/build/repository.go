@@ -56,6 +56,10 @@ type Repository interface {
 	// It returns the number of builds that were updated.
 	FailStartedBuilds(ctx context.Context, reason string) (int, error)
 
+	// FindActiveBuilds returns all builds for the given job with status started, pending, or
+	// waiting_for_approval that have an ID less than beforeBuildID.
+	FindActiveBuilds(ctx context.Context, tc, pn, jn string, beforeBuildID uint32) ([]*Build, error)
+
 	// CreateApproval records an approve or reject vote for a build.
 	CreateApproval(ctx context.Context, buildID uint32, username, action, message string) error
 	// FindApprovals returns all approval/rejection votes for a build.
