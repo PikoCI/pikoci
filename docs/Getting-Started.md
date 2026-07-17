@@ -17,8 +17,9 @@ docker compose up
 
 Open [http://localhost:8080](http://localhost:8080) and log in with `admin` / `admin123`. The hello-world pipeline runs automatically every 10 seconds.
 
-<!-- TODO: add screenshot of pipeline graph view -->
-<!-- TODO: add screenshot of running build output -->
+![Pipeline graph view](images/getting-started-graph.png)
+
+![Running build output](images/getting-started-build-output.png)
 
 ## Install
 
