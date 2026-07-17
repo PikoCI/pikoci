@@ -1,3 +1,7 @@
+---
+description: "Require human approval before CI/CD jobs run. Add approval gates to PikoCI pipelines for controlled deployments."
+---
+
 # Approval Gates
 
 Approval gates let you require human authorization before a job runs. The pipeline builds and tests automatically, but deployment waits for someone to approve.
@@ -36,7 +40,7 @@ job "deploy" {
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| label (first argument) | **yes** | — | Display label for the approval gate |
+| label (first argument) | **yes** | - | Display label for the approval gate |
 | `approvals` | no | 1 | Number of approvals required before the build starts |
 
 ### Notifications
@@ -86,11 +90,13 @@ Retry of approved-then-failed build → Pending (skips gate)
 
 Navigate to the job's builds page. Builds waiting for approval show a purple **Waiting for Approval** card with:
 
-- **Vote history** — who approved/rejected and when
-- **Approve button** — with optional message (Maintain+ only)
-- **Reject button** — with required reason (Maintain+ only)
+- **Vote history**: who approved/rejected and when
+- **Approve button**: with optional message (Maintain+ only)
+- **Reject button**: with required reason (Maintain+ only)
 
 Read and Write users can see the approval panel and vote history but cannot vote.
+
+![Approval gate UI with approve and reject buttons](images/approval-gates-ui.png)
 
 ### Via the CLI
 
@@ -150,14 +156,14 @@ Approval actions are recorded in the team audit log:
 
 ## Edge Cases
 
-- **Same user can't vote twice** — the database enforces one vote per user per build
-- **Rejection overrides approvals** — even if 1 of 2 required approvals is recorded, a single rejection immediately fails the build
-- **No cascade** — approving build #5 does not affect build #3 (each build needs individual approval)
-- **Retries skip the gate** — retrying a failed build creates a new build that goes directly to Pending
-- **No approve block = normal flow** — jobs without an `approve` block behave exactly as before
+- **Same user can't vote twice**: the database enforces one vote per user per build
+- **Rejection overrides approvals**: even if 1 of 2 required approvals is recorded, a single rejection immediately fails the build
+- **No cascade**: approving build #5 does not affect build #3 (each build needs individual approval)
+- **Retries skip the gate**: retrying a failed build creates a new build that goes directly to Pending
+- **No approve block = normal flow**: jobs without an `approve` block behave exactly as before
 
 ## Planned Features
 
 The following features are planned but not yet implemented:
 
-- **Approval timeout** — automatic failure of builds that wait too long for approval (#584).
+- **Approval timeout**: automatic failure of builds that wait too long for approval (#584).

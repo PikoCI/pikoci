@@ -1,3 +1,7 @@
+---
+description: "Deploy PikoCI on a single server with systemd, Caddy, Prometheus, and Grafana. Production-ready in minutes."
+---
+
 # Deployment
 
 This guide covers deploying PikoCI on a single server. This setup uses an embedded worker, which is suitable for demos and small teams.
@@ -99,13 +103,13 @@ pikoci user-password -u admin -p your-password
 # USERS=admin:$2a$10$...
 ```
 
-`deploy/pikoci.env` is gitignored — only the `.example` file is tracked.
+`deploy/pikoci.env` is gitignored. Only the `.example` file is tracked.
 
 See [Server Configuration](Server.md) for all available options.
 
 ### 5. Deploy
 
-The deploy script copies everything to the server — binary, configs, and env files:
+The deploy script copies everything to the server: binary, configs, and env files:
 
 ```bash
 ./deploy/deploy.sh root@your-server
@@ -139,10 +143,10 @@ docker compose up -d
 
 This starts:
 
-- **Caddy** — reverse proxy with automatic HTTPS (ports 80/443)
-- **Prometheus** — scrapes PikoCI `/metrics` and Node Exporter
-- **Grafana** — dashboards (accessible at `grafana.pikoci.com`)
-- **Node Exporter** — host-level metrics
+- **Caddy**: reverse proxy with automatic HTTPS (ports 80/443)
+- **Prometheus**: scrapes PikoCI `/metrics` and Node Exporter
+- **Grafana**: dashboards (accessible at `grafana.pikoci.com`)
+- **Node Exporter**: host-level metrics
 
 ### 7. DNS
 
@@ -156,7 +160,7 @@ Caddy handles TLS certificates automatically via Let's Encrypt.
 ## Secrets management
 
 - Keep your secrets in `deploy/pikoci.env` locally (gitignored). The deploy script copies it to the server with correct permissions (`chmod 600`)
-- The `pikoci.env.example` file is a template — never commit actual secrets
+- The `pikoci.env.example` file is a template. Never commit actual secrets.
 - Generate JWT secrets with: `openssl rand -hex 32`
 - Generate password hashes with: `pikoci user-password -u <user> -p <password>`
 - For standalone workers, generate a worker token with `pikoci worker-token --jwt-secret <secret>` instead of distributing the raw JWT secret. See [Running Workers Separately](Workers.md)
@@ -219,4 +223,4 @@ job "deploy" {
 }
 ```
 
-See [Server Configuration — Signal handling](Server.md#signal-handling) for details on `SIGQUIT` vs `SIGTERM` behavior.
+See [Server Configuration: Signal handling](Server.md#signal-handling) for details on `SIGQUIT` vs `SIGTERM` behavior.

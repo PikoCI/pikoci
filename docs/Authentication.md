@@ -1,3 +1,7 @@
+---
+description: "PikoCI authentication methods. Local username/password, OAuth/OIDC single sign-on, and linked accounts."
+---
+
 # Authentication
 
 PikoCI supports two authentication methods: local username/password and OAuth/OIDC single sign-on. Both can be active simultaneously, and users can link multiple OAuth identities to a single PikoCI account.
@@ -35,11 +39,11 @@ Go to the user menu (top right) and click **Authentication**. From there:
 
 1. Click **Add Provider**.
 2. Select a **Provider Template** (GitHub, Google, GitLab, etc.) to auto-fill URLs, scopes, and type. Or select **Other** for manual configuration.
-3. The **Callback URL** is displayed automatically — copy it and paste it into your provider's redirect URI settings.
+3. The **Callback URL** is displayed automatically. Copy it and paste it into your provider's redirect URI settings.
 4. Fill in your **Client ID** and **Client Secret**.
 5. Click **Create Provider**.
 
-The provider appears on the login page immediately — no server restart needed.
+The provider appears on the login page immediately, with no server restart needed.
 
 ### Provider Types
 
@@ -47,7 +51,7 @@ PikoCI supports two provider types:
 
 | Type | When to use | What you configure |
 |------|-------------|-------------------|
-| **OIDC** | Google, GitLab, Keycloak, Azure AD, any OpenID Connect provider | Just the Issuer URL — endpoints are auto-discovered |
+| **OIDC** | Google, GitLab, Keycloak, Azure AD, any OpenID Connect provider | Just the Issuer URL. Endpoints are auto-discovered. |
 | **OAuth2** | GitHub, Bitbucket, custom providers without OIDC discovery | Auth URL, Token URL, and Userinfo URL manually |
 
 ---
@@ -172,7 +176,7 @@ When OAuth providers are configured, the login page shows the local login form f
 
 ## Restricting Who Can Sign In
 
-PikoCI itself does not filter which users from a provider can sign in — any user who successfully authenticates with the provider can create a PikoCI account. **You should configure access restrictions at the provider level.**
+PikoCI itself does not filter which users from a provider can sign in. Any user who successfully authenticates with the provider can create a PikoCI account. **You should configure access restrictions at the provider level.**
 
 Here's how for each provider:
 
@@ -181,7 +185,7 @@ Here's how for each provider:
 | **Google** | In Google Cloud Console → OAuth consent screen, set **User type** to **Internal**. Only users in your Google Workspace organization can authenticate. |
 | **GitLab** | Self-hosted GitLab: only users with GitLab accounts can authenticate. GitLab.com: restrict the application to group members under **Admin → Applications**. |
 | **Keycloak** | Only users in the configured realm can authenticate. Use realm roles, groups, or client scopes to restrict further. |
-| **Azure AD** | Tenant-scoped by default — only users in your Azure AD tenant can authenticate. For multi-tenant apps, configure **Supported account types** to restrict. |
+| **Azure AD** | Tenant-scoped by default. Only users in your Azure AD tenant can authenticate. For multi-tenant apps, configure **Supported account types** to restrict. |
 | **GitHub** | GitHub OAuth Apps allow **any** GitHub user to authorize. To restrict: create a **GitHub Organization App** under your org's settings and enable **Request user authorization (OAuth) during installation**, or use GitHub's IP allow lists. Alternatively, create users manually in PikoCI first and have them link their GitHub accounts from their profile (no auto-provisioning). |
 
 !!! warning
@@ -232,7 +236,7 @@ From the Authentication admin page, you can:
 !!! warning
     You cannot disable or delete a provider if any user relies on it as their only authentication method (no local password and no other OAuth links). The affected username is shown in the error message.
 
-Changes take effect immediately — no server restart needed.
+Changes take effect immediately, with no server restart needed.
 
 ## API Endpoints
 
@@ -269,7 +273,7 @@ Changes take effect immediately — no server restart needed.
 - **Token security**: OAuth callback tokens are short-lived (5 minutes) and single-use.
 - **Client secrets**: Stored in the database (same security model as pipeline secrets). Never exposed in API responses.
 - **Callback URLs**: Built from the `--external-url` flag to prevent open redirect attacks.
-- **Lockout prevention**: PikoCI prevents actions that would lock users out of their accounts — disabling local auth, disabling/deleting a provider, or unlinking an account are all blocked if any user would be left with no way to log in.
+- **Lockout prevention**: PikoCI prevents actions that would lock users out of their accounts. Disabling local auth, disabling/deleting a provider, or unlinking an account are all blocked if any user would be left with no way to log in.
 
 ### Session Lifetime
 
@@ -277,7 +281,7 @@ The `--session-lifetime` flag controls how long a user session remains valid aft
 
 When set, a JWT `exp` claim is added to all session tokens. After the session expires, the user must re-login. The flag accepts Go duration syntax plus day/week/month/year units (e.g. `24h`, `7d`, `30d`, `1M`).
 
-Password changes immediately invalidate all existing sessions for that user. Admin password resets also invalidate the user's sessions. This is done via a generation counter (`token_gen`) embedded in the JWT — when the counter doesn't match the database, the session is rejected.
+Password changes immediately invalidate all existing sessions for that user. Admin password resets also invalidate the user's sessions. This is done via a generation counter (`token_gen`) embedded in the JWT. When the counter doesn't match the database, the session is rejected.
 
 ```bash
 pikoci server --jwt-secret my-secret --session-lifetime 24h

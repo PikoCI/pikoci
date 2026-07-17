@@ -1,3 +1,7 @@
+---
+description: "Send build notifications from PikoCI. GitHub Checks, Slack, Discord, and custom notification types with message interpolation."
+---
+
 # Notifications
 
 Notifications are fire-and-forget messages sent during or after job execution. Unlike resources, notifications have no versioning, no check intervals, and no pull lifecycle. They are ideal for sending status updates to external services like GitHub Checks, Slack, or Discord.
@@ -28,13 +32,13 @@ notification_type "github-check" {
 
 - `params` - List of parameter names that notifications of this type can provide.
 - `notify` - A runner command block that executes the notification logic.
-- `runner` - Optional runner override for the notify command. See [Runners — Type-level runner overrides](Runners.md#type-level-runner-overrides).
+- `runner` - Optional runner override for the notify command. See [Runners: Type-level runner overrides](Runners.md#type-level-runner-overrides).
 
 ## Notifications
 
 A `notification` defines **what** to send and **where**. It references a notification type and provides concrete parameter values.
 
-A notification without an `on` field is **manual-only** — it will never fire automatically. You must explicitly use `notify` steps in job plans or hooks to trigger it. This is useful for notifications like `github-check` where you need precise control over when each notification is sent (e.g., `status = "in_progress"` at the start, `conclusion = "success"` at the end).
+A notification without an `on` field is **manual-only**: it will never fire automatically. You must explicitly use `notify` steps in job plans or hooks to trigger it. This is useful for notifications like `github-check` where you need precise control over when each notification is sent (e.g., `status = "in_progress"` at the start, `conclusion = "success"` at the end).
 
 ```hcl
 notification "slack" "deploys" {
@@ -153,8 +157,8 @@ notification "slack" "skip-lint" {
 
 Both `jobs` and `exclude` support `for_each` group names and specific instance names:
 
-- **Group name** (e.g., `"test"`) — matches **all** instances of the for_each job (`test--a`, `test--b`, etc.)
-- **Specific instance** (e.g., `"test--a"`) — matches only that particular instance
+- **Group name** (e.g., `"test"`): matches **all** instances of the for_each job (`test--a`, `test--b`, etc.)
+- **Specific instance** (e.g., `"test--a"`): matches only that particular instance
 
 ```hcl
 job "test" {
@@ -189,7 +193,7 @@ notification "slack" "skip-unit" {
 }
 ```
 
-Job names in `jobs` and `exclude` are validated at pipeline load time — referencing a non-existent instance produces a validation error.
+Job names in `jobs` and `exclude` are validated at pipeline load time. Referencing a non-existent instance produces a validation error.
 
 ## github-check
 
@@ -329,7 +333,7 @@ With `base_url`:
 ✅ [my-pipeline/deploy] Build #42 - success - https://ci.example.com/teams/main/pipelines/my-pipeline/jobs/deploy/builds/42
 ```
 
-When a custom `message` is provided (on the notification or notify step), it is used as-is — `base_url` only affects the default message.
+When a custom `message` is provided (on the notification or notify step), it is used as-is. `base_url` only affects the default message.
 
 ### Webhook setup
 
@@ -435,7 +439,7 @@ With `base_url`:
 ✅ [my-pipeline/deploy] Build #42 - success - https://ci.example.com/teams/main/pipelines/my-pipeline/jobs/deploy/builds/42
 ```
 
-When a custom `message` is provided, it is used as-is — `base_url` only affects the default message.
+When a custom `message` is provided, it is used as-is. `base_url` only affects the default message.
 
 ### Webhook setup
 
@@ -458,7 +462,7 @@ The message sent to the notification type is resolved in this order:
 
 1. `message` attribute on the `notify` step (highest priority)
 2. `message` field on the `notification` definition
-3. Empty — `$NOTIFY_MESSAGE` is not set
+3. Empty: `$NOTIFY_MESSAGE` is not set
 
 When `$NOTIFY_MESSAGE` is empty, the notification type script is responsible for providing a default. The built-in `slack` and `discord` types default to:
 
@@ -485,8 +489,8 @@ The resolved message is available as the `$NOTIFY_MESSAGE` environment variable.
 Any `$VAR` or `${VAR}` reference in the message is expanded against the available runtime variables:
 
 - `$BUILD_NUMBER`, `$BUILD_JOB_NAME`, `$BUILD_PIPELINE_NAME`, `$BUILD_TEAM_NAME`
-- `$GET_<STEP>_<KEY>` — values from get steps (e.g. `$GET_MY_REPO_REF`)
-- `$TASK_<STEP>_<KEY>` — values exported via `$PIKOCI_OUTPUT` from task steps
+- `$GET_<STEP>_<KEY>`: values from get steps (e.g. `$GET_MY_REPO_REF`)
+- `$TASK_<STEP>_<KEY>`: values exported via `$PIKOCI_OUTPUT` from task steps
 
 ```hcl
 job "release" {
@@ -518,16 +522,16 @@ To include multiline content (like a changelog), write it to `$PIKOCI_OUTPUT` wi
 
 Notify commands receive all of the following as environment variables:
 
-- `$param_*` — Notification-level parameters (from the `notification` block's `params`)
-- `$notify_*` — Step-level parameters (from the `notify` step's attributes)
-- `$NOTIFY_MESSAGE` — Resolved message text (may be empty)
-- `$BUILD_NUMBER` — Current build number
-- `$BUILD_JOB_NAME` — Job name
-- `$BUILD_PIPELINE_NAME` — Pipeline canonical name
-- `$BUILD_TEAM_NAME` — Team canonical name
-- `$WORKDIR` — Working directory (shared with get/task steps)
-- `$GET_<STEP>_<KEY>` — Values from get steps (e.g. `$GET_MY_REPO_REF`)
-- `$TASK_<STEP>_<KEY>` — Values exported via `$PIKOCI_OUTPUT` from task steps
+- `$param_*`: Notification-level parameters (from the `notification` block's `params`)
+- `$notify_*`: Step-level parameters (from the `notify` step's attributes)
+- `$NOTIFY_MESSAGE`: Resolved message text (may be empty)
+- `$BUILD_NUMBER`: Current build number
+- `$BUILD_JOB_NAME`: Job name
+- `$BUILD_PIPELINE_NAME`: Pipeline canonical name
+- `$BUILD_TEAM_NAME`: Team canonical name
+- `$WORKDIR`: Working directory (shared with get/task steps)
+- `$GET_<STEP>_<KEY>`: Values from get steps (e.g. `$GET_MY_REPO_REF`)
+- `$TASK_<STEP>_<KEY>`: Values exported via `$PIKOCI_OUTPUT` from task steps
 
 These environment variables are available inside the notification type's `notify` command script. For example, you can reference `$BUILD_NUMBER` in your script even if it wasn't part of `$NOTIFY_MESSAGE`.
 

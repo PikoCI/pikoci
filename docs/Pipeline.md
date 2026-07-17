@@ -1,6 +1,11 @@
+---
+description: "HCL pipeline configuration reference for PikoCI. Define resources, jobs, tasks, steps, services, variables, and triggers."
+---
 # Pipeline Reference
 
 Pipelines are defined in [HCL](https://github.com/hashicorp/hcl). A pipeline file contains `variable`, `resource_type`, `resource`, `notification_type`, `notification`, `runner`, `secret_type`, `secret`, `service`, and `job` blocks.
+
+![Pipeline graph showing jobs and resources](images/pipeline-graph.png)
 
 ## variable
 
@@ -61,7 +66,7 @@ resource_type "git" {
 | `pull`   | no       | Runner command block for fetching a version |
 | `push`   | no       | Runner command block for pushing a version |
 
-When `source` is set, inline commands are not needed. The source is resolved once when the pipeline is created or updated — if the remote definition changes, you must re-set the pipeline to pick up the new version. This applies to all block types that support `source` (`resource_type`, `runner_type`, `secret_type`, `service_type`).
+When `source` is set, inline commands are not needed. The source is resolved once when the pipeline is created or updated: if the remote definition changes, you must re-set the pipeline to pick up the new version. This applies to all block types that support `source` (`resource_type`, `runner_type`, `secret_type`, `service_type`).
 
 ## resource
 
@@ -271,20 +276,24 @@ The optional `timeout` attribute limits the total wall-clock time for a build's 
 | `interruptible` | no | When `true`, creating a new build automatically cancels all older running, pending, and waiting-for-approval builds (default `false`) |
 | `for_each` | no | Generate job instances from a set or map |
 | `matrix` | no | Generate job instances from cartesian product (mutually exclusive with `for_each`) |
-| `get` | no | Step block — fetches a resource version |
-| `task` | no | Step block — runs a command via a runner |
-| `put` | no | Step block — pushes to a resource |
-| `notify` | no | Step block — sends a fire-and-forget notification |
-| `service` | no | Step block — references a service type for the job |
-| `in_parallel` | no | Step block — runs multiple steps concurrently |
-| `on_success` | no | Hook — runs after all steps succeed |
-| `on_failure` | no | Hook — runs after a step fails |
-| `on_cancel` | no | Hook — runs when the build is cancelled |
-| `ensure` | no | Hook — always runs regardless of outcome |
+| `get` | no | Step block: fetches a resource version |
+| `task` | no | Step block: runs a command via a runner |
+| `put` | no | Step block: pushes to a resource |
+| `notify` | no | Step block: sends a fire-and-forget notification |
+| `service` | no | Step block: references a service type for the job |
+| `in_parallel` | no | Step block: runs multiple steps concurrently |
+| `on_success` | no | Hook: runs after all steps succeed |
+| `on_failure` | no | Hook: runs after a step fails |
+| `on_cancel` | no | Hook: runs when the build is cancelled |
+| `ensure` | no | Hook: always runs regardless of outcome |
+
+#### approve
+
+Jobs can include an `approve` block to require human authorization before builds run. See [Approval Gates](Approval-Gates.md) for full documentation.
 
 #### Tags
 
-The `tags` attribute routes a job to workers with matching tags. A job with `tags = ["gpu"]` will only run on workers started with `--tags gpu`. The matching uses AND logic — a job with `tags = ["gpu", "vpn"]` requires a worker with **both** tags.
+The `tags` attribute routes a job to workers with matching tags. A job with `tags = ["gpu"]` will only run on workers started with `--tags gpu`. The matching uses AND logic: a job with `tags = ["gpu", "vpn"]` requires a worker with **both** tags.
 
 Jobs without tags run on any non-exclusive worker.
 
@@ -302,7 +311,7 @@ Tags must be valid slugs (lowercase alphanumeric and hyphens). Maximum 10 tags p
 
 #### Serial Groups
 
-The `serial_groups` attribute provides cross-job mutual exclusion — only one job from a group runs at a time. This is useful for deploy jobs that shouldn't overlap, or any set of jobs that share a resource that can't handle concurrent access.
+The `serial_groups` attribute provides cross-job mutual exclusion: only one job from a group runs at a time. This is useful for deploy jobs that shouldn't overlap, or any set of jobs that share a resource that can't handle concurrent access.
 
 ```hcl
 job "deploy-staging" {
@@ -328,7 +337,7 @@ When `deploy-staging` is running, `deploy-prod` will queue until it finishes, an
 
 A job can belong to multiple serial groups. It will only run when **none** of its groups have a running build from another job.
 
-`serial_groups` is orthogonal to `concurrency` — both checks apply. A build must pass both the per-job concurrency limit and the serial group check before starting. Note that `serial_groups` only provides cross-job mutual exclusion; to also limit a single job to one build at a time, set `concurrency = 1` on the job.
+`serial_groups` is orthogonal to `concurrency`: both checks apply. A build must pass both the per-job concurrency limit and the serial group check before starting. Note that `serial_groups` only provides cross-job mutual exclusion; to also limit a single job to one build at a time, set `concurrency = 1` on the job.
 
 #### for_each
 
@@ -504,7 +513,7 @@ job "quick-deploy" {
 }
 ```
 
-Both group names and specific instance names are validated at pipeline load time — referencing a non-existent instance (e.g., `"test--lint"` when only `"unit"` and `"integration"` exist) produces a validation error.
+Both group names and specific instance names are validated at pipeline load time: referencing a non-existent instance (e.g., `"test--lint"` when only `"unit"` and `"integration"` exist) produces a validation error.
 
 #### Lifecycle on pipeline update
 
@@ -585,10 +594,10 @@ get "git" "my_repo" {
 | `passed`   | no       | List of job names that must have run with this version first |
 | `timeout`  | no       | Maximum duration for the step (e.g. `"2m"`, `"30s"`) |
 | `attempts` | no       | Maximum number of times to try the step (default `1`, no retry) |
-| `on_success` | no     | Hook — runs after the step succeeds |
-| `on_failure` | no     | Hook — runs after the step fails |
-| `on_cancel`  | no     | Hook — runs when the build is cancelled |
-| `ensure`     | no     | Hook — always runs regardless of outcome |
+| `on_success` | no     | Hook: runs after the step succeeds |
+| `on_failure` | no     | Hook: runs after the step fails |
+| `on_cancel`  | no     | Hook: runs when the build is cancelled |
+| `ensure`     | no     | Hook: always runs regardless of outcome |
 
 #### Exported version metadata
 
@@ -635,10 +644,10 @@ task "test" {
 | `inputs`   | no       | List of paths that must exist before the task runs |
 | `outputs`  | no       | List of paths that must exist after the task finishes |
 | `run`        | yes      | Runner command block |
-| `on_success` | no       | Hook — runs after the step succeeds |
-| `on_failure` | no       | Hook — runs after the step fails |
-| `on_cancel`  | no       | Hook — runs when the build is cancelled |
-| `ensure`     | no       | Hook — always runs regardless of outcome |
+| `on_success` | no       | Hook: runs after the step succeeds |
+| `on_failure` | no       | Hook: runs after the step fails |
+| `on_cancel`  | no       | Hook: runs when the build is cancelled |
+| `ensure`     | no       | Hook: always runs regardless of outcome |
 
 Example with inputs and outputs:
 
@@ -722,10 +731,10 @@ put "git" "my_repo" {
 | `timeout`  | no       | Maximum duration for the step (e.g. `"5m"`, `"30s"`) |
 | `attempts` | no       | Maximum number of times to try the step (default `1`, no retry) |
 | `params`     | no       | Block with key/value pairs passed to the resource type |
-| `on_success` | no       | Hook — runs after the step succeeds |
-| `on_failure` | no       | Hook — runs after the step fails |
-| `on_cancel`  | no       | Hook — runs when the build is cancelled |
-| `ensure`     | no       | Hook — always runs regardless of outcome |
+| `on_success` | no       | Hook: runs after the step succeeds |
+| `on_failure` | no       | Hook: runs after the step fails |
+| `on_cancel`  | no       | Hook: runs when the build is cancelled |
+| `ensure`     | no       | Hook: always runs regardless of outcome |
 
 ### notify
 
@@ -796,16 +805,16 @@ job "build" {
 |-------------|----------|------------------------------------------------------|
 | `limit`     | no       | Max concurrent steps. `0` or omitted = no limit.     |
 | `fail_fast` | no       | Cancel remaining steps on first failure. Default: `false`. |
-| `get`         | no       | Step block — fetches a resource version |
-| `task`        | no       | Step block — runs a command via a runner |
-| `put`         | no       | Step block — pushes to a resource |
-| `notify`      | no       | Step block — sends a fire-and-forget notification |
+| `get`         | no       | Step block: fetches a resource version |
+| `task`        | no       | Step block: runs a command via a runner |
+| `put`         | no       | Step block: pushes to a resource |
+| `notify`      | no       | Step block: sends a fire-and-forget notification |
 | `timeout`     | no       | Wall-clock time limit for the entire group |
 | `attempts`    | no       | Retry the entire block on failure |
-| `on_success`  | no       | Hook — runs after the group succeeds |
-| `on_failure`  | no       | Hook — runs after the group fails |
-| `on_cancel`   | no       | Hook — runs when the build is cancelled |
-| `ensure`      | no       | Hook — always runs regardless of outcome |
+| `on_success`  | no       | Hook: runs after the group succeeds |
+| `on_failure`  | no       | Hook: runs after the group fails |
+| `on_cancel`   | no       | Hook: runs when the build is cancelled |
+| `ensure`      | no       | Hook: always runs regardless of outcome |
 
 **Allowed inner step types:** `get`, `task`, `put`, `notify`. Services are not allowed inside `in_parallel`.
 
@@ -888,7 +897,7 @@ task "long-build" {
 
 ### Job timeout
 
-Jobs can set a `timeout` to limit the total wall-clock time for all plan steps. The value is a Go duration string (e.g. `"30m"`, `"1h"`, `"2h30m"`). If the build exceeds the timeout, the running step is killed, the build is marked as failed with a "job timed out after ..." message, and `on_cancel`/`ensure` hooks still run — just like user-initiated cancellation. If no timeout is set, the job runs with no time limit.
+Jobs can set a `timeout` to limit the total wall-clock time for all plan steps. The value is a Go duration string (e.g. `"30m"`, `"1h"`, `"2h30m"`). If the build exceeds the timeout, the running step is killed, the build is marked as failed with a "job timed out after ..." message, and `on_cancel`/`ensure` hooks still run, just like user-initiated cancellation. If no timeout is set, the job runs with no time limit.
 
 ```hcl
 job "integration" {
@@ -992,7 +1001,7 @@ resource "artifact" "build-output" {
 
 PikoCI is designed to keep sensitive information out of build logs:
 
-- **Command lines are never shown.** The command path and arguments are not printed in build output — only the process's stdout and stderr are captured and displayed.
+- **Command lines are never shown.** The command path and arguments are not printed in build output: only the process's stdout and stderr are captured and displayed.
 - **Secret values are redacted from API responses.** When secrets are injected as environment variables, their values are not visible in pipeline configuration returned by the API.
 - **Public pipeline responses are sanitized.** Sensitive fields (secrets, variable values) are stripped from public API responses. See [Public Pipelines](Public-Pipelines.md) for details.
 - **Echoing secrets is the user's responsibility.** If a step explicitly prints a secret value (e.g. `echo $SECRET`), that output will appear in the build logs.

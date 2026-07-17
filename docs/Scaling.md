@@ -1,12 +1,18 @@
+---
+description: Scale PikoCI from a single binary to distributed production. Multiple servers, separate workers, and database-backed scheduling.
+---
+
 # Scaling PikoCI
 
 PikoCI is designed to grow with your needs. You can start with a single binary
 and zero external dependencies, then scale to distributed workers and
 production-grade databases without changing your pipeline config.
 
+![Scaling architecture: from single binary to distributed workers](images/scaling-architecture.svg)
+
 ---
 
-## Phase 1 — In-memory, single machine
+## Phase 1: In-memory, single machine
 
 The fastest way to get started. Everything runs in a single process.
 No files, no external services, no configuration.
@@ -33,7 +39,7 @@ Good for: local development, trying things out, CI for small personal projects.
 
 ---
 
-## Phase 2 — SQLite, single machine
+## Phase 2: SQLite, single machine
 
 Add persistence without any new infrastructure. One flag change.
 
@@ -55,7 +61,7 @@ pikoci server \
 **Note:** From Phase 2 onward, pipelines persist in the database. You can
 manage them via the web UI or CLI (`pikoci client pipelines create ...`)
 instead of passing `--pipeline-name` / `--pipeline-config` on every start.
-The flags still work — they create or update the pipeline at startup.
+The flags still work; they create or update the pipeline at startup.
 
 **Migrating from in-memory:**
 
@@ -73,13 +79,13 @@ Good for: teams that want history, projects that need to survive restarts.
 
 ---
 
-## Phase 3 — Distributed workers
+## Phase 3: Distributed workers
 
 Add more workers without changing the server. Workers connect via gRPC
 streaming and only need network access to the server. No external queue
 service required.
 
-**Step 1 — Restart the server without a built-in worker:**
+**Step 1: Restart the server without a built-in worker:**
 
 ```bash
 pikoci server \
@@ -89,7 +95,7 @@ pikoci server \
   --jwt-secret my-secret
 ```
 
-**Step 2 — Start workers on any machine:**
+**Step 2: Start workers on any machine:**
 
 ```bash
 # generate a worker token (or copy it from the server startup logs)
@@ -108,7 +114,7 @@ pikoci worker \
 
 Add as many workers as you need. Workers connect to the server via gRPC
 streaming and receive jobs as they become available. Workers can be on
-different machines, in different networks, or behind NAT — they only need
+different machines, in different networks, or behind NAT. They only need
 outbound access to the server port.
 
 **What this gives you:**
@@ -122,7 +128,7 @@ isolating workloads.
 
 ---
 
-## Phase 4 — Production with PostgreSQL
+## Phase 4: Production with PostgreSQL
 
 Replace SQLite with PostgreSQL for better performance, concurrent access,
 and the ability to run multiple server instances.
@@ -170,7 +176,7 @@ pikoci server --db-system postgresql --db-host db.example.com --db-name pikoci \
 ```
 
 **What this gives you:**
-- High availability — server instances can restart without downtime
+- High availability: server instances can restart without downtime
 - Better performance for large builds and many pipelines
 - Multiple server instances behind a load balancer
 
@@ -188,7 +194,7 @@ Good for: production deployments, teams that need HA, large-scale CI.
 | 4 | PostgreSQL | Distributed (gRPC) | Production, high availability |
 
 The pipeline config never changes between phases.
-Add infrastructure when you need it — not before.
+Add infrastructure when you need it, not before.
 
 ---
 

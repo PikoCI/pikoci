@@ -1,3 +1,7 @@
+---
+description: "Run PikoCI workers as separate processes. Distributed worker setup with team isolation and tagged routing."
+---
+
 # Running Workers Separately
 
 By default, PikoCI runs an embedded worker inside the server process. For production setups, you can run workers as separate processes on different machines.
@@ -19,12 +23,12 @@ Standalone workers connect to the server using gRPC bidirectional streaming. The
 ```
 
 **Key benefits of gRPC streaming:**
-- **Instant cancellation** — server pushes `CancelJob` to the worker (no polling delay)
-- **Built-in keepalive** — heartbeats flow over the stream
-- **Server-push dispatch** — no wasted polling cycles
-- **Typed contracts** — protobuf schema (`proto/worker/v1/worker.proto`)
+- **Instant cancellation**: server pushes `CancelJob` to the worker (no polling delay)
+- **Built-in keepalive**: heartbeats flow over the stream
+- **Server-push dispatch**: no wasted polling cycles
+- **Typed contracts**: protobuf schema (`proto/worker/v1/worker.proto`)
 
-The embedded worker (when `--run-worker=true`) calls the service directly in-process — no gRPC or HTTP involved.
+The embedded worker (when `--run-worker=true`) calls the service directly in-process, with no gRPC or HTTP involved.
 
 ## Requirements
 
@@ -110,7 +114,7 @@ Tags route specific jobs and resource checks to specific workers. A job with `ta
 - **AND logic**: a job with `tags = ["gpu", "vpn"]` requires a worker with **both** tags.
 - **Untagged jobs** run on any non-exclusive worker (including tagged workers).
 - **Tagged jobs** only run on workers that have all of the job's tags.
-- Tags on resources work the same way — a resource with `tags = ["vpn"]` will only have its checks run on workers with the `vpn` tag.
+- Tags on resources work the same way: a resource with `tags = ["vpn"]` will only have its checks run on workers with the `vpn` tag.
 
 ### Exclusive mode
 
@@ -175,7 +179,7 @@ Tags are visible in the workers dashboard alongside the worker status and platfo
 
 ## Team-scoped workers
 
-For multi-tenant environments, teams can generate dedicated worker tokens that restrict workers to only process that team's builds and resource checks. This provides a hard security boundary — team workers never access other teams' secrets or source code.
+For multi-tenant environments, teams can generate dedicated worker tokens that restrict workers to only process that team's builds and resource checks. This provides a hard security boundary: team workers never access other teams' secrets or source code.
 
 ### Generating a team worker token
 
@@ -213,7 +217,7 @@ The global workers dashboard shows a **Team** column for each worker, displaying
 
 Since gRPC and HTTP share the same port, your reverse proxy needs to handle HTTP/2 for gRPC. Most proxies support this automatically.
 
-**Caddy** (works out of the box — Caddy handles HTTP/2 automatically):
+**Caddy** (works out of the box, Caddy handles HTTP/2 automatically):
 ```
 ci.example.com {
     reverse_proxy localhost:8080

@@ -1,3 +1,7 @@
+---
+description: "Create API tokens for non-interactive access to the PikoCI API. Use in scripts, automation, and monitoring integrations."
+---
+
 # API Tokens
 
 API tokens provide non-interactive authenticated access to the PikoCI API. Use them for scripted automation, CI/CD pipelines, monitoring integrations, and any scenario where interactive JWT login is not practical.
@@ -6,7 +10,7 @@ API tokens provide non-interactive authenticated access to the PikoCI API. Use t
 
 - **Personal tokens** grant full access across all teams, mirroring the user's own permissions.
 - **Team-scoped tokens** are restricted to a single team with a role cap, providing least-privilege access.
-- Tokens are tied to a user — when the user is deleted, all their tokens are deleted too.
+- Tokens are tied to a user. When the user is deleted, all their tokens are deleted too.
 - The plaintext token is shown **only once** at creation. Store it securely.
 
 ## Token Format
@@ -17,7 +21,7 @@ Tokens use the format `pko_` followed by 64 hex characters (32 random bytes):
 pko_a1b2c3d4e5f6...  (68 characters total)
 ```
 
-Only the SHA-256 hash is stored in the database. PikoCI cannot recover a lost token — you must delete it and create a new one.
+Only the SHA-256 hash is stored in the database. PikoCI cannot recover a lost token. You must delete it and create a new one.
 
 ## Authentication
 
@@ -41,7 +45,7 @@ pikoci client api-tokens create --name "my-script" --personal
 
 ### Team-Scoped Tokens
 
-A team-scoped token is restricted to one team and capped at a specific role. The effective role is always `min(user_role, token_role)` — if the user is later downgraded to `read` but the token was created with `maintain`, the effective role becomes `read`.
+A team-scoped token is restricted to one team and capped at a specific role. The effective role is always `min(user_role, token_role)`: if the user is later downgraded to `read` but the token was created with `maintain`, the effective role becomes `read`.
 
 ```bash
 pikoci client api-tokens create --name "ci-deploy" \

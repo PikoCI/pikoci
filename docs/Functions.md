@@ -1,3 +1,7 @@
+---
+description: HCL functions available in PikoCI pipelines. String manipulation, collections, encoding, filesystem, and Terraform-compatible functions.
+---
+
 # Functions
 
 HCL functions are available in pipeline definitions for string manipulation, collection operations, encoding, and more.

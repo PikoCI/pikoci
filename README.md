@@ -40,7 +40,16 @@ Pipelines are defined in [HCL](https://github.com/hashicorp/hcl). The runner abs
 - **Pipelines at startup**: pass a pipeline config at launch and it's ready the moment the server starts. No CLI or UI step required.
 - **Public pipelines**: mark a pipeline as public so anyone can view its status without an account. Perfect for open source projects.
 - **Built-in UI**: visualize pipeline state, stream build logs, manage pipelines from a web interface.
-- **Teams and users**: multi-user support with team-based access control. [Granular role management planned (#207)](https://github.com/PikoCI/pikoci/issues/207).
+- **Role-based access**: hierarchical team roles (read, write, maintain, admin) with granular permissions.
+- **Approval gates**: require human approval before jobs run. Configurable approval count, optional notifications.
+- **Audit log**: append-only log of every significant action per team. Filterable by user, action, pipeline.
+- **OAuth/OIDC**: GitHub, Google, GitLab, Keycloak, Microsoft, Bitbucket, or any OIDC provider. Local auth and SSO can coexist.
+- **Secrets masking**: secret values are automatically redacted from build logs.
+- **Notifications**: fire-and-forget notifications on build events. Built-in Slack, Discord, and GitHub Checks.
+- **Services**: ephemeral databases, caches, or message brokers that run alongside job tasks.
+- **`for_each` and `matrix`**: generate multiple job instances from a set, map, or cartesian product.
+- **`in_parallel`**: run multiple steps concurrently within a job.
+- **API tokens**: personal or team-scoped tokens for non-interactive API access.
 - **DOT graph output**: export pipeline state as a DOT graph, or as embeddable SVG/PNG images for READMEs and dashboards.
 
 
@@ -187,7 +196,7 @@ For production setups, run the server and workers as separate processes on diffe
 # Generate a worker token (or copy from server logs)
 ./pikoci worker-token --jwt-secret my-secret
 
-# Worker, can run anywhere with HTTP access to the server
+# Worker, connects to the server via gRPC
 ./pikoci worker --pikoci-url http://your-server:8080 --worker-token <token>
 ```
 
@@ -196,7 +205,7 @@ Full server and worker configuration options are covered in the [documentation](
 
 ## Dogfooding: PikoCI runs its own CI
 
-PikoCI uses itself for CI. See it live at [pikoci.com/teams/main/pipelines/pikoci](https://pikoci.com/teams/main/pipelines/pikoci). The [full pipeline](deploy/pipeline.hcl) runs lint, unit tests, integration tests, and backend tests with services — all defined in HCL:
+PikoCI uses itself for CI. See it live at [ci.pikoci.com/teams/main/pipelines/pikoci](https://ci.pikoci.com/teams/main/pipelines/pikoci). The [full pipeline](deploy/pipeline.hcl) runs lint, unit tests, integration tests, and backend tests with services — all defined in HCL:
 
 ```hcl
 resource_type "git" {
@@ -283,13 +292,21 @@ Full documentation is at [docs.pikoci.com](https://docs.pikoci.com):
 - [Pipeline configuration reference](https://docs.pikoci.com/Pipeline)
 - [Resource types](https://docs.pikoci.com/Resource-Types)
 - [Runners](https://docs.pikoci.com/Runners)
-- [Server configuration](https://docs.pikoci.com/Server)
+- [Services](https://docs.pikoci.com/Services)
+- [Notifications](https://docs.pikoci.com/Notifications)
 - [Variables and secrets](https://docs.pikoci.com/Variables)
+- [Roles & permissions](https://docs.pikoci.com/Roles)
+- [Authentication](https://docs.pikoci.com/Authentication)
+- [Approval gates](https://docs.pikoci.com/Approval-Gates)
+- [Audit log](https://docs.pikoci.com/Audit-Log)
+- [API tokens](https://docs.pikoci.com/API-Tokens)
+- [Server configuration](https://docs.pikoci.com/Server)
 - [Database backends](https://docs.pikoci.com/Database)
 - [CLI reference](https://docs.pikoci.com/CLI)
 - [Public pipelines](https://docs.pikoci.com/Public-Pipelines)
 - [Running workers separately](https://docs.pikoci.com/Workers)
 - [Deployment](https://docs.pikoci.com/Deployment)
+- [Scaling](https://docs.pikoci.com/Scaling)
 - [Portability and bundling](https://docs.pikoci.com/Portability)
 - [Coming from Concourse](https://docs.pikoci.com/Concourse)
 

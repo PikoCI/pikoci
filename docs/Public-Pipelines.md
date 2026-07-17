@@ -1,3 +1,7 @@
+---
+description: "Share CI/CD pipeline status publicly. Let anyone view builds and job status without authentication."
+---
+
 # Public Pipelines
 
 Public pipelines let anyone view a pipeline's status without authentication. Useful for open-source projects that want to display build status.
@@ -62,15 +66,15 @@ Example:
 
 In the graph view, click the **share button** (<i class="bi bi-share"></i>) next to the gear icon to open a panel with copyable URLs for the pipeline graph:
 
-- **SVG** — direct link to the SVG image
-- **PNG** — direct link to the PNG image
-- **Markdown** — ready-to-paste `![pipeline](url)` snippet
+- **SVG**: direct link to the SVG image
+- **PNG**: direct link to the PNG image
+- **Markdown**: ready-to-paste `![pipeline](url)` snippet
 
 The URLs automatically include query parameters matching your current gear options (hide intermediates, group parallel), so what you see is what gets shared.
 
 ## Embedding pipeline graphs
 
-Public pipelines can be embedded directly in READMEs, dashboards, or any HTML page. **The pipeline must be marked as public** (see above) for unauthenticated embedding to work — non-public pipelines require authentication and will return an error for anonymous requests.
+Public pipelines can be embedded directly in READMEs, dashboards, or any HTML page. **The pipeline must be marked as public** (see above) for unauthenticated embedding to work. Non-public pipelines require authentication and will return an error for anonymous requests.
 
 **Markdown:**
 

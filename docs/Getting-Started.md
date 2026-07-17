@@ -1,4 +1,25 @@
+---
+description: "Install PikoCI and run your first CI/CD pipeline in under 2 minutes. Download the binary, write an HCL pipeline, and see it run."
+---
+
 # Getting Started
+
+By the end of this page you will have a running PikoCI server with a pipeline that triggers automatically. The whole setup takes under 2 minutes.
+
+## Quickstart with Docker Compose
+
+The [`examples/`](https://github.com/PikoCI/pikoci/tree/master/examples) folder contains ready-to-run pipelines. The fastest way to try PikoCI:
+
+```bash
+cd examples
+docker compose up
+```
+
+Open [http://localhost:8080](http://localhost:8080) and log in with `admin` / `admin123`. The hello-world pipeline runs automatically every 10 seconds.
+
+![Pipeline graph view](images/getting-started-graph.png)
+
+![Running build output](images/getting-started-build-output.png)
 
 ## Install
 
@@ -91,17 +112,6 @@ The default user is `admin` / `admin123` (created by the initial database migrat
 # Pass it to the server (also works to update the default admin password)
 ./pikoci server --jwt-secret my-secret --users 'myuser:$2a$10$...'
 ```
-
-## Try with Docker Compose
-
-The [`examples/`](https://github.com/PikoCI/pikoci/tree/master/examples) folder contains ready-to-run pipelines. The fastest way to try PikoCI:
-
-```bash
-cd examples
-docker compose up
-```
-
-Open [http://localhost:8080](http://localhost:8080) and log in with `admin` / `admin123`. The hello-world pipeline runs automatically every 10 seconds.
 
 ## Edit pipelines locally
 

@@ -1,6 +1,9 @@
+---
+description: "Track who did what in your PikoCI team. Append-only audit log of pipeline, build, and team management actions."
+---
 # Audit Log
 
-The audit log records who did what within a team. Every significant action — creating a pipeline, cancelling a build, changing a member's role — is captured as an append-only entry with the actor, action, target, and timestamp.
+The audit log records who did what within a team. Every significant action: creating a pipeline, cancelling a build, changing a member's role, is captured as an append-only entry with the actor, action, target, and timestamp.
 
 ## Accessing the Audit Log
 
@@ -11,6 +14,8 @@ Navigate to a team page and click the **Audit Log** tab. The URL is shareable:
 ```
 /teams/main/audit
 ```
+
+![Audit log UI with filters](images/audit-log-ui.png)
 
 ### CLI
 
@@ -46,6 +51,9 @@ curl -H "Authorization: Bearer $TOKEN" \
 | `member.added` | team_member | Member is added to the team (includes `role`) |
 | `member.removed` | team_member | Member is removed from the team |
 | `member.role_changed` | team_member | Member's role is changed (includes `old_role` and `new_role`) |
+| `build.approved` | build | A user approves a build |
+| `build.rejected` | build | A user rejects a build |
+| `build.marked_warning` | build | A build is marked as warning (allow_failure) |
 
 Actions performed by the system (e.g., scheduler-triggered checks) use the actor name `system`.
 
@@ -92,8 +100,8 @@ pikoci client audit list --pipeline deploy --since 2026-01-01T00:00:00Z
 In the Audit Log tab, each filter (User, Action, Pipeline) is a multi-select dropdown:
 
 1. Select a value from the dropdown and click **+** to add it
-2. The value appears as a **blue chip** (include) — entries matching this value are shown
-3. Click the chip to toggle it to a **red chip** (exclude) — entries matching this value are hidden
+2. The value appears as a **blue chip** (include): entries matching this value are shown
+3. Click the chip to toggle it to a **red chip** (exclude): entries matching this value are hidden
 4. Click **×** on a chip to remove it
 5. Click **Filter** to apply
 
@@ -103,10 +111,10 @@ Example: to see all actions except those by `system`, add `system` to the User f
 
 Any team member with **Read** role or above can read the audit log. API tokens with Read access can also read it.
 
-The audit log is read-only — there is no API to modify or delete entries.
+The audit log is read-only. There is no API to modify or delete entries.
 
 ## Data Retention
 
 Audit log entries are kept indefinitely. They persist even after the actor is removed from the team or the target pipeline is deleted, since entries store names as plain text rather than foreign key references.
 
-The only automatic cleanup is when an entire team is deleted — all its audit log entries are cascade-deleted with it.
+The only automatic cleanup is when an entire team is deleted: all its audit log entries are cascade-deleted with it.

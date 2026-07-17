@@ -1,3 +1,7 @@
+---
+description: Bundle and deploy PikoCI anywhere. Single binary, HCL config, and optional SQLite database for fully portable CI/CD.
+---
+
 # Portability and Bundling
 
 PikoCI is designed to be fully portable. A single binary, a pipeline config, and optionally a SQLite database file are all you need.

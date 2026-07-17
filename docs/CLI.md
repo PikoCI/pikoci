@@ -1,3 +1,7 @@
+---
+description: "PikoCI CLI reference. Server, worker, client, local run, and pipeline editor commands with all flags and examples."
+---
+
 # CLI Reference
 
 PikoCI provides three top-level commands: `server`, `worker`, and `client`, plus `run` for local execution, `pipeline edit` for local pipeline editing, and utility commands `user-password` and `worker-token`.
@@ -8,6 +12,7 @@ PikoCI provides three top-level commands: `server`, `worker`, and `client`, plus
 pikoci server              [flags]          # Start the server
 pikoci worker              [flags]          # Start a standalone worker
 pikoci client              [flags] <cmd>    # Interact with the API
+pikoci client audit list   [flags]          # Query the audit log
 pikoci run                 [flags]          # Run a pipeline job locally
 pikoci pipeline edit       <file> [flags]   # Edit a pipeline HCL file in the browser
 pikoci user-password       [flags]          # Generate hashed passwords
@@ -175,6 +180,42 @@ pikoci client users create --username newuser --password secret123
 pikoci client users list
 ```
 
+#### users update
+
+```bash
+pikoci client users update --username myuser --full-name "My Name" --password newpass --admin
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--username` | **yes** | Username of the User to update |
+| `--password` | no | New password for the User |
+| `--full-name` | no | Full name for the User |
+| `--admin` | no | Whether the User is an admin |
+
+#### users delete
+
+```bash
+pikoci client users delete --username myuser
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--username` | **yes** | Username of the User to delete |
+
+#### users change-password
+
+Changes the password of the currently authenticated user.
+
+```bash
+pikoci client users change-password --old-password current --new-password newpass
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--old-password` | **yes** | Current password |
+| `--new-password` | **yes** | New password |
+
 ### teams
 
 Team management commands.
@@ -237,24 +278,24 @@ Team member management. All subcommands require `--team-canonical`.
 ##### teams members create
 
 ```bash
-pikoci client teams members create --team-canonical my-team --username user1 --admin
+pikoci client teams members create --team-canonical my-team --username user1 --role admin
 ```
 
 | Flag | Required | Description |
 |------|----------|-------------|
 | `--username` | **yes** | Username of the member to add |
-| `--admin` | no | Whether the member is a team admin |
+| `--role` | no | Role for the member: `read`, `write`, `maintain`, `admin` (default: `maintain`) |
 
 ##### teams members update
 
 ```bash
-pikoci client teams members update --team-canonical my-team --username user1 --admin
+pikoci client teams members update --team-canonical my-team --username user1 --role admin
 ```
 
 | Flag | Required | Description |
 |------|----------|-------------|
 | `--username` | **yes** | Username of the member to update |
-| `--admin` | no | Whether the member is a team admin |
+| `--role` | no | Role for the member: `read`, `write`, `maintain`, `admin` (default: `maintain`) |
 
 ##### teams members delete
 
@@ -321,6 +362,46 @@ pikoci client builds retry --team-canonical main --pipeline-name my-pipeline --j
 | Flag | Required | Description |
 |------|----------|-------------|
 | `--build-number` | **yes** | Number of the Build |
+
+#### builds approve
+
+Approve a build that is waiting for manual approval.
+
+```bash
+pikoci client builds approve --team-canonical main --pipeline-name deploy --job-name deploy --build-number 5 --message "LGTM"
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--build-number` | **yes** | Number of the Build |
+| `--message` | no | Approval message |
+
+#### builds reject
+
+Reject a build that is waiting for manual approval.
+
+```bash
+pikoci client builds reject --team-canonical main --pipeline-name deploy --job-name deploy --build-number 5 --message "not ready"
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--build-number` | **yes** | Number of the Build |
+| `--message` | **yes** | Rejection reason |
+
+#### builds report
+
+Export a build's full report as JSON.
+
+```bash
+pikoci client builds report --team-canonical main --pipeline-name deploy --job-name deploy --build-number 5
+pikoci client builds report --team-canonical main --pipeline-name deploy --job-name deploy --build-number 5 --output report.json
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--build-number` | **yes** | Number of the Build |
+| `--output` | no | Output file path (default: stdout) |
 
 ### resources
 
@@ -472,6 +553,30 @@ pikoci client -u localhost:8080 export -o backup.db
 | `--output` | `-o` | **yes** | Output file path for the SQLite export |
 
 This is also available via the web UI admin dropdown and as a `GET /admin/export` API endpoint.
+
+### audit
+
+Audit log commands. Requires `--team-canonical`.
+
+#### audit list
+
+Query the audit log for a team. All filter flags are optional and can be repeated.
+
+```bash
+pikoci client audit list --team-canonical main --user alice --action pipeline.created --since 2026-01-01T00:00:00Z --until 2026-12-31T23:59:59Z --limit 100
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--team-canonical` | no | Team scope (default: `main`) |
+| `--user` | no | Filter by actor username (repeatable, OR logic) |
+| `--exclude-user` | no | Exclude entries by actor (repeatable) |
+| `--action` | no | Filter by action type (repeatable, OR logic) |
+| `--exclude-action` | no | Exclude entries with action type (repeatable) |
+| `--pipeline` | no | Filter by pipeline canonical prefix (repeatable, OR logic) |
+| `--since` | no | Show entries after this time (RFC3339) |
+| `--until` | no | Show entries before this time (RFC3339) |
+| `--limit` | no | Maximum number of entries to return (default: `50`) |
 
 ## run
 

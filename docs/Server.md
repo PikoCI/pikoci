@@ -1,3 +1,7 @@
+---
+description: "PikoCI server configuration. All flags, environment variables, database backends, metrics, health checks, and signal handling."
+---
+
 # Server Configuration
 
 Start the PikoCI server with:
@@ -122,7 +126,7 @@ PikoCI exposes a `/metrics` endpoint in Prometheus format with Go runtime metric
 curl http://localhost:8080/metrics
 ```
 
-See [Deployment — Monitoring](Deployment.md#monitoring) for setting up Prometheus and Grafana.
+See [Deployment: Monitoring](Deployment.md#monitoring) for setting up Prometheus and Grafana.
 
 ## Health check
 
