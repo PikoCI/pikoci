@@ -415,6 +415,7 @@ func (w *Worker) processJob(ctx context.Context, m workitem.Body, cwd string, pp
 		Steps:             []build.Step{},
 		VersionID:         nb.VersionID,
 		ResourceCanonical: nb.ResourceCanonical,
+		InputValues:       nb.InputValues,
 	}
 
 	// If the message doesn't carry version info, fall back to what was stored on the build
@@ -2664,12 +2665,16 @@ func (w *Worker) startServices(ctx context.Context, m workitem.Body, b *build.Bu
 
 // buildMetadataParams returns the standard build metadata environment variables.
 func buildMetadataParams(b *build.Build, m workitem.Body) map[string]string {
-	return map[string]string{
+	params := map[string]string{
 		"BUILD_NUMBER":        b.BuildNumber,
 		"BUILD_JOB_NAME":      m.JobName,
 		"BUILD_PIPELINE_NAME": m.PipelineCanonical,
 		"BUILD_TEAM_NAME":     m.TeamCanonical,
 	}
+	for k, v := range b.InputValues {
+		params["input_"+strings.ToLower(k)] = v
+	}
+	return params
 }
 
 // flattenVersionValue flattens a version metadata value into params with the

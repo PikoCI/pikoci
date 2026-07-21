@@ -47,6 +47,24 @@ job "slow-build" {
 
 job "deploy-staging" {
   disable_retry = true
+
+  input "version" {
+    type        = "string"
+    description = "Version to deploy"
+    default     = "latest"
+  }
+
+  input "environment" {
+    type    = "string"
+    options = ["staging", "production"]
+    default = "staging"
+  }
+
+  input "dry_run" {
+    type    = "bool"
+    default = "false"
+  }
+
   get "artifact" "cron_output" {
     trigger = true
     passed  = ["gen"]
@@ -55,7 +73,7 @@ job "deploy-staging" {
   task "deploy" {
     run "exec" {
       path = "/bin/sh"
-      args = ["-ec", "echo '--- deploy-staging ---' && cat cron-output/timestamp.txt && echo 'deploying to staging...' && sleep 5 && echo 'done'"]
+      args = ["-ec", "echo '--- deploy-staging ---' && echo version=$input_version env=$input_environment dry_run=$input_dry_run && cat cron-output/timestamp.txt && echo 'deploying to staging...' && sleep 5 && echo 'done'"]
     }
   }
 }
@@ -177,6 +195,17 @@ job "nightly-report" {
 }
 
 job "monitor" {
+  input "target" {
+    type        = "string"
+    description = "Service to monitor"
+    default     = "all"
+  }
+
+  input "verbose" {
+    type    = "bool"
+    default = "false"
+  }
+
   get "cron" "my_cron" {
     trigger = true
     passed  = ["gen"]
@@ -184,7 +213,7 @@ job "monitor" {
   task "check" {
     run "exec" {
       path = "/bin/sh"
-      args = ["-ec", "echo '--- monitor ---' && echo 'cron version: $GET_MY_CRON_DATE' && echo 'done'"]
+      args = ["-ec", "echo '--- monitor ---' && echo target=$input_target verbose=$input_verbose && echo 'cron version: $GET_MY_CRON_DATE' && echo 'done'"]
     }
     on_success "exec" {
       path = "/bin/sh"

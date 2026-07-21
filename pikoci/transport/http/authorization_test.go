@@ -124,7 +124,7 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 			// We use AnyTimes() + permissive returns so the test only checks auth.
 			svc.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 			svc.EXPECT().GetTeam(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-			svc.EXPECT().TriggerPipelineJob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().TriggerPipelineJob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			svc.EXPECT().PausePipeline(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			svc.EXPECT().UnpausePipeline(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			svc.EXPECT().CancelJobBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()

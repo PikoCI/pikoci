@@ -18,6 +18,7 @@ const stepIcon = {
   service: 'bi-hdd-stack',
   runner: 'bi-gear',
   job: 'bi-braces',
+  input: 'bi-sliders2',
 };
 
 function getStepIcon(type) {
@@ -139,6 +140,29 @@ function StepRow({ step, expanded, onToggle, autoFollow, setAutoFollow, isAutoSc
           </button>
           <pre ref=${preRef} onScroll=${onScroll}>${logs}</pre>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+// ---------- InputStep ----------
+
+function InputStep({ inputValues, expanded, onToggle }) {
+  const entries = Object.entries(inputValues);
+  return html`
+    <div class="piko-step-row" data-status="succeeded">
+      <div class="piko-step-row-header" onClick=${onToggle}>
+        <span>
+          <span class="piko-step-label"><i class="bi bi-sliders2"></i> input</span>
+          ${' '}parameters${' '}
+          <span style="color:var(--text-muted);">(${entries.length} ${entries.length === 1 ? 'value' : 'values'})</span>
+        </span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          ${statusBadge('succeeded', true)}
+        </span>
+      </div>
+      <div class="piko-step-row-body" style="display:${expanded ? 'block' : 'none'};">
+        <pre>${entries.map(([k, v]) => k + '=' + (v || '""') + '\n')}</pre>
       </div>
     </div>
   `;
@@ -512,6 +536,13 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
           </span>
         `}
       </div>
+      ${jobData && jobData.inputs && jobData.inputs.length > 0 ? html`
+        <${InputStep}
+          inputValues=${build.input_values || Object.fromEntries(jobData.inputs.map(inp => [inp.name, inp.default !== undefined && inp.default !== null ? inp.default : (inp.type === 'bool' ? 'false' : inp.type === 'number' ? '0' : '')]))}
+          expanded=${!!expandedSteps['inputs']}
+          onToggle=${() => toggleStep('inputs')}
+        />
+      ` : null}
       ${steps.map((s, i) => {
         if (s.type === 'in_parallel') {
           return html`
@@ -815,13 +846,39 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
     }
   }, [tc, pn, jn, embedded, trackedVersionID]);
 
-  // Trigger/pause/unpause handlers
-  const onTrigger = useCallback(async () => {
+  // Input modal state
+  const [showInputModal, setShowInputModal] = useState(false);
+  const [inputFormValues, setInputFormValues] = useState({});
+
+  const doTriggerWithInputs = useCallback(async (values) => {
     await withTriggerLoading(async () => {
-      await triggerJob(tc, pn, jn);
+      await triggerJob(tc, pn, jn, values);
       showToast('Job triggered', 'success');
     });
   }, [tc, pn, jn, withTriggerLoading]);
+
+  // Trigger/pause/unpause handlers
+  const onTrigger = useCallback(async () => {
+    if (job && job.inputs && job.inputs.length > 0) {
+      // Pre-fill defaults
+      const defaults = {};
+      for (const inp of job.inputs) {
+        if (inp.default !== undefined && inp.default !== null) {
+          defaults[inp.name] = inp.default;
+        } else if (inp.type === 'bool') {
+          defaults[inp.name] = 'false';
+        } else if (inp.type === 'number') {
+          defaults[inp.name] = '0';
+        } else {
+          defaults[inp.name] = '';
+        }
+      }
+      setInputFormValues(defaults);
+      setShowInputModal(true);
+      return;
+    }
+    await doTriggerWithInputs(null);
+  }, [job, doTriggerWithInputs]);
 
   const onPause = useCallback(async () => {
     await withPauseLoading(async () => {
@@ -870,6 +927,36 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
   }, [tc, pn, trackedVersionID]);
 
   const isMember = hasTeamRole(tc, 'write');
+
+  const onInputSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    setShowInputModal(false);
+    await doTriggerWithInputs(inputFormValues);
+  }, [inputFormValues, doTriggerWithInputs]);
+
+  const onInputChange = useCallback((name, value) => {
+    setInputFormValues(prev => ({ ...prev, [name]: value }));
+  }, []);
+
+  const onMultiSelectChange = useCallback((name, option, checked) => {
+    setInputFormValues(prev => {
+      const current = prev[name] ? prev[name].split(',').filter(Boolean) : [];
+      let next;
+      if (checked) {
+        next = [...current, option];
+      } else {
+        next = current.filter(v => v !== option);
+      }
+      return { ...prev, [name]: next.join(',') };
+    });
+  }, []);
+
+  // Check if all required fields are filled
+  const inputsValid = !job || !job.inputs || job.inputs.every(inp => {
+    if (inp.default !== undefined && inp.default !== null) return true;
+    const val = inputFormValues[inp.name];
+    return val !== undefined && val !== '';
+  });
 
   return html`
     <div>
@@ -932,6 +1019,66 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
           </div>
         `)}
       </div>
+      ${showInputModal && job && job.inputs ? html`
+        <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <form onSubmit=${onInputSubmit}>
+                <div class="modal-header">
+                  <h5 class="modal-title">Trigger Job: ${job.name}</h5>
+                  <button type="button" class="btn-close" onClick=${() => setShowInputModal(false)}></button>
+                </div>
+                <div class="modal-body">
+                  ${job.inputs.map(inp => html`
+                    <div class="mb-3" key=${inp.name}>
+                      <label class="form-label fw-semibold">
+                        ${inp.name}${inp.default === undefined || inp.default === null ? html` <span class="text-danger">*</span>` : ''}
+                      </label>
+                      ${inp.description ? html`<div class="form-text mt-0 mb-1">${inp.description}</div>` : null}
+                      ${inp.type === 'bool' ? html`
+                        <div class="form-check form-switch">
+                          <input class="form-check-input" type="checkbox"
+                            checked=${inputFormValues[inp.name] === 'true'}
+                            onChange=${(e) => onInputChange(inp.name, e.target.checked ? 'true' : 'false')} />
+                        </div>
+                      ` : inp.options && inp.options.length > 0 && inp.multiple ? html`
+                        <div>
+                          ${inp.options.map(opt => html`
+                            <div class="form-check" key=${opt}>
+                              <input class="form-check-input" type="checkbox"
+                                checked=${(inputFormValues[inp.name] || '').split(',').includes(opt)}
+                                onChange=${(e) => onMultiSelectChange(inp.name, opt, e.target.checked)} />
+                              <label class="form-check-label">${opt}</label>
+                            </div>
+                          `)}
+                        </div>
+                      ` : inp.options && inp.options.length > 0 ? html`
+                        <select class="form-select" value=${inputFormValues[inp.name] || ''}
+                          onChange=${(e) => onInputChange(inp.name, e.target.value)}>
+                          <option value="">-- select --</option>
+                          ${inp.options.map(opt => html`<option key=${opt} value=${opt}>${opt}</option>`)}
+                        </select>
+                      ` : inp.type === 'number' ? html`
+                        <input type="number" class="form-control" value=${inputFormValues[inp.name] || ''}
+                          onInput=${(e) => onInputChange(inp.name, e.target.value)} />
+                      ` : html`
+                        <input type="text" class="form-control" value=${inputFormValues[inp.name] || ''}
+                          onInput=${(e) => onInputChange(inp.name, e.target.value)} />
+                      `}
+                    </div>
+                  `)}
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-secondary" onClick=${() => setShowInputModal(false)}>Cancel</button>
+                  <button type="submit" class="btn btn-warning" disabled=${!inputsValid || triggerLoading}>
+                    ${triggerLoading ? 'Triggering...' : 'Trigger'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      ` : null}
     </div>
   `;
 }

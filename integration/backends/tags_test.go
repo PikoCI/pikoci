@@ -104,7 +104,7 @@ job "gpu-job" {
 	go func() { defer wg.Done(); untaggedWorker.Run(ctx) }()
 
 	// Directly trigger the job to create a pending build
-	err = svc.TriggerPipelineJob(ctx, "main", "tags-test", "gpu-job")
+	err = svc.TriggerPipelineJob(ctx, "main", "tags-test", "gpu-job", nil, false)
 	require.NoError(t, err)
 
 	// Wait a bit — the build should stay pending because no matching worker
@@ -190,9 +190,9 @@ job "gpu-job" {
 	go func() { defer wg.Done(); exclWorker.Run(ctx) }()
 
 	// Directly trigger both jobs to create pending builds
-	err = svc.TriggerPipelineJob(ctx, "main", "excl-test", "gpu-job")
+	err = svc.TriggerPipelineJob(ctx, "main", "excl-test", "gpu-job", nil, false)
 	require.NoError(t, err)
-	err = svc.TriggerPipelineJob(ctx, "main", "excl-test", "untagged-job")
+	err = svc.TriggerPipelineJob(ctx, "main", "excl-test", "untagged-job", nil, false)
 	require.NoError(t, err)
 
 	// Wait for the gpu-job to complete

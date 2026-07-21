@@ -192,6 +192,7 @@ func (q *PikoCI) GetBuildReport(ctx context.Context, tc, pc, jn, buildNumber str
 			ResourceCanonical: b.ResourceCanonical,
 			VersionMetadata:   b.VersionMetadata,
 			PinnedVersions:    b.PinnedVersions,
+			InputValues:       b.InputValues,
 			RetryOf:           retryOf,
 		},
 		Approvals: b.Approvals,
@@ -353,8 +354,8 @@ func (q *PikoCI) RetryJobBuild(ctx context.Context, tc, pc, jn, buildNumber stri
 		return fmt.Errorf("failed to Find parent Build %q: %w", parentBN, err)
 	}
 
-	// Create a pending retry build first
-	_, err = q.CreateRetryJobBuild(ctx, tc, pc, jn, parentBN, build.Build{Status: build.Pending, RetrySourceBuildID: parentBuild.ID})
+	// Create a pending retry build first, copying input values from the original
+	_, err = q.CreateRetryJobBuild(ctx, tc, pc, jn, parentBN, build.Build{Status: build.Pending, RetrySourceBuildID: parentBuild.ID, InputValues: b.InputValues})
 	if err != nil {
 		return fmt.Errorf("failed to create pending retry build: %w", err)
 	}
@@ -731,9 +732,12 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 		if j.ApproveLabel != "" {
 			status = build.WaitingForApproval
 		}
+		// Resolve input defaults for auto-triggered builds.
+		inputVals, _ := resolveInputValues(j.Inputs, nil, false)
 		id, buildNumber, err := uow.Builds().Create(ctx, tc, pn, j.Name, build.Build{
-			Status:    status,
-			VersionID: versionID,
+			Status:      status,
+			VersionID:   versionID,
+			InputValues: inputVals,
 		})
 		if err != nil {
 			return fmt.Errorf("create pending build: %w", err)

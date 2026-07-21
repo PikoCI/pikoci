@@ -607,11 +607,15 @@ func (cl *Client) ListPublicPipelineJobs(ctx context.Context, tc, pn string) ([]
 	return cl.ListPipelineJobs(ctx, tc, pn)
 }
 
-// TriggerPipelineJob triggers a manual run of the specified job.
-func (cl *Client) TriggerPipelineJob(ctx context.Context, tc, pn, jn string) error {
+// TriggerPipelineJob triggers a manual run of the specified job with optional input values.
+func (cl *Client) TriggerPipelineJob(ctx context.Context, tc, pn, jn string, inputValues map[string]string, manual bool) error {
 	var resp thttp.TriggerPipelineJobResponse
+	var body interface{}
+	if len(inputValues) > 0 {
+		body = thttp.TriggerPipelineJobRequest{InputValues: inputValues}
+	}
 
-	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/trigger", cl.url, tc, pn, jn), nil, &resp)
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/jobs/%s/trigger", cl.url, tc, pn, jn), body, &resp)
 	if err != nil {
 		return fmt.Errorf("failed to make request: %w", err)
 	}

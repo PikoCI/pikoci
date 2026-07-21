@@ -57,7 +57,7 @@ func TestTriggerPipelineJob(t *testing.T) {
 	// TriggerPipelineJob creates a pending build and calls Notify()
 	s.Builds.EXPECT().Create(ctx, tc, ppc, jn, gomock.Any()).Return(uint32(1), "1", nil)
 
-	err := s.S.TriggerPipelineJob(ctx, tc, ppc, jn)
+	err := s.S.TriggerPipelineJob(ctx, tc, ppc, jn, nil, false)
 	require.NoError(t, err)
 }
 

@@ -73,6 +73,16 @@ type hclPutStep struct {
 	Remain hcl.Body `hcl:",remain"`
 }
 
+// hclInput is the intermediate HCL-decoded input block inside a job.
+type hclInput struct {
+	Name        string   `hcl:"name,label"`
+	Type        string   `hcl:"type"`
+	Description string   `hcl:"description,optional"`
+	Default     *string  `hcl:"default,optional"`
+	Options     []string `hcl:"options,optional"`
+	Multiple    bool     `hcl:"multiple,optional"`
+}
+
 // hclApproveBlock is the intermediate HCL-decoded approve block inside a job.
 type hclApproveBlock struct {
 	Label     string          `hcl:"label,label"`
@@ -97,6 +107,7 @@ type hclJob struct {
 	Service      []hclServiceRef      `hcl:"service,block"`
 	InParallel   []hclInParallelBlock `hcl:"in_parallel,block"`
 	Approve      []hclApproveBlock    `hcl:"approve,block"`
+	Input        []hclInput           `hcl:"input,block"`
 
 	Remain hcl.Body `hcl:",remain"` // absorbs hook blocks; parsed by parseHooks from AST
 }
@@ -645,7 +656,7 @@ var (
 	}
 	jobBlocks = map[string]bool{
 		"get": true, "task": true, "put": true, "notify": true, "service": true,
-		"in_parallel": true, "approve": true,
+		"in_parallel": true, "approve": true, "input": true,
 		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
 		"matrix": true,
 	}
@@ -1480,6 +1491,53 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 		if meta, ok := forEachMetas[hj.Name]; ok {
 			j.ForEachGroup = meta.baseName
 			j.ForEachKey = meta.key
+		}
+		if len(hj.Input) > 0 {
+			if len(hj.Input) > 20 {
+				return nil, fmt.Errorf("job %q: too many inputs (max 20, got %d)", hj.Name, len(hj.Input))
+			}
+			envNames := make(map[string]bool)
+			inputNames := make(map[string]bool)
+			for _, inp := range hj.Input {
+				if inputNames[inp.Name] {
+					return nil, fmt.Errorf("job %q: duplicate input name %q", hj.Name, inp.Name)
+				}
+				inputNames[inp.Name] = true
+				envName := strings.ToLower(inp.Name)
+				if envNames[envName] {
+					return nil, fmt.Errorf("job %q: input %q produces duplicate env var name input_%s", hj.Name, inp.Name, envName)
+				}
+				envNames[envName] = true
+				if inp.Type != "string" && inp.Type != "number" && inp.Type != "bool" {
+					return nil, fmt.Errorf("job %q: input %q has invalid type %q (must be string, number, or bool)", hj.Name, inp.Name, inp.Type)
+				}
+				if len(inp.Options) > 0 && inp.Type != "string" {
+					return nil, fmt.Errorf("job %q: input %q: options can only be used with type string", hj.Name, inp.Name)
+				}
+				if inp.Multiple && len(inp.Options) == 0 {
+					return nil, fmt.Errorf("job %q: input %q: multiple can only be used with options", hj.Name, inp.Name)
+				}
+				if inp.Default != nil && len(inp.Options) > 0 && !inp.Multiple {
+					found := false
+					for _, o := range inp.Options {
+						if o == *inp.Default {
+							found = true
+							break
+						}
+					}
+					if !found {
+						return nil, fmt.Errorf("job %q: input %q: default value %q is not in options list", hj.Name, inp.Name, *inp.Default)
+					}
+				}
+				j.Inputs = append(j.Inputs, job.Input{
+					Name:        inp.Name,
+					Type:        inp.Type,
+					Description: inp.Description,
+					Default:     inp.Default,
+					Options:     inp.Options,
+					Multiple:    inp.Multiple,
+				})
+			}
 		}
 		pp.Jobs = append(pp.Jobs, j)
 	}

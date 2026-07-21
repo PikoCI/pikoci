@@ -1208,17 +1208,17 @@ func (mr *ServiceMockRecorder) StartPendingBuild(ctx, tc, pn, jn, buildID any) *
 }
 
 // TriggerPipelineJob mocks base method.
-func (m *Service) TriggerPipelineJob(ctx context.Context, tc, pn, jn string) error {
+func (m *Service) TriggerPipelineJob(ctx context.Context, tc, pn, jn string, inputValues map[string]string, manual bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TriggerPipelineJob", ctx, tc, pn, jn)
+	ret := m.ctrl.Call(m, "TriggerPipelineJob", ctx, tc, pn, jn, inputValues, manual)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // TriggerPipelineJob indicates an expected call of TriggerPipelineJob.
-func (mr *ServiceMockRecorder) TriggerPipelineJob(ctx, tc, pn, jn any) *gomock.Call {
+func (mr *ServiceMockRecorder) TriggerPipelineJob(ctx, tc, pn, jn, inputValues, manual any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TriggerPipelineJob", reflect.TypeOf((*Service)(nil).TriggerPipelineJob), ctx, tc, pn, jn)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TriggerPipelineJob", reflect.TypeOf((*Service)(nil).TriggerPipelineJob), ctx, tc, pn, jn, inputValues, manual)
 }
 
 // TriggerPipelineResource mocks base method.

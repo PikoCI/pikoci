@@ -3,6 +3,8 @@ package pikoci
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/build"
@@ -13,7 +15,7 @@ import (
 // TriggerPipelineJob creates a pending build for the specified job, pins the
 // latest version of its first get-step resource, and enqueues the build for
 // execution via the job topic.
-func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) error {
+func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string, inputValues map[string]string, manual bool) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
 	} else if !utils.ValidateCanonical(pc) {
@@ -31,7 +33,12 @@ func (q *PikoCI) TriggerPipelineJob(ctx context.Context, tc, pc, jn string) erro
 		return fmt.Errorf("job %q is paused", jn)
 	}
 
-	bb := build.Build{Status: build.Pending}
+	resolved, err := resolveInputValues(j.Inputs, inputValues, manual)
+	if err != nil {
+		return fmt.Errorf("invalid input values for job %q: %w", jn, err)
+	}
+
+	bb := build.Build{Status: build.Pending, InputValues: resolved}
 
 	// Use the pinned version if the resource is pinned, otherwise use the
 	// latest version of the first get-step resource.
@@ -191,4 +198,94 @@ func (q *PikoCI) GetPipelineJob(ctx context.Context, tc, pc, jn string) (*job.Jo
 	}
 
 	return j, nil
+}
+
+// resolveInputValues validates and resolves input values against the declared
+// inputs. For manual triggers, required inputs (no default) must be provided.
+// For automatic triggers, missing values use defaults or zero values.
+func resolveInputValues(inputs []job.Input, provided map[string]string, manual bool) (map[string]string, error) {
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+
+	declared := make(map[string]job.Input, len(inputs))
+	for _, inp := range inputs {
+		declared[inp.Name] = inp
+	}
+
+	// Reject unknown keys
+	for k := range provided {
+		if _, ok := declared[k]; !ok {
+			return nil, fmt.Errorf("unknown input %q", k)
+		}
+	}
+
+	resolved := make(map[string]string, len(inputs))
+	for _, inp := range inputs {
+		val, ok := provided[inp.Name]
+		if !ok || val == "" {
+			if inp.Default != nil {
+				val = *inp.Default
+			} else if manual {
+				return nil, fmt.Errorf("required input %q not provided", inp.Name)
+			} else {
+				// Auto-trigger zero values
+				switch inp.Type {
+				case "number":
+					val = "0"
+				case "bool":
+					val = "false"
+				default:
+					val = ""
+				}
+			}
+		}
+
+		// Type validation
+		switch inp.Type {
+		case "number":
+			if _, err := strconv.ParseFloat(val, 64); err != nil {
+				return nil, fmt.Errorf("input %q: value %q is not a valid number", inp.Name, val)
+			}
+		case "bool":
+			if val != "true" && val != "false" {
+				return nil, fmt.Errorf("input %q: value %q must be \"true\" or \"false\"", inp.Name, val)
+			}
+		}
+
+		// Options validation
+		if len(inp.Options) > 0 && val != "" {
+			if inp.Multiple {
+				parts := strings.Split(val, ",")
+				for _, p := range parts {
+					p = strings.TrimSpace(p)
+					found := false
+					for _, o := range inp.Options {
+						if o == p {
+							found = true
+							break
+						}
+					}
+					if !found {
+						return nil, fmt.Errorf("input %q: value %q is not in options %v", inp.Name, p, inp.Options)
+					}
+				}
+			} else {
+				found := false
+				for _, o := range inp.Options {
+					if o == val {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return nil, fmt.Errorf("input %q: value %q is not in options %v", inp.Name, val, inp.Options)
+				}
+			}
+		}
+
+		resolved[inp.Name] = val
+	}
+
+	return resolved, nil
 }

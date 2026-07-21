@@ -230,7 +230,7 @@ func runLocal(ctx context.Context, logger *slog.Logger, pipelineConfig, jobName 
 	}()
 
 	// Trigger the job
-	if err := svc.TriggerPipelineJob(ctx, mainTeamCanonical, "local", jobName); err != nil {
+	if err := svc.TriggerPipelineJob(ctx, mainTeamCanonical, "local", jobName, nil, false); err != nil {
 		return 0, fmt.Errorf("failed to trigger job %q: %w", jobName, err)
 	}
 
