@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"go.uber.org/mock/gomock"
@@ -31,13 +32,13 @@ func TestTriggerPipelineJob_InvalidCanonical(t *testing.T) {
 	s := newService(ctrl)
 	ctx := context.TODO()
 
-	err := s.S.TriggerPipelineJob(ctx, "INVALID", "pp", "jn")
+	err := s.S.TriggerPipelineJob(ctx, "INVALID", "pp", "jn", nil, false)
 	require.Error(t, err)
 
-	err = s.S.TriggerPipelineJob(ctx, "main", "INVALID", "jn")
+	err = s.S.TriggerPipelineJob(ctx, "main", "INVALID", "jn", nil, false)
 	require.Error(t, err)
 
-	err = s.S.TriggerPipelineJob(ctx, "main", "pp", "INVALID")
+	err = s.S.TriggerPipelineJob(ctx, "main", "pp", "INVALID", nil, false)
 	require.Error(t, err)
 }
 
@@ -59,7 +60,7 @@ func TestTriggerPipelineJob_NotFound(t *testing.T) {
 
 	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(nil, assert.AnError)
 
-	err := s.S.TriggerPipelineJob(ctx, "main", "pp", "jn")
+	err := s.S.TriggerPipelineJob(ctx, "main", "pp", "jn", nil, false)
 	require.Error(t, err)
 }
 
@@ -71,7 +72,7 @@ func TestTriggerPipelineJob_Success(t *testing.T) {
 	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(&job.Job{ID: 1}, nil).Times(2)
 	s.Builds.EXPECT().Create(ctx, "main", "pp", "jn", gomock.Any()).Return(uint32(1), "1", nil)
 
-	err := s.S.TriggerPipelineJob(ctx, "main", "pp", "jn")
+	err := s.S.TriggerPipelineJob(ctx, "main", "pp", "jn", nil, false)
 	require.NoError(t, err)
 }
 
@@ -109,7 +110,7 @@ func TestTriggerPipelineJob_PinsLatestVersion(t *testing.T) {
 	// TriggerPipelineJob creates a pending build and calls Notify()
 	s.Builds.EXPECT().Create(ctx, tc, ppc, jn, gomock.Any()).Return(uint32(5), "1", nil)
 
-	err := s.S.TriggerPipelineJob(ctx, tc, ppc, jn)
+	err := s.S.TriggerPipelineJob(ctx, tc, ppc, jn, nil, false)
 	require.NoError(t, err)
 }
 
@@ -141,7 +142,7 @@ func TestTriggerPipelineJob_UsesPinnedVersion(t *testing.T) {
 	// FilterVersions should NOT be called — pinned version is used directly
 	s.Builds.EXPECT().Create(ctx, tc, ppc, jn, gomock.Any()).Return(uint32(5), "1", nil)
 
-	err := s.S.TriggerPipelineJob(ctx, tc, ppc, jn)
+	err := s.S.TriggerPipelineJob(ctx, tc, ppc, jn, nil, false)
 	require.NoError(t, err)
 }
 
@@ -152,9 +153,83 @@ func TestTriggerPipelineJob_JobPaused(t *testing.T) {
 
 	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(&job.Job{ID: 1, Paused: true}, nil)
 
-	err := s.S.TriggerPipelineJob(ctx, "main", "pp", "jn")
+	err := s.S.TriggerPipelineJob(ctx, "main", "pp", "jn", nil, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "is paused")
+}
+
+func TestTriggerPipelineJob_InputsDefaults(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	defVal := "latest"
+	j := &job.Job{
+		ID:   1,
+		Name: "jn",
+		Inputs: []job.Input{
+			{Name: "version", Type: "string", Default: &defVal},
+			{Name: "count", Type: "number", Default: func() *string { s := "3"; return &s }()},
+		},
+	}
+
+	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(j, nil).Times(2)
+	s.Builds.EXPECT().Create(ctx, "main", "pp", "jn", gomock.Any()).DoAndReturn(
+		func(ctx context.Context, tc, pn, jn string, b build.Build) (uint32, string, error) {
+			require.NotNil(t, b.InputValues)
+			assert.Equal(t, "latest", b.InputValues["version"])
+			assert.Equal(t, "3", b.InputValues["count"])
+			return uint32(1), "1", nil
+		})
+
+	err := s.S.TriggerPipelineJob(ctx, "main", "pp", "jn", nil, false)
+	require.NoError(t, err)
+}
+
+func TestTriggerPipelineJob_InputsProvided(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	defVal := "latest"
+	j := &job.Job{
+		ID:   1,
+		Name: "jn",
+		Inputs: []job.Input{
+			{Name: "version", Type: "string", Default: &defVal},
+		},
+	}
+
+	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(j, nil).Times(2)
+	s.Builds.EXPECT().Create(ctx, "main", "pp", "jn", gomock.Any()).DoAndReturn(
+		func(ctx context.Context, tc, pn, jn string, b build.Build) (uint32, string, error) {
+			require.NotNil(t, b.InputValues)
+			assert.Equal(t, "v2.0", b.InputValues["version"])
+			return uint32(1), "1", nil
+		})
+
+	err := s.S.TriggerPipelineJob(ctx, "main", "pp", "jn", map[string]string{"version": "v2.0"}, true)
+	require.NoError(t, err)
+}
+
+func TestTriggerPipelineJob_InputsRequiredMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	j := &job.Job{
+		ID:   1,
+		Name: "jn",
+		Inputs: []job.Input{
+			{Name: "version", Type: "string"}, // no default = required
+		},
+	}
+
+	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(j, nil)
+
+	err := s.S.TriggerPipelineJob(ctx, "main", "pp", "jn", nil, true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "required input")
 }
 
 func TestPauseJob(t *testing.T) {

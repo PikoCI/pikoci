@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -37,9 +38,10 @@ func listPipelineJobs(s pikoci.Service) http.HandlerFunc {
 }
 
 type TriggerPipelineJobRequest struct {
-	TeamCanonical     string `json:"team_canonical"`
-	PipelineCanonical string `json:"pipeline_canonical"`
-	JobName           string `json:"job_name"`
+	TeamCanonical     string            `json:"team_canonical"`
+	PipelineCanonical string            `json:"pipeline_canonical"`
+	JobName           string            `json:"job_name"`
+	InputValues       map[string]string `json:"input_values,omitempty"`
 }
 type TriggerPipelineJobResponse struct {
 	Err string `json:"error,omitempty"`
@@ -57,7 +59,12 @@ func triggerPipelineJob(s pikoci.Service) http.HandlerFunc {
 		req.TeamCanonical = vars["team_canonical"]
 		req.PipelineCanonical = vars["pipeline_canonical"]
 		req.JobName = vars["job_name"]
-		err := s.TriggerPipelineJob(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName)
+		// Decode optional JSON body for input values
+		if r.Body != nil && r.ContentLength > 0 {
+			_ = json.NewDecoder(r.Body).Decode(&req)
+		}
+		manual := len(req.InputValues) > 0 || r.ContentLength > 0
+		err := s.TriggerPipelineJob(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName, req.InputValues, manual)
 		var errs string
 		if err != nil {
 			errs = err.Error()

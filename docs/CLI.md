@@ -149,15 +149,17 @@ pikoci client -u localhost:8080 jobs get -tc main -pn my-pipeline -n my-job
 
 #### jobs trigger
 
-Manually trigger a job.
+Manually trigger a job. For jobs with `input` blocks, use `--input` to provide parameter values.
 
 ```bash
 pikoci client -u localhost:8080 jobs trigger -tc main -pn my-pipeline -n my-job
+pikoci client -u localhost:8080 jobs trigger -tc main -pn my-pipeline -n deploy --input version=v1.2.3 --input environment=staging
 ```
 
 | Flag | Alias | Required | Description |
 |------|-------|----------|-------------|
 | `--job-name` | `-n`, `-jn` | **yes** | Job name |
+| `--input` | | no | Input values in `key=value` format (repeatable) |
 
 ### users
 

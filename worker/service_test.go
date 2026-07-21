@@ -9846,3 +9846,160 @@ func TestAutoNotification_MessageInterpolation(t *testing.T) {
 	require.Len(t, reqs, 1, "mock server should have received the notification")
 	assert.Contains(t, reqs[0].Body, "Job my-job in test-pipeline: success", "message should have interpolated $BUILD_JOB_NAME, $BUILD_PIPELINE_NAME, and $notify_build_status")
 }
+
+func TestProcessJob_InputValues_PreservedOnUpdate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	inputVals := map[string]string{"version": "v1.0", "env": "staging"}
+
+	// GetJobBuild returns a build with InputValues
+	svc.EXPECT().GetJobBuild(gomock.Any(), "main", "test-pipeline", "echo-job", "10").
+		Return(&build.Build{
+			ID: 10, BuildNumber: "10", Status: build.Started,
+			StartedAt: time.Now(), InputValues: inputVals,
+		}, nil).AnyTimes()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), "main", "test-pipeline", "echo-job").
+		Return(&job.Job{
+			ID: 1, Name: "echo-job",
+			Inputs: []job.Input{
+				{Name: "version", Type: "string"},
+				{Name: "env", Type: "string"},
+			},
+			Plan: []job.PlanStep{
+				{
+					Type: job.StepTypeTask,
+					Task: &job.TaskStep{
+						Name: "echo",
+						Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"hello"}, Params: map[string]string{"path": "echo"}},
+					},
+				},
+			},
+		}, nil)
+
+	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	svc.EXPECT().FindBuildGetVersions(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	svc.EXPECT().EvaluateDownstreamJobs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	// Capture all UpdateJobBuild calls and verify InputValues is always present
+	var lastBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), "main", "test-pipeline", "echo-job", "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			lastBuild = b
+			return nil
+		}).AnyTimes()
+
+	w := &Worker{pikoci: svc, logger: logger}
+
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: "test-pipeline",
+		Jobs: []job.Job{
+			{ID: 1, Name: "echo-job", Plan: []job.PlanStep{
+				{Type: job.StepTypeTask, Task: &job.TaskStep{
+					Name: "echo",
+					Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"hello"}, Params: map[string]string{"path": "echo"}},
+				}},
+			}},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+
+	m := workitem.Body{
+		TeamCanonical: "main", PipelineCanonical: "test-pipeline",
+		JobName: "echo-job", BuildID: 10, BuildNumber: "10",
+	}
+
+	w.processJob(context.Background(), m, t.TempDir(), pp)
+
+	// The last update (marking succeeded) must still carry InputValues
+	require.NotNil(t, lastBuild.InputValues, "InputValues must be preserved across build updates")
+	assert.Equal(t, "v1.0", lastBuild.InputValues["version"])
+	assert.Equal(t, "staging", lastBuild.InputValues["env"])
+}
+
+func TestProcessJob_InputValues_InjectedAsEnvVars(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	inputVals := map[string]string{"version": "v2.0", "debug": "true"}
+
+	svc.EXPECT().GetJobBuild(gomock.Any(), "main", "test-pipeline", "env-job", "20").
+		Return(&build.Build{
+			ID: 20, BuildNumber: "20", Status: build.Started,
+			StartedAt: time.Now(), InputValues: inputVals,
+		}, nil).AnyTimes()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), "main", "test-pipeline", "env-job").
+		Return(&job.Job{
+			ID: 1, Name: "env-job",
+			Plan: []job.PlanStep{
+				{
+					Type: job.StepTypeTask,
+					Task: &job.TaskStep{
+						Name: "print-env",
+						Run: utils.RunnerCommand{
+							Runner: "exec",
+							Args:   []string{"-ec", "echo version=$input_version debug=$input_debug"},
+							Params: map[string]string{"path": "/bin/sh"},
+						},
+					},
+				},
+			},
+		}, nil)
+
+	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	svc.EXPECT().FindBuildGetVersions(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	svc.EXPECT().EvaluateDownstreamJobs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	// Capture the final build to check logs contain expanded env vars
+	var lastBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), "main", "test-pipeline", "env-job", "20", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			lastBuild = b
+			return nil
+		}).AnyTimes()
+
+	w := &Worker{pikoci: svc, logger: logger}
+
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: "test-pipeline",
+		Jobs: []job.Job{
+			{ID: 1, Name: "env-job", Plan: []job.PlanStep{
+				{Type: job.StepTypeTask, Task: &job.TaskStep{
+					Name: "print-env",
+					Run: utils.RunnerCommand{
+						Runner: "exec",
+						Args:   []string{"-ec", "echo version=$input_version debug=$input_debug"},
+						Params: map[string]string{"path": "/bin/sh"},
+					},
+				}},
+			}},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+
+	m := workitem.Body{
+		TeamCanonical: "main", PipelineCanonical: "test-pipeline",
+		JobName: "env-job", BuildID: 20, BuildNumber: "20",
+	}
+
+	w.processJob(context.Background(), m, t.TempDir(), pp)
+
+	// Verify the task step logs contain the expanded input env vars
+	require.True(t, len(lastBuild.Steps) > 0, "build should have steps")
+	taskLogs := ""
+	for _, s := range lastBuild.Steps {
+		if s.Name == "print-env" {
+			taskLogs = s.Logs
+		}
+	}
+	assert.Contains(t, taskLogs, "version=v2.0", "input_version env var should be expanded in task logs")
+	assert.Contains(t, taskLogs, "debug=true", "input_debug env var should be expanded in task logs")
+}

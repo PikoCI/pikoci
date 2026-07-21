@@ -128,7 +128,13 @@ export const previewPipelineImage = (tc, data) =>
 // --- Jobs ---
 export const fetchJobs = (tc, pn) => api('/teams/' + tc + '/pipelines/' + pn + '/jobs').then(r => r.data);
 export const fetchJob = (tc, pn, jn) => api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn).then(r => r.data);
-export const triggerJob = (tc, pn, jn) => api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/trigger', { method: 'POST' });
+export const triggerJob = (tc, pn, jn, inputValues) => {
+  const opts = { method: 'POST' };
+  if (inputValues && Object.keys(inputValues).length > 0) {
+    opts.body = JSON.stringify({ input_values: inputValues });
+  }
+  return api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/trigger', opts);
+};
 export const pauseJob = (tc, pn, jn) => api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/pause', { method: 'POST' });
 export const unpauseJob = (tc, pn, jn) => api('/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/unpause', { method: 'POST' });
 

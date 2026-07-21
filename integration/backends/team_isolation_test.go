@@ -415,9 +415,9 @@ job "test-job" {
 	require.False(t, streamMgr.HasTeamWorkers("beta"), "beta should not have team workers")
 
 	// --- Trigger builds on both teams ---
-	err = svc.TriggerPipelineJob(ctx, "alpha", "alpha-pipe", "test-job")
+	err = svc.TriggerPipelineJob(ctx, "alpha", "alpha-pipe", "test-job", nil, false)
 	require.NoError(t, err)
-	err = svc.TriggerPipelineJob(ctx, "beta", "beta-pipe", "test-job")
+	err = svc.TriggerPipelineJob(ctx, "beta", "beta-pipe", "test-job", nil, false)
 	require.NoError(t, err)
 
 	// --- Wait for both builds to complete ---
@@ -456,7 +456,7 @@ job "test-job" {
 	}, 5*time.Second, 50*time.Millisecond, "global worker should disconnect")
 
 	// Trigger a new build on beta
-	err = svc.TriggerPipelineJob(ctx, "beta", "beta-pipe", "test-job")
+	err = svc.TriggerPipelineJob(ctx, "beta", "beta-pipe", "test-job", nil, false)
 	require.NoError(t, err)
 
 	// Wait a bit and verify the beta build stays pending — the alpha
@@ -475,7 +475,7 @@ job "test-job" {
 	// Phase 3: Trigger an alpha build → team worker should still pick it up
 	// ===================================================================
 
-	err = svc.TriggerPipelineJob(ctx, "alpha", "alpha-pipe", "test-job")
+	err = svc.TriggerPipelineJob(ctx, "alpha", "alpha-pipe", "test-job", nil, false)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {

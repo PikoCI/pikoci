@@ -172,7 +172,7 @@ job "grpc-test" {
 	require.NoError(t, err)
 
 	// Trigger the job (creates a pending build + notifies workers)
-	err = svc.TriggerPipelineJob(ctx, "main", "grpc-test", "grpc-test")
+	err = svc.TriggerPipelineJob(ctx, "main", "grpc-test", "grpc-test", nil, false)
 	require.NoError(t, err)
 
 	// --- Wait for build to complete ---
@@ -445,7 +445,7 @@ job "drain-test" {
 		Version: map[string]interface{}{"date": "v2"},
 	})
 	require.NoError(t, err)
-	err = svc.TriggerPipelineJob(ctx, "main", "drain-test", "drain-test")
+	err = svc.TriggerPipelineJob(ctx, "main", "drain-test", "drain-test", nil, false)
 	require.NoError(t, err)
 
 	// Wait until the build is started

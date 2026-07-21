@@ -918,7 +918,7 @@ func TestUnpausePipeline_Error(t *testing.T) {
 func TestTriggerPipelineJob_Success(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectMemberAuth()
-	e.svc.EXPECT().TriggerPipelineJob(gomock.Any(), "main", "my-pipe", "build").Return(nil)
+	e.svc.EXPECT().TriggerPipelineJob(gomock.Any(), "main", "my-pipe", "build", gomock.Any(), gomock.Any()).Return(nil)
 
 	resp := doRequest(t, http.MethodPost, e.server.URL+"/teams/main/pipelines/my-pipe/jobs/build/trigger", e.memberJWT(t), "")
 	defer resp.Body.Close()
@@ -932,7 +932,7 @@ func TestTriggerPipelineJob_Success(t *testing.T) {
 func TestTriggerPipelineJob_Error(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectMemberAuth()
-	e.svc.EXPECT().TriggerPipelineJob(gomock.Any(), "main", "my-pipe", "build").Return(fmt.Errorf("trigger error"))
+	e.svc.EXPECT().TriggerPipelineJob(gomock.Any(), "main", "my-pipe", "build", gomock.Any(), gomock.Any()).Return(fmt.Errorf("trigger error"))
 
 	resp := doRequest(t, http.MethodPost, e.server.URL+"/teams/main/pipelines/my-pipe/jobs/build/trigger", e.memberJWT(t), "")
 	defer resp.Body.Close()

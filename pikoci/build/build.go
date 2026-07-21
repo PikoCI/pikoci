@@ -67,7 +67,8 @@ type Build struct {
 	// the exact versions are tracked and displayed.
 	PinnedVersions map[string]map[string]interface{} `json:"pinned_versions,omitempty"`
 
-	RetrySourceBuildID uint32 `json:"retry_source_build_id,omitempty"`
+	InputValues        map[string]string `json:"input_values,omitempty"`
+	RetrySourceBuildID uint32            `json:"retry_source_build_id,omitempty"`
 
 	// Approvals contains the approval/rejection votes for this build.
 	// Only populated for builds with WaitingForApproval status.
@@ -107,6 +108,7 @@ type BuildReportData struct {
 	ResourceCanonical string                            `json:"resource_canonical"`
 	VersionMetadata   map[string]interface{}            `json:"version_metadata"`
 	PinnedVersions    map[string]map[string]interface{} `json:"pinned_versions"`
+	InputValues       map[string]string                 `json:"input_values,omitempty"`
 	RetryOf           string                            `json:"retry_of"`
 }
 

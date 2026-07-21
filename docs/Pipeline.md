@@ -282,10 +282,60 @@ The optional `timeout` attribute limits the total wall-clock time for a build's 
 | `notify` | no | Step block: sends a fire-and-forget notification |
 | `service` | no | Step block: references a service type for the job |
 | `in_parallel` | no | Step block: runs multiple steps concurrently |
+| `input` | no | Parameterized input block (see below) |
 | `on_success` | no | Hook: runs after all steps succeed |
 | `on_failure` | no | Hook: runs after a step fails |
 | `on_cancel` | no | Hook: runs when the build is cancelled |
 | `ensure` | no | Hook: always runs regardless of outcome |
+
+#### input
+
+Jobs can declare `input` blocks to accept parameters when manually triggered. Each input becomes an environment variable `$input_<name>` available to all steps.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | yes | Label on the block |
+| `type` | yes | `string`, `number`, or `bool` |
+| `description` | no | Helper text shown below the field in the UI |
+| `default` | no | Pre-filled value. If omitted, the field is required on manual trigger |
+| `options` | no | List of allowed values (only with `type = string`). Renders as dropdown |
+| `multiple` | no | Allow selecting multiple options (only with `options`). Values are comma-separated |
+
+**Trigger behavior:**
+- **Manual trigger (UI/CLI):** A form is shown with one field per input. Required fields (no default) must be filled.
+- **Automatic trigger:** Defaults are used. If no default exists, zero values are used (`""`, `"0"`, `"false"`). Auto-triggers are never blocked by missing inputs.
+- **Local execution (`pikoci run`):** Pass input values via `--var input_<name>=value`.
+- **Retry:** Input values from the original build are automatically copied to the retry.
+
+```hcl
+job "deploy" {
+  input "version" {
+    type        = "string"
+    description = "Version to deploy"
+    default     = "latest"
+  }
+
+  input "environment" {
+    type    = "string"
+    options = ["staging", "production"]
+    default = "staging"
+  }
+
+  input "dry_run" {
+    type    = "bool"
+    default = "false"
+  }
+
+  task "deploy" {
+    run "exec" {
+      path = "./deploy.sh"
+      args = ["$input_version", "$input_environment"]
+    }
+  }
+}
+```
+
+A maximum of 20 inputs per job is allowed.
 
 #### approve
 

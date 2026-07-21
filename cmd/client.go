@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/adrg/xdg"
 	"github.com/spf13/cobra"
@@ -471,13 +472,26 @@ var jobsTriggerCmd = &cobra.Command{
 		pn, _ := cmd.Flags().GetString("pipeline-name")
 		pn = utils.Canonicalize(pn)
 		jn, _ := cmd.Flags().GetString("job-name")
+		inputFlags, _ := cmd.Flags().GetStringSlice("input")
 
 		c, err := newClientWithConfig(url, jwt)
 		if err != nil {
 			return fmt.Errorf("failed to initialize client with url %q: %w", url, err)
 		}
 
-		err = c.TriggerPipelineJob(cmd.Context(), tc, pn, jn)
+		var inputValues map[string]string
+		if len(inputFlags) > 0 {
+			inputValues = make(map[string]string, len(inputFlags))
+			for _, f := range inputFlags {
+				parts := strings.SplitN(f, "=", 2)
+				if len(parts) != 2 {
+					return fmt.Errorf("invalid --input format %q, expected key=value", f)
+				}
+				inputValues[parts[0]] = parts[1]
+			}
+		}
+
+		err = c.TriggerPipelineJob(cmd.Context(), tc, pn, jn, inputValues, len(inputValues) > 0)
 		if err != nil {
 			return fmt.Errorf("failed to trigger Job %q from Pipeline %q: %w", jn, pn, err)
 		}
@@ -489,6 +503,7 @@ var jobsTriggerCmd = &cobra.Command{
 func init() {
 	jobsTriggerCmd.Flags().StringP("job-name", "n", "", "Name of the Job")
 	jobsTriggerCmd.MarkFlagRequired("job-name")
+	jobsTriggerCmd.Flags().StringSlice("input", nil, "Input values in key=value format (repeatable)")
 }
 
 func newClientWithConfig(url, jwt string) (*client.Client, error) {

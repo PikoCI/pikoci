@@ -191,6 +191,28 @@ func TestRetryJobBuild_RetryOfRetry(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRetryJobBuild_CopiesInputValues(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	inputVals := map[string]string{"version": "v1.0", "env": "staging"}
+
+	s.Jobs.EXPECT().Find(ctx, "main", "pp", "jn").Return(&job.Job{Name: "jn"}, nil).Times(2)
+	s.Builds.EXPECT().Find(ctx, "main", "pp", "jn", "1").
+		Return(&build.Build{ID: 5, BuildNumber: "1", Status: build.Failed, InputValues: inputVals}, nil).Times(2)
+	s.Builds.EXPECT().CreateRetry(ctx, "main", "pp", "jn", "1", gomock.Any()).
+		DoAndReturn(func(ctx context.Context, tc, pc, jn, pbn string, b build.Build) (uint32, string, error) {
+			require.NotNil(t, b.InputValues)
+			assert.Equal(t, "v1.0", b.InputValues["version"])
+			assert.Equal(t, "staging", b.InputValues["env"])
+			return uint32(10), "1.1", nil
+		})
+
+	err := s.S.RetryJobBuild(ctx, "main", "pp", "jn", "1")
+	require.NoError(t, err)
+}
+
 func TestRetryJobBuild_RunningBuildFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
@@ -832,6 +854,58 @@ func TestEvaluateDownstreamJobs_TriggersWhenReady(t *testing.T) {
 	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "deploy", gomock.Any()).
 		Return(uint32(10), "1", nil)
 	// Versions are pinned at creation time for all builds
+	s.Builds.EXPECT().InsertGetVersion(ctx, "main", "my-pipeline", "deploy", uint32(10), "repo", uint32(42)).Return(nil)
+
+	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")
+	require.NoError(t, err)
+}
+
+func TestEvaluateDownstreamJobs_FillsInputDefaults(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	defVal := "staging"
+	pp := &pipeline.Pipeline{
+		Name: "my-pipeline",
+		Jobs: []job.Job{
+			{Name: "lint"},
+			{
+				Name: "deploy",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeGet,
+						Get: &job.GetStep{
+							Type: "git", Name: "repo",
+							Passed: []string{"lint"}, Trigger: true,
+						},
+					},
+				},
+				Inputs: []job.Input{
+					{Name: "env", Type: "string", Default: &defVal},
+					{Name: "count", Type: "number"}, // no default → zero value "0"
+				},
+			},
+		},
+	}
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+
+	s.Builds.EXPECT().FindReadyDownstreamVersion(
+		ctx, "main", "my-pipeline",
+		[]string{"lint"}, "deploy", "repo", 1, (*uint32)(nil),
+	).Return(uint32(42), true, nil)
+	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").
+		Return(&resource.Resource{Type: "git", Name: "repo"}, nil)
+	s.Builds.EXPECT().FindOldestPending(ctx, "main", "my-pipeline", "deploy").
+		Return(nil, nil)
+
+	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "deploy", gomock.Any()).
+		DoAndReturn(func(ctx context.Context, tc, pn, jn string, b build.Build) (uint32, string, error) {
+			require.NotNil(t, b.InputValues)
+			assert.Equal(t, "staging", b.InputValues["env"])
+			assert.Equal(t, "0", b.InputValues["count"])
+			return uint32(10), "1", nil
+		})
 	s.Builds.EXPECT().InsertGetVersion(ctx, "main", "my-pipeline", "deploy", uint32(10), "repo", uint32(42)).Return(nil)
 
 	err := s.S.EvaluateDownstreamJobs(ctx, "main", "my-pipeline", "lint")

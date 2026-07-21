@@ -142,8 +142,9 @@ type Service interface {
 	CreatePipelineImage(ctx context.Context, tc string, pp []byte, vars map[string]interface{}, format string) ([]byte, error)
 
 	// TriggerPipelineJob creates a pending build for the specified job and enqueues
-	// it for execution.
-	TriggerPipelineJob(ctx context.Context, tc, pn, jn string) error
+	// it for execution. inputValues provides parameter values for jobs with input
+	// blocks; manual indicates whether this is a manual trigger (requiring required inputs).
+	TriggerPipelineJob(ctx context.Context, tc, pn, jn string, inputValues map[string]string, manual bool) error
 	// ListPipelineJobs returns all jobs for the given pipeline enriched with
 	// their latest build status.
 	ListPipelineJobs(ctx context.Context, tc, pn string) ([]job.WithStatus, error)

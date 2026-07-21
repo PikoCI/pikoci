@@ -503,7 +503,7 @@ func TestTriggerPipelineJob(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	err = c.TriggerPipelineJob(context.Background(), "team", "pipe", "job1")
+	err = c.TriggerPipelineJob(context.Background(), "team", "pipe", "job1", nil, false)
 	require.NoError(t, err)
 }
 
@@ -1683,7 +1683,7 @@ func TestTriggerPipelineJob_Error(t *testing.T) {
 	c, err := client.New(ts.URL, "jwt")
 	require.NoError(t, err)
 
-	err = c.TriggerPipelineJob(context.Background(), "team1", "pipe", "nojob")
+	err = c.TriggerPipelineJob(context.Background(), "team1", "pipe", "nojob", nil, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "job not found")
 }

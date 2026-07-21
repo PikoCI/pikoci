@@ -38,6 +38,17 @@ type HookStep struct {
 	Notify *NotifyStep          `json:"notify,omitempty"`
 }
 
+// Input defines a parameter that can be provided when manually triggering a job.
+// Values are injected as $input_<name> environment variables into all steps.
+type Input struct {
+	Name        string   `json:"name"`
+	Type        string   `json:"type"`              // "string", "number", "bool"
+	Description string   `json:"description,omitempty"`
+	Default     *string  `json:"default,omitempty"`  // nil = required
+	Options     []string `json:"options,omitempty"`
+	Multiple    bool     `json:"multiple,omitempty"`
+}
+
 // Job represents a named unit of work in a pipeline. It contains a plan of
 // ordered steps and optional lifecycle hooks that run on success, failure,
 // cancellation, or unconditionally (ensure).
@@ -66,6 +77,8 @@ type Job struct {
 	ApproveCount int `json:"approve_count,omitempty"`
 	// ApproveNotify contains notification steps to fire when a build enters WaitingForApproval.
 	ApproveNotify []NotifyStep `json:"approve_notify,omitempty"`
+
+	Inputs []Input `json:"inputs,omitempty"`
 
 	OnSuccess []HookStep `json:"on_success,omitempty"`
 	OnFailure []HookStep `json:"on_failure,omitempty"`

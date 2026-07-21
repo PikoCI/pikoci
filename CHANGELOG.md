@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Parameterized manual triggers**: Jobs can declare `input` blocks to collect parameters on manual trigger, injected as `$input_<name>` env vars. Supports typed fields, defaults, dropdowns, and multi-select ([#467](https://github.com/PikoCI/pikoci/issues/467)).
 - **`interruptible` on jobs**: When `true`, creating a new build for the job automatically cancels all older running, pending, and waiting-for-approval builds, so only the latest build runs ([#612](https://github.com/PikoCI/pikoci/issues/612)).
 - **`allow_failure` on jobs**: When `true`, a failed build is marked as `warning` (salmon) instead of `failed`, unblocking downstream jobs. Any failed build can also be manually marked as warning via a UI button (requires Maintain role) ([#610](https://github.com/PikoCI/pikoci/issues/610)).
 - **`disable_retry` on jobs**: Prevents build retries via API and hides the retry button in the UI ([#617](https://github.com/PikoCI/pikoci/issues/617)).
