@@ -10003,3 +10003,292 @@ func TestProcessJob_InputValues_InjectedAsEnvVars(t *testing.T) {
 	assert.Contains(t, taskLogs, "version=v2.0", "input_version env var should be expanded in task logs")
 	assert.Contains(t, taskLogs, "debug=true", "input_debug env var should be expanded in task logs")
 }
+
+func TestProcessJob_IfStep_InputValues_AndBranchSelection(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	inputVals := map[string]string{"env": "production", "version": "v3.0"}
+
+	ifJob := job.Job{
+		ID: 1, Name: "deploy",
+		Plan: []job.PlanStep{
+			{
+				Type: job.StepTypeIf,
+				If: &job.IfStep{
+					Branches: []job.IfBranch{
+						{
+							Type:      "if",
+							Label:     "check-prod",
+							Condition: "$input_env == 'production'",
+							Steps: []job.PlanStep{
+								{Type: job.StepTypeTask, Task: &job.TaskStep{
+									Name: "deploy-prod",
+									Run: utils.RunnerCommand{
+										Runner: "exec",
+										Args:   []string{"-ec", "echo PROD version=$input_version"},
+										Params: map[string]string{"path": "/bin/sh"},
+									},
+								}},
+							},
+						},
+						{
+							Type:  "else",
+							Label: "else",
+							Steps: []job.PlanStep{
+								{Type: job.StepTypeTask, Task: &job.TaskStep{
+									Name: "deploy-staging",
+									Run: utils.RunnerCommand{
+										Runner: "exec",
+										Args:   []string{"-ec", "echo STAGING version=$input_version"},
+										Params: map[string]string{"path": "/bin/sh"},
+									},
+								}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	svc.EXPECT().GetJobBuild(gomock.Any(), "main", "test-pipeline", "deploy", "30").
+		Return(&build.Build{
+			ID: 30, BuildNumber: "30", Status: build.Started,
+			StartedAt: time.Now(), InputValues: inputVals,
+		}, nil).AnyTimes()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), "main", "test-pipeline", "deploy").
+		Return(&ifJob, nil)
+
+	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	svc.EXPECT().FindBuildGetVersions(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	svc.EXPECT().EvaluateDownstreamJobs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	var lastBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), "main", "test-pipeline", "deploy", "30", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			lastBuild = b
+			return nil
+		}).AnyTimes()
+
+	w := &Worker{pikoci: svc, logger: logger}
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: "test-pipeline",
+		Jobs:    []job.Job{ifJob},
+		Runners: []runner.Runner{{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}}},
+	}
+	m := workitem.Body{
+		TeamCanonical: "main", PipelineCanonical: "test-pipeline",
+		JobName: "deploy", BuildID: 30, BuildNumber: "30",
+	}
+
+	w.processJob(context.Background(), m, t.TempDir(), pp)
+
+	// Verify structure: parent "if" step with branch sub-steps
+	require.True(t, len(lastBuild.Steps) > 0, "build should have steps")
+	ifParent := lastBuild.Steps[0]
+	assert.Equal(t, "if", ifParent.Type)
+	assert.Equal(t, build.Succeeded, ifParent.Status)
+	require.Len(t, ifParent.SubSteps, 2, "should have 2 branches (if + else)")
+
+	// First branch (if "check-prod") should be entered because input_env=production
+	assert.Equal(t, "if", ifParent.SubSteps[0].Type)
+	assert.Equal(t, build.Succeeded, ifParent.SubSteps[0].Status)
+	require.Len(t, ifParent.SubSteps[0].SubSteps, 1, "entered branch should have 1 inner step")
+	assert.Equal(t, "deploy-prod", ifParent.SubSteps[0].SubSteps[0].Name)
+
+	// Second branch (else) should be skipped
+	assert.Equal(t, "else", ifParent.SubSteps[1].Type)
+	assert.Equal(t, build.Skipped, ifParent.SubSteps[1].Status)
+
+	// Verify input values are available inside the branch task
+	taskLogs := ifParent.SubSteps[0].SubSteps[0].Logs
+	assert.Contains(t, taskLogs, "PROD version=v3.0", "input_version env var should be expanded inside if branch")
+	assert.NotContains(t, taskLogs, "STAGING", "else branch should not have executed")
+}
+
+func TestProcessJob_IfStep_NoBranchMatches(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	inputVals := map[string]string{"env": "development"}
+
+	ifJob := job.Job{
+		ID: 1, Name: "deploy",
+		Plan: []job.PlanStep{
+			{
+				Type: job.StepTypeIf,
+				If: &job.IfStep{
+					Branches: []job.IfBranch{
+						{
+							Type:      "if",
+							Label:     "check-prod",
+							Condition: "$input_env == 'production'",
+							Steps: []job.PlanStep{
+								{Type: job.StepTypeTask, Task: &job.TaskStep{
+									Name: "deploy-prod",
+									Run: utils.RunnerCommand{
+										Runner: "exec",
+										Args:   []string{"-ec", "echo prod"},
+										Params: map[string]string{"path": "/bin/sh"},
+									},
+								}},
+							},
+						},
+						{
+							Type:      "else_if",
+							Label:     "check-staging",
+							Condition: "$input_env == 'staging'",
+							Steps: []job.PlanStep{
+								{Type: job.StepTypeTask, Task: &job.TaskStep{
+									Name: "deploy-staging",
+									Run: utils.RunnerCommand{
+										Runner: "exec",
+										Args:   []string{"-ec", "echo staging"},
+										Params: map[string]string{"path": "/bin/sh"},
+									},
+								}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	svc.EXPECT().GetJobBuild(gomock.Any(), "main", "test-pipeline", "deploy", "31").
+		Return(&build.Build{
+			ID: 31, BuildNumber: "31", Status: build.Started,
+			StartedAt: time.Now(), InputValues: inputVals,
+		}, nil).AnyTimes()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), "main", "test-pipeline", "deploy").
+		Return(&ifJob, nil)
+
+	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	svc.EXPECT().FindBuildGetVersions(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	svc.EXPECT().EvaluateDownstreamJobs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	var lastBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), "main", "test-pipeline", "deploy", "31", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			lastBuild = b
+			return nil
+		}).AnyTimes()
+
+	w := &Worker{pikoci: svc, logger: logger}
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: "test-pipeline",
+		Jobs:    []job.Job{ifJob},
+		Runners: []runner.Runner{{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}}},
+	}
+	m := workitem.Body{
+		TeamCanonical: "main", PipelineCanonical: "test-pipeline",
+		JobName: "deploy", BuildID: 31, BuildNumber: "31",
+	}
+
+	w.processJob(context.Background(), m, t.TempDir(), pp)
+
+	// No branch matches — all should be skipped, build should succeed
+	assert.Equal(t, build.Succeeded, lastBuild.Status, "build should succeed when no branch matches")
+	require.True(t, len(lastBuild.Steps) > 0)
+	ifParent := lastBuild.Steps[0]
+	assert.Equal(t, "if", ifParent.Type)
+	assert.Equal(t, build.Succeeded, ifParent.Status)
+	require.Len(t, ifParent.SubSteps, 2)
+	assert.Equal(t, build.Skipped, ifParent.SubSteps[0].Status, "if branch should be skipped")
+	assert.Equal(t, build.Skipped, ifParent.SubSteps[1].Status, "else_if branch should be skipped")
+}
+
+func TestProcessJob_IfStep_BranchFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	ifJob := job.Job{
+		ID: 1, Name: "deploy",
+		Plan: []job.PlanStep{
+			{
+				Type: job.StepTypeIf,
+				If: &job.IfStep{
+					Branches: []job.IfBranch{
+						{
+							Type:      "if",
+							Label:     "always-true",
+							Condition: "'yes' == 'yes'",
+							Steps: []job.PlanStep{
+								{Type: job.StepTypeTask, Task: &job.TaskStep{
+									Name: "failing-task",
+									Run: utils.RunnerCommand{
+										Runner: "exec",
+										Args:   []string{"-ec", "exit 1"},
+										Params: map[string]string{"path": "/bin/sh"},
+									},
+								}},
+							},
+						},
+						{
+							Type:  "else",
+							Steps: []job.PlanStep{
+								{Type: job.StepTypeTask, Task: &job.TaskStep{
+									Name: "never-reached",
+									Run: utils.RunnerCommand{
+										Runner: "exec",
+										Args:   []string{"-ec", "echo ok"},
+										Params: map[string]string{"path": "/bin/sh"},
+									},
+								}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	svc.EXPECT().GetJobBuild(gomock.Any(), "main", "test-pipeline", "deploy", "32").
+		Return(&build.Build{
+			ID: 32, BuildNumber: "32", Status: build.Started,
+			StartedAt: time.Now(),
+		}, nil).AnyTimes()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), "main", "test-pipeline", "deploy").
+		Return(&ifJob, nil)
+
+	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	svc.EXPECT().FindBuildGetVersions(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	svc.EXPECT().EvaluateDownstreamJobs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	var lastBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), "main", "test-pipeline", "deploy", "32", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			lastBuild = b
+			return nil
+		}).AnyTimes()
+
+	w := &Worker{pikoci: svc, logger: logger}
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: "test-pipeline",
+		Jobs:    []job.Job{ifJob},
+		Runners: []runner.Runner{{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}}},
+	}
+	m := workitem.Body{
+		TeamCanonical: "main", PipelineCanonical: "test-pipeline",
+		JobName: "deploy", BuildID: 32, BuildNumber: "32",
+	}
+
+	w.processJob(context.Background(), m, t.TempDir(), pp)
+
+	// Build should fail when the selected branch's task fails
+	assert.Equal(t, build.Failed, lastBuild.Status, "build should fail when selected branch fails")
+	require.True(t, len(lastBuild.Steps) > 0)
+	ifParent := lastBuild.Steps[0]
+	assert.Equal(t, "if", ifParent.Type)
+	assert.Equal(t, build.Failed, ifParent.Status, "if parent should be failed")
+	require.Len(t, ifParent.SubSteps, 2)
+	assert.Equal(t, build.Failed, ifParent.SubSteps[0].Status, "entered branch should be failed")
+	assert.Equal(t, build.Skipped, ifParent.SubSteps[1].Status, "else branch should be skipped")
+}

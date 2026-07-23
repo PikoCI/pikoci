@@ -19,6 +19,7 @@ const stepIcon = {
   runner: 'bi-gear',
   job: 'bi-braces',
   input: 'bi-sliders2',
+  if: 'bi-signpost-split',
 };
 
 function getStepIcon(type) {
@@ -31,6 +32,7 @@ function statusBadge(status, hasLogs) {
   if (status === 'pending') return html`<span class="piko-badge piko-badge-pending">pending</span>`;
   if (status === 'cancelled') return html`<span class="piko-badge piko-badge-cancelled">cancel</span>`;
   if (status === 'warning') return html`<span class="piko-badge piko-badge-warning">warn</span>`;
+  if (status === 'skipped') return html`<span class="piko-badge piko-badge-skipped">skip</span>`;
   if (status === 'succeeded' || hasLogs) return html`<span class="piko-badge piko-badge-succeeded">ok</span>`;
   return null;
 }
@@ -43,6 +45,7 @@ function buildStatusBadge(status) {
   if (status === 'pending') return html`<span class="piko-badge piko-badge-pending">Pending</span>`;
   if (status === 'waiting_for_approval') return html`<span class="piko-badge piko-badge-waiting_for_approval">Waiting for Approval</span>`;
   if (status === 'warning') return html`<span class="piko-badge piko-badge-warning">Warning</span>`;
+  if (status === 'skipped') return html`<span class="piko-badge piko-badge-skipped">Skipped</span>`;
   return null;
 }
 
@@ -197,6 +200,64 @@ function ParallelGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoF
             isAutoScrollingRef=${isAutoScrollingRef}
           />
         `)}
+      </div>
+    </div>
+  `;
+}
+
+// ---------- ConditionalGroup ----------
+
+function ConditionalGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoFollow, setAutoFollow, isAutoScrollingRef }) {
+  const [groupExpanded, setGroupExpanded] = useState(true);
+  const branches = step.sub_steps || [];
+  const entered = branches.find(b => b.status !== 'skipped');
+
+  return html`
+    <div class="piko-step-row piko-conditional-group" data-status="${step.status}">
+      <div class="piko-step-row-header" onClick=${() => setGroupExpanded(!groupExpanded)}>
+        <span>
+          <span class="piko-step-label"><i class="bi bi-signpost-split"></i> if</span>
+          ${' '}${step.name || ''}${' '}
+          <span style="color:var(--text-muted);">(${entered ? 'entered ' + (entered.name || entered.type) : 'skipped all'}, ${step.duration})</span>
+        </span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          ${statusBadge(step.status, false)}
+        </span>
+      </div>
+      <div class="piko-step-row-body" style="display:${groupExpanded ? 'block' : 'none'};padding:4px 4px 4px 16px;">
+        ${branches.map((branch, bi) => {
+          const isSkipped = branch.status === 'skipped';
+          const branchKey = stepIndexBase + '_if_' + bi;
+          return html`
+            <div class="piko-step-row ${isSkipped ? 'piko-step-skipped' : ''}" data-status="${branch.status}" key=${bi}>
+              <div class="piko-step-row-header" onClick=${() => !isSkipped && onToggleStep(branchKey)}>
+                <span>
+                  <span class="piko-step-label"><i class="bi ${branch.type === 'else' ? 'bi-arrow-return-right' : 'bi-signpost-split'}"></i> ${branch.type}</span>
+                  ${' '}${branch.name || ''}${' '}
+                  ${branch.duration ? html`<span style="color:var(--text-muted);">(${branch.duration})</span>` : null}
+                </span>
+                <span style="display:flex;align-items:center;gap:6px;">
+                  ${statusBadge(branch.status, false)}
+                </span>
+              </div>
+              ${!isSkipped && (branch.sub_steps || []).length > 0 ? html`
+                <div class="piko-step-row-body" style="display:block;padding:4px 4px 4px 16px;">
+                  ${(branch.sub_steps || []).map((child, ci) => html`
+                    <${StepRow}
+                      key=${ci}
+                      step=${child}
+                      expanded=${!!expandedSteps[branchKey + '_' + ci]}
+                      onToggle=${() => onToggleStep(branchKey + '_' + ci)}
+                      autoFollow=${autoFollow}
+                      setAutoFollow=${setAutoFollow}
+                      isAutoScrollingRef=${isAutoScrollingRef}
+                    />
+                  `)}
+                </div>
+              ` : null}
+            </div>
+          `;
+        })}
       </div>
     </div>
   `;
@@ -547,6 +608,20 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
         if (s.type === 'in_parallel') {
           return html`
             <${ParallelGroup}
+              key=${i}
+              step=${s}
+              expandedSteps=${expandedSteps}
+              onToggleStep=${toggleStep}
+              stepIndexBase=${i}
+              autoFollow=${autoFollow}
+              setAutoFollow=${setAutoFollow}
+              isAutoScrollingRef=${isAutoScrollingRef}
+            />
+          `;
+        }
+        if (s.type === 'if') {
+          return html`
+            <${ConditionalGroup}
               key=${i}
               step=${s}
               expandedSteps=${expandedSteps}

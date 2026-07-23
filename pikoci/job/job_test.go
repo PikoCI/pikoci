@@ -311,6 +311,173 @@ func TestPlanGetSteps_IncludesInParallelSteps(t *testing.T) {
 	assert.Equal(t, job.StepTypeGet, steps[0].Type)
 }
 
+func TestFlatPlanSteps_IfBranches(t *testing.T) {
+	j := job.Job{
+		Name: "test",
+		Plan: []job.PlanStep{
+			{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "app"}},
+			{
+				Type: job.StepTypeIf,
+				If: &job.IfStep{
+					Branches: []job.IfBranch{
+						{
+							Type:      "if",
+							Label:     "check-prod",
+							Condition: "$BRANCH == 'main'",
+							Steps: []job.PlanStep{
+								{Type: job.StepTypeTask, Task: &job.TaskStep{Name: "deploy-prod"}},
+								{Type: job.StepTypePut, Put: &job.PutStep{Type: "git", Name: "release"}},
+							},
+						},
+						{
+							Type: "else",
+							Steps: []job.PlanStep{
+								{Type: job.StepTypeTask, Task: &job.TaskStep{Name: "skip"}},
+							},
+						},
+					},
+				},
+			},
+			{Type: job.StepTypeTask, Task: &job.TaskStep{Name: "notify"}},
+		},
+	}
+
+	flat := j.FlatPlanSteps()
+	require.Len(t, flat, 5)
+	assert.Equal(t, job.StepTypeGet, flat[0].Type)
+	assert.Equal(t, "deploy-prod", flat[1].Task.Name)
+	assert.Equal(t, "release", flat[2].Put.Name)
+	assert.Equal(t, "skip", flat[3].Task.Name)
+	assert.Equal(t, "notify", flat[4].Task.Name)
+}
+
+func TestFlatPlanSteps_IfOnly(t *testing.T) {
+	j := job.Job{
+		Name: "test",
+		Plan: []job.PlanStep{
+			{
+				Type: job.StepTypeIf,
+				If: &job.IfStep{
+					Branches: []job.IfBranch{
+						{
+							Type:      "if",
+							Condition: "$BRANCH == 'main'",
+							Steps: []job.PlanStep{
+								{Type: job.StepTypeTask, Task: &job.TaskStep{Name: "only-task"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	flat := j.FlatPlanSteps()
+	require.Len(t, flat, 1)
+	assert.Equal(t, "only-task", flat[0].Task.Name)
+}
+
+func TestGetSteps_InsideIfBranches(t *testing.T) {
+	j := job.Job{
+		Name: "test",
+		Plan: []job.PlanStep{
+			{
+				Type: job.StepTypeIf,
+				If: &job.IfStep{
+					Branches: []job.IfBranch{
+						{
+							Type: "if",
+							Steps: []job.PlanStep{
+								{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "app", Trigger: true}},
+							},
+						},
+						{
+							Type: "else",
+							Steps: []job.PlanStep{
+								{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "backup"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	gets := j.GetSteps()
+	require.Len(t, gets, 2)
+	assert.Equal(t, "app", gets[0].Name)
+	assert.Equal(t, "backup", gets[1].Name)
+}
+
+func TestAllPutSteps_InsideIfBranches(t *testing.T) {
+	j := job.Job{
+		Name: "test",
+		Plan: []job.PlanStep{
+			{
+				Type: job.StepTypeIf,
+				If: &job.IfStep{
+					Branches: []job.IfBranch{
+						{
+							Type: "if",
+							Steps: []job.PlanStep{
+								{Type: job.StepTypePut, Put: &job.PutStep{Type: "git", Name: "release"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	puts := j.AllPutSteps()
+	require.Len(t, puts, 1)
+	assert.Equal(t, "release", puts[0].Name)
+}
+
+func TestIfStep_JSONRoundTrip(t *testing.T) {
+	original := job.PlanStep{
+		Type: job.StepTypeIf,
+		If: &job.IfStep{
+			Branches: []job.IfBranch{
+				{
+					Type:      "if",
+					Label:     "check-branch",
+					Condition: "$GET_APP_BRANCH == 'main'",
+					Steps: []job.PlanStep{
+						{Type: job.StepTypeTask, Task: &job.TaskStep{Name: "deploy"}},
+					},
+				},
+				{
+					Type:      "else_if",
+					Label:     "check-staging",
+					Condition: "$GET_APP_BRANCH == 'staging'",
+					Steps:     []job.PlanStep{},
+				},
+				{
+					Type:  "else",
+					Steps: []job.PlanStep{},
+				},
+			},
+		},
+	}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var decoded job.PlanStep
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+
+	require.NotNil(t, decoded.If)
+	require.Len(t, decoded.If.Branches, 3)
+	assert.Equal(t, "if", decoded.If.Branches[0].Type)
+	assert.Equal(t, "check-branch", decoded.If.Branches[0].Label)
+	assert.Equal(t, "$GET_APP_BRANCH == 'main'", decoded.If.Branches[0].Condition)
+	assert.Equal(t, "else_if", decoded.If.Branches[1].Type)
+	assert.Equal(t, "else", decoded.If.Branches[2].Type)
+	assert.Empty(t, decoded.If.Branches[2].Condition)
+}
+
 func TestNotifyStep_NotificationCanonical(t *testing.T) {
 	n := &job.NotifyStep{Type: "slack", Name: "deploy-alerts"}
 	assert.Equal(t, "slack.deploy-alerts", n.NotificationCanonical())

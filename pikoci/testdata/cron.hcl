@@ -70,10 +70,33 @@ job "deploy-staging" {
     passed  = ["gen"]
   }
   approve "deploy to staging" {}
-  task "deploy" {
-    run "exec" {
-      path = "/bin/sh"
-      args = ["-ec", "echo '--- deploy-staging ---' && echo version=$input_version env=$input_environment dry_run=$input_dry_run && cat cron-output/timestamp.txt && echo 'deploying to staging...' && sleep 5 && echo 'done'"]
+
+  if "check-dry-run" {
+    condition = "$input_dry_run == 'true'"
+    task "dry-run" {
+      run "exec" {
+        path = "/bin/sh"
+        args = ["-ec", "echo '--- DRY RUN ---' && echo version=$input_version env=$input_environment && echo 'would deploy to $input_environment (skipped)' && cat cron-output/timestamp.txt"]
+      }
+    }
+  }
+
+  else_if "check-production" {
+    condition = "$input_environment == 'production'"
+    task "deploy-prod" {
+      run "exec" {
+        path = "/bin/sh"
+        args = ["-ec", "echo '--- PRODUCTION DEPLOY ---' && echo version=$input_version && cat cron-output/timestamp.txt && echo 'deploying to production...' && sleep 5 && echo 'done'"]
+      }
+    }
+  }
+
+  else {
+    task "deploy-staging" {
+      run "exec" {
+        path = "/bin/sh"
+        args = ["-ec", "echo '--- STAGING DEPLOY ---' && echo version=$input_version && cat cron-output/timestamp.txt && echo 'deploying to staging...' && sleep 5 && echo 'done'"]
+      }
     }
   }
 }

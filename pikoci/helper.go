@@ -659,7 +659,14 @@ var (
 		"in_parallel": true, "approve": true, "input": true,
 		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
 		"matrix": true,
+		"if": true, "else_if": true, "else": true,
 	}
+	ifBranchBlocks = map[string]bool{
+		"get": true, "task": true, "put": true, "notify": true, "service": true,
+		"in_parallel": true,
+		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
+	}
+	ifBlockKnownAttrs = []string{"condition"}
 	stepHookBlocks = map[string]bool{
 		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
 	}
@@ -734,12 +741,66 @@ func validateJobBlock(block *hclsyntax.Block) []string {
 
 	errs = append(errs, validateAttrTypos(block, jobCtx, jobKnownAttrs)...)
 
-	for _, inner := range block.Body.Blocks {
+	lastIfIdx := -1
+	for i, inner := range block.Body.Blocks {
 		if !jobBlocks[inner.Type] {
 			errs = append(errs, suggestBlockTypo(inner.Type, jobBlocks, jobCtx, inner.TypeRange))
 			continue
 		}
 
+		switch inner.Type {
+		case "task":
+			errs = append(errs, validateTaskBlock(inner, jobName)...)
+		case "get":
+			errs = append(errs, validateStepBlock(inner, jobName, getStepKnownAttrs)...)
+		case "put":
+			errs = append(errs, validateStepBlock(inner, jobName, putStepKnownAttrs)...)
+		case "notify":
+			errs = append(errs, validateStepBlock(inner, jobName, notifyStepKnownAttrs)...)
+		case "in_parallel":
+			errs = append(errs, validateInParallelBlock(inner, jobName)...)
+		case "if":
+			lastIfIdx = i
+			errs = append(errs, validateIfBranchBlock(inner, jobName)...)
+		case "else_if":
+			if lastIfIdx < 0 {
+				errs = append(errs, fmt.Sprintf("%s: else_if without preceding if (line %d)", jobCtx, inner.TypeRange.Start.Line))
+			}
+			errs = append(errs, validateIfBranchBlock(inner, jobName)...)
+		case "else":
+			if lastIfIdx < 0 {
+				errs = append(errs, fmt.Sprintf("%s: else without preceding if (line %d)", jobCtx, inner.TypeRange.Start.Line))
+			}
+			errs = append(errs, validateIfBranchBlock(inner, jobName)...)
+			lastIfIdx = -1 // reset: only one else per chain
+		}
+
+		// Reset chain tracking when a non-conditional block appears
+		if inner.Type != "if" && inner.Type != "else_if" && inner.Type != "else" {
+			lastIfIdx = -1
+		}
+	}
+	return errs
+}
+
+// validateIfBranchBlock checks for unknown blocks/attrs inside if/else_if/else branches.
+func validateIfBranchBlock(block *hclsyntax.Block, jobName string) []string {
+	var errs []string
+	ctx := fmt.Sprintf("%s in job %q", block.Type, jobName)
+
+	if block.Type != "else" {
+		errs = append(errs, validateAttrTypos(block, ctx, ifBlockKnownAttrs)...)
+	}
+
+	for _, inner := range block.Body.Blocks {
+		if inner.Type == "if" || inner.Type == "else_if" || inner.Type == "else" {
+			errs = append(errs, fmt.Sprintf("%s: nested conditional blocks are not allowed (line %d)", ctx, inner.TypeRange.Start.Line))
+			continue
+		}
+		if !ifBranchBlocks[inner.Type] {
+			errs = append(errs, suggestBlockTypo(inner.Type, ifBranchBlocks, ctx, inner.TypeRange))
+			continue
+		}
 		switch inner.Type {
 		case "task":
 			errs = append(errs, validateTaskBlock(inner, jobName)...)
@@ -1819,10 +1880,81 @@ func parseJobPlansFromPairs(pairs []jobBlockPair, services []service.Service) (m
 		var plan []job.PlanStep
 		getIdx, taskIdx, putIdx, notifyIdx, serviceIdx, inParallelIdx := 0, 0, 0, 0, 0, 0
 
-		for _, innerBlock := range block.Body.Blocks {
+		allBlocks := block.Body.Blocks
+		for blockI := 0; blockI < len(allBlocks); blockI++ {
+			innerBlock := allBlocks[blockI]
 			switch innerBlock.Type {
 			case "matrix":
 				// Skip matrix blocks (already processed during expansion)
+				continue
+			case "if", "else_if", "else":
+				// Parse if/else_if/else chain from AST
+				serviceByNameCopy := make(map[string]service.Service, len(serviceByName))
+				for k, v := range serviceByName {
+					serviceByNameCopy[k] = v
+				}
+
+				var branches []job.IfBranch
+				ifBlockIdx := blockI // remember the first "if" block for hooks
+				for blockI < len(allBlocks) {
+					cb := allBlocks[blockI]
+					if cb.Type != "if" && cb.Type != "else_if" && cb.Type != "else" {
+						break
+					}
+					// First block must be "if"
+					if len(branches) == 0 && cb.Type != "if" {
+						break
+					}
+
+					branch := job.IfBranch{Type: cb.Type}
+					if len(cb.Labels) > 0 {
+						branch.Label = cb.Labels[0]
+					}
+
+					// Parse condition attribute (not on else)
+					if cb.Type != "else" {
+						if attr, exists := cb.Body.Attributes["condition"]; exists {
+							val, vd := attr.Expr.Value(pairEctx)
+							if vd.HasErrors() {
+								return nil, nil, nil, fmt.Errorf("failed to evaluate condition in %s block: %s", cb.Type, vd.Error())
+							}
+							branch.Condition = val.AsString()
+						}
+					}
+
+					// Parse inner step blocks
+					{
+						innerSteps, err := parseInnerStepsFromAST(cb.Body.Blocks, pairEctx, serviceByNameCopy)
+						if err != nil {
+							label := branch.Label
+							if label == "" {
+								label = cb.Type
+							}
+							return nil, nil, nil, fmt.Errorf("failed to parse steps in %s %q: %w", cb.Type, label, err)
+						}
+						branch.Steps = innerSteps
+					}
+
+					branches = append(branches, branch)
+
+					if cb.Type == "else" {
+						blockI++
+						break
+					}
+					blockI++
+				}
+				blockI-- // outer loop will increment
+
+				plan = append(plan, job.PlanStep{
+					Type: job.StepTypeIf,
+					If: &job.IfStep{
+						Branches: branches,
+					},
+					OnSuccess: parseHooks(allBlocks[ifBlockIdx], pairEctx, "on_success"),
+					OnFailure: parseHooks(allBlocks[ifBlockIdx], pairEctx, "on_failure"),
+					OnCancel:  parseHooks(allBlocks[ifBlockIdx], pairEctx, "on_cancel"),
+					Ensure:    parseHooks(allBlocks[ifBlockIdx], pairEctx, "ensure"),
+				})
 				continue
 			case "service":
 				if serviceIdx >= len(hj.Service) {
@@ -2148,4 +2280,262 @@ func parseJobPlansFromPairs(pairs []jobBlockPair, services []service.Service) (m
 	}
 
 	return result, jhMap, services, nil
+}
+
+// parseInnerStepsFromAST parses get/task/put/notify/service/in_parallel steps
+// directly from AST blocks, without relying on hclsimple-decoded structs.
+// Used for if/else_if/else branch bodies which are not decoded by hclsimple.
+func parseInnerStepsFromAST(blocks []*hclsyntax.Block, ectx *hcl.EvalContext, services map[string]service.Service) ([]job.PlanStep, error) {
+	var steps []job.PlanStep
+	for _, b := range blocks {
+		body := b.Body
+		switch b.Type {
+		case "get":
+			if len(b.Labels) < 2 {
+				return nil, fmt.Errorf("get step requires type and name labels")
+			}
+			gs := job.GetStep{Type: b.Labels[0], Name: b.Labels[1]}
+			var timeout time.Duration
+			var attempts int
+			for name, attr := range body.Attributes {
+				val, vd := attr.Expr.Value(ectx)
+				if vd.HasErrors() {
+					continue
+				}
+				switch name {
+				case "passed":
+					if val.Type().IsListType() || val.Type().IsTupleType() {
+						for it := val.ElementIterator(); it.Next(); {
+							_, v := it.Element()
+							gs.Passed = append(gs.Passed, v.AsString())
+						}
+					}
+				case "trigger":
+					gs.Trigger = val.True()
+				case "timeout":
+					d, err := time.ParseDuration(val.AsString())
+					if err != nil {
+						return nil, fmt.Errorf("invalid timeout on get step %q: %w", gs.Name, err)
+					}
+					timeout = d
+				case "attempts":
+					var n int64
+					if err := gocty.FromCtyValue(val, &n); err != nil {
+						return nil, fmt.Errorf("invalid attempts on get step %q: %w", gs.Name, err)
+					}
+					attempts = int(n)
+				}
+			}
+			steps = append(steps, job.PlanStep{
+				Type: job.StepTypeGet, Timeout: timeout, Attempts: attempts,
+				Get:       &gs,
+				OnSuccess: parseHooks(b, ectx, "on_success"),
+				OnFailure: parseHooks(b, ectx, "on_failure"),
+				OnCancel:  parseHooks(b, ectx, "on_cancel"),
+				Ensure:    parseHooks(b, ectx, "ensure"),
+			})
+		case "task":
+			if len(b.Labels) < 1 {
+				return nil, fmt.Errorf("task step requires a name label")
+			}
+			ts := job.TaskStep{Name: b.Labels[0]}
+			var timeout time.Duration
+			var attempts int
+			for name, attr := range body.Attributes {
+				val, vd := attr.Expr.Value(ectx)
+				if vd.HasErrors() {
+					continue
+				}
+				switch name {
+				case "timeout":
+					d, err := time.ParseDuration(val.AsString())
+					if err != nil {
+						return nil, fmt.Errorf("invalid timeout on task step %q: %w", ts.Name, err)
+					}
+					timeout = d
+				case "attempts":
+					var n int64
+					if err := gocty.FromCtyValue(val, &n); err != nil {
+						return nil, fmt.Errorf("invalid attempts on task step %q: %w", ts.Name, err)
+					}
+					attempts = int(n)
+				case "inputs":
+					if val.Type().IsListType() || val.Type().IsTupleType() {
+						for it := val.ElementIterator(); it.Next(); {
+							_, v := it.Element()
+							ts.Inputs = append(ts.Inputs, v.AsString())
+						}
+					}
+				case "outputs":
+					if val.Type().IsListType() || val.Type().IsTupleType() {
+						for it := val.ElementIterator(); it.Next(); {
+							_, v := it.Element()
+							ts.Outputs = append(ts.Outputs, v.AsString())
+						}
+					}
+				}
+			}
+			// Parse run block
+			for _, inner := range body.Blocks {
+				if inner.Type == "run" && len(inner.Labels) >= 1 {
+					rc := utils.RunnerCommand{Runner: inner.Labels[0]}
+					for rname, rattr := range inner.Body.Attributes {
+						rval, rvd := rattr.Expr.Value(ectx)
+						if rvd.HasErrors() {
+							continue
+						}
+						if rname == "args" {
+							if rval.Type().IsListType() || rval.Type().IsTupleType() {
+								for it := rval.ElementIterator(); it.Next(); {
+									_, v := it.Element()
+									rc.Args = append(rc.Args, v.AsString())
+								}
+							}
+						} else {
+							if rc.Params == nil {
+								rc.Params = make(map[string]string)
+							}
+							rc.Params[rname] = rval.AsString()
+						}
+					}
+					ts.Run = rc
+				}
+			}
+			steps = append(steps, job.PlanStep{
+				Type: job.StepTypeTask, Timeout: timeout, Attempts: attempts,
+				Task:      &ts,
+				OnSuccess: parseHooks(b, ectx, "on_success"),
+				OnFailure: parseHooks(b, ectx, "on_failure"),
+				OnCancel:  parseHooks(b, ectx, "on_cancel"),
+				Ensure:    parseHooks(b, ectx, "ensure"),
+			})
+		case "put":
+			if len(b.Labels) < 2 {
+				return nil, fmt.Errorf("put step requires type and name labels")
+			}
+			ps := job.PutStep{Type: b.Labels[0], Name: b.Labels[1]}
+			var timeout time.Duration
+			var attempts int
+			params := make(map[string]string)
+			for name, attr := range body.Attributes {
+				val, vd := attr.Expr.Value(ectx)
+				if vd.HasErrors() {
+					continue
+				}
+				switch name {
+				case "timeout":
+					d, err := time.ParseDuration(val.AsString())
+					if err != nil {
+						return nil, fmt.Errorf("invalid timeout on put step %q: %w", ps.Name, err)
+					}
+					timeout = d
+				case "attempts":
+					var n int64
+					if err := gocty.FromCtyValue(val, &n); err != nil {
+						return nil, fmt.Errorf("invalid attempts on put step %q: %w", ps.Name, err)
+					}
+					attempts = int(n)
+				default:
+					params[name] = val.AsString()
+				}
+			}
+			ps.Params = params
+			steps = append(steps, job.PlanStep{
+				Type: job.StepTypePut, Timeout: timeout, Attempts: attempts,
+				Put:       &ps,
+				OnSuccess: parseHooks(b, ectx, "on_success"),
+				OnFailure: parseHooks(b, ectx, "on_failure"),
+				OnCancel:  parseHooks(b, ectx, "on_cancel"),
+				Ensure:    parseHooks(b, ectx, "ensure"),
+			})
+		case "notify":
+			if len(b.Labels) < 2 {
+				return nil, fmt.Errorf("notify step requires type and name labels")
+			}
+			ns := job.NotifyStep{Type: b.Labels[0], Name: b.Labels[1]}
+			params := make(map[string]string)
+			for name, attr := range body.Attributes {
+				val, vd := attr.Expr.Value(ectx)
+				if vd.HasErrors() {
+					continue
+				}
+				if name == "message" {
+					ns.Message = val.AsString()
+				} else {
+					params[name] = val.AsString()
+				}
+			}
+			ns.Params = params
+			steps = append(steps, job.PlanStep{
+				Type: job.StepTypeNotify,
+				Notify:    &ns,
+				OnSuccess: parseHooks(b, ectx, "on_success"),
+				OnFailure: parseHooks(b, ectx, "on_failure"),
+				OnCancel:  parseHooks(b, ectx, "on_cancel"),
+				Ensure:    parseHooks(b, ectx, "ensure"),
+			})
+		case "service":
+			if len(b.Labels) < 1 {
+				return nil, fmt.Errorf("service step requires a name label")
+			}
+			svcName := b.Labels[0]
+			if _, ok := services[svcName]; !ok {
+				return nil, fmt.Errorf("service_type %q does not exist", svcName)
+			}
+			params := make(map[string]string)
+			for name, attr := range body.Attributes {
+				val, vd := attr.Expr.Value(ectx)
+				if vd.HasErrors() {
+					continue
+				}
+				params[name] = val.AsString()
+			}
+			var paramMap map[string]string
+			if len(params) > 0 {
+				paramMap = params
+			}
+			steps = append(steps, job.PlanStep{
+				Type: job.StepTypeService,
+				Service: &job.ServiceStep{
+					Name:   svcName,
+					Params: paramMap,
+				},
+			})
+		case "in_parallel":
+			subSteps, err := parseInnerStepsFromAST(body.Blocks, ectx, services)
+			if err != nil {
+				return nil, fmt.Errorf("in_parallel: %w", err)
+			}
+			var limit int
+			var failFast bool
+			for name, attr := range body.Attributes {
+				val, vd := attr.Expr.Value(ectx)
+				if vd.HasErrors() {
+					continue
+				}
+				switch name {
+				case "limit":
+					var n int64
+					if err := gocty.FromCtyValue(val, &n); err == nil {
+						limit = int(n)
+					}
+				case "fail_fast":
+					failFast = val.True()
+				}
+			}
+			steps = append(steps, job.PlanStep{
+				Type: job.StepTypeInParallel,
+				InParallel: &job.InParallelStep{
+					Steps:    subSteps,
+					Limit:    limit,
+					FailFast: failFast,
+				},
+				OnSuccess: parseHooks(b, ectx, "on_success"),
+				OnFailure: parseHooks(b, ectx, "on_failure"),
+				OnCancel:  parseHooks(b, ectx, "on_cancel"),
+				Ensure:    parseHooks(b, ectx, "ensure"),
+			})
+		}
+	}
+	return steps, nil
 }

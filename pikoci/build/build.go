@@ -33,6 +33,8 @@ const (
 	// Warning indicates the build failed but the job has allow_failure enabled,
 	// so downstream jobs are not blocked.
 	Warning
+	// Skipped indicates a conditional branch was not selected at runtime.
+	Skipped
 )
 
 // Approval represents a single approve/reject vote on a build.

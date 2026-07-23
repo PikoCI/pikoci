@@ -797,6 +797,13 @@ func (w *Worker) runPlan(ctx context.Context, m workitem.Body, b *build.Build, c
 			if w.runInParallelStep(ctx, m, b, cwd, pp, *ps.InParallel, ps, resolvedVersions, exportedVars, secretVals, resolved) {
 				return true, resolved, exportedVars
 			}
+		case job.StepTypeIf:
+			if ps.If == nil {
+				continue
+			}
+			if w.runIfStep(ctx, m, b, cwd, pp, *ps.If, ps, resolvedVersions, exportedVars, secretVals, resolved) {
+				return true, resolved, exportedVars
+			}
 		}
 	}
 	return false, resolved, exportedVars
@@ -1004,6 +1011,192 @@ func (w *Worker) runInParallelStep(
 	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, "", ps.Ensure, "ensure", resolved, exportedVars)
 
 	return anyFailed
+}
+
+// runIfStep evaluates conditional branches and executes the first matching one.
+// Returns true if the selected branch failed.
+func (w *Worker) runIfStep(
+	ctx context.Context, m workitem.Body, b *build.Build,
+	cwd string, pp *pipeline.Pipeline, ifStep job.IfStep,
+	ps job.PlanStep, resolvedVersions map[string]uint32,
+	exportedVars map[string]string, secretVals []string, resolved map[string]string,
+) bool {
+	start := time.Now()
+
+	if len(ifStep.Branches) == 0 {
+		b.Steps = append(b.Steps, build.Step{
+			Type: "if", Status: build.Succeeded, Duration: 0,
+		})
+		w.updateBuild(ctx, m, *b)
+		return false
+	}
+
+	// Build condition vars from exportedVars + build metadata + input values
+	condVars := make(map[string]string)
+	for k, v := range exportedVars {
+		condVars[k] = v
+	}
+	for k, v := range buildMetadataParams(b, m) {
+		condVars[k] = v
+	}
+	for k, v := range resolved {
+		condVars[k] = v
+	}
+
+	// Add parent step placeholder
+	parentIdx := len(b.Steps)
+	label := "if"
+	if len(ifStep.Branches) > 0 && ifStep.Branches[0].Label != "" {
+		label = ifStep.Branches[0].Label
+	}
+	b.Steps = append(b.Steps, build.Step{
+		Type: "if", Name: label, Status: build.Started,
+	})
+	w.updateBuild(ctx, m, *b)
+
+	// Evaluate branches to find the selected one
+	selectedIdx := -1
+	for i, branch := range ifStep.Branches {
+		if branch.Type == "else" {
+			selectedIdx = i
+			break
+		}
+		result, err := EvaluateCondition(branch.Condition, condVars)
+		if err != nil {
+			w.failBuild(ctx, m, *b, fmt.Errorf("condition evaluation error in %s %q: %w", branch.Type, branch.Label, err))
+			return true
+		}
+		if result {
+			selectedIdx = i
+			break
+		}
+	}
+
+	// Build sub-steps for each branch. For the selected branch we use a
+	// local build with SuppressUpdates so inner steps appear nested under the
+	// branch in real-time (same pattern as runInParallelStep).
+	var subSteps []build.Step
+	failed := false
+	for i, branch := range ifStep.Branches {
+		branchName := branch.Label
+		if branchName == "" {
+			branchName = branch.Type
+		}
+
+		if i == selectedIdx {
+			branchStart := time.Now()
+
+			// Initialise the branch sub-step inside the parent so the UI
+			// shows the entered branch immediately.
+			branchIdx := len(subSteps)
+			subSteps = append(subSteps, build.Step{
+				Type: branch.Type, Name: branchName, Status: build.Started,
+			})
+			b.Steps[parentIdx].SubSteps = subSteps
+			w.updateBuild(ctx, m, *b)
+
+			// Local build whose steps sync into the branch's SubSteps on
+			// every updateBuild call, keeping the UI nested in real-time.
+			// Copy InputValues and BuildNumber so buildMetadataParams works.
+			localBuild := &build.Build{
+				SuppressUpdates: true,
+				InputValues:     b.InputValues,
+				BuildNumber:     b.BuildNumber,
+			}
+			localBuild.OnUpdate = func() {
+				subSteps[branchIdx].SubSteps = make([]build.Step, len(localBuild.Steps))
+				copy(subSteps[branchIdx].SubSteps, localBuild.Steps)
+				b.Steps[parentIdx].SubSteps = subSteps
+				w.updateBuild(ctx, m, *b)
+			}
+
+			// Execute inner steps sequentially on the local build.
+			for _, innerPS := range branch.Steps {
+				switch innerPS.Type {
+				case job.StepTypeGet:
+					if innerPS.Get != nil {
+						if w.runGetStep(ctx, m, localBuild, cwd, pp, *innerPS.Get, innerPS, resolvedVersions, exportedVars, secretVals, resolved) {
+							failed = true
+						}
+					}
+				case job.StepTypeTask:
+					if innerPS.Task != nil {
+						if w.runTaskStep(ctx, m, localBuild, cwd, pp, *innerPS.Task, innerPS, exportedVars, secretVals, resolved) {
+							failed = true
+						}
+					}
+				case job.StepTypePut:
+					if innerPS.Put != nil {
+						if w.runPutStep(ctx, m, localBuild, cwd, pp, *innerPS.Put, innerPS, exportedVars, secretVals, resolved) {
+							failed = true
+						}
+					}
+				case job.StepTypeNotify:
+					if innerPS.Notify != nil {
+						if w.runNotifyStep(ctx, m, localBuild, cwd, pp, *innerPS.Notify, innerPS, exportedVars, secretVals, resolved) {
+							failed = true
+						}
+					}
+				case job.StepTypeInParallel:
+					if innerPS.InParallel != nil {
+						if w.runInParallelStep(ctx, m, localBuild, cwd, pp, *innerPS.InParallel, innerPS, resolvedVersions, exportedVars, secretVals, resolved) {
+							failed = true
+						}
+					}
+				case job.StepTypeService:
+					if innerPS.Service != nil {
+						batch := []job.ServiceStep{*innerPS.Service}
+						startedServices := w.startServices(ctx, m, localBuild, cwd, pp, batch, secretVals)
+						if len(startedServices) != len(batch) {
+							failed = true
+						} else if !w.waitForServices(ctx, m, localBuild, cwd, pp, startedServices, secretVals) {
+							failed = true
+						}
+					}
+				}
+				if failed {
+					break
+				}
+			}
+
+			// Final sync of inner steps.
+			subSteps[branchIdx].SubSteps = make([]build.Step, len(localBuild.Steps))
+			copy(subSteps[branchIdx].SubSteps, localBuild.Steps)
+
+			if failed {
+				subSteps[branchIdx].Status = build.Failed
+			} else {
+				subSteps[branchIdx].Status = build.Succeeded
+			}
+			subSteps[branchIdx].Duration = time.Since(branchStart)
+		} else {
+			// Skipped branch
+			subSteps = append(subSteps, build.Step{
+				Type: branch.Type, Name: branchName, Status: build.Skipped,
+			})
+		}
+	}
+
+	// Update parent step
+	status := build.Succeeded
+	if failed {
+		status = build.Failed
+		b.Status = build.Failed
+	}
+	b.Steps[parentIdx].Status = status
+	b.Steps[parentIdx].Duration = time.Since(start)
+	b.Steps[parentIdx].SubSteps = subSteps
+	w.updateBuild(ctx, m, *b)
+
+	// Run if-level hooks
+	if failed {
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, "", ps.OnFailure, "on_failure", resolved, exportedVars)
+	} else {
+		w.runHooks(ctx, m, b, &b.Steps, cwd, pp, "", ps.OnSuccess, "on_success", resolved, exportedVars)
+	}
+	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, "", ps.Ensure, "ensure", resolved, exportedVars)
+
+	return failed
 }
 
 // runGetStep runs a single get step (resource pull).

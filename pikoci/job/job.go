@@ -27,6 +27,8 @@ const (
 	StepTypeNotify StepType = "notify"
 	// StepTypeInParallel represents a step that runs multiple sub-steps concurrently.
 	StepTypeInParallel StepType = "in_parallel"
+	// StepTypeIf represents a conditional step with if/else_if/else branches.
+	StepTypeIf StepType = "if"
 )
 
 // HookStep represents a single step inside a hook (on_success, on_failure, on_cancel, ensure).
@@ -142,6 +144,10 @@ func (j *Job) FlatPlanSteps() []PlanStep {
 	for _, p := range j.Plan {
 		if p.Type == StepTypeInParallel && p.InParallel != nil {
 			steps = append(steps, p.InParallel.Steps...)
+		} else if p.Type == StepTypeIf && p.If != nil {
+			for _, branch := range p.If.Branches {
+				steps = append(steps, branch.Steps...)
+			}
 		} else {
 			steps = append(steps, p)
 		}
@@ -173,6 +179,7 @@ type PlanStep struct {
 	Notify     *NotifyStep     `json:"notify,omitempty"`
 	Service    *ServiceStep   `json:"service,omitempty"`
 	InParallel *InParallelStep `json:"in_parallel,omitempty"`
+	If         *IfStep         `json:"if,omitempty"`
 	OnSuccess []HookStep    `json:"on_success,omitempty"`
 	OnFailure []HookStep    `json:"on_failure,omitempty"`
 	OnCancel  []HookStep    `json:"on_cancel,omitempty"`
@@ -248,6 +255,20 @@ type InParallelStep struct {
 	Steps    []PlanStep `json:"steps"`
 	Limit    int        `json:"limit,omitempty"`
 	FailFast bool       `json:"fail_fast,omitempty"`
+}
+
+// IfStep defines a conditional step with one or more branches.
+// Exactly one branch is selected at runtime based on condition evaluation.
+type IfStep struct {
+	Branches []IfBranch `json:"branches"`
+}
+
+// IfBranch represents a single branch in a conditional step.
+type IfBranch struct {
+	Type      string     `json:"type"`               // "if", "else_if", "else"
+	Label     string     `json:"label,omitempty"`
+	Condition string     `json:"condition,omitempty"` // empty for "else"
+	Steps     []PlanStep `json:"steps"`
 }
 
 // WithStatus enriches a Job with its latest build status information,
