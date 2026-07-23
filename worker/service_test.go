@@ -10105,7 +10105,7 @@ func TestProcessJob_IfStep_InputValues_AndBranchSelection(t *testing.T) {
 
 	// Verify input values are available inside the branch task
 	taskLogs := ifParent.SubSteps[0].SubSteps[0].Logs
-	assert.Contains(t, taskLogs, "PROD version=v3.0", "input_version env var should be expanded inside if branch")
+	assert.Contains(t, taskLogs, "PROD version=v3.0", "INPUT_version env var should be expanded inside if branch")
 	assert.NotContains(t, taskLogs, "STAGING", "else branch should not have executed")
 }
 

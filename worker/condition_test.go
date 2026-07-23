@@ -178,7 +178,7 @@ func TestEvaluateCondition(t *testing.T) {
 		// ── ${VAR} brace syntax (supported by os.Expand) ──
 		{"brace syntax eq", "${GET_APP_BRANCH} == 'main'", true, false},
 		{"brace syntax neq", "${BUILD_NUMBER} != '99'", true, false},
-		{"brace syntax in expression", "${GET_APP_BRANCH} == 'main' && ${input_env} == 'staging'", true, false},
+		{"brace syntax in expression", "${GET_APP_BRANCH} == 'main' && ${INPUT_env} == 'staging'", true, false},
 
 		// ── Numeric edge cases ──
 		{"gt negative number", "$TASK_BUILD_EXIT_CODE > '-1'", true, false},
@@ -265,7 +265,7 @@ func TestEvaluateCondition_SpecialCharValues(t *testing.T) {
 	vars := map[string]string{
 		"GET_APP_BRANCH":     "feature/my-branch",
 		"TASK_BUILD_VERSION": "1.2.3-rc.1",
-		"input_path":         "/opt/deploy/app",
+		"INPUT_path":         "/opt/deploy/app",
 	}
 
 	tests := []struct {
@@ -297,7 +297,7 @@ func TestEvaluateCondition_ValuesWithSpaces(t *testing.T) {
 	// in PIKOCI_OUTPUT keys and resource metadata values.
 	vars := map[string]string{
 		"TASK_BUILD_MSG": "hello world",
-		"input_label":    "deploy to prod",
+		"INPUT_label":    "deploy to prod",
 	}
 
 	tests := []struct {
