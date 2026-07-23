@@ -305,7 +305,7 @@ Jobs can declare `input` blocks to accept parameters when manually triggered. Ea
 **Trigger behavior:**
 - **Manual trigger (UI/CLI):** A form is shown with one field per input. Required fields (no default) must be filled.
 - **Automatic trigger:** Defaults are used. If no default exists, zero values are used (`""`, `"0"`, `"false"`). Auto-triggers are never blocked by missing inputs.
-- **Local execution (`pikoci run`):** Pass input values via `--var input_<name>=value`.
+- **Local execution (`pikoci run`):** Pass input values via `--var INPUT_<name>=value`.
 - **Retry:** Input values from the original build are automatically copied to the retry.
 
 ```hcl
