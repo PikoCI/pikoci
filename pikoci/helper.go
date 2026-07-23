@@ -1566,7 +1566,7 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 				inputNames[inp.Name] = true
 				envName := strings.ToLower(inp.Name)
 				if envNames[envName] {
-					return nil, fmt.Errorf("job %q: input %q produces duplicate env var name input_%s", hj.Name, inp.Name, envName)
+					return nil, fmt.Errorf("job %q: input %q produces duplicate env var name INPUT_%s", hj.Name, inp.Name, inp.Name)
 				}
 				envNames[envName] = true
 				if inp.Type != "string" && inp.Type != "number" && inp.Type != "bool" {
