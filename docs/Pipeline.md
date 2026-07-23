@@ -910,7 +910,7 @@ job "deploy" {
 }
 ```
 
-**Labels:** `if` and `else_if` blocks take an optional label (e.g. `if "check-branch"`). `else` blocks do not take a label.
+**Labels:** `if` and `else_if` blocks take an optional label (e.g. `if "check-branch"`). The label is used as the display name in the build UI and logs, making it easy to identify which branch was entered or skipped at a glance. `else` blocks do not take a label.
 
 **Chaining:** `else_if` and `else` must immediately follow an `if` or `else_if` block. Only one `else` is allowed per chain.
 
