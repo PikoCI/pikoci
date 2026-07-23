@@ -2865,7 +2865,7 @@ func buildMetadataParams(b *build.Build, m workitem.Body) map[string]string {
 		"BUILD_TEAM_NAME":     m.TeamCanonical,
 	}
 	for k, v := range b.InputValues {
-		params["input_"+strings.ToLower(k)] = v
+		params["INPUT_"+k] = v
 	}
 	return params
 }

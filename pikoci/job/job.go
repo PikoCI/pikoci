@@ -41,7 +41,7 @@ type HookStep struct {
 }
 
 // Input defines a parameter that can be provided when manually triggering a job.
-// Values are injected as $input_<name> environment variables into all steps.
+// Values are injected as $INPUT_<name> environment variables into all steps.
 type Input struct {
 	Name        string   `json:"name"`
 	Type        string   `json:"type"`              // "string", "number", "bool"
