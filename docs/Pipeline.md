@@ -291,7 +291,7 @@ The optional `timeout` attribute limits the total wall-clock time for a build's 
 
 #### input
 
-Jobs can declare `input` blocks to accept parameters when manually triggered. Each input becomes an environment variable `$input_<name>` available to all steps.
+Jobs can declare `input` blocks to accept parameters when manually triggered. Each input becomes an environment variable `$INPUT_<name>` available to all steps.
 
 | Field | Required | Description |
 |-------|----------|-------------|
@@ -330,7 +330,7 @@ job "deploy" {
   task "deploy" {
     run "exec" {
       path = "./deploy.sh"
-      args = ["$input_version", "$input_environment"]
+      args = ["$INPUT_version", "$INPUT_environment"]
     }
   }
 }
@@ -942,7 +942,7 @@ Parentheses are supported for grouping: `($GET_APP_BRANCH == 'main' || $GET_APP_
 - `$GET_<STEP>_<KEY>` — resource version metadata from get steps
 - `$TASK_<STEP>_<KEY>` — values exported via `$PIKOCI_OUTPUT` from task steps
 - `$BUILD_NUMBER`, `$BUILD_JOB_NAME`, `$BUILD_PIPELINE_NAME`, `$BUILD_TEAM_NAME`
-- `$input_<name>` — input parameter values
+- `$INPUT_<name>` — input parameter values
 
 #### Behavior
 

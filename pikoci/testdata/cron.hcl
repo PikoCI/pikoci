@@ -72,21 +72,21 @@ job "deploy-staging" {
   approve "deploy to staging" {}
 
   if "check-dry-run" {
-    condition = "$input_dry_run == 'true'"
+    condition = "$INPUT_dry_run == 'true'"
     task "dry-run" {
       run "exec" {
         path = "/bin/sh"
-        args = ["-ec", "echo '--- DRY RUN ---' && echo version=$input_version env=$input_environment && echo 'would deploy to $input_environment (skipped)' && cat cron-output/timestamp.txt"]
+        args = ["-ec", "echo '--- DRY RUN ---' && echo version=$INPUT_version env=$INPUT_environment && echo 'would deploy to $INPUT_environment (skipped)' && cat cron-output/timestamp.txt"]
       }
     }
   }
 
   else_if "check-production" {
-    condition = "$input_environment == 'production'"
+    condition = "$INPUT_environment == 'production'"
     task "deploy-prod" {
       run "exec" {
         path = "/bin/sh"
-        args = ["-ec", "echo '--- PRODUCTION DEPLOY ---' && echo version=$input_version && cat cron-output/timestamp.txt && echo 'deploying to production...' && sleep 5 && echo 'done'"]
+        args = ["-ec", "echo '--- PRODUCTION DEPLOY ---' && echo version=$INPUT_version && cat cron-output/timestamp.txt && echo 'deploying to production...' && sleep 5 && echo 'done'"]
       }
     }
   }
@@ -95,7 +95,7 @@ job "deploy-staging" {
     task "deploy-staging" {
       run "exec" {
         path = "/bin/sh"
-        args = ["-ec", "echo '--- STAGING DEPLOY ---' && echo version=$input_version && cat cron-output/timestamp.txt && echo 'deploying to staging...' && sleep 5 && echo 'done'"]
+        args = ["-ec", "echo '--- STAGING DEPLOY ---' && echo version=$INPUT_version && cat cron-output/timestamp.txt && echo 'deploying to staging...' && sleep 5 && echo 'done'"]
       }
     }
   }
@@ -236,7 +236,7 @@ job "monitor" {
   task "check" {
     run "exec" {
       path = "/bin/sh"
-      args = ["-ec", "echo '--- monitor ---' && echo target=$input_target verbose=$input_verbose && echo 'cron version: $GET_MY_CRON_DATE' && echo 'done'"]
+      args = ["-ec", "echo '--- monitor ---' && echo target=$INPUT_target verbose=$INPUT_verbose && echo 'cron version: $GET_MY_CRON_DATE' && echo 'done'"]
     }
     on_success "exec" {
       path = "/bin/sh"

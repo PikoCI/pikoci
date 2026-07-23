@@ -9944,7 +9944,7 @@ func TestProcessJob_InputValues_InjectedAsEnvVars(t *testing.T) {
 						Name: "print-env",
 						Run: utils.RunnerCommand{
 							Runner: "exec",
-							Args:   []string{"-ec", "echo version=$input_version debug=$input_debug"},
+							Args:   []string{"-ec", "echo version=$INPUT_version debug=$INPUT_debug"},
 							Params: map[string]string{"path": "/bin/sh"},
 						},
 					},
@@ -9974,7 +9974,7 @@ func TestProcessJob_InputValues_InjectedAsEnvVars(t *testing.T) {
 					Name: "print-env",
 					Run: utils.RunnerCommand{
 						Runner: "exec",
-						Args:   []string{"-ec", "echo version=$input_version debug=$input_debug"},
+						Args:   []string{"-ec", "echo version=$INPUT_version debug=$INPUT_debug"},
 						Params: map[string]string{"path": "/bin/sh"},
 					},
 				}},
@@ -10000,8 +10000,8 @@ func TestProcessJob_InputValues_InjectedAsEnvVars(t *testing.T) {
 			taskLogs = s.Logs
 		}
 	}
-	assert.Contains(t, taskLogs, "version=v2.0", "input_version env var should be expanded in task logs")
-	assert.Contains(t, taskLogs, "debug=true", "input_debug env var should be expanded in task logs")
+	assert.Contains(t, taskLogs, "version=v2.0", "INPUT_version env var should be expanded in task logs")
+	assert.Contains(t, taskLogs, "debug=true", "INPUT_debug env var should be expanded in task logs")
 }
 
 func TestProcessJob_IfStep_InputValues_AndBranchSelection(t *testing.T) {
@@ -10021,13 +10021,13 @@ func TestProcessJob_IfStep_InputValues_AndBranchSelection(t *testing.T) {
 						{
 							Type:      "if",
 							Label:     "check-prod",
-							Condition: "$input_env == 'production'",
+							Condition: "$INPUT_env == 'production'",
 							Steps: []job.PlanStep{
 								{Type: job.StepTypeTask, Task: &job.TaskStep{
 									Name: "deploy-prod",
 									Run: utils.RunnerCommand{
 										Runner: "exec",
-										Args:   []string{"-ec", "echo PROD version=$input_version"},
+										Args:   []string{"-ec", "echo PROD version=$INPUT_version"},
 										Params: map[string]string{"path": "/bin/sh"},
 									},
 								}},
@@ -10041,7 +10041,7 @@ func TestProcessJob_IfStep_InputValues_AndBranchSelection(t *testing.T) {
 									Name: "deploy-staging",
 									Run: utils.RunnerCommand{
 										Runner: "exec",
-										Args:   []string{"-ec", "echo STAGING version=$input_version"},
+										Args:   []string{"-ec", "echo STAGING version=$INPUT_version"},
 										Params: map[string]string{"path": "/bin/sh"},
 									},
 								}},
@@ -10126,7 +10126,7 @@ func TestProcessJob_IfStep_NoBranchMatches(t *testing.T) {
 						{
 							Type:      "if",
 							Label:     "check-prod",
-							Condition: "$input_env == 'production'",
+							Condition: "$INPUT_env == 'production'",
 							Steps: []job.PlanStep{
 								{Type: job.StepTypeTask, Task: &job.TaskStep{
 									Name: "deploy-prod",
@@ -10141,7 +10141,7 @@ func TestProcessJob_IfStep_NoBranchMatches(t *testing.T) {
 						{
 							Type:      "else_if",
 							Label:     "check-staging",
-							Condition: "$input_env == 'staging'",
+							Condition: "$INPUT_env == 'staging'",
 							Steps: []job.PlanStep{
 								{Type: job.StepTypeTask, Task: &job.TaskStep{
 									Name: "deploy-staging",
