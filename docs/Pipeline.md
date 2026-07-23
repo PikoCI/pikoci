@@ -282,6 +282,7 @@ The optional `timeout` attribute limits the total wall-clock time for a build's 
 | `notify` | no | Step block: sends a fire-and-forget notification |
 | `service` | no | Step block: references a service type for the job |
 | `in_parallel` | no | Step block: runs multiple steps concurrently |
+| `if` / `else_if` / `else` | no | Step block: conditional execution (see below) |
 | `input` | no | Parameterized input block (see below) |
 | `on_success` | no | Hook: runs after all steps succeed |
 | `on_failure` | no | Hook: runs after a step fails |
@@ -875,6 +876,82 @@ job "build" {
 **Timeout/Attempts:** `timeout` on the block applies to wall-clock time of the entire group. `attempts` retries the entire block. Inner steps can have their own `timeout` and `attempts` independently.
 
 **Hooks:** The `in_parallel` block supports `on_success`, `on_failure`, `on_cancel`, and `ensure` hooks, which fire based on whether the group as a whole succeeded or failed.
+
+### Conditional execution (if / else_if / else)
+
+Conditional blocks let you branch job execution based on runtime values such as resource metadata, task outputs, build metadata, or input parameters.
+
+```hcl
+job "deploy" {
+  get "git" "app" { trigger = true }
+  task "test" {
+    run "exec" { path = "make" args = ["test"] }
+  }
+
+  if "check-branch" {
+    condition = "$GET_APP_BRANCH == 'main'"
+    task "deploy-prod" {
+      run "exec" { path = "./deploy.sh" args = ["prod"] }
+    }
+  }
+
+  else_if "check-staging" {
+    condition = "$GET_APP_BRANCH == 'staging'"
+    task "deploy-staging" {
+      run "exec" { path = "./deploy.sh" args = ["staging"] }
+    }
+  }
+
+  else {
+    task "skip-deploy" {
+      run "exec" { path = "echo" args = ["Branch not deployed"] }
+    }
+  }
+}
+```
+
+**Labels:** `if` and `else_if` blocks take an optional label (e.g. `if "check-branch"`). `else` blocks do not take a label.
+
+**Chaining:** `else_if` and `else` must immediately follow an `if` or `else_if` block. Only one `else` is allowed per chain.
+
+**Allowed inner step types:** `get`, `task`, `put`, `notify`, `service`, `in_parallel`.
+
+**Nesting:** Conditional blocks cannot be nested inside other conditional blocks.
+
+**Multiple chains:** A job can have multiple independent `if`/`else_if`/`else` chains.
+
+#### Condition operators
+
+Conditions are evaluated at runtime after `$VAR` expansion. Supported operators:
+
+| Operator | Meaning |
+|----------|---------|
+| `==` | string equality |
+| `!=` | not equal |
+| `>` | greater than (numeric if parseable, else string) |
+| `<` | less than (numeric if parseable, else string) |
+| `contains` | substring match |
+| `!contains` | negated substring match |
+| `&&` | logical AND |
+| `\|\|` | logical OR |
+
+Parentheses are supported for grouping: `($GET_APP_BRANCH == 'main' || $GET_APP_BRANCH == 'develop') && $TASK_TEST_EXIT_CODE == '0'`
+
+#### Available variables
+
+- `$GET_<STEP>_<KEY>` — resource version metadata from get steps
+- `$TASK_<STEP>_<KEY>` — values exported via `$PIKOCI_OUTPUT` from task steps
+- `$BUILD_NUMBER`, `$BUILD_JOB_NAME`, `$BUILD_PIPELINE_NAME`, `$BUILD_TEAM_NAME`
+- `$input_<name>` — input parameter values
+
+#### Behavior
+
+- **No match:** If no `if`/`else_if` condition is true and there is no `else`, all branches are skipped and execution continues.
+- **Empty condition:** Treated as `true` (always enters the branch).
+- **Malformed condition:** The build fails with an error message.
+- **Failure:** If a step inside the entered branch fails, the job fails. There is no fallthrough to the next branch.
+- **Exported variables:** Variables exported by steps in the selected branch are available to subsequent steps after the conditional block.
+- **Hooks:** The `if` block supports `on_success`, `on_failure`, `on_cancel`, and `ensure` hooks.
 
 ### Step hooks
 

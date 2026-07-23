@@ -1300,6 +1300,7 @@ textarea.form-control {
 .piko-badge-pending { background: #e8e0f0; color: #5F574F; }
 .piko-badge-waiting_for_approval { background: rgba(142,68,173,0.15); color: #8e44ad; }
 .piko-badge-warning { background: #fde8e5; color: #b5453a; }
+.piko-badge-skipped { background: #e8e0f0; color: #83769C; }
 .piko-badge-primary { background: rgba(41,173,255,0.15); color: #29ADFF; }
 [data-theme="dark"] .piko-badge-succeeded { background: rgba(0,168,58,0.15); color: #00E436; }
 [data-theme="dark"] .piko-badge-failed { background: rgba(255,0,77,0.15); color: #FF77A8; }
@@ -1308,6 +1309,7 @@ textarea.form-control {
 [data-theme="dark"] .piko-badge-pending { background: rgba(131,118,156,0.15); color: #83769C; }
 [data-theme="dark"] .piko-badge-waiting_for_approval { background: rgba(142,68,173,0.15); color: #b370cf; }
 [data-theme="dark"] .piko-badge-warning { background: rgba(250,128,114,0.15); color: #FA8072; }
+[data-theme="dark"] .piko-badge-skipped { background: rgba(131,118,156,0.15); color: #83769C; }
 
 /* In-parallel step group */
 .piko-parallel-group > .piko-step-row-body {
@@ -1315,6 +1317,17 @@ textarea.form-control {
 }
 .piko-parallel-group > .piko-step-row-body > .piko-step-row {
   margin-left: 0;
+}
+
+/* Conditional step group */
+.piko-conditional-group > .piko-step-row-body {
+  border-top: 1px solid var(--border);
+}
+.piko-conditional-group > .piko-step-row-body > .piko-step-row {
+  margin-left: 0;
+}
+.piko-step-skipped {
+  opacity: 0.6;
 }
 
 /* ============================================================

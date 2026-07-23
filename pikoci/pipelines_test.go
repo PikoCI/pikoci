@@ -5135,3 +5135,111 @@ func TestGetPipelineImage_GroupParallel_RootJobs(t *testing.T) {
 	assert.NotContains(t, dot, `"lint" [`)
 	assert.NotContains(t, dot, `"vet" [`)
 }
+
+func TestCreatePipeline_ConditionalValidation_OrphanElseIf(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclData := []byte(`
+resource "cron" "tick" { check_interval = "@every 30s" }
+job "bad" {
+  get "cron" "tick" {}
+  else_if "orphan" {
+    condition = "$FOO == 'bar'"
+    task "x" {
+      run "exec" { args = ["true"] }
+    }
+  }
+}
+`)
+	_, err := s.S.CreatePipeline(ctx, "main", "bad-pipeline", hclData, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "else_if without preceding if")
+}
+
+func TestCreatePipeline_ConditionalValidation_OrphanElse(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclData := []byte(`
+resource "cron" "tick" { check_interval = "@every 30s" }
+job "bad" {
+  get "cron" "tick" {}
+  else {
+    task "x" {
+      run "exec" { args = ["true"] }
+    }
+  }
+}
+`)
+	_, err := s.S.CreatePipeline(ctx, "main", "bad-pipeline", hclData, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "else without preceding if")
+}
+
+func TestCreatePipeline_ConditionalValidation_NestedIf(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclData := []byte(`
+resource "cron" "tick" { check_interval = "@every 30s" }
+job "bad" {
+  get "cron" "tick" {}
+  if "outer" {
+    condition = "$FOO == 'bar'"
+    if "inner" {
+      condition = "$BAZ == 'qux'"
+      task "x" {
+        run "exec" { args = ["true"] }
+      }
+    }
+  }
+}
+`)
+	_, err := s.S.CreatePipeline(ctx, "main", "bad-pipeline", hclData, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nested conditional blocks are not allowed")
+}
+
+func TestCreatePipeline_Conditional_IfOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclData := []byte(`
+resource "cron" "tick" { check_interval = "@every 30s" }
+job "simple" {
+  get "cron" "tick" { trigger = true }
+  if "check" {
+    condition = "$GET_TICK_TS != ''"
+    task "deploy" {
+      run "exec" { args = ["echo", "hi"] }
+    }
+  }
+}
+`)
+
+	var capturedJob job.Job
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "simple-pipeline", gomock.Any()).DoAndReturn(
+		func(_ context.Context, _, _ string, j job.Job) (uint32, error) {
+			capturedJob = j
+			return uint32(1), nil
+		}).Times(1)
+	s.Resources.EXPECT().Create(ctx, "main", "simple-pipeline", gomock.Any()).Return(uint32(1), nil).Times(1)
+	s.Pipelines.EXPECT().Find(ctx, "main", "simple-pipeline").Return(&pipeline.Pipeline{Name: "simple-pipeline"}, nil)
+
+	pp, err := s.S.CreatePipeline(ctx, "main", "simple-pipeline", hclData, nil)
+	require.NoError(t, err)
+	require.NotNil(t, pp)
+
+	require.Len(t, capturedJob.Plan, 2)
+	assert.Equal(t, job.StepTypeIf, capturedJob.Plan[1].Type)
+	require.NotNil(t, capturedJob.Plan[1].If)
+	require.Len(t, capturedJob.Plan[1].If.Branches, 1)
+	assert.Equal(t, "if", capturedJob.Plan[1].If.Branches[0].Type)
+	assert.Equal(t, "check", capturedJob.Plan[1].If.Branches[0].Label)
+}

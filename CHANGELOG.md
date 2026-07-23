@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Conditional job execution (`if`/`else_if`/`else`)**: Jobs can use declarative conditional blocks to branch execution based on runtime values (`$GET_*`, `$TASK_*`, `$BUILD_*`, `$input_*`). Supports `==`, `!=`, `>`, `<`, `contains`, `!contains`, `&&`, `||` operators with parentheses. Skipped branches display with a muted badge in the UI ([#164](https://github.com/PikoCI/pikoci/issues/164)).
 - **Parameterized manual triggers**: Jobs can declare `input` blocks to collect parameters on manual trigger, injected as `$input_<name>` env vars. Supports typed fields, defaults, dropdowns, and multi-select ([#467](https://github.com/PikoCI/pikoci/issues/467)).
 - **`interruptible` on jobs**: When `true`, creating a new build for the job automatically cancels all older running, pending, and waiting-for-approval builds, so only the latest build runs ([#612](https://github.com/PikoCI/pikoci/issues/612)).
 - **`allow_failure` on jobs**: When `true`, a failed build is marked as `warning` (salmon) instead of `failed`, unblocking downstream jobs. Any failed build can also be manually marked as warning via a UI button (requires Maintain role) ([#610](https://github.com/PikoCI/pikoci/issues/610)).
