@@ -7236,6 +7236,92 @@ func TestProcessJob_ServiceStep_StartAndStop(t *testing.T) {
 	assert.True(t, found, "expected my-db:stop step")
 }
 
+func TestProcessJob_ServiceStep_InsideIfBranchIsStopped(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "service-if-job",
+		BuildID:           10,
+		BuildNumber:       "332",
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "service-if-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeIf,
+						If: &job.IfStep{
+							Branches: []job.IfBranch{
+								{
+									Type:      "if",
+									Label:     "always",
+									Condition: "'a' == 'a'",
+									Steps: []job.PlanStep{
+										{
+											Type:    job.StepTypeService,
+											Service: &job.ServiceStep{Name: "my-db"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Services: []service.Service{
+			{
+				ID:   1,
+				Name: "my-db",
+				Start: utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"starting db"},
+					Params: map[string]string{"path": "echo"},
+				},
+				Stop: utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"stopping db"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "332", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	found := false
+	for _, s := range capturedBuild.Steps {
+		if s.Name == "my-db:stop" && s.Type == "service" {
+			found = true
+		}
+	}
+	assert.True(t, found, "service started inside an if branch must still be stopped")
+}
+
 func TestProcessJob_ServiceStep_StartFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc := newTestWorker(ctrl)
