@@ -28,9 +28,9 @@ import (
 	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
+	"github.com/pikoci/pikoci/pikoci/condition"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
-	"github.com/pikoci/pikoci/pikoci/workitem"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
@@ -38,6 +38,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/service"
 	"github.com/pikoci/pikoci/pikoci/utils"
 	"github.com/pikoci/pikoci/pikoci/wkr"
+	"github.com/pikoci/pikoci/pikoci/workitem"
 	"gopkg.in/yaml.v3"
 )
 
@@ -59,13 +60,13 @@ type WorkPoller interface {
 // polling or gRPC streaming. It manages build lifecycle, executes pipeline
 // steps, and supports graceful draining.
 type Worker struct {
-	pikoci            pikoci.Service
-	workPoller        WorkPoller
+	pikoci     pikoci.Service
+	workPoller WorkPoller
 
 	draining      atomic.Bool
 	drainCancelMu sync.Mutex
 	drainCancel   context.CancelFunc
-	logger      *slog.Logger
+	logger        *slog.Logger
 
 	// apiCtx is the parent server context used for DB operations.
 	// It outlives individual job contexts (which get cancelled on
@@ -1044,7 +1045,7 @@ func (w *Worker) runIfStep(
 			selectedIdx = i
 			break
 		}
-		result, err := EvaluateCondition(branch.Condition, condVars)
+		result, err := condition.Evaluate(branch.Condition, condVars)
 		if err != nil {
 			w.failBuild(ctx, m, *b, fmt.Errorf("condition evaluation error in %s %q: %w", branch.Type, branch.Label, err))
 			return true

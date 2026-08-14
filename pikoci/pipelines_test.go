@@ -5281,6 +5281,29 @@ job "bad" {
 	assert.Contains(t, err.Error(), "nested conditional blocks are not allowed")
 }
 
+func TestCreatePipeline_Conditional_InvalidCondition(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclData := []byte(`
+resource "cron" "tick" { check_interval = "@every 30s" }
+job "simple" {
+  get "cron" "tick" { trigger = true }
+  if "check" {
+    condition = "$GET_TICK_TS >= 5"
+    task "deploy" {
+      run "exec" { args = ["echo", "hi"] }
+    }
+  }
+}
+`)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "simple-pipeline", hclData, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid condition")
+}
+
 func TestCreatePipeline_Conditional_IfOnly(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)

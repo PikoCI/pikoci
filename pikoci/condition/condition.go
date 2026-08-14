@@ -1,4 +1,4 @@
-package worker
+package condition
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"unicode"
 )
 
-// EvaluateCondition evaluates a condition expression, substituting $VAR
+// Evaluate evaluates a condition expression, substituting $VAR
 // references from the provided vars map. Supported operators:
 // ==, !=, >, <, contains, !contains, && (AND), || (OR).
 // Values can be single-quoted strings or bare words. Parentheses are supported.
@@ -16,7 +16,7 @@ import (
 // Variables are expanded per value, after the expression has been split into
 // tokens, so a value containing spaces, quotes or operators is compared as
 // data and cannot alter the shape of the expression.
-func EvaluateCondition(condition string, vars map[string]string) (bool, error) {
+func Evaluate(condition string, vars map[string]string) (bool, error) {
 	condition = strings.TrimSpace(condition)
 	if condition == "" {
 		return true, nil
@@ -261,4 +261,12 @@ func (p *condParser) parseValue() (string, error) {
 
 func isWordChar(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
+}
+
+// Validate reports whether a condition is syntactically usable, so a typo is
+// caught when the pipeline is saved rather than by a failing build. Variables
+// are unset here, which only affects the outcome, not the syntax.
+func Validate(cond string) error {
+	_, err := Evaluate(cond, nil)
+	return err
 }

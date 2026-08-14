@@ -1,4 +1,4 @@
-package worker
+package condition
 
 import (
 	"testing"
@@ -35,7 +35,7 @@ var allVars = map[string]string{
 	"INPUT_count":   "3",
 }
 
-func TestEvaluateCondition(t *testing.T) {
+func TestEvaluate(t *testing.T) {
 	tests := []struct {
 		name      string
 		condition string
@@ -237,7 +237,7 @@ func TestEvaluateCondition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := EvaluateCondition(tt.condition, allVars)
+			got, err := Evaluate(tt.condition, allVars)
 			if tt.wantErr {
 				require.Error(t, err)
 				return
@@ -248,20 +248,20 @@ func TestEvaluateCondition(t *testing.T) {
 	}
 }
 
-func TestEvaluateCondition_NilVars(t *testing.T) {
+func TestEvaluate_NilVars(t *testing.T) {
 	// Nil vars map should not panic; all vars expand to ""
-	result, err := EvaluateCondition("$FOO == ''", nil)
+	result, err := Evaluate("$FOO == ''", nil)
 	require.NoError(t, err)
 	assert.True(t, result)
 }
 
-func TestEvaluateCondition_EmptyVars(t *testing.T) {
-	result, err := EvaluateCondition("$FOO == ''", map[string]string{})
+func TestEvaluate_EmptyVars(t *testing.T) {
+	result, err := Evaluate("$FOO == ''", map[string]string{})
 	require.NoError(t, err)
 	assert.True(t, result)
 }
 
-func TestEvaluateCondition_SpecialCharValues(t *testing.T) {
+func TestEvaluate_SpecialCharValues(t *testing.T) {
 	vars := map[string]string{
 		"GET_APP_BRANCH":     "feature/my-branch",
 		"TASK_BUILD_VERSION": "1.2.3-rc.1",
@@ -283,14 +283,14 @@ func TestEvaluateCondition_SpecialCharValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := EvaluateCondition(tt.condition, vars)
+			got, err := Evaluate(tt.condition, vars)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
 }
 
-func TestEvaluateCondition_ValuesWithSpaces(t *testing.T) {
+func TestEvaluate_ValuesWithSpaces(t *testing.T) {
 	// When a variable expands to a value with spaces, the bare word parser
 	// reads only until the first space. This means variables containing
 	// spaces produce errors when used unquoted — users should avoid spaces
@@ -318,7 +318,7 @@ func TestEvaluateCondition_ValuesWithSpaces(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := EvaluateCondition(tt.condition, vars)
+			got, err := Evaluate(tt.condition, vars)
 			if tt.wantErr {
 				require.Error(t, err)
 				return
@@ -329,19 +329,19 @@ func TestEvaluateCondition_ValuesWithSpaces(t *testing.T) {
 	}
 }
 
-func TestEvaluateCondition_SingleQuotesInValues(t *testing.T) {
+func TestEvaluate_SingleQuotesInValues(t *testing.T) {
 	// A quote inside a variable value is data, not syntax, because the value
 	// is substituted after the expression has been parsed.
 	vars := map[string]string{
 		"TASK_BUILD_MSG": "it's done",
 	}
 
-	result, err := EvaluateCondition("$TASK_BUILD_MSG contains 'done'", vars)
+	result, err := Evaluate("$TASK_BUILD_MSG contains 'done'", vars)
 	require.NoError(t, err)
 	assert.True(t, result)
 }
 
-func TestEvaluateCondition_ValueCannotInjectSyntax(t *testing.T) {
+func TestEvaluate_ValueCannotInjectSyntax(t *testing.T) {
 	// A value that looks like expression syntax must be compared as data,
 	// otherwise a job input could rewrite the condition guarding a branch.
 	vars := map[string]string{
@@ -349,16 +349,16 @@ func TestEvaluateCondition_ValueCannotInjectSyntax(t *testing.T) {
 		"GET_TAG":   "v1 == v1",
 	}
 
-	result, err := EvaluateCondition("$INPUT_env == 'prod'", vars)
+	result, err := Evaluate("$INPUT_env == 'prod'", vars)
 	require.NoError(t, err)
 	assert.False(t, result)
 
-	result, err = EvaluateCondition("$GET_TAG == 'prod'", vars)
+	result, err = Evaluate("$GET_TAG == 'prod'", vars)
 	require.NoError(t, err)
 	assert.False(t, result)
 }
 
-func TestEvaluateCondition_FalseIsNotTruthy(t *testing.T) {
+func TestEvaluate_FalseIsNotTruthy(t *testing.T) {
 	vars := map[string]string{
 		"FLAG_OFF": "false",
 		"ZERO":     "0",
@@ -373,13 +373,13 @@ func TestEvaluateCondition_FalseIsNotTruthy(t *testing.T) {
 		"$FLAG_ON":   true,
 		"$WORD":      true,
 	} {
-		got, err := EvaluateCondition(condition, vars)
+		got, err := Evaluate(condition, vars)
 		require.NoError(t, err, condition)
 		assert.Equal(t, want, got, "condition: %s", condition)
 	}
 }
 
-func TestEvaluateCondition_MalformedIsAnError(t *testing.T) {
+func TestEvaluate_MalformedIsAnError(t *testing.T) {
 	vars := map[string]string{"S": "hello", "FLAG": "false"}
 
 	for _, condition := range []string{
@@ -389,7 +389,7 @@ func TestEvaluateCondition_MalformedIsAnError(t *testing.T) {
 		"!$FLAG",
 		"$S >= 5",
 	} {
-		_, err := EvaluateCondition(condition, vars)
+		_, err := Evaluate(condition, vars)
 		require.Error(t, err, "condition %q should be rejected", condition)
 	}
 }
