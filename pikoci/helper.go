@@ -1161,6 +1161,13 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 	}
 	forEachMetas := make(map[string]forEachJobMeta)
 	cleanedForEachBlocks := make(map[string][]byte) // cache cleaned blocks per base name
+	// Expansion names must not collide with an already declared job, otherwise
+	// the pipeline ends up with two jobs of the same name and the reordering
+	// below cannot tell them apart.
+	declaredJobNames := make(map[string]bool, len(hp.Jobs))
+	for _, hj := range hp.Jobs {
+		declaredJobNames[hj.Name] = true
+	}
 	for _, exp := range forEachExpansions {
 		blockRaw := forEachBlockBytes[exp.baseName]
 		cleanBlock, cErr := removeForEachAndMatrixFromBlock(blockRaw)
@@ -1182,6 +1189,10 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 			}
 			expandedJob := singleJobFile.Jobs[0]
 			expandedJob.Name = exp.baseName + "--" + inst.slugKey
+			if declaredJobNames[expandedJob.Name] {
+				return nil, fmt.Errorf("for_each instance %q of job %q expands to job name %q, which is already used by another job", inst.key, exp.baseName, expandedJob.Name)
+			}
+			declaredJobNames[expandedJob.Name] = true
 			hp.Jobs = append(hp.Jobs, expandedJob)
 			forEachMetas[expandedJob.Name] = forEachJobMeta{
 				baseName: exp.baseName,
