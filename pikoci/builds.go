@@ -51,6 +51,17 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 		b.Status = build.WaitingForApproval
 	}
 
+	// Builds created without input values (resource triggers, retries of
+	// builds predating the inputs feature) still get the declared defaults,
+	// so conditions and steps see what the pipeline says they should.
+	if len(b.InputValues) == 0 && jErr == nil {
+		vals, ierr := resolveInputValues(j.Inputs, nil, false)
+		if ierr != nil {
+			return nil, fmt.Errorf("failed to resolve input defaults for job %q: %w", jn, ierr)
+		}
+		b.InputValues = vals
+	}
+
 	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
 		id, buildNumber, err := uow.Builds().Create(ctx, tc, pc, jn, b)
 		if err != nil {
@@ -733,7 +744,10 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 			status = build.WaitingForApproval
 		}
 		// Resolve input defaults for auto-triggered builds.
-		inputVals, _ := resolveInputValues(j.Inputs, nil, false)
+		inputVals, err := resolveInputValues(j.Inputs, nil, false)
+		if err != nil {
+			return fmt.Errorf("resolve input defaults for job %q: %w", j.Name, err)
+		}
 		id, buildNumber, err := uow.Builds().Create(ctx, tc, pn, j.Name, build.Build{
 			Status:      status,
 			VersionID:   versionID,

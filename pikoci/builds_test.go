@@ -31,6 +31,33 @@ func TestCreateJobBuild(t *testing.T) {
 	assert.Equal(t, build.Pending, b.Status)
 }
 
+func TestCreateJobBuild_AppliesInputDefaults(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	staging := "staging"
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{
+		Name: "my-job",
+		Inputs: []job.Input{
+			{Name: "environment", Type: "string", Default: &staging},
+			{Name: "count", Type: "number"},
+		},
+	}, nil)
+
+	var created build.Build
+	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "my-job", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _ string, b build.Build) (uint32, string, error) {
+			created = b
+			return uint32(1), "1", nil
+		})
+
+	_, err := s.S.CreateJobBuild(ctx, "main", "my-pipeline", "my-job", build.Build{})
+	require.NoError(t, err)
+	assert.Equal(t, "staging", created.InputValues["environment"])
+	assert.Equal(t, "0", created.InputValues["count"])
+}
+
 func TestCreateJobBuild_InvalidCanonical(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
