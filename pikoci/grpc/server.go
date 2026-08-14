@@ -173,26 +173,46 @@ func (s *Server) Execute(stream workerv1.WorkerService_ExecuteServer) error {
 	// Goroutine: listen for notifier signals and dispatch work
 	go s.dispatchLoop(ctx, ws)
 
-	// Main loop: receive messages from the worker
+	// Recv blocks until the worker says something, so it runs separately
+	// from the loop below, which must also react to send failures. It exits
+	// when the handler returns and ends the RPC.
+	type recvResult struct {
+		msg *workerv1.WorkerMessage
+		err error
+	}
+	recvCh := make(chan recvResult)
+	go func() {
+		for {
+			msg, err := stream.Recv()
+			select {
+			case recvCh <- recvResult{msg: msg, err: err}:
+			case <-ctx.Done():
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
 	for {
 		select {
 		case err := <-sendErr:
 			s.logger.Error("send error on worker stream", "worker_id", workerID, "error", err)
 			return err
-		default:
+		case <-ctx.Done():
+			return ctx.Err()
+		case r := <-recvCh:
+			if r.err == io.EOF {
+				s.logger.Info("worker disconnected", "worker_id", workerID)
+				return nil
+			}
+			if r.err != nil {
+				s.logger.Error("recv error on worker stream", "worker_id", workerID, "error", r.err)
+				return r.err
+			}
+			s.handleWorkerMessage(ctx, ws, r.msg)
 		}
-
-		msg, err := stream.Recv()
-		if err == io.EOF {
-			s.logger.Info("worker disconnected", "worker_id", workerID)
-			return nil
-		}
-		if err != nil {
-			s.logger.Error("recv error on worker stream", "worker_id", workerID, "error", err)
-			return err
-		}
-
-		s.handleWorkerMessage(ctx, ws, msg)
 	}
 }
 
@@ -400,4 +420,3 @@ func (s *Server) validateWorkerToken(ctx context.Context, tokenStr string) (stri
 
 	return tc, nil
 }
-
