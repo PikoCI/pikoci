@@ -943,6 +943,20 @@ func TestTriggerPipelineJob_Error(t *testing.T) {
 	assert.Equal(t, "trigger error", got.Err)
 }
 
+func TestTriggerPipelineJob_BodyCannotOverrideTarget(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectMemberAuth()
+	// The route is authorized against the team in the URL, so the body must
+	// not be able to retarget the trigger at another team's pipeline.
+	e.svc.EXPECT().TriggerPipelineJob(gomock.Any(), "main", "my-pipe", "build", gomock.Any(), gomock.Any()).Return(nil)
+
+	body := `{"team_canonical":"victim","pipeline_canonical":"prod","job_name":"deploy"}`
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/teams/main/pipelines/my-pipe/jobs/build/trigger", e.memberJWT(t), body)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
 func TestGetPipelineJob_Success(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectMemberAuth()

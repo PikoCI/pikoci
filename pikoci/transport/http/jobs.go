@@ -2,6 +2,8 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -55,15 +57,26 @@ func triggerPipelineJob(s pikoci.Service) http.HandlerFunc {
 			req TriggerPipelineJobRequest
 			ctx = r.Context()
 		)
+		// Decode the optional JSON body for input values first, then take the
+		// target from the route vars. The request is authorized against the
+		// team in the URL, so the body must never be able to override it.
+		var manual bool
+		if r.Body != nil {
+			err := json.NewDecoder(r.Body).Decode(&req)
+			switch {
+			case errors.Is(err, io.EOF):
+				// no body, not a manual trigger
+			case err != nil:
+				encodeResponse(TriggerPipelineJobResponse{Err: err.Error()}, w)
+				return
+			default:
+				manual = true
+			}
+		}
 		vars := mux.Vars(r)
 		req.TeamCanonical = vars["team_canonical"]
 		req.PipelineCanonical = vars["pipeline_canonical"]
 		req.JobName = vars["job_name"]
-		// Decode optional JSON body for input values
-		if r.Body != nil && r.ContentLength > 0 {
-			_ = json.NewDecoder(r.Body).Decode(&req)
-		}
-		manual := len(req.InputValues) > 0 || r.ContentLength > 0
 		err := s.TriggerPipelineJob(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName, req.InputValues, manual)
 		var errs string
 		if err != nil {
