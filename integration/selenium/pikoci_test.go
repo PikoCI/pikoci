@@ -1464,6 +1464,10 @@ job "gen" {
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain\nPipelines"), 5*time.Second)
 		})
 		t.Run("Delete Pipeline", func(t *testing.T) {
+			waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+				_, err := wd.FindElement(selenium.ByCSSSelector, ".card")
+				return err == nil
+			}, 5*time.Second)
 			ppBtn, err := wd.FindElement(selenium.ByCSSSelector, ".card")
 			require.NoError(t, err)
 
