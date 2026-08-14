@@ -1,6 +1,5 @@
 qid.db
 /builds
-/.superpowers
 integration/screenshot.png
 deploy/pikoci.env
 *.pem
