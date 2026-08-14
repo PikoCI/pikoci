@@ -25,6 +25,7 @@ func NewJobRepository(db sqlr.Querier) *JobRepository {
 type dbJob struct {
 	ID           sql.NullInt64
 	Name         sql.NullString
+	Order        sql.NullInt64
 	Tags         sql.NullString
 	Plan         sql.NullString
 	OnSuccess    sql.NullString
@@ -55,6 +56,7 @@ func newDBJob(p job.Job) dbJob {
 	inp, _ := json.Marshal(p.Inputs)
 	dbj := dbJob{
 		Name:         toNullString(p.Name),
+		Order:        sql.NullInt64{Int64: int64(p.Order), Valid: true},
 		Tags:         sql.NullString{String: strings.Join(p.Tags, ","), Valid: true},
 		Plan:         toNullString(string(pl)),
 		OnSuccess:    toNullString(string(s)),
@@ -87,6 +89,7 @@ func (dbp *dbJob) toDomainEntity() *job.Job {
 	}
 	j := &job.Job{
 		ID:           uint32(dbp.ID.Int64),
+		Order:        int(dbp.Order.Int64),
 		Name:         dbp.Name.String,
 		Tags:         tags,
 		Concurrency:  int(dbp.Concurrency.Int64),
@@ -131,8 +134,8 @@ func (dbp *dbJob) toDomainEntity() *job.Job {
 func (r *JobRepository) Create(ctx context.Context, tc, pn string, j job.Job) (uint32, error) {
 	dbj := newDBJob(j)
 	res, err := r.querier.ExecContext(ctx, `
-		INSERT INTO jobs(name, tags, plan, on_success, on_failure, on_cancel, ensure, concurrency, paused, timeout, for_each_group, for_each_key, pipeline_id, baseline_version_id, approve_label, approve_timeout, approve_count, disable_retry, allow_failure, interruptible, inputs)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+		INSERT INTO jobs(name, `+"`order`"+`, tags, plan, on_success, on_failure, on_cancel, ensure, concurrency, paused, timeout, for_each_group, for_each_key, pipeline_id, baseline_version_id, approve_label, approve_timeout, approve_count, disable_retry, allow_failure, interruptible, inputs)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 			-- pipeline_id
 			(
 				SELECT p.id
@@ -142,7 +145,7 @@ func (r *JobRepository) Create(ctx context.Context, tc, pn string, j job.Job) (u
 				WHERE t.canonical = ? AND p.canonical = ?
 			),
 			-- baseline_version_id
-			(SELECT MAX(id) FROM resource_versions), ?, ?, ?, ?, ?, ?, ?)`, dbj.Name, dbj.Tags, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, dbj.Timeout, dbj.ForEachGroup, dbj.ForEachKey, tc, pn, dbj.ApproveLabel, dbj.ApproveTimeout, dbj.ApproveCount, dbj.DisableRetry, dbj.AllowFailure, dbj.Interruptible, dbj.Inputs)
+			(SELECT MAX(id) FROM resource_versions), ?, ?, ?, ?, ?, ?, ?)`, dbj.Name, dbj.Order, dbj.Tags, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Paused, dbj.Timeout, dbj.ForEachGroup, dbj.ForEachKey, tc, pn, dbj.ApproveLabel, dbj.ApproveTimeout, dbj.ApproveCount, dbj.DisableRetry, dbj.AllowFailure, dbj.Interruptible, dbj.Inputs)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -163,7 +166,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 	dbj := newDBJob(j)
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE jobs AS j
-		SET name = ?, tags = ?, plan = ?, on_success = ?, on_failure = ?, on_cancel = ?, ensure = ?, concurrency = ?, timeout = ?, for_each_group = ?, for_each_key = ?, approve_label = ?, approve_timeout = ?, approve_count = ?, disable_retry = ?, allow_failure = ?, interruptible = ?, inputs = ?
+		SET name = ?, `+"`order`"+` = ?, tags = ?, plan = ?, on_success = ?, on_failure = ?, on_cancel = ?, ensure = ?, concurrency = ?, timeout = ?, for_each_group = ?, for_each_key = ?, approve_label = ?, approve_timeout = ?, approve_count = ?, disable_retry = ?, allow_failure = ?, interruptible = ?, inputs = ?
 		FROM (
 			SELECT j.id
 			FROM jobs AS j
@@ -174,7 +177,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
 		) AS jj
 		WHERE jj.id = j.id
-	`, dbj.Name, dbj.Tags, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Timeout, dbj.ForEachGroup, dbj.ForEachKey, dbj.ApproveLabel, dbj.ApproveTimeout, dbj.ApproveCount, dbj.DisableRetry, dbj.AllowFailure, dbj.Interruptible, dbj.Inputs, tc, pn, jn)
+	`, dbj.Name, dbj.Order, dbj.Tags, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Timeout, dbj.ForEachGroup, dbj.ForEachKey, dbj.ApproveLabel, dbj.ApproveTimeout, dbj.ApproveCount, dbj.DisableRetry, dbj.AllowFailure, dbj.Interruptible, dbj.Inputs, tc, pn, jn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -205,7 +208,7 @@ func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job
 
 func (r *JobRepository) Find(ctx context.Context, tc, pn, jn string) (*job.Job, error) {
 	row := r.querier.QueryRowContext(ctx, `
-		SELECT j.id, j.name, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key, j.baseline_version_id, j.approve_label, j.approve_timeout, j.approve_count, j.disable_retry, j.allow_failure, j.interruptible, j.inputs
+		SELECT j.id, j.name, j.`+"`order`"+`, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key, j.baseline_version_id, j.approve_label, j.approve_timeout, j.approve_count, j.disable_retry, j.allow_failure, j.interruptible, j.inputs
 		FROM jobs AS j
 		JOIN pipelines AS p
 			ON j.pipeline_id = p.id
@@ -230,13 +233,14 @@ func (r *JobRepository) Find(ctx context.Context, tc, pn, jn string) (*job.Job, 
 
 func (r *JobRepository) Filter(ctx context.Context, tc, pn string) ([]*job.Job, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT j.id, j.name, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key, j.baseline_version_id, j.approve_label, j.approve_timeout, j.approve_count, j.disable_retry, j.allow_failure, j.interruptible, j.inputs
+		SELECT j.id, j.name, j.`+"`order`"+`, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key, j.baseline_version_id, j.approve_label, j.approve_timeout, j.approve_count, j.disable_retry, j.allow_failure, j.interruptible, j.inputs
 		FROM jobs AS j
 		JOIN pipelines AS p
 			ON j.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
 		WHERE t.canonical = ? AND p.canonical = ?
+		ORDER BY j.`+"`order`"+` ASC
 	`, tc, pn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter jobs: %w", err)
@@ -363,6 +367,7 @@ func scanJob(s sqlr.Scanner) (*job.Job, error) {
 	err := s.Scan(
 		&j.ID,
 		&j.Name,
+		&j.Order,
 		&j.Tags,
 		&j.Plan,
 		&j.OnSuccess,
@@ -474,13 +479,14 @@ func (r *JobRepository) loadSerialGroupsBatch(ctx context.Context, jobIDs []uint
 
 func (r *JobRepository) FilterByForEachGroup(ctx context.Context, tc, pn, group string) ([]*job.Job, error) {
 	rows, err := r.querier.QueryContext(ctx, `
-		SELECT j.id, j.name, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key, j.baseline_version_id, j.approve_label, j.approve_timeout, j.approve_count, j.disable_retry, j.allow_failure, j.interruptible, j.inputs
+		SELECT j.id, j.name, j.`+"`order`"+`, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key, j.baseline_version_id, j.approve_label, j.approve_timeout, j.approve_count, j.disable_retry, j.allow_failure, j.interruptible, j.inputs
 		FROM jobs AS j
 		JOIN pipelines AS p
 			ON j.pipeline_id = p.id
 		JOIN teams AS t
 			ON p.team_id = t.id
 		WHERE t.canonical = ? AND p.canonical = ? AND j.for_each_group = ?
+		ORDER BY j.`+"`order`"+` ASC
 	`, tc, pn, group)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter jobs by for_each group: %w", err)
@@ -514,7 +520,7 @@ func (r *JobRepository) FindJobsBySerialGroups(ctx context.Context, tc, pn strin
 		args = append(args, sg)
 	}
 	query := fmt.Sprintf(`
-		SELECT DISTINCT j.id, j.name, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key, j.baseline_version_id, j.approve_label, j.approve_timeout, j.approve_count, j.disable_retry, j.allow_failure, j.interruptible, j.inputs
+		SELECT DISTINCT j.id, j.name, j.`+"`order`"+`, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.concurrency, j.paused, j.timeout, j.for_each_group, j.for_each_key, j.baseline_version_id, j.approve_label, j.approve_timeout, j.approve_count, j.disable_retry, j.allow_failure, j.interruptible, j.inputs
 		FROM jobs AS j
 		JOIN pipelines AS p ON j.pipeline_id = p.id
 		JOIN teams AS t ON p.team_id = t.id

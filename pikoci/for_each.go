@@ -20,9 +20,10 @@ type forEachInstance struct {
 
 // forEachExpansion holds expansion data for a single for_each/matrix job.
 type forEachExpansion struct {
-	baseName   string
-	instances  []forEachInstance
-	blockRange hcl.Range // byte range of the job block in the source
+	baseName      string
+	instances     []forEachInstance
+	blockRange    hcl.Range // byte range of the job block in the source
+	jobBlockIndex int       // position among all job blocks in the HCL (0-based, for ordering)
 }
 
 // slugifyKey converts a for_each key into a valid slug for use in canonical names.
@@ -40,6 +41,7 @@ func detectForEachExpansions(rpp []byte, ectx *hcl.EvalContext) ([]forEachExpans
 
 	body := file.Body.(*hclsyntax.Body)
 	var expansions []forEachExpansion
+	jobBlockIdx := 0
 
 	for _, block := range body.Blocks {
 		if block.Type != "job" || len(block.Labels) == 0 {
@@ -61,6 +63,7 @@ func detectForEachExpansions(rpp []byte, ectx *hcl.EvalContext) ([]forEachExpans
 		}
 
 		if !hasForEach && matrixBlock == nil {
+			jobBlockIdx++
 			continue
 		}
 
@@ -93,10 +96,12 @@ func detectForEachExpansions(rpp []byte, ectx *hcl.EvalContext) ([]forEachExpans
 		}
 
 		expansions = append(expansions, forEachExpansion{
-			baseName:   jobName,
-			instances:  instances,
-			blockRange: block.Range(),
+			baseName:      jobName,
+			instances:     instances,
+			blockRange:    block.Range(),
+			jobBlockIndex: jobBlockIdx,
 		})
+		jobBlockIdx++
 	}
 
 	return expansions, nil

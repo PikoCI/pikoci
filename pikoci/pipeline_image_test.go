@@ -131,6 +131,47 @@ func TestPostProcessSVG_PreservesNonRectPolygons(t *testing.T) {
 	assert.Contains(t, result, `<polygon fill="#00A83A"`)
 }
 
+func TestRenderDOT_JobOrderPreservedInSVG(t *testing.T) {
+	if _, err := exec.LookPath("dot"); err != nil {
+		t.Skip("graphviz dot binary not available")
+	}
+
+	// Jobs in reverse-alphabetical order to detect alphabetical sorting bugs.
+	// With rankdir=LR and jobs at the same rank (connected via a shared resource
+	// node), graphviz emits nodes in the SVG in visual top-to-bottom order
+	// matching declaration order in the DOT.
+	dot := []byte(`strict graph "test" {
+	rankdir=LR;
+	"cron.tick" [label="cron.tick"];
+	subgraph "cluster_zebra" {
+		"zebra" [label="zebra" URL="/zebra"];
+	}
+	subgraph "cluster_apple" {
+		"apple" [label="apple" URL="/apple"];
+	}
+	subgraph "cluster_mango" {
+		"mango" [label="mango" URL="/mango"];
+	}
+	"cron.tick"--"zebra";
+	"cron.tick"--"apple";
+	"cron.tick"--"mango";
+}`)
+
+	ctx := context.Background()
+	out, err := renderDOT(ctx, dot, "svg")
+	require.NoError(t, err)
+
+	svg := string(out)
+	zebraPos := strings.Index(svg, "zebra")
+	applePos := strings.Index(svg, "apple")
+	mangoPos := strings.Index(svg, "mango")
+	require.True(t, zebraPos >= 0, "zebra should appear in SVG")
+	require.True(t, applePos >= 0, "apple should appear in SVG")
+	require.True(t, mangoPos >= 0, "mango should appear in SVG")
+	assert.Less(t, zebraPos, applePos, "zebra should appear before apple in SVG (config order preserved)")
+	assert.Less(t, applePos, mangoPos, "apple should appear before mango in SVG (config order preserved)")
+}
+
 func TestExtractAttr(t *testing.T) {
 	assert.Equal(t, "red", extractAttr(`<polygon fill="red" stroke="black"/>`, "fill"))
 	assert.Equal(t, "black", extractAttr(`<polygon fill="red" stroke="black"/>`, "stroke"))

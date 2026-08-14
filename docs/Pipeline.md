@@ -260,6 +260,8 @@ The `ready_check` block accepts `interval` (default `"1s"`) and `timeout` (defau
 
 Jobs contain a plan of steps executed in order. Each step is one of `get`, `task`, `put`, `notify`, or `service`.
 
+The order in which `job` blocks appear in the HCL file determines their display order in the pipeline graph. To reorder jobs in the UI, reorder the blocks in your pipeline file and re-apply it.
+
 The optional `concurrency` attribute limits how many builds of the job can run simultaneously. When the limit is reached, new builds are re-queued and wait until a slot frees up. The default value `0` means unlimited.
 
 The optional `timeout` attribute limits the total wall-clock time for a build's plan steps. When the timeout is reached, the build fails with a "job timed out" error and `on_cancel`/`ensure` hooks still run. If not set, the job runs with no time limit.

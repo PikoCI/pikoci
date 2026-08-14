@@ -1516,6 +1516,62 @@ func TestGetPipelineImage_ShowsLinkedResources(t *testing.T) {
 	assert.True(t, strings.Contains(dot, `"git.repo"`), "second linked resource should appear")
 }
 
+func TestGetPipelineImage_JobOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// Jobs named in reverse-alphabetical order: "zebra", "apple", "mango".
+	// If ordering is broken they would appear alphabetically: apple, mango, zebra.
+	pp := &pipeline.Pipeline{
+		Name:      "my-pipeline",
+		Canonical: "my-pipeline",
+		Resources: []resource.Resource{
+			{ID: 1, Canonical: "cron.tick"},
+		},
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "zebra",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "cron", Name: "tick", Trigger: true}},
+				},
+			},
+			{
+				ID:   2,
+				Name: "apple",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "cron", Name: "tick", Trigger: true}},
+				},
+			},
+			{
+				ID:   3,
+				Name: "mango",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "cron", Name: "tick", Trigger: true}},
+				},
+			},
+		},
+	}
+
+	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(pp, nil)
+	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "my-pipeline", ([]build.Status)(nil)).Return(map[string][]*build.Build{}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "my-pipeline").Return(map[string]*resource.Version{}, nil)
+
+	img, err := s.S.GetPipelineImage(ctx, "main", "my-pipeline", "dot", false, false, nil)
+	require.NoError(t, err)
+
+	dot := string(img)
+	zebraPos := strings.Index(dot, `"zebra"`)
+	applePos := strings.Index(dot, `"apple"`)
+	mangoPos := strings.Index(dot, `"mango"`)
+	require.True(t, zebraPos >= 0, "zebra node should be in graph")
+	require.True(t, applePos >= 0, "apple node should be in graph")
+	require.True(t, mangoPos >= 0, "mango node should be in graph")
+	assert.Less(t, zebraPos, applePos, "zebra should appear before apple (config order, not alphabetical)")
+	assert.Less(t, applePos, mangoPos, "apple should appear before mango (config order)")
+}
+
 func TestGetPipelineImage_PassedReusesPutOutputNode(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)

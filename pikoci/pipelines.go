@@ -57,10 +57,11 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 			return fmt.Errorf("failed to create Pipeline %q: %w", pn, err)
 		}
 
-		for _, j := range pp.Jobs {
+		for i, j := range pp.Jobs {
 			if !utils.ValidateCanonical(j.Name) {
 				return fmt.Errorf("invalid Job Name format %q", j.Name)
 			}
+			j.Order = i
 			_, err = uow.Jobs().Create(ctx, tc, pCan, j)
 			if err != nil {
 				return fmt.Errorf("failed to create Job %q: %w", j.Name, err)
@@ -210,10 +211,11 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pCan string, rpp []byte
 		for _, j := range dbpp.Jobs {
 			dbjbs[j.Name] = struct{}{}
 		}
-		for _, j := range pp.Jobs {
+		for i, j := range pp.Jobs {
 			if !utils.ValidateCanonical(j.Name) {
 				return fmt.Errorf("invalid Job Name format %q", j.Name)
 			}
+			j.Order = i
 			if _, ok := dbjbs[j.Name]; ok {
 				delete(dbjbs, j.Name)
 				err = uow.Jobs().Update(ctx, tc, pCan, j.Name, j)
@@ -696,11 +698,20 @@ func resolveJobVisualsFromBuilds(builds []*build.Build, j job.Job) jobNodeVisual
 // When hideIntermediates is true, intermediate resource nodes (between jobs via
 // passed constraints and put outputs) are removed, keeping only entry-point
 // trigger resources and drawing direct job-to-job edges.
+// graphItem tracks the insertion order of top-level DOT items (nodes and subgraphs)
+// so that graphToDOT can reproduce them in config order rather than alphabetical order.
+type graphItem struct {
+	kind string // "node" or "subgraph"
+	name string
+}
+
 func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipeline, hideRes, groupParallel bool, versionFilter *versionFilterOpts) ([]byte, error) {
 	var (
 		pn  = fmt.Sprintf(`"%s"`, pp.Canonical)
 		err error
 	)
+
+	var orderedItems []graphItem
 
 	graph := gographviz.NewGraph()
 	graph.SetName(pn)
@@ -803,10 +814,12 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		if tip, ok := resourceTooltips[r.Canonical]; ok {
 			attrs[string(gographviz.Tooltip)] = fmt.Sprintf(`"%s"`, tip)
 		}
-		err = graph.AddNode(pn, fmt.Sprintf(`"%s"`, r.Canonical), attrs)
+		rNodeName := fmt.Sprintf(`"%s"`, r.Canonical)
+		err = graph.AddNode(pn, rNodeName, attrs)
 		if err != nil {
 			return nil, fmt.Errorf("failed to add node to Graph: %w", err)
 		}
+		orderedItems = append(orderedItems, graphItem{"node", rNodeName})
 	}
 
 	// Build a map of for_each group names to instance names for passed expansion
@@ -931,6 +944,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 			string(gographviz.Style): vis.clusterStyle,
 			string(gographviz.Color): vis.clusterBorderColor,
 		})
+		orderedItems = append(orderedItems, graphItem{"subgraph", jg})
 
 		burl := fmt.Sprintf(`"/teams/%s/pipelines/%s/jobs/%s/builds"`, tc, pp.Canonical, j.Name)
 		quotedJobName := fmt.Sprintf(`"%s"`, j.Name)
@@ -996,6 +1010,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 				if err != nil {
 					return nil, fmt.Errorf("failed to add node to Graph: %w", err)
 				}
+				orderedItems = append(orderedItems, graphItem{"node", nn})
 				err = graph.AddEdge(quotedJobName, nn, false, map[string]string{
 					string(gographviz.Style): "solid",
 				})
@@ -1078,6 +1093,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		if err != nil {
 			return nil, fmt.Errorf("failed to add parallel group node to Graph: %w", err)
 		}
+		orderedItems = append(orderedItems, graphItem{"node", pg.nodeName})
 
 		// Draw resource→group edges for get steps without passed constraints
 		for _, j := range pg.jobs {
@@ -1130,6 +1146,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 					if err != nil {
 						return nil, fmt.Errorf("failed to add node to Graph: %w", err)
 					}
+					orderedItems = append(orderedItems, graphItem{"node", nn})
 					err = graph.AddEdge(pg.nodeName, nn, false, map[string]string{
 						string(gographviz.Style): "solid",
 					})
@@ -1208,6 +1225,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 						if err != nil {
 							return nil, fmt.Errorf("failed to add node to Graph: %w", err)
 						}
+						orderedItems = append(orderedItems, graphItem{"node", nn})
 						err = graph.AddEdge(quotedPassedName, nn, false, nil)
 						if err != nil {
 							return nil, fmt.Errorf("failed to add edge to Graph: %w", err)
@@ -1222,8 +1240,203 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 		}
 	}
 
-	str := graph.String()
+	// Detect disconnected connected components in DOT declaration order and
+	// insert invisible ordering edges between consecutive components so that
+	// graphviz places later-declared components below earlier ones. Without
+	// this, graphviz places smaller components at the top regardless of order.
+	{
+		// Union-find over graph node names.
+		ufParent := make(map[string]string)
+		var ufFind func(string) string
+		ufFind = func(x string) string {
+			if ufParent[x] == "" {
+				ufParent[x] = x
+			}
+			if ufParent[x] != x {
+				ufParent[x] = ufFind(ufParent[x])
+			}
+			return ufParent[x]
+		}
+		ufUnion := func(a, b string) {
+			ra, rb := ufFind(a), ufFind(b)
+			if ra != rb {
+				ufParent[ra] = rb
+			}
+		}
+		for _, n := range graph.Nodes.Nodes {
+			ufFind(n.Name)
+		}
+		for _, e := range graph.Edges.Edges {
+			ufUnion(e.Src, e.Dst)
+		}
+
+		// Resolve a representative node name for each orderedItem.
+		// Subgraph items use their first inner node; node items use themselves.
+		representative := func(item graphItem) string {
+			if item.kind == "node" {
+				return item.name
+			}
+			for child := range graph.Relations.ParentToChildren[item.name] {
+				return child
+			}
+			return ""
+		}
+
+		// Walk orderedItems in declaration order, tracking component first/last representatives.
+		type compEntry struct {
+			root    string
+			first   string
+			last    string
+		}
+		compByRoot := make(map[string]*compEntry)
+		var comps []*compEntry
+		for _, item := range orderedItems {
+			rep := representative(item)
+			if rep == "" {
+				continue
+			}
+			root := ufFind(rep)
+			if ce, exists := compByRoot[root]; exists {
+				ce.last = rep
+			} else {
+				ce := &compEntry{root: root, first: rep, last: rep}
+				compByRoot[root] = ce
+				comps = append(comps, ce)
+			}
+		}
+
+		// Add one invisible ordering edge per consecutive component pair.
+		for i := 1; i < len(comps); i++ {
+			src := comps[i-1].last
+			dst := comps[i].first
+			_ = graph.AddEdge(src, dst, false, map[string]string{
+				string(gographviz.Style):      "invis",
+				string(gographviz.Constraint): "false",
+			})
+		}
+	}
+
+	str := graphToDOT(graph, orderedItems)
 	return []byte(str), nil
+}
+
+// graphToDOT serializes a gographviz.Graph to a DOT string, rendering
+// top-level nodes and subgraphs in the order they were inserted (as tracked
+// by orderedItems) rather than alphabetically. Edges are written in insertion
+// order. Attribute keys within each node/subgraph are still sorted for stability.
+func graphToDOT(g *gographviz.Graph, orderedItems []graphItem) string {
+	var b strings.Builder
+
+	if g.Strict {
+		b.WriteString("strict ")
+	}
+	if g.Directed {
+		b.WriteString("digraph ")
+	} else {
+		b.WriteString("graph ")
+	}
+	b.WriteString(g.Name)
+	b.WriteString(" {\n")
+
+	// Graph-level attributes (sorted for stability)
+	for _, k := range dotSortedAttrKeys(g.Attrs) {
+		b.WriteString("\t")
+		b.WriteString(string(k))
+		b.WriteString("=")
+		b.WriteString(g.Attrs[k])
+		b.WriteString(";\n")
+	}
+
+	// Top-level items in insertion order
+	written := make(map[string]bool)
+	for _, item := range orderedItems {
+		if written[item.name] {
+			continue
+		}
+		written[item.name] = true
+		if item.kind == "node" {
+			node := g.Nodes.Lookup[item.name]
+			if node == nil {
+				continue
+			}
+			b.WriteString("\t")
+			b.WriteString(node.Name)
+			dotWriteAttrs(&b, node.Attrs)
+			b.WriteString(";\n")
+		} else {
+			sub := g.SubGraphs.SubGraphs[item.name]
+			if sub == nil {
+				continue
+			}
+			b.WriteString("\tsubgraph ")
+			b.WriteString(sub.Name)
+			b.WriteString(" {\n")
+			for _, k := range dotSortedAttrKeys(sub.Attrs) {
+				b.WriteString("\t\t")
+				b.WriteString(string(k))
+				b.WriteString("=")
+				b.WriteString(sub.Attrs[k])
+				b.WriteString(";\n")
+			}
+			// Nodes within the subgraph in insertion order
+			children := g.Relations.ParentToChildren[item.name]
+			for _, n := range g.Nodes.Nodes {
+				if !children[n.Name] {
+					continue
+				}
+				b.WriteString("\t\t")
+				b.WriteString(n.Name)
+				dotWriteAttrs(&b, n.Attrs)
+				b.WriteString(";\n")
+			}
+			b.WriteString("\t}\n")
+		}
+	}
+
+	// Edges in insertion order
+	for _, e := range g.Edges.Edges {
+		op := "--"
+		if e.Dir {
+			op = "->"
+		}
+		b.WriteString("\t")
+		b.WriteString(e.Src)
+		b.WriteString(op)
+		b.WriteString(e.Dst)
+		dotWriteAttrs(&b, e.Attrs)
+		b.WriteString(";\n")
+	}
+
+	b.WriteString("\n}\n")
+	return b.String()
+}
+
+// dotSortedAttrKeys returns attribute keys sorted alphabetically for stable output.
+func dotSortedAttrKeys(attrs gographviz.Attrs) []gographviz.Attr {
+	keys := make([]gographviz.Attr, 0, len(attrs))
+	for k := range attrs {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	return keys
+}
+
+// dotWriteAttrs writes node/edge attributes in DOT [ key=value ] format.
+func dotWriteAttrs(b *strings.Builder, attrs gographviz.Attrs) {
+	if len(attrs) == 0 {
+		return
+	}
+	keys := dotSortedAttrKeys(attrs)
+	b.WriteString(" [ ")
+	for i, k := range keys {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(string(k))
+		b.WriteString("=")
+		b.WriteString(attrs[k])
+	}
+	b.WriteString(" ]")
 }
 
 // buildResourceTooltip formats a resource version's key-value pairs and
