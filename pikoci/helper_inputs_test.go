@@ -140,6 +140,37 @@ job "test" {
 		assert.Contains(t, err.Error(), "duplicate input name")
 	})
 
+	t.Run("default does not match type", func(t *testing.T) {
+		_, err := ReadPipeline(context.Background(), base(`
+  input "x" {
+    type    = "number"
+    default = "abc"
+  }`), nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not a valid number")
+	})
+
+	t.Run("multi-select default not in options", func(t *testing.T) {
+		_, err := ReadPipeline(context.Background(), base(`
+  input "x" {
+    type     = "string"
+    options  = ["a", "b"]
+    multiple = true
+    default  = "a,c"
+  }`), nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "is not in options")
+	})
+
+	t.Run("input name is not a usable env var name", func(t *testing.T) {
+		_, err := ReadPipeline(context.Background(), base(`
+  input "x=y" {
+    type = "string"
+  }`), nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "letters, digits and underscores")
+	})
+
 	t.Run("too many inputs", func(t *testing.T) {
 		var inputs string
 		for i := 0; i < 21; i++ {

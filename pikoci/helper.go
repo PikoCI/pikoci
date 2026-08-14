@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -1008,6 +1009,10 @@ func blockLabel(block *hclsyntax.Block) string {
 // struct. It handles variable resolution (string, number, bool, and secret
 // types), source resolution for resource types, runners, secret types, and
 // services, and extracts ordered job plans from the HCL AST.
+// validInputName matches the input names that make a usable INPUT_<name>
+// environment variable.
+var validInputName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
 func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error) {
 	funcs := hclFunctions()
 	ectx := pipeline.TypeEvalContext()
@@ -1606,18 +1611,15 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 			if len(hj.Input) > 20 {
 				return nil, fmt.Errorf("job %q: too many inputs (max 20, got %d)", hj.Name, len(hj.Input))
 			}
-			envNames := make(map[string]bool)
 			inputNames := make(map[string]bool)
 			for _, inp := range hj.Input {
 				if inputNames[inp.Name] {
 					return nil, fmt.Errorf("job %q: duplicate input name %q", hj.Name, inp.Name)
 				}
 				inputNames[inp.Name] = true
-				envName := strings.ToLower(inp.Name)
-				if envNames[envName] {
-					return nil, fmt.Errorf("job %q: input %q produces duplicate env var name INPUT_%s", hj.Name, inp.Name, inp.Name)
+				if !validInputName.MatchString(inp.Name) {
+					return nil, fmt.Errorf("job %q: input %q must start with a letter or underscore and contain only letters, digits and underscores, since it becomes the env var INPUT_%s", hj.Name, inp.Name, inp.Name)
 				}
-				envNames[envName] = true
 				if inp.Type != "string" && inp.Type != "number" && inp.Type != "bool" {
 					return nil, fmt.Errorf("job %q: input %q has invalid type %q (must be string, number, or bool)", hj.Name, inp.Name, inp.Type)
 				}
@@ -1647,6 +1649,12 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 					Options:     inp.Options,
 					Multiple:    inp.Multiple,
 				})
+			}
+			// Resolve the declared defaults the same way an auto-triggered
+			// build will, so a default that does not match its own type or
+			// options is rejected here instead of at trigger time.
+			if _, err := resolveInputValues(j.Inputs, nil, false); err != nil {
+				return nil, fmt.Errorf("job %q: %w", hj.Name, err)
 			}
 		}
 		pp.Jobs = append(pp.Jobs, j)
