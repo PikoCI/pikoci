@@ -81,6 +81,7 @@ func adaptSQL(sql, system string) string {
 		sql = strings.ReplaceAll(sql, "`type`", `"type"`)
 		sql = strings.ReplaceAll(sql, "`check`", `"check"`)
 		sql = strings.ReplaceAll(sql, "`commit`", `"commit"`)
+		sql = strings.ReplaceAll(sql, "`order`", `"order"`)
 		// PostgreSQL uses ALTER COLUMN ... TYPE instead of MODIFY COLUMN
 		sql = modifyColumnRePostgres.ReplaceAllString(sql, "ALTER TABLE $1 ALTER COLUMN $2 TYPE $3;")
 		// PostgreSQL doesn't support RENAME COLUMN with the same syntax in older versions,
