@@ -111,7 +111,7 @@ func TestEvaluateCondition(t *testing.T) {
 		// When $UNDEFINED expands to empty, "contains ''" becomes a bare word
 		// "contains" followed by trailing text — this is an error, not a match.
 		// Users should quote or compare the empty var differently.
-		{"contains undefined empty is error", "$UNDEFINED contains ''", false, true},
+		{"contains undefined empty", "$UNDEFINED contains ''", true, false},
 
 		// ── !contains (negated substring) ──
 		{"!contains GET no match", "$GET_APP_BRANCH !contains 'dev'", true, false},
@@ -222,7 +222,7 @@ func TestEvaluateCondition(t *testing.T) {
 		{"and-or precedence all paths false", "$GET_APP_BRANCH == 'develop' || $BUILD_NUMBER == '99' && $INPUT_env == 'staging'", false, false},
 
 		// ── Whitespace edge cases ──
-		{"whitespace only", "   ", false, false},
+		{"whitespace only", "   ", true, false},
 		{"extra whitespace around operators", "  $GET_APP_BRANCH   ==   'main'  ", true, false},
 		{"tabs and spaces", "\t$BUILD_NUMBER\t==\t'42'\t", true, false},
 
@@ -232,7 +232,7 @@ func TestEvaluateCondition(t *testing.T) {
 		{"trailing text", "$GET_APP_BRANCH == 'main' extratext", false, true},
 		{"extra closing paren", "$GET_APP_BRANCH == 'main')", false, true},
 		{"empty parens", "()", false, false}, // parses inner as empty → "" → falsy
-		{"contains undefined empty is error", "$UNDEFINED contains ''", false, true},
+		{"contains undefined empty", "$UNDEFINED contains ''", true, false},
 	}
 
 	for _, tt := range tests {
@@ -306,11 +306,11 @@ func TestEvaluateCondition_ValuesWithSpaces(t *testing.T) {
 		want      bool
 		wantErr   bool
 	}{
-		// Space in expanded var causes trailing text errors because the
-		// bare word parser splits on whitespace.
-		{"space value eq is error", "$TASK_BUILD_MSG == 'hello world'", false, true},
-		{"space value contains is error", "$TASK_BUILD_MSG contains 'hello'", false, true},
-		{"space input eq is error", "$INPUT_label == 'deploy to prod'", false, true},
+		// A variable is expanded after the expression is tokenized, so spaces
+		// in its value are part of the value and nothing else.
+		{"space value eq", "$TASK_BUILD_MSG == 'hello world'", true, false},
+		{"space value contains", "$TASK_BUILD_MSG contains 'hello'", true, false},
+		{"space input eq", "$INPUT_label == 'deploy to prod'", true, false},
 		// Quoted literal comparison still works fine
 		{"space value eq both quoted", "'hello world' == 'hello world'", true, false},
 		{"space value contains both quoted", "'hello world' contains 'hello'", true, false},
@@ -330,16 +330,66 @@ func TestEvaluateCondition_ValuesWithSpaces(t *testing.T) {
 }
 
 func TestEvaluateCondition_SingleQuotesInValues(t *testing.T) {
-	// Single quotes inside values cannot be represented in single-quoted
-	// strings, but they can appear as bare words or in variable values.
+	// A quote inside a variable value is data, not syntax, because the value
+	// is substituted after the expression has been parsed.
 	vars := map[string]string{
 		"TASK_BUILD_MSG": "it's done",
 	}
 
-	// The var expands to: it's done contains 'done'
-	// Bare word reads "it", then the single quote starts a quoted string "'s done contains '"
-	// which is "s done contains ", then "done'" is trailing — this is an error.
 	result, err := EvaluateCondition("$TASK_BUILD_MSG contains 'done'", vars)
-	require.Error(t, err)
-	_ = result
+	require.NoError(t, err)
+	assert.True(t, result)
+}
+
+func TestEvaluateCondition_ValueCannotInjectSyntax(t *testing.T) {
+	// A value that looks like expression syntax must be compared as data,
+	// otherwise a job input could rewrite the condition guarding a branch.
+	vars := map[string]string{
+		"INPUT_env": "x' || '1' == '1",
+		"GET_TAG":   "v1 == v1",
+	}
+
+	result, err := EvaluateCondition("$INPUT_env == 'prod'", vars)
+	require.NoError(t, err)
+	assert.False(t, result)
+
+	result, err = EvaluateCondition("$GET_TAG == 'prod'", vars)
+	require.NoError(t, err)
+	assert.False(t, result)
+}
+
+func TestEvaluateCondition_FalseIsNotTruthy(t *testing.T) {
+	vars := map[string]string{
+		"FLAG_OFF": "false",
+		"ZERO":     "0",
+		"FLAG_ON":  "true",
+		"WORD":     "yes",
+	}
+
+	for condition, want := range map[string]bool{
+		"$FLAG_OFF":  false,
+		"$ZERO":      false,
+		"$UNDEFINED": false,
+		"$FLAG_ON":   true,
+		"$WORD":      true,
+	} {
+		got, err := EvaluateCondition(condition, vars)
+		require.NoError(t, err, condition)
+		assert.Equal(t, want, got, "condition: %s", condition)
+	}
+}
+
+func TestEvaluateCondition_MalformedIsAnError(t *testing.T) {
+	vars := map[string]string{"S": "hello", "FLAG": "false"}
+
+	for _, condition := range []string{
+		"$S contains",
+		"'a' == 'a' &&",
+		"$S ==",
+		"!$FLAG",
+		"$S >= 5",
+	} {
+		_, err := EvaluateCondition(condition, vars)
+		require.Error(t, err, "condition %q should be rejected", condition)
+	}
 }

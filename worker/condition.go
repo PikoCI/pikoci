@@ -8,20 +8,21 @@ import (
 	"unicode"
 )
 
-// EvaluateCondition expands $VAR references using the provided vars map,
-// then evaluates the resulting expression. Supported operators:
+// EvaluateCondition evaluates a condition expression, substituting $VAR
+// references from the provided vars map. Supported operators:
 // ==, !=, >, <, contains, !contains, && (AND), || (OR).
 // Values can be single-quoted strings or bare words. Parentheses are supported.
+//
+// Variables are expanded per value, after the expression has been split into
+// tokens, so a value containing spaces, quotes or operators is compared as
+// data and cannot alter the shape of the expression.
 func EvaluateCondition(condition string, vars map[string]string) (bool, error) {
+	condition = strings.TrimSpace(condition)
 	if condition == "" {
 		return true, nil
 	}
 
-	expanded := os.Expand(condition, func(key string) string {
-		return vars[key]
-	})
-
-	p := &condParser{input: expanded}
+	p := &condParser{input: condition, vars: vars}
 	result, err := p.parseOr()
 	if err != nil {
 		return false, fmt.Errorf("condition %q: %w", condition, err)
@@ -38,6 +39,15 @@ func EvaluateCondition(condition string, vars map[string]string) (bool, error) {
 type condParser struct {
 	input string
 	pos   int
+	vars  map[string]string
+}
+
+// expand substitutes $VAR references in a single parsed value.
+func (p *condParser) expand(value string) string {
+	if !strings.ContainsRune(value, '$') {
+		return value
+	}
+	return os.Expand(value, func(key string) string { return p.vars[key] })
 }
 
 func (p *condParser) skipSpaces() {
@@ -102,8 +112,15 @@ func (p *condParser) parseCompare() (bool, error) {
 	// Check for comparison operator
 	op := p.peekOp()
 	if op == "" {
-		// No operator — treat the value as a boolean: non-empty string is true
-		return left != "", nil
+		// No operator — treat the value as a boolean. Anything non-empty is
+		// true except the strings that spell out falsehood, so that a variable
+		// holding "false" or "0" does not select the branch.
+		switch strings.ToLower(left) {
+		case "", "false", "0":
+			return false, nil
+		default:
+			return true, nil
+		}
 	}
 
 	p.pos += len(op)
@@ -181,7 +198,13 @@ func (p *condParser) parseValue() (string, error) {
 	p.skipSpaces()
 
 	if p.pos >= len(p.input) {
-		return "", nil
+		return "", fmt.Errorf("expected a value at position %d", p.pos)
+	}
+
+	// A leading "!" is not negation; rejecting it beats silently evaluating
+	// "!$FLAG" as the bare word "!false", which is always true.
+	if p.input[p.pos] == '!' && p.peekOp() != "!contains" && p.peekOp() != "!=" {
+		return "", fmt.Errorf("unsupported %q at position %d, negation is not available; compare explicitly instead", "!", p.pos)
 	}
 
 	// Parenthesized expression — evaluate and return "true"/"false"
@@ -214,7 +237,7 @@ func (p *condParser) parseValue() (string, error) {
 		}
 		val := p.input[start:p.pos]
 		p.pos++ // skip closing quote
-		return val, nil
+		return p.expand(val), nil
 	}
 
 	// Bare word: read until space or operator character
@@ -233,7 +256,7 @@ func (p *condParser) parseValue() (string, error) {
 		}
 		p.pos++
 	}
-	return p.input[start:p.pos], nil
+	return p.expand(p.input[start:p.pos]), nil
 }
 
 func isWordChar(b byte) bool {
