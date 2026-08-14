@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 
 	"github.com/cycloidio/sqlr"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
@@ -181,7 +182,7 @@ func (r *PipelineRepository) FilterAll(ctx context.Context) ([]*pipeline.WithTea
 		SELECT
 			t.id, t.name, t.canonical,
 			p.id, p.name, p.canonical, p.raw, p.public,
-			j.id, j.name, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.paused, j.for_each_group, j.for_each_key, j.baseline_version_id, j.approve_label, j.approve_timeout, j.approve_count, j.disable_retry, j.allow_failure, j.interruptible,
+			j.id, j.name, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.paused, j.for_each_group, j.for_each_key, j.baseline_version_id, j.approve_label, j.approve_timeout, j.approve_count, j.disable_retry, j.allow_failure, j.interruptible, ` + "j.`order`" + `, j.inputs,
 			r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.tags, r.pinned_version_id,
 			rt.id, rt.name, rt.`+"`check`"+`, rt.pull, rt.push, rt.params,
 			ru.id, ru.name, ru.run,
@@ -237,7 +238,7 @@ func scanPipelinesWithTeam(rows *sql.Rows) ([]*pipeline.WithTeam, error) {
 		err := rows.Scan(
 			&tt.ID, &tt.Name, &tt.Canonical,
 			&pp.ID, &pp.Name, &pp.Canonical, &pp.Raw, &pp.Public,
-			&j.ID, &j.Name, &j.Tags, &j.Plan, &j.OnSuccess, &j.OnFailure, &j.OnCancel, &j.Ensure, &j.Paused, &j.ForEachGroup, &j.ForEachKey, &j.BaselineVersionID, &j.ApproveLabel, &j.ApproveTimeout, &j.ApproveCount, &j.DisableRetry, &j.AllowFailure, &j.Interruptible,
+			&j.ID, &j.Name, &j.Tags, &j.Plan, &j.OnSuccess, &j.OnFailure, &j.OnCancel, &j.Ensure, &j.Paused, &j.ForEachGroup, &j.ForEachKey, &j.BaselineVersionID, &j.ApproveLabel, &j.ApproveTimeout, &j.ApproveCount, &j.DisableRetry, &j.AllowFailure, &j.Interruptible, &j.Order, &j.Inputs,
 			&r.ID, &r.Name, &r.Type, &r.Canonical, &r.Params, &r.CheckInterval, &r.Logs, &r.LastCheck, &r.NextCheck, &r.Tags, &r.PinnedVersionID,
 			&rt.ID, &rt.Name, &rt.Check, &rt.Pull, &rt.Push, &rt.Params,
 			&ru.ID, &ru.Name, &ru.Run,
@@ -316,7 +317,9 @@ func scanPipelinesWithTeam(rows *sql.Rows) ([]*pipeline.WithTeam, error) {
 
 	result := make([]*pipeline.WithTeam, 0, len(pipelineOrder))
 	for _, id := range pipelineOrder {
-		result = append(result, pipelineMap[id])
+		p := pipelineMap[id]
+		sort.Slice(p.Jobs, func(i, j int) bool { return p.Jobs[i].Order < p.Jobs[j].Order })
+		result = append(result, p)
 	}
 	return result, nil
 }
@@ -351,7 +354,7 @@ func (r *PipelineRepository) Delete(ctx context.Context, tc, pCan string) error 
 const pipelineQuery = `
 	SELECT
 		p.id, p.name, p.canonical, p.raw, p.public,
-		j.id, j.name, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.paused, j.for_each_group, j.for_each_key, j.baseline_version_id, j.approve_label, j.approve_timeout, j.approve_count, j.disable_retry, j.allow_failure, j.interruptible,
+		j.id, j.name, j.tags, j.plan, j.on_success, j.on_failure, j.on_cancel, j.ensure, j.paused, j.for_each_group, j.for_each_key, j.baseline_version_id, j.approve_label, j.approve_timeout, j.approve_count, j.disable_retry, j.allow_failure, j.interruptible, ` + "j.`order`" + `, j.inputs,
 		r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.tags, r.pinned_version_id,
 		rt.id, rt.name, rt.` + "`check`" + `, rt.pull, rt.push, rt.params,
 		ru.id, ru.name, ru.run,
@@ -395,7 +398,7 @@ func scanPipelines(rows *sql.Rows) ([]*pipeline.Pipeline, error) {
 
 		err := rows.Scan(
 			&pp.ID, &pp.Name, &pp.Canonical, &pp.Raw, &pp.Public,
-			&j.ID, &j.Name, &j.Tags, &j.Plan, &j.OnSuccess, &j.OnFailure, &j.OnCancel, &j.Ensure, &j.Paused, &j.ForEachGroup, &j.ForEachKey, &j.BaselineVersionID, &j.ApproveLabel, &j.ApproveTimeout, &j.ApproveCount, &j.DisableRetry, &j.AllowFailure, &j.Interruptible,
+			&j.ID, &j.Name, &j.Tags, &j.Plan, &j.OnSuccess, &j.OnFailure, &j.OnCancel, &j.Ensure, &j.Paused, &j.ForEachGroup, &j.ForEachKey, &j.BaselineVersionID, &j.ApproveLabel, &j.ApproveTimeout, &j.ApproveCount, &j.DisableRetry, &j.AllowFailure, &j.Interruptible, &j.Order, &j.Inputs,
 			&r.ID, &r.Name, &r.Type, &r.Canonical, &r.Params, &r.CheckInterval, &r.Logs, &r.LastCheck, &r.NextCheck, &r.WebhookToken, &r.Tags, &r.PinnedVersionID,
 			&rt.ID, &rt.Name, &rt.Check, &rt.Pull, &rt.Push, &rt.Params,
 			&ru.ID, &ru.Name, &ru.Run,
@@ -471,7 +474,9 @@ func scanPipelines(rows *sql.Rows) ([]*pipeline.Pipeline, error) {
 
 	result := make([]*pipeline.Pipeline, 0, len(pipelineOrder))
 	for _, id := range pipelineOrder {
-		result = append(result, pipelineMap[id])
+		p := pipelineMap[id]
+		sort.Slice(p.Jobs, func(i, j int) bool { return p.Jobs[i].Order < p.Jobs[j].Order })
+		result = append(result, p)
 	}
 	return result, nil
 }

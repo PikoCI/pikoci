@@ -1187,6 +1187,35 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 		}
 	}
 
+	// Reorder hp.Jobs so that for_each instances appear at the position of their
+	// original job block in the HCL, not appended at the end.
+	if len(forEachExpansions) > 0 {
+		var regularJobs []hclJob
+		forEachByBase := make(map[string][]hclJob)
+		for _, hj := range hp.Jobs {
+			if meta, ok := forEachMetas[hj.Name]; ok {
+				forEachByBase[meta.baseName] = append(forEachByBase[meta.baseName], hj)
+			} else {
+				regularJobs = append(regularJobs, hj)
+			}
+		}
+		forEachAtIndex := make(map[int][]hclJob)
+		for _, exp := range forEachExpansions {
+			forEachAtIndex[exp.jobBlockIndex] = forEachByBase[exp.baseName]
+		}
+		totalSlots := len(regularJobs) + len(forEachExpansions)
+		orderedJobs := make([]hclJob, 0, len(hp.Jobs))
+		regularIdx := 0
+		for i := 0; i < totalSlots; i++ {
+			if instances, ok := forEachAtIndex[i]; ok {
+				orderedJobs = append(orderedJobs, instances...)
+			} else {
+				orderedJobs = append(orderedJobs, regularJobs[regularIdx])
+				regularIdx++
+			}
+		}
+		hp.Jobs = orderedJobs
+	}
 	// Convert intermediate types and resolve sources
 	var resourceTypes []restype.ResourceType
 	for _, hrt := range hp.ResourceTypes {
@@ -1420,24 +1449,28 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 	// Regular jobs come from decodeRPP, for_each jobs from their block bytes.
 	var jobPairs []jobBlockPair
 
-	// Parse stripped HCL for regular job AST blocks
+	// Parse stripped HCL for regular job AST blocks.
+	// Build a name-based lookup so ordering of hp.Jobs does not matter here.
 	if len(hp.Jobs) > 0 {
+		hjByName := make(map[string]hclJob, len(hp.Jobs))
+		for _, hj := range hp.Jobs {
+			hjByName[hj.Name] = hj
+		}
 		regularFile, rDiags := hclsyntax.ParseConfig(decodeRPP, "pipeline.hcl", hcl.Pos{Line: 1, Column: 1})
 		if rDiags.HasErrors() {
 			return nil, fmt.Errorf("failed to parse stripped pipeline HCL: %s", rDiags.Error())
 		}
 		regularBody := regularFile.Body.(*hclsyntax.Body)
-		regularJobIdx := 0
 		for _, block := range regularBody.Blocks {
-			if block.Type != "job" {
+			if block.Type != "job" || len(block.Labels) == 0 {
 				continue
 			}
-			if regularJobIdx >= len(hp.Jobs)-len(forEachMetas) {
-				break
+			jobName := block.Labels[0]
+			hj, ok := hjByName[jobName]
+			if !ok {
+				continue
 			}
-			hj := hp.Jobs[regularJobIdx]
-			// Skip if this is a for_each expanded job (they're appended at the end)
-			if _, isForEach := forEachMetas[hj.Name]; isForEach {
+			if _, isForEach := forEachMetas[jobName]; isForEach {
 				continue
 			}
 			jobPairs = append(jobPairs, jobBlockPair{
@@ -1445,7 +1478,6 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 				block:   block,
 				jobEctx: ectx,
 			})
-			regularJobIdx++
 		}
 	}
 

@@ -56,6 +56,7 @@ type Input struct {
 // cancellation, or unconditionally (ensure).
 type Job struct {
 	ID           uint32     `json:"id"`
+	Order        int        `json:"order"`
 	Name         string     `json:"name" hcl:"name,label"`
 	Concurrency  int        `json:"concurrency,omitempty"`
 	SerialGroups []string      `json:"serial_groups,omitempty"`
