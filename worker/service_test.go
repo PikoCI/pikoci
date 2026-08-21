@@ -3446,6 +3446,40 @@ func TestTriggerResourceJobs_TriggersWhenPinnedVersionMatches(t *testing.T) {
 	w.triggerResourceJobs(ctx, m, pp, r, cv)
 }
 
+func TestTriggerResourceJobs_FiresOnTriggerNotifications(t *testing.T) {
+	// Verify that FireTriggerNotifications is called before CreateJobBuild,
+	// with the correct team, pipeline, resource canonical, and version metadata.
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	w := &Worker{pikoci: svc, logger: logger}
+
+	ctx := context.Background()
+	versionMeta := map[string]interface{}{"ref": "abc123"}
+	r := resource.Resource{ID: 1, Name: "repo", Type: "git", Canonical: "git.repo"}
+	cv := &resource.Version{ID: 10, Version: versionMeta}
+	m := workitem.Body{TeamCanonical: "tc", PipelineCanonical: "my-pipeline"}
+	pp := &pipeline.Pipeline{
+		Name:      "my-pipeline",
+		Canonical: "my-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "build",
+				Plan: []job.PlanStep{
+					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo", Trigger: true}},
+				},
+			},
+		},
+	}
+
+	svc.EXPECT().FireTriggerNotifications(ctx, "tc", "my-pipeline", "git.repo", versionMeta).Times(1)
+	svc.EXPECT().CreateJobBuild(gomock.Any(), "tc", "my-pipeline", "build", gomock.Any()).
+		Return(&build.Build{ID: 1, BuildNumber: "1"}, nil)
+
+	w.triggerResourceJobs(ctx, m, pp, r, cv)
+}
+
 func TestProcessJob_TaskInputMissing(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc := newTestWorker(ctrl)

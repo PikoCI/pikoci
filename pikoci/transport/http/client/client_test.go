@@ -1191,6 +1191,26 @@ func TestTriggerResourceVersion(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestFireTriggerNotifications(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/pipelines/{pc}/trigger-notifications", func(w http.ResponseWriter, req *http.Request) {
+		assert.Equal(t, "team", mux.Vars(req)["tc"])
+		assert.Equal(t, "pipe", mux.Vars(req)["pc"])
+		var got thttp.FireTriggerNotificationsRequest
+		json.NewDecoder(req.Body).Decode(&got)
+		assert.Equal(t, "git.repo", got.TriggeringResourceCanonical)
+		jsonHandler(w, thttp.FireTriggerNotificationsResponse{})
+	}).Methods("POST")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	// FireTriggerNotifications is fire-and-forget: no return value to assert.
+	c.FireTriggerNotifications(context.Background(), "team", "pipe", "git.repo", map[string]interface{}{"ref": "abc"})
+}
+
 func TestWebhookTrigger(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/webhooks/{token}", func(w http.ResponseWriter, req *http.Request) {
