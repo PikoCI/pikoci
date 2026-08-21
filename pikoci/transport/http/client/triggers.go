@@ -9,6 +9,23 @@ import (
 	"github.com/pikoci/pikoci/pikoci/trigger"
 )
 
+// FireTriggerNotifications asks the server to fire on_trigger notifications
+// for all jobs reachable from the given resource canonical.
+func (cl *Client) FireTriggerNotifications(ctx context.Context, tc, pc, triggeringRCan string, versionMeta map[string]interface{}) {
+	// Fire-and-forget: remote workers delegate notification execution to the
+	// server, which runs the exec command in a temp dir. Errors are logged
+	// server-side; the worker does not wait for a meaningful response.
+	var resp thttp.FireTriggerNotificationsResponse
+	_ = cl.Request(ctx, http.MethodPost,
+		fmt.Sprintf("%s/teams/%s/pipelines/%s/trigger-notifications", cl.url, tc, pc),
+		thttp.FireTriggerNotificationsRequest{
+			TriggeringResourceCanonical: triggeringRCan,
+			VersionMeta:                 versionMeta,
+		},
+		&resp,
+	)
+}
+
 // CreateTrigger creates a new trigger event with the given name and version data.
 func (cl *Client) CreateTrigger(ctx context.Context, tc, name string, version map[string]interface{}) (*trigger.Trigger, error) {
 	var resp thttp.CreateTriggerResponse

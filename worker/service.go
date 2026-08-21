@@ -2363,6 +2363,9 @@ func (w *Worker) triggerResourceJobs(ctx context.Context, m workitem.Body, pp *p
 		return
 	}
 
+	// Fire on_trigger notifications synchronously before any builds are created.
+	w.pikoci.FireTriggerNotifications(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, cv.Version)
+
 	for _, j := range pp.Jobs {
 		if j.Paused {
 			continue

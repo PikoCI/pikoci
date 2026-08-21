@@ -658,6 +658,7 @@ var (
 		"get": true, "task": true, "put": true, "notify": true, "service": true,
 		"in_parallel": true, "approve": true, "input": true,
 		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
+		"on_trigger": true,
 		"matrix": true,
 		"if": true, "else_if": true, "else": true,
 	}
@@ -1565,6 +1566,7 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 			OnFailure:    jh.OnFailure,
 			OnCancel:     jh.OnCancel,
 			Ensure:       jh.Ensure,
+			OnTrigger:    jh.OnTrigger,
 		}
 		if len(hj.Approve) > 0 {
 			ab := hj.Approve[0]
@@ -1796,6 +1798,7 @@ type jobHooks struct {
 	OnFailure []job.HookStep
 	OnCancel  []job.HookStep
 	Ensure    []job.HookStep
+	OnTrigger []job.HookStep
 }
 
 // parseHooks finds all hook steps (runner commands and put blocks) inside a specific
@@ -2307,6 +2310,7 @@ func parseJobPlansFromPairs(pairs []jobBlockPair, services []service.Service) (m
 			OnFailure: parseHooks(block, pairEctx, "on_failure"),
 			OnCancel:  parseHooks(block, pairEctx, "on_cancel"),
 			Ensure:    parseHooks(block, pairEctx, "ensure"),
+			OnTrigger: parseHooks(block, pairEctx, "on_trigger"),
 		}
 		jhMap[hj.Name] = jh
 	}

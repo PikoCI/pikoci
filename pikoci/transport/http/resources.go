@@ -407,3 +407,31 @@ func triggerPipelineResource(s pikoci.Service) http.HandlerFunc {
 		encodeResponse(TriggerPipelineResourceResponse{Err: errs}, w)
 	}
 }
+
+// FireTriggerNotificationsRequest is the request body for the fire-trigger-notifications endpoint.
+type FireTriggerNotificationsRequest struct {
+	TriggeringResourceCanonical string                 `json:"triggering_resource_canonical"`
+	VersionMeta                 map[string]interface{} `json:"version_meta"`
+}
+
+// FireTriggerNotificationsResponse is the response for the fire-trigger-notifications endpoint.
+type FireTriggerNotificationsResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r FireTriggerNotificationsResponse) Error() string { return r.Err }
+
+func fireTriggerNotifications(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		tc := vars["team_canonical"]
+		pc := vars["pipeline_canonical"]
+		var req FireTriggerNotificationsRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			encodeResponse(FireTriggerNotificationsResponse{Err: err.Error()}, w)
+			return
+		}
+		s.FireTriggerNotifications(r.Context(), tc, pc, req.TriggeringResourceCanonical, req.VersionMeta)
+		encodeResponse(FireTriggerNotificationsResponse{}, w)
+	}
+}

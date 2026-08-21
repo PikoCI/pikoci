@@ -87,6 +87,9 @@ type Job struct {
 	OnFailure []HookStep `json:"on_failure,omitempty"`
 	OnCancel  []HookStep `json:"on_cancel,omitempty"`
 	Ensure    []HookStep `json:"ensure,omitempty"`
+	// OnTrigger contains notification steps fired when a resource version makes
+	// this job reachable (directly or transitively), before any build is created.
+	OnTrigger []HookStep `json:"on_trigger,omitempty"`
 }
 
 // GetSteps returns all get steps from the plan in order.

@@ -1249,6 +1249,18 @@ func (mr *ServiceMockRecorder) TriggerResourceVersion(ctx, tc, pn, rCan, version
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TriggerResourceVersion", reflect.TypeOf((*Service)(nil).TriggerResourceVersion), ctx, tc, pn, rCan, versionID)
 }
 
+// FireTriggerNotifications mocks base method.
+func (m *Service) FireTriggerNotifications(ctx context.Context, tc, pc, triggeringRCan string, versionMeta map[string]interface{}) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "FireTriggerNotifications", ctx, tc, pc, triggeringRCan, versionMeta)
+}
+
+// FireTriggerNotifications indicates an expected call of FireTriggerNotifications.
+func (mr *ServiceMockRecorder) FireTriggerNotifications(ctx, tc, pc, triggeringRCan, versionMeta any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FireTriggerNotifications", reflect.TypeOf((*Service)(nil).FireTriggerNotifications), ctx, tc, pc, triggeringRCan, versionMeta)
+}
+
 // UnlinkAccount mocks base method.
 func (m *Service) UnlinkAccount(ctx context.Context, userID uint32, canonical string) error {
 	m.ctrl.T.Helper()

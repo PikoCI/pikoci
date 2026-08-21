@@ -65,6 +65,9 @@ func newTestWorker(ctrl *gomock.Controller) (*Worker, *mock.Service) {
 	// EvaluateDownstreamJobs is called after a build succeeds; allow it globally.
 	svc.EXPECT().EvaluateDownstreamJobs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
+	// FireTriggerNotifications is called by triggerResourceJobs before creating builds; allow globally.
+	svc.EXPECT().FireTriggerNotifications(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
 	w := &Worker{
 		pikoci: svc,
 		logger: logger,
