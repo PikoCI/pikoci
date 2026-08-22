@@ -721,7 +721,7 @@ service_type "keycloak" {
     path     = "/bin/sh"
     args     = ["-ec", "curl -sf http://127.0.0.1:$param_port/realms/pikoci"]
     interval = "3s"
-    timeout  = "120s"
+    timeout  = "5m"
   }
 
   stop "exec" {
