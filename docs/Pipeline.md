@@ -290,6 +290,7 @@ The optional `timeout` attribute limits the total wall-clock time for a build's 
 | `on_failure` | no | Hook: runs after a step fails |
 | `on_cancel` | no | Hook: runs when the build is cancelled |
 | `ensure` | no | Hook: always runs regardless of outcome |
+| `on_trigger` | no | Hook: runs before any builds are created when a resource version triggers this job (or a transitively dependent job) |
 
 #### input
 
@@ -1005,6 +1006,67 @@ job "test" {
 ```
 
 Job-level hooks have access to `$BUILD_STATUS` (`succeeded` or `failed`) in addition to all other build metadata environment variables (`$BUILD_NUMBER`, `$BUILD_JOB_NAME`, `$BUILD_PIPELINE_NAME`, `$BUILD_TEAM_NAME`).
+
+### on_trigger
+
+The `on_trigger` hook fires **before any builds are created** when a resource version triggers the pipeline. It fires for every job that is transitively reachable from the triggering resource — both the directly triggered job and any downstream jobs whose `passed` constraints are satisfied by the trigger.
+
+This is useful for reporting a `queued` status to external systems (like GitHub Checks) immediately when a commit is detected, rather than waiting for the job to actually start.
+
+```hcl
+job "test-backends" {
+  get "git" "repo" {
+    trigger = true
+    passed  = ["backend", "frontend"]
+  }
+
+  on_trigger {
+    notify "github-check" "ci" { status = "queued" }
+  }
+
+  notify "github-check" "ci" { status = "in_progress" }
+
+  task "run" {
+    run "exec" { path = "make"; args = ["test"] }
+  }
+
+  on_success {
+    notify "github-check" "ci" { conclusion = "success" }
+  }
+  on_failure {
+    notify "github-check" "ci" { conclusion = "failure" }
+  }
+}
+```
+
+In this example:
+
+1. A new commit is detected on `repo`
+2. PikoCI fires `on_trigger` for **all** reachable jobs (`backend`, `frontend`, and `test-backends`) **before** creating any builds — all appear as `queued` on GitHub immediately
+3. Each job starts and fires `notify "github-check" "ci" { status = "in_progress" }` as it begins
+4. Each job fires the `on_success` or `on_failure` hook when it finishes
+
+#### on_trigger environment variables
+
+The `on_trigger` hook runs **outside of any build context** — there is no WORKDIR, no build number, and no get/task step outputs. The following variables are available:
+
+| Variable | Description |
+|----------|-------------|
+| `$BUILD_JOB_NAME` | Job name |
+| `$BUILD_PIPELINE_NAME` | Pipeline canonical name |
+| `$BUILD_TEAM_NAME` | Team canonical name |
+| `$param_*` | Notification-level parameters (from `notification` block's `params`) |
+| `$notify_*` | Step-level parameters (from `notify` step attributes) |
+| `$version_<key>` | Version metadata fields from the triggering resource (e.g. `$version_ref` for a git SHA) |
+
+**Note:** `$BUILD_NUMBER` is not available in `on_trigger` because no build has been created yet.
+
+#### Limitations
+
+- `on_trigger` only supports `notify` steps. Runner commands (`exec`) and `put` steps are not allowed.
+- The hook fires for **all transitively reachable jobs**, including jobs that may ultimately not run (e.g. because an upstream job fails or is paused). Notification type scripts should be idempotent.
+- If an `on_trigger` notification fails, the failure is logged but does not block build creation.
+- There is no WORKDIR in `on_trigger` context. Notification types that rely on reading files from a working directory (e.g. `git rev-parse HEAD`) must use `$version_ref` or other env vars instead.
 
 ### Step timeout
 
