@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/notifier"
@@ -20,6 +22,7 @@ import (
 	tshttp "github.com/pikoci/pikoci/pikoci/transport/http"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
+	"github.com/pikoci/pikoci/pikoci/utils"
 	"github.com/pikoci/pikoci/worker"
 )
 
@@ -30,6 +33,12 @@ func TestMain(m *testing.M) {
 }
 
 func runTests(m *testing.M) int {
+	// Use bcrypt cost 4 (MinCost) throughout all integration tests so that
+	// password hashing and verification complete in milliseconds rather than
+	// several seconds. Cost 14 (production default) on a loaded arm64 server
+	// exceeds the 5-second Selenium waitFor timeouts.
+	utils.BcryptCost = bcrypt.MinCost
+
 	jwtSecret := []byte("secret")
 	ctx := context.Background()
 
@@ -79,9 +88,11 @@ func runTests(m *testing.M) int {
 	var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.Mem, "test", "abc1234", pikoURL, oauthStateStore)
 	mux.Handle("/", handler)
 
+	pepitoPwd, _ := bcrypt.GenerateFromPassword([]byte("pepito"), bcrypt.MinCost)
+	grilloPwd, _ := bcrypt.GenerateFromPassword([]byte("grillo"), bcrypt.MinCost)
 	isHash := true
-	_, _ = svc.CreateUser(ctx, user.User{FullName: "pepito", Username: "pepito", Password: "$2a$14$rwQk8Qvc2rij7qhFO4P1W.OiSF6AkgVU1RCrLaY2wawJcpkPEKwbm"}, isHash)
-	_, _ = svc.CreateUser(ctx, user.User{FullName: "grillo", Username: "grillo", Password: "$2a$14$SvWir17.jlXxiZfe0pJuDedznetc/HWKv43YPsQQNo6MJiuypS2q6"}, isHash)
+	_, _ = svc.CreateUser(ctx, user.User{FullName: "pepito", Username: "pepito", Password: string(pepitoPwd)}, isHash)
+	_, _ = svc.CreateUser(ctx, user.User{FullName: "grillo", Username: "grillo", Password: string(grilloPwd)}, isHash)
 
 	// Create Keycloak OIDC provider for OAuth integration tests.
 	// Only if KEYCLOAK_URL is set (e.g., http://localhost:8180).
