@@ -6,7 +6,7 @@ import { html } from 'htm/preact';
 import { Login } from '../../pikoci/transport/http/assets/js/app/components/Login.js';
 import { Breadcrumb } from '../../pikoci/transport/http/assets/js/app/components/Layout.js';
 import { StepRow } from '../../pikoci/transport/http/assets/js/app/components/Jobs.js';
-import { EntryRow, NewEntryRow } from '../../pikoci/transport/http/assets/js/app/components/ConfigStore.js';
+import { EntryRow, NewEntryRow, mergeEntries } from '../../pikoci/transport/http/assets/js/app/components/ConfigStore.js';
 
 // ---------------------------------------------------------------------------
 // Login
@@ -209,4 +209,63 @@ test('NewEntryRow: renders the name and value inputs', () => {
   const output = render(html`<${NewEntryRow} existing=${[]} />`);
   assert.ok(output.includes('id="config-name"'), 'should have the name input');
   assert.ok(output.includes('id="config-value"'), 'should have the value input');
+});
+
+// ---------------------------------------------------------------------------
+// ConfigStore — team/pipeline merge
+// ---------------------------------------------------------------------------
+
+const teamOnly = { name: 'NPM_TOKEN', canonical: 'NPM_TOKEN', kind: 'secret', scope: 'team' };
+const teamShared = { name: 'SHARED', canonical: 'SHARED', kind: 'plain', scope: 'team', value: 'team-value' };
+const pipeOverride = { name: 'SHARED', canonical: 'SHARED', kind: 'plain', scope: 'pipeline', value: 'pipe-value' };
+const pipeOwn = { name: 'DB_URL', canonical: 'DB_URL', kind: 'secret', scope: 'pipeline' };
+
+test('mergeEntries: inherits team entries the pipeline does not define', () => {
+  const merged = mergeEntries([teamOnly], [pipeOwn]);
+  const npm = merged.find(e => e.canonical === 'NPM_TOKEN');
+  const db = merged.find(e => e.canonical === 'DB_URL');
+  assert.equal(merged.length, 2);
+  assert.equal(npm.inherited, true, 'team-only entry is inherited');
+  assert.equal(db.inherited, false, 'pipeline entry is not inherited');
+});
+
+test('mergeEntries: a pipeline entry shadows the team entry, listed once', () => {
+  const merged = mergeEntries([teamShared], [pipeOverride]);
+  assert.equal(merged.length, 1, 'shadowed team entry must not be listed twice');
+  assert.equal(merged[0].value, 'pipe-value', 'pipeline value wins');
+  assert.equal(merged[0].overrides, true, 'should be flagged as overriding');
+  assert.equal(merged[0].inherited, false);
+});
+
+test('mergeEntries: sorts by name and tolerates empty scopes', () => {
+  const merged = mergeEntries([teamShared, teamOnly], [pipeOwn]);
+  assert.deepEqual(merged.map(e => e.canonical), ['DB_URL', 'NPM_TOKEN', 'SHARED']);
+  assert.deepEqual(mergeEntries(null, null), []);
+  assert.equal(mergeEntries([teamOnly], []).length, 1);
+});
+
+test('EntryRow: inherited entry shows an inherited badge and no delete', () => {
+  const entry = { ...teamOnly, inherited: true, overrides: false };
+  const output = render(html`<${EntryRow} entry=${entry} canWrite=${true} showScope=${true} tc="main" />`);
+  assert.ok(output.includes('inherited'), 'should show the inherited badge');
+  assert.ok(!output.includes('delete-config'), 'inherited entries are managed on the team, not here');
+});
+
+test('EntryRow: overriding entry is badged and still deletable', () => {
+  const entry = { ...pipeOverride, inherited: false, overrides: true };
+  const output = render(html`<${EntryRow} entry=${entry} canWrite=${true} showScope=${true} tc="main" />`);
+  assert.ok(output.includes('overrides team'), 'should show the override badge');
+  assert.ok(output.includes('delete-config'), 'its own entry stays deletable');
+});
+
+test('EntryRow: omits the scope column at team scope', () => {
+  const output = render(html`<${EntryRow} entry=${plainEntry} canWrite=${true} showScope=${false} />`);
+  assert.ok(!output.includes('inherited'), 'team view has no scope column');
+});
+
+// A name that exists only on the team is a valid override, not a conflict.
+test('NewEntryRow: flags an override instead of blocking it', () => {
+  const output = render(html`<${NewEntryRow} existing=${[]} teamEntries=${[teamShared]} showScope=${true} />`);
+  assert.ok(output.includes('id="config-name"'), 'renders the form');
+  assert.ok(!output.includes('already exists'), 'a team-level name must not read as a duplicate');
 });
