@@ -99,7 +99,9 @@ export function ConfigPanel({ tc, pn }) {
   `;
 }
 
-function EntryRow({ entry, canWrite, onDelete }) {
+// Exported for tests: ConfigPanel renders nothing until its fetch resolves,
+// so the rows are the testable surface.
+export function EntryRow({ entry, canWrite, onDelete }) {
   const isSecret = entry.kind === 'secret';
 
   return html`
@@ -127,7 +129,7 @@ function EntryRow({ entry, canWrite, onDelete }) {
   `;
 }
 
-function NewEntryRow({ onAdd, onCancel, existing }) {
+export function NewEntryRow({ onAdd, onCancel, existing }) {
   const [name, setName] = useState('');
   const [value, setValue] = useState('');
   const [isSecret, setIsSecret] = useState(true);

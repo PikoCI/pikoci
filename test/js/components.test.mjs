@@ -6,6 +6,7 @@ import { html } from 'htm/preact';
 import { Login } from '../../pikoci/transport/http/assets/js/app/components/Login.js';
 import { Breadcrumb } from '../../pikoci/transport/http/assets/js/app/components/Layout.js';
 import { StepRow } from '../../pikoci/transport/http/assets/js/app/components/Jobs.js';
+import { EntryRow, NewEntryRow } from '../../pikoci/transport/http/assets/js/app/components/ConfigStore.js';
 
 // ---------------------------------------------------------------------------
 // Login
@@ -152,4 +153,60 @@ test('StepRow shows duration when step is completed and stepElapsed not provided
     stepElapsed=${{}}
   />`);
   assert.ok(output.includes('00:00:05'), 'should show completed step duration');
+// ConfigStore — EntryRow
+// ---------------------------------------------------------------------------
+
+const secretEntry = { name: 'GITHUB_TOKEN', canonical: 'GITHUB_TOKEN', kind: 'secret', scope: 'team' };
+const plainEntry = { name: 'LOG_LEVEL', canonical: 'LOG_LEVEL', kind: 'plain', scope: 'team', value: 'debug' };
+
+test('EntryRow: secret hides the value behind dots', () => {
+  const output = render(html`<${EntryRow} entry=${secretEntry} canWrite=${true} />`);
+  assert.ok(output.includes('GITHUB_TOKEN'), 'should show the name');
+  assert.ok(output.includes('••••••••'), 'should mask the value');
+  assert.ok(output.includes('bi-lock-fill'), 'should show the lock badge');
+});
+
+test('EntryRow: plain shows the value in the clear', () => {
+  const output = render(html`<${EntryRow} entry=${plainEntry} canWrite=${true} />`);
+  assert.ok(output.includes('LOG_LEVEL'), 'should show the name');
+  assert.ok(output.includes('debug'), 'should show the value');
+  assert.ok(!output.includes('••••••••'), 'plain values must not be masked');
+});
+
+// A secret value is never returned by the API, but if one ever were, the row
+// must not put it in the DOM.
+test('EntryRow: never renders a value on a secret entry', () => {
+  const leaky = { ...secretEntry, value: 'ghp_should_never_render' };
+  const output = render(html`<${EntryRow} entry=${leaky} canWrite=${true} />`);
+  assert.ok(!output.includes('ghp_should_never_render'), 'secret value must never reach the DOM');
+});
+
+test('EntryRow: hides delete for a user without write access', () => {
+  const withWrite = render(html`<${EntryRow} entry=${plainEntry} canWrite=${true} />`);
+  const readOnly = render(html`<${EntryRow} entry=${plainEntry} canWrite=${false} />`);
+  assert.ok(withWrite.includes('delete-config'), 'maintainer sees delete');
+  assert.ok(!readOnly.includes('delete-config'), 'reader must not see delete');
+});
+
+// ---------------------------------------------------------------------------
+// ConfigStore — NewEntryRow
+// ---------------------------------------------------------------------------
+
+test('NewEntryRow: defaults to secret, matching the server default', () => {
+  const output = render(html`<${NewEntryRow} existing=${[]} />`);
+  assert.ok(output.includes('id="config-secret"'), 'should have the secret toggle');
+  assert.ok(output.includes('checked'), 'secret should be checked by default');
+  assert.ok(output.includes('type="password"'), 'value input should be masked by default');
+});
+
+test('NewEntryRow: save is disabled until a name and value are given', () => {
+  const output = render(html`<${NewEntryRow} existing=${[]} />`);
+  assert.ok(output.includes('id="save-config"'), 'should have the save button');
+  assert.ok(output.includes('disabled'), 'save should start disabled');
+});
+
+test('NewEntryRow: renders the name and value inputs', () => {
+  const output = render(html`<${NewEntryRow} existing=${[]} />`);
+  assert.ok(output.includes('id="config-name"'), 'should have the name input');
+  assert.ok(output.includes('id="config-value"'), 'should have the value input');
 });
