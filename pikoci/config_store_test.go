@@ -230,13 +230,12 @@ func TestConfigStore_PlainValuesAreReadable(t *testing.T) {
 	`, tc).Scan(&stored))
 	assert.Equal(t, "debug", stored, "plain values are stored verbatim, not encoded")
 
+	require.NoError(t, svc.SetTeamConfig(ctx, tc, "API_TOKEN", "tok", secret.KindSecret))
+
 	entries, err := svc.ListTeamConfig(ctx, tc)
 	require.NoError(t, err)
 
 	var plain, sec *secret.Entry
-	require.NoError(t, svc.SetTeamConfig(ctx, tc, "API_TOKEN", "tok", secret.KindSecret))
-	entries, err = svc.ListTeamConfig(ctx, tc)
-	require.NoError(t, err)
 	for _, e := range entries {
 		switch e.Canonical {
 		case "LOG_LEVEL":
