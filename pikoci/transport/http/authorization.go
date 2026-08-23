@@ -123,8 +123,39 @@ var (
 		CreateApiToken: jwtOnly(requireRole(role.Read)),
 		ListApiTokens:  jwtOnly(requireRole(role.Read)),
 		DeleteApiToken: jwtOnly(requireRole(role.Read)),
+
+		// Secret management. Writes match the other pipeline-configuration
+		// routes at Maintain; listing only ever exposes names, never values.
+		SetTeamSecret:        requireRole(role.Maintain),
+		ListTeamSecrets:      requireRole(role.Read),
+		DeleteTeamSecret:     requireRole(role.Maintain),
+		SetPipelineSecret:    requireRole(role.Maintain),
+		ListPipelineSecrets:  requireRole(role.Read),
+		DeletePipelineSecret: requireRole(role.Maintain),
+
+		// Decrypted values are for workers only. Reaching this as a user is
+		// always a denial: there is deliberately no secret-reveal API.
+		GetPipelineSecretValues: workerOnly,
+	}
+
+	// workerScopedRoutes are routes that a worker JWT must be explicitly
+	// authorized for, instead of being waved through by the blanket
+	// "is_from_worker implies admin" bypass in the auth middleware. A worker
+	// reaching one of these must present a team-scoped token whose team
+	// matches the team in the request path.
+	//
+	// Without this, any worker token — including an unscoped global one —
+	// could read every team's secrets.
+	workerScopedRoutes = map[RouteName]bool{
+		GetPipelineSecretValues: true,
 	}
 )
+
+// workerOnly rejects every non-worker caller. Workers never reach it: the auth
+// middleware handles them via workerScopedRoutes before consulting this table.
+func workerOnly(ctx context.Context, s pikoci.Service, un, tc string) error {
+	return fmt.Errorf("this endpoint is only available to workers")
+}
 
 func nothing(ctx context.Context, s pikoci.Service, un, tc string) error { return nil }
 

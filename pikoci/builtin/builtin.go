@@ -140,6 +140,9 @@ func SecretTypes() map[string]sectype.SecretType {
 				secretTypes[st.Name] = st
 			}
 		}
+		// The encrypted store is resolved natively by the worker rather than
+		// by a runner command, so it has no HCL definition to embed.
+		secretTypes[sectype.StoreName] = sectype.Store()
 	})
 	return secretTypes
 }

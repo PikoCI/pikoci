@@ -716,7 +716,7 @@ func (w *Worker) runPlan(ctx context.Context, m workitem.Body, b *build.Build, c
 	}()
 
 	// Resolve secret-backed variables once for the entire job execution.
-	resolved, err := w.resolveSecretVars(ctx, cwd, pp)
+	resolved, err := w.resolveSecretVars(ctx, cwd, m.TeamCanonical, pp)
 	if err != nil {
 		w.failBuild(ctx, m, *b, fmt.Errorf("failed to resolve secret vars: %w", err))
 		return true, nil, nil
@@ -2169,7 +2169,7 @@ func (w *Worker) processResourceCheck(ctx context.Context, m workitem.Body, cwd 
 		params[k] = v
 	}
 
-	resolved, err := w.resolveSecretVars(ctx, cwd, pp)
+	resolved, err := w.resolveSecretVars(ctx, cwd, m.TeamCanonical, pp)
 	if err != nil {
 		w.logger.Error("failed to resolve secret vars for resource check", "error", err)
 		r.Logs = err.Error()
@@ -2703,12 +2703,27 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 
 // fetchSecrets resolves secret values for the given secrets map (secret_type name -> path)
 // and returns them as a map of "secret_<key>" env vars.
-func (w *Worker) fetchSecrets(ctx context.Context, cwd string, pp *pipeline.Pipeline, secrets map[string]string) (map[string]string, error) {
+func (w *Worker) fetchSecrets(ctx context.Context, cwd, tc string, pp *pipeline.Pipeline, secrets map[string]string) (map[string]string, error) {
 	result := make(map[string]string)
 	for stName, path := range secrets {
 		st, ok := pp.SecretType(stName)
 		if !ok {
 			return nil, fmt.Errorf("secret_type %q not found in pipeline", stName)
+		}
+
+		// The built-in store has no Get command: values come from the server,
+		// which holds the decryption key. Handling it here keeps placeholder
+		// substitution, chaining and log masking identical to every other
+		// secret type.
+		if stName == sectype.StoreName {
+			values, err := w.pikoci.ResolvePipelineSecrets(ctx, tc, pp.Canonical)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch secrets from the PikoCI store: %w", err)
+			}
+			for k, v := range values {
+				result["secret_"+k] = v
+			}
+			continue
 		}
 
 		// Build params: config values + path param
@@ -3294,7 +3309,7 @@ func (w *Worker) stopServices(m workitem.Body, b *build.Build, cwd string, pp *p
 // the actual secret values from the configured secret types. Variables are
 // resolved in dependency order: if a variable's path/key references another
 // secret variable's placeholder, the dependency is resolved first.
-func (w *Worker) resolveSecretVars(ctx context.Context, cwd string, pp *pipeline.Pipeline) (map[string]string, error) {
+func (w *Worker) resolveSecretVars(ctx context.Context, cwd, tc string, pp *pipeline.Pipeline) (map[string]string, error) {
 	if len(pp.SecretVars) == 0 {
 		return nil, nil
 	}
@@ -3352,7 +3367,7 @@ func (w *Worker) resolveSecretVars(ctx context.Context, cwd string, pp *pipeline
 		}
 
 		for k, varNames := range groups {
-			secrets, err := w.fetchSecrets(ctx, cwd, layerPP, map[string]string{k.typ: k.path})
+			secrets, err := w.fetchSecrets(ctx, cwd, tc, layerPP, map[string]string{k.typ: k.path})
 			if err != nil {
 				return nil, fmt.Errorf("failed to resolve secrets from %q at %q: %w", k.typ, k.path, err)
 			}

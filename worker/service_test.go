@@ -3427,7 +3427,7 @@ func TestFetchSecrets_RawFormat(t *testing.T) {
 	}
 
 	secrets := map[string]string{"pem": ""}
-	result, err := w.fetchSecrets(ctx, cwd, pp, secrets)
+	result, err := w.fetchSecrets(ctx, cwd, "main", pp, secrets)
 	require.NoError(t, err)
 	assert.Equal(t, pemContent, result["secret_content"], "raw format should return trimmed file content under 'content' key")
 }

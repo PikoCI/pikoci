@@ -21,6 +21,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/runner"
 	"github.com/pikoci/pikoci/pikoci/scheduler"
+	"github.com/pikoci/pikoci/pikoci/secret"
 	"github.com/pikoci/pikoci/pikoci/sectype"
 	"github.com/pikoci/pikoci/pikoci/team"
 	"github.com/pikoci/pikoci/pikoci/trigger"
@@ -278,6 +279,22 @@ type Service interface {
 	// filter options. The boolean return value indicates whether more results exist.
 	ListAuditLog(ctx context.Context, tc string, opts auditlog.FilterOpts) ([]*auditlog.Entry, bool, error)
 
+	// SetTeamSecret stores an encrypted team-scoped secret value.
+	SetTeamSecret(ctx context.Context, tc, name, value string) error
+	// SetPipelineSecret stores an encrypted pipeline-scoped secret value.
+	SetPipelineSecret(ctx context.Context, tc, pn, name, value string) error
+	// ListTeamSecrets returns the team-scoped secrets, never their values.
+	ListTeamSecrets(ctx context.Context, tc string) ([]*secret.Secret, error)
+	// ListPipelineSecrets returns the pipeline-scoped secrets, never their values.
+	ListPipelineSecrets(ctx context.Context, tc, pn string) ([]*secret.Secret, error)
+	// DeleteTeamSecret removes a team-scoped secret.
+	DeleteTeamSecret(ctx context.Context, tc, name string) error
+	// DeletePipelineSecret removes a pipeline-scoped secret.
+	DeletePipelineSecret(ctx context.Context, tc, pn, name string) error
+	// ResolvePipelineSecrets returns the decrypted secret values a pipeline
+	// references, keyed by secret name. Used by workers at build time.
+	ResolvePipelineSecrets(ctx context.Context, tc, pn string) (map[string]string, error)
+
 	// GenerateTeamWorkerToken generates (or regenerates) a team-scoped worker
 	// token by creating a new salt, storing it, and signing a JWT.
 	GenerateTeamWorkerToken(ctx context.Context, tc string) (string, error)
@@ -340,6 +357,13 @@ type PikoCI struct {
 	Runners       runner.Repository
 	// SecretTypes is the repository for secret type persistence.
 	SecretTypes   sectype.Repository
+	// Secrets is the repository for stored secret persistence. It is nil when
+	// the encrypted secret store has not been enabled.
+	Secrets       secret.Repository
+	// SecretCipher encrypts and decrypts stored secret values. It is nil when
+	// the encrypted secret store has not been enabled, and unconfigured when
+	// no master key was supplied.
+	SecretCipher  *secret.Cipher
 	// Triggers is the repository for trigger persistence.
 	Triggers      trigger.Repository
 	// Workers is the repository for worker persistence.

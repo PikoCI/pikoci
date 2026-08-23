@@ -89,7 +89,7 @@ resource "git" "repo" {
 }
 ```
 
-The `secret` block label is the name of a `secret_type` defined in the pipeline. The block has two fields:
+The `secret` block label is the name of a `secret_type` defined in the pipeline, or `pikoci` for a value held in PikoCI's own [secret store](Secrets.md). The block has two fields:
 
 | Field  | Required | Description                                       |
 |--------|----------|---------------------------------------------------|

@@ -1,15 +1,34 @@
-// Package secret defines the domain model for secrets in PikoCI.
-// Secrets store sensitive configuration values (such as credentials or tokens)
-// that are resolved at build time through secret types.
+// Package secret defines the domain model for stored secrets in PikoCI.
+// Secrets hold sensitive values (credentials, tokens) encrypted at rest with a
+// server-held age identity, managed through the API rather than declared in a
+// pipeline definition.
 package secret
 
-// Secret represents a named secret associated with a pipeline. It has a type
-// that determines how the secret value is retrieved, and optional parameters
-// passed to the secret type's get command.
+import "time"
+
+// Scope identifies what a secret is attached to.
+type Scope string
+
+const (
+	// TeamScope secrets are readable by every pipeline in the team.
+	TeamScope Scope = "team"
+
+	// PipelineScope secrets are readable only by the pipeline that owns them.
+	// A pipeline secret shadows a team secret with the same canonical name.
+	PipelineScope Scope = "pipeline"
+)
+
+// Secret is a named value stored encrypted and referenced from a pipeline
+// through the built-in "pikoci" secret type.
+//
+// The plaintext value is deliberately absent from this struct. Values exist
+// only transiently inside Cipher during encryption and decryption, so a Secret
+// can be logged or serialized to an API response without leaking anything.
 type Secret struct {
-	ID        uint32            `json:"id"`
-	Type      string            `json:"type" hcl:"type,label"`
-	Name      string            `json:"name" hcl:"name,label"`
-	Canonical string            `json:"canonical"`
-	Params    map[string]string `json:"params,omitempty"`
+	ID        uint32    `json:"id"`
+	Name      string    `json:"name"`
+	Canonical string    `json:"canonical"`
+	Scope     Scope     `json:"scope"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

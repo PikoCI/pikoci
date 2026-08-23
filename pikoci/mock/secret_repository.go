@@ -41,75 +41,134 @@ func (m *SecretRepository) EXPECT() *SecretRepositoryMockRecorder {
 	return m.recorder
 }
 
-// Create mocks base method.
-func (m *SecretRepository) Create(ctx context.Context, tc, pn string, s secret.Secret) (uint32, error) {
+// CreateServerKey mocks base method.
+func (m *SecretRepository) CreateServerKey(ctx context.Context, k secret.ServerKey) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", ctx, tc, pn, s)
-	ret0, _ := ret[0].(uint32)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Create indicates an expected call of Create.
-func (mr *SecretRepositoryMockRecorder) Create(ctx, tc, pn, s any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*SecretRepository)(nil).Create), ctx, tc, pn, s)
-}
-
-// Delete mocks base method.
-func (m *SecretRepository) Delete(ctx context.Context, tc, pn, sCan string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", ctx, tc, pn, sCan)
+	ret := m.ctrl.Call(m, "CreateServerKey", ctx, k)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// Delete indicates an expected call of Delete.
-func (mr *SecretRepositoryMockRecorder) Delete(ctx, tc, pn, sCan any) *gomock.Call {
+// CreateServerKey indicates an expected call of CreateServerKey.
+func (mr *SecretRepositoryMockRecorder) CreateServerKey(ctx, k any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*SecretRepository)(nil).Delete), ctx, tc, pn, sCan)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateServerKey", reflect.TypeOf((*SecretRepository)(nil).CreateServerKey), ctx, k)
 }
 
-// Filter mocks base method.
-func (m *SecretRepository) Filter(ctx context.Context, tc, pn string) ([]*secret.Secret, error) {
+// DeletePipeline mocks base method.
+func (m *SecretRepository) DeletePipeline(ctx context.Context, tc, pn, sCan string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Filter", ctx, tc, pn)
+	ret := m.ctrl.Call(m, "DeletePipeline", ctx, tc, pn, sCan)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeletePipeline indicates an expected call of DeletePipeline.
+func (mr *SecretRepositoryMockRecorder) DeletePipeline(ctx, tc, pn, sCan any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePipeline", reflect.TypeOf((*SecretRepository)(nil).DeletePipeline), ctx, tc, pn, sCan)
+}
+
+// DeleteTeam mocks base method.
+func (m *SecretRepository) DeleteTeam(ctx context.Context, tc, sCan string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteTeam", ctx, tc, sCan)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteTeam indicates an expected call of DeleteTeam.
+func (mr *SecretRepositoryMockRecorder) DeleteTeam(ctx, tc, sCan any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTeam", reflect.TypeOf((*SecretRepository)(nil).DeleteTeam), ctx, tc, sCan)
+}
+
+// EncryptedValues mocks base method.
+func (m *SecretRepository) EncryptedValues(ctx context.Context, tc, pn string) (map[string][]byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EncryptedValues", ctx, tc, pn)
+	ret0, _ := ret[0].(map[string][]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// EncryptedValues indicates an expected call of EncryptedValues.
+func (mr *SecretRepositoryMockRecorder) EncryptedValues(ctx, tc, pn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EncryptedValues", reflect.TypeOf((*SecretRepository)(nil).EncryptedValues), ctx, tc, pn)
+}
+
+// FilterPipeline mocks base method.
+func (m *SecretRepository) FilterPipeline(ctx context.Context, tc, pn string) ([]*secret.Secret, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FilterPipeline", ctx, tc, pn)
 	ret0, _ := ret[0].([]*secret.Secret)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Filter indicates an expected call of Filter.
-func (mr *SecretRepositoryMockRecorder) Filter(ctx, tc, pn any) *gomock.Call {
+// FilterPipeline indicates an expected call of FilterPipeline.
+func (mr *SecretRepositoryMockRecorder) FilterPipeline(ctx, tc, pn any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Filter", reflect.TypeOf((*SecretRepository)(nil).Filter), ctx, tc, pn)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilterPipeline", reflect.TypeOf((*SecretRepository)(nil).FilterPipeline), ctx, tc, pn)
 }
 
-// Find mocks base method.
-func (m *SecretRepository) Find(ctx context.Context, tc, pn, sCan string) (*secret.Secret, error) {
+// FilterTeam mocks base method.
+func (m *SecretRepository) FilterTeam(ctx context.Context, tc string) ([]*secret.Secret, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Find", ctx, tc, pn, sCan)
-	ret0, _ := ret[0].(*secret.Secret)
+	ret := m.ctrl.Call(m, "FilterTeam", ctx, tc)
+	ret0, _ := ret[0].([]*secret.Secret)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Find indicates an expected call of Find.
-func (mr *SecretRepositoryMockRecorder) Find(ctx, tc, pn, sCan any) *gomock.Call {
+// FilterTeam indicates an expected call of FilterTeam.
+func (mr *SecretRepositoryMockRecorder) FilterTeam(ctx, tc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Find", reflect.TypeOf((*SecretRepository)(nil).Find), ctx, tc, pn, sCan)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilterTeam", reflect.TypeOf((*SecretRepository)(nil).FilterTeam), ctx, tc)
 }
 
-// Update mocks base method.
-func (m *SecretRepository) Update(ctx context.Context, tc, pn, sCan string, s secret.Secret) error {
+// FindServerKey mocks base method.
+func (m *SecretRepository) FindServerKey(ctx context.Context) (*secret.ServerKey, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", ctx, tc, pn, sCan, s)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "FindServerKey", ctx)
+	ret0, _ := ret[0].(*secret.ServerKey)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
-// Update indicates an expected call of Update.
-func (mr *SecretRepositoryMockRecorder) Update(ctx, tc, pn, sCan, s any) *gomock.Call {
+// FindServerKey indicates an expected call of FindServerKey.
+func (mr *SecretRepositoryMockRecorder) FindServerKey(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*SecretRepository)(nil).Update), ctx, tc, pn, sCan, s)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindServerKey", reflect.TypeOf((*SecretRepository)(nil).FindServerKey), ctx)
+}
+
+// UpsertPipeline mocks base method.
+func (m *SecretRepository) UpsertPipeline(ctx context.Context, tc, pn string, s secret.Secret, value []byte) (uint32, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertPipeline", ctx, tc, pn, s, value)
+	ret0, _ := ret[0].(uint32)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertPipeline indicates an expected call of UpsertPipeline.
+func (mr *SecretRepositoryMockRecorder) UpsertPipeline(ctx, tc, pn, s, value any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertPipeline", reflect.TypeOf((*SecretRepository)(nil).UpsertPipeline), ctx, tc, pn, s, value)
+}
+
+// UpsertTeam mocks base method.
+func (m *SecretRepository) UpsertTeam(ctx context.Context, tc string, s secret.Secret, value []byte) (uint32, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertTeam", ctx, tc, s, value)
+	ret0, _ := ret[0].(uint32)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertTeam indicates an expected call of UpsertTeam.
+func (mr *SecretRepositoryMockRecorder) UpsertTeam(ctx, tc, s, value any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertTeam", reflect.TypeOf((*SecretRepository)(nil).UpsertTeam), ctx, tc, s, value)
 }

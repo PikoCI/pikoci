@@ -31,6 +31,7 @@ nav:
   - Pipeline Reference: Pipeline.md
   - Resource Types: Resource-Types.md
   - Runners: Runners.md
+  - Secrets: Secrets.md
   - Secret Types: Secret-Types.md
   - Services: Services.md
   - Notifications: Notifications.md

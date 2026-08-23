@@ -207,6 +207,27 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 				return
 			}
 
+			// Some routes expose data that the blanket worker bypass below must
+			// not hand out unconditionally. A worker reaching one of those has
+			// to prove it holds a team-scoped token for the team in the path.
+			if isFromWorker && workerScopedRoutes[crn] {
+				vars := mux.Vars(rr)
+				tc := vars["team_canonical"]
+				wtc, _ := rr.Context().Value(WorkerTeamCanonicalKey).(string)
+				if wtc == "" {
+					l.Error("unscoped worker token rejected", "route", crn.String())
+					encodeError("This endpoint requires a team-scoped worker token", rw)
+					return
+				}
+				if wtc != tc {
+					l.Error("worker token team mismatch", "route", crn.String(), "token_team", wtc, "requested_team", tc)
+					encodeError("Worker token is not scoped to this team", rw)
+					return
+				}
+				h.ServeHTTP(rw, rr)
+				return
+			}
+
 			// If the JWT has the 'is_from_worker' we assume admin
 			// so we do not even have to Authorize anything
 			if !isFromWorker {
@@ -371,6 +392,15 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodDelete).Path("/admin/oauth-providers/{canonical}").Name(DeleteOAuthProvider.String()).Handler(deleteOAuthProvider(s))
 	api.Methods(http.MethodGet).Path("/admin/auth-settings").Name(GetAdminAuthSettings.String()).Handler(getAdminAuthSettings(s))
 	api.Methods(http.MethodPut).Path("/admin/auth-settings").Name(UpdateAdminAuthSettings.String()).Handler(updateAdminAuthSettings(s))
+
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/secrets").Name(SetTeamSecret.String()).Handler(setTeamSecret(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/secrets").Name(ListTeamSecrets.String()).Handler(listTeamSecrets(s))
+	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/secrets/{secret_name}").Name(DeleteTeamSecret.String()).Handler(deleteTeamSecret(s))
+
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/secrets").Name(SetPipelineSecret.String()).Handler(setPipelineSecret(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/secrets").Name(ListPipelineSecrets.String()).Handler(listPipelineSecrets(s))
+	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/secrets/{secret_name}").Name(DeletePipelineSecret.String()).Handler(deletePipelineSecret(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/secret-values").Name(GetPipelineSecretValues.String()).Handler(getPipelineSecretValues(s))
 
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/audit").Name(ListAuditLog.String()).Handler(listAuditLog(s))
 
