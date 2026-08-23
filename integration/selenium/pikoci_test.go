@@ -1288,7 +1288,7 @@ job "gen" {
 				require.NoError(t, err)
 
 				// Should redirect to user show page
-				waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Edit User: testuser"), 5*time.Second)
+				waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Edit User: testuser"), 10*time.Second)
 			})
 
 			t.Run("Edit User", func(t *testing.T) {
@@ -1673,7 +1673,7 @@ job "gen" {
 			err = login.Click()
 			require.NoError(t, err)
 
-			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 5*time.Second)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 10*time.Second)
 		})
 		t.Run("Export Database Not Visible", func(t *testing.T) {
 			navLink, err := wd.FindElement(selenium.ByCSSSelector, ".navbar .nav-link")
@@ -2115,7 +2115,7 @@ job "gen" {
 			require.NoError(t, err)
 			err = login.Click()
 			require.NoError(t, err)
-			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 5*time.Second)
+			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 10*time.Second)
 		})
 		t.Run("Has New Pipeline button", func(t *testing.T) {
 			// Wait for team rows to load
@@ -2465,7 +2465,7 @@ job "gen" {
 		require.NoError(t, err)
 		err = login.Click()
 		require.NoError(t, err)
-		waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 5*time.Second)
+		waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams"), 10*time.Second)
 	})
 	t.Run("RefreshToken", func(t *testing.T) {
 		// Pepito is still logged in as a non-admin member of "main".

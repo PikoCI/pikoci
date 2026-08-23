@@ -63,6 +63,16 @@ func TestOAuthLoginWithKeycloak(t *testing.T) {
 	kcUser.SendKeys("testuser")
 	kcPass.SendKeys("testpassword")
 
+	// Wait for submit button (Keycloak may render form fields progressively)
+	waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+		el, err := wd.FindElement(selenium.ByCSSSelector, "#kc-login")
+		if err == nil && el != nil {
+			return true
+		}
+		el, err = wd.FindElement(selenium.ByCSSSelector, "input[type=submit]")
+		return err == nil && el != nil
+	}, 10*time.Second)
+
 	// Submit Keycloak login
 	loginBtn, err := wd.FindElement(selenium.ByCSSSelector, "#kc-login")
 	if err != nil {
