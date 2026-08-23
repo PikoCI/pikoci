@@ -197,6 +197,18 @@ export const deleteUser = (username) => api('/users/' + username, { method: 'DEL
 export const updateProfile = (data) => api('/profile', { method: 'PUT', body: JSON.stringify(data) });
 export const changePassword = (data) => api('/users/change-password', { method: 'POST', body: JSON.stringify(data) });
 
+// --- Config store (secrets and plain configuration) ---
+// Names are used verbatim as lookup keys and may contain characters that need
+// escaping in a path segment.
+const configPath = (tc, pn) =>
+  pn ? '/teams/' + tc + '/pipelines/' + pn + '/config' : '/teams/' + tc + '/config';
+
+export const fetchConfig = (tc, pn) => api(configPath(tc, pn)).then(r => r.data);
+export const setConfig = (tc, pn, data) =>
+  api(configPath(tc, pn), { method: 'POST', body: JSON.stringify(data) });
+export const deleteConfig = (tc, pn, name) =>
+  api(configPath(tc, pn) + '/' + encodeURIComponent(name), { method: 'DELETE' });
+
 // --- API Tokens ---
 export const fetchApiTokens = () => api('/api-tokens').then(r => r.data);
 export const createApiToken = (data) => api('/api-tokens', { method: 'POST', body: JSON.stringify(data) });
