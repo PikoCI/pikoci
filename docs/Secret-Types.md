@@ -5,9 +5,9 @@ description: "Manage secrets in PikoCI pipelines. Built-in Vault and JSON file s
 # Secret Types
 
 !!! tip "Looking for the simple case?"
-    PikoCI can store secrets itself, encrypted at rest, with no external system
-    to run. See [Secrets](Secrets.md). Secret types are for fetching from
-    somewhere else, such as Vault or a file on the worker.
+    PikoCI can store configuration and secrets itself, with no external system
+    to run. See [Configuration & Secrets](Secrets.md). Secret types are for
+    fetching from somewhere else, such as Vault or a file on the worker.
 
 A secret type defines how PikoCI fetches secrets from an external system (e.g. Vault, a JSON file). It has one operation: **get** (fetch secret values). Connection config (address, token, etc.) is set on the secret_type block.
 

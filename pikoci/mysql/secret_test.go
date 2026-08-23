@@ -16,7 +16,7 @@ func TestSecret_TeamUpsertAndFilter(t *testing.T) {
 	ctx := context.Background()
 	repo := mysql.NewSecretRepository(db)
 
-	s := secret.Secret{Name: "GITHUB_TOKEN", Canonical: "upsert-github-token"}
+	s := secret.Entry{Name: "GITHUB_TOKEN", Canonical: "upsert-github-token", Kind: secret.KindSecret}
 	id, err := repo.UpsertTeam(ctx, "main", s, []byte("cipher-v1"))
 	require.NoError(t, err)
 	assert.NotZero(t, id)
@@ -33,9 +33,9 @@ func TestSecret_TeamUpsertAndFilter(t *testing.T) {
 	assert.Equal(t, "GITHUB_TOKEN", got.Name)
 	assert.Equal(t, secret.TeamScope, got.Scope)
 
-	values, err := repo.EncryptedValues(ctx, "main", "anything")
+	values, err := repo.StoredValues(ctx, "main", "anything")
 	require.NoError(t, err)
-	assert.Equal(t, []byte("cipher-v2"), values["upsert-github-token"], "latest value should win")
+	assert.Equal(t, []byte("cipher-v2"), values["upsert-github-token"].Data, "latest value should win")
 }
 
 func TestSecret_PipelineShadowsTeam(t *testing.T) {
@@ -49,23 +49,23 @@ func TestSecret_PipelineShadowsTeam(t *testing.T) {
 
 	repo := mysql.NewSecretRepository(db)
 
-	_, err = repo.UpsertTeam(ctx, "main", secret.Secret{Name: "TOKEN", Canonical: "shadow-token"}, []byte("team-value"))
+	_, err = repo.UpsertTeam(ctx, "main", secret.Entry{Name: "TOKEN", Canonical: "shadow-token", Kind: secret.KindSecret}, []byte("team-value"))
 	require.NoError(t, err)
-	_, err = repo.UpsertTeam(ctx, "main", secret.Secret{Name: "SHARED", Canonical: "shadow-shared"}, []byte("shared-value"))
+	_, err = repo.UpsertTeam(ctx, "main", secret.Entry{Name: "SHARED", Canonical: "shadow-shared", Kind: secret.KindSecret}, []byte("shared-value"))
 	require.NoError(t, err)
-	_, err = repo.UpsertPipeline(ctx, "main", "web", secret.Secret{Name: "TOKEN", Canonical: "shadow-token"}, []byte("pipeline-value"))
+	_, err = repo.UpsertPipeline(ctx, "main", "web", secret.Entry{Name: "TOKEN", Canonical: "shadow-token", Kind: secret.KindSecret}, []byte("pipeline-value"))
 	require.NoError(t, err)
 
 	// The pipeline that defines its own TOKEN sees the override.
-	values, err := repo.EncryptedValues(ctx, "main", "web")
+	values, err := repo.StoredValues(ctx, "main", "web")
 	require.NoError(t, err)
-	assert.Equal(t, []byte("pipeline-value"), values["shadow-token"], "pipeline secret must shadow the team one")
-	assert.Equal(t, []byte("shared-value"), values["shadow-shared"], "team secrets must still be inherited")
+	assert.Equal(t, []byte("pipeline-value"), values["shadow-token"].Data, "pipeline entry must shadow the team one")
+	assert.Equal(t, []byte("shared-value"), values["shadow-shared"].Data, "team entries must still be inherited")
 
 	// A sibling pipeline is unaffected by the override.
-	values, err = repo.EncryptedValues(ctx, "main", "api")
+	values, err = repo.StoredValues(ctx, "main", "api")
 	require.NoError(t, err)
-	assert.Equal(t, []byte("team-value"), values["shadow-token"])
+	assert.Equal(t, []byte("team-value"), values["shadow-token"].Data)
 }
 
 func TestSecret_Delete(t *testing.T) {
@@ -73,7 +73,7 @@ func TestSecret_Delete(t *testing.T) {
 	ctx := context.Background()
 	repo := mysql.NewSecretRepository(db)
 
-	_, err := repo.UpsertTeam(ctx, "main", secret.Secret{Name: "GONE", Canonical: "delete-gone"}, []byte("v"))
+	_, err := repo.UpsertTeam(ctx, "main", secret.Entry{Name: "GONE", Canonical: "delete-gone", Kind: secret.KindSecret}, []byte("v"))
 	require.NoError(t, err)
 
 	require.NoError(t, repo.DeleteTeam(ctx, "main", "delete-gone"))
@@ -96,7 +96,7 @@ func TestSecret_PipelineDeleteCascades(t *testing.T) {
 	require.NoError(t, err)
 
 	repo := mysql.NewSecretRepository(db)
-	_, err = repo.UpsertPipeline(ctx, "main", "doomed", secret.Secret{Name: "K", Canonical: "cascade-k"}, []byte("v"))
+	_, err = repo.UpsertPipeline(ctx, "main", "doomed", secret.Entry{Name: "K", Canonical: "cascade-k", Kind: secret.KindSecret}, []byte("v"))
 	require.NoError(t, err)
 
 	_, err = db.ExecContext(ctx, `DELETE FROM pipelines WHERE canonical = 'doomed'`)
@@ -128,7 +128,7 @@ func TestSecret_ServerKeyRoundTrip(t *testing.T) {
 
 // findSecret locates a secret by canonical name. Tests share one in-memory
 // database, so assertions are scoped to names rather than to list length.
-func findSecret(secrets []*secret.Secret, canonical string) *secret.Secret {
+func findSecret(secrets []*secret.Entry, canonical string) *secret.Entry {
 	for _, s := range secrets {
 		if s.Canonical == canonical {
 			return s

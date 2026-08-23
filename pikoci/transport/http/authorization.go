@@ -124,18 +124,19 @@ var (
 		ListApiTokens:  jwtOnly(requireRole(role.Read)),
 		DeleteApiToken: jwtOnly(requireRole(role.Read)),
 
-		// Secret management. Writes match the other pipeline-configuration
-		// routes at Maintain; listing only ever exposes names, never values.
-		SetTeamSecret:        requireRole(role.Maintain),
-		ListTeamSecrets:      requireRole(role.Read),
-		DeleteTeamSecret:     requireRole(role.Maintain),
-		SetPipelineSecret:    requireRole(role.Maintain),
-		ListPipelineSecrets:  requireRole(role.Read),
-		DeletePipelineSecret: requireRole(role.Maintain),
+		// Config store. Writes match the other pipeline-configuration routes at
+		// Maintain. Listing is Read and returns plain values in the clear;
+		// secret values are never returned at any role.
+		SetTeamConfig:        requireRole(role.Maintain),
+		ListTeamConfig:       requireRole(role.Read),
+		DeleteTeamConfig:     requireRole(role.Maintain),
+		SetPipelineConfig:    requireRole(role.Maintain),
+		ListPipelineConfig:   requireRole(role.Read),
+		DeletePipelineConfig: requireRole(role.Maintain),
 
-		// Decrypted values are for workers only. Reaching this as a user is
+		// Resolved values are for workers only. Reaching this as a user is
 		// always a denial: there is deliberately no secret-reveal API.
-		GetPipelineSecretValues: workerOnly,
+		GetPipelineConfigValues: workerOnly,
 	}
 
 	// workerScopedRoutes are routes that a worker JWT must be explicitly
@@ -147,7 +148,7 @@ var (
 	// Without this, any worker token — including an unscoped global one —
 	// could read every team's secrets.
 	workerScopedRoutes = map[RouteName]bool{
-		GetPipelineSecretValues: true,
+		GetPipelineConfigValues: true,
 	}
 )
 

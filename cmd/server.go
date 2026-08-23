@@ -139,9 +139,9 @@ var serverCmd = &cobra.Command{
 		// exactly as before and secret operations report that they are not
 		// configured, rather than failing startup for everyone who does not
 		// use secrets.
-		svc.EnableSecretStore(sr, cfg.SecretKey)
+		svc.EnableConfigStore(sr, cfg.SecretKey)
 		if cfg.SecretKey == "" {
-			logger.Info("secret store disabled: set --secret-key or PIKOCI_SECRET_KEY to store and read secrets")
+			logger.Info("secret encryption disabled: set --secret-key or PIKOCI_SECRET_KEY to store and read secrets. Plain config entries still work")
 		}
 
 		if cfg.SessionLifetime != "" && cfg.SessionLifetime != "0" {

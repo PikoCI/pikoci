@@ -69,7 +69,7 @@ func init() {
 	clientCmd.AddCommand(exportCmd)
 	clientCmd.AddCommand(apiTokensCmd)
 	clientCmd.AddCommand(auditCmd)
-	clientCmd.AddCommand(secretsCmd)
+	clientCmd.AddCommand(configCmd)
 }
 
 // login

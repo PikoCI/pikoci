@@ -279,21 +279,23 @@ type Service interface {
 	// filter options. The boolean return value indicates whether more results exist.
 	ListAuditLog(ctx context.Context, tc string, opts auditlog.FilterOpts) ([]*auditlog.Entry, bool, error)
 
-	// SetTeamSecret stores an encrypted team-scoped secret value.
-	SetTeamSecret(ctx context.Context, tc, name, value string) error
-	// SetPipelineSecret stores an encrypted pipeline-scoped secret value.
-	SetPipelineSecret(ctx context.Context, tc, pn, name, value string) error
-	// ListTeamSecrets returns the team-scoped secrets, never their values.
-	ListTeamSecrets(ctx context.Context, tc string) ([]*secret.Secret, error)
-	// ListPipelineSecrets returns the pipeline-scoped secrets, never their values.
-	ListPipelineSecrets(ctx context.Context, tc, pn string) ([]*secret.Secret, error)
-	// DeleteTeamSecret removes a team-scoped secret.
-	DeleteTeamSecret(ctx context.Context, tc, name string) error
-	// DeletePipelineSecret removes a pipeline-scoped secret.
-	DeletePipelineSecret(ctx context.Context, tc, pn, name string) error
-	// ResolvePipelineSecrets returns the decrypted secret values a pipeline
-	// references, keyed by secret name. Used by workers at build time.
-	ResolvePipelineSecrets(ctx context.Context, tc, pn string) (map[string]string, error)
+	// SetTeamConfig stores a team-scoped configuration entry.
+	SetTeamConfig(ctx context.Context, tc, name, value string, kind secret.Kind) error
+	// SetPipelineConfig stores a pipeline-scoped configuration entry.
+	SetPipelineConfig(ctx context.Context, tc, pn, name, value string, kind secret.Kind) error
+	// ListTeamConfig returns the team-scoped entries. Plain entries carry
+	// their value; secret values are never returned.
+	ListTeamConfig(ctx context.Context, tc string) ([]*secret.Entry, error)
+	// ListPipelineConfig returns the pipeline-scoped entries. Plain entries
+	// carry their value; secret values are never returned.
+	ListPipelineConfig(ctx context.Context, tc, pn string) ([]*secret.Entry, error)
+	// DeleteTeamConfig removes a team-scoped entry.
+	DeleteTeamConfig(ctx context.Context, tc, name string) error
+	// DeletePipelineConfig removes a pipeline-scoped entry.
+	DeletePipelineConfig(ctx context.Context, tc, pn, name string) error
+	// ResolvePipelineValues returns the values a pipeline references, with the
+	// plain ones flagged so they are not masked. Used by workers at build time.
+	ResolvePipelineValues(ctx context.Context, tc, pn string) (*secret.Resolved, error)
 
 	// GenerateTeamWorkerToken generates (or regenerates) a team-scoped worker
 	// token by creating a new salt, storing it, and signing a JWT.
@@ -357,13 +359,13 @@ type PikoCI struct {
 	Runners       runner.Repository
 	// SecretTypes is the repository for secret type persistence.
 	SecretTypes   sectype.Repository
-	// Secrets is the repository for stored secret persistence. It is nil when
-	// the encrypted secret store has not been enabled.
-	Secrets       secret.Repository
-	// SecretCipher encrypts and decrypts stored secret values. It is nil when
-	// the encrypted secret store has not been enabled, and unconfigured when
-	// no master key was supplied.
-	SecretCipher  *secret.Cipher
+	// Config is the repository for the configuration store. It is nil when the
+	// store has not been enabled.
+	Config        secret.Repository
+	// Cipher encrypts and decrypts secret-kind values. It is nil when the
+	// store has not been enabled, and unconfigured when no master key was
+	// supplied; plain entries do not use it.
+	Cipher        *secret.Cipher
 	// Triggers is the repository for trigger persistence.
 	Triggers      trigger.Repository
 	// Workers is the repository for worker persistence.

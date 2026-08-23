@@ -1,0 +1,266 @@
+package pikoci_test
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"sync/atomic"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/mysql"
+	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
+	"github.com/pikoci/pikoci/pikoci/secret"
+)
+
+// storePipelineHCL references two secrets from the built-in store and one
+// value that is not a secret at all.
+const storePipelineHCL = `
+variable "gh_token" {
+  type = string
+  secret "pikoci" {
+    key = "GITHUB_TOKEN"
+  }
+}
+
+variable "db_pass" {
+  type = string
+  secret "pikoci" {
+    key = "DB_PASSWORD"
+  }
+}
+
+job "deploy" {
+  task "run" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "echo ${var.gh_token} ${var.db_pass}"]
+    }
+  }
+}
+`
+
+// secretScopeSeq gives each test its own team and pipeline. The in-memory
+// backend is opened with cache=shared, so every mysql.New in this process
+// reaches the same database and fixed names would collide across tests.
+var secretScopeSeq atomic.Int64
+
+// newConfigStoreService builds a service backed by a real in-memory database
+// and a real cipher, so the test exercises actual encryption rather than a mock.
+// It returns the team and pipeline canonicals reserved for this test.
+func newConfigStoreService(t *testing.T, masterKey string) (*pikoci.PikoCI, *sql.DB, string, string) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	ms := newService(ctrl)
+
+	db, err := mysql.New("", 0, "", "", mysql.Options{
+		MultiStatements: true,
+		ClientFoundRows: true,
+		System:          mysql.Mem,
+	})
+	require.NoError(t, err)
+	require.NoError(t, migrate.Migrate(db, mysql.Mem))
+
+	n := secretScopeSeq.Add(1)
+	tc := fmt.Sprintf("team-%d", n)
+	pn := fmt.Sprintf("pipe-%d", n)
+
+	res, err := db.Exec(`INSERT INTO teams (name, canonical) VALUES (?, ?)`, tc, tc)
+	require.NoError(t, err)
+	teamID, err := res.LastInsertId()
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO pipelines (team_id, name, canonical) VALUES (?, ?, ?)`, teamID, pn, pn)
+	require.NoError(t, err)
+
+	ms.P.EnableConfigStore(mysql.NewSecretRepository(db), masterKey)
+
+	ms.Pipelines.EXPECT().Find(gomock.Any(), tc, pn).Return(&pipeline.Pipeline{
+		Name:      pn,
+		Canonical: pn,
+		Raw:       []byte(storePipelineHCL),
+	}, nil).AnyTimes()
+
+	return ms.P, db, tc, pn
+}
+
+func TestResolvePipelineSecrets(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tc, pn := newConfigStoreService(t, "master-key")
+
+	require.NoError(t, svc.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "ghp_team", secret.KindSecret))
+	require.NoError(t, svc.SetTeamConfig(ctx, tc, "DB_PASSWORD", "team-db-pass", secret.KindSecret))
+
+	resolved, err := svc.ResolvePipelineValues(ctx, tc, pn)
+	require.NoError(t, err)
+	assert.Equal(t, "ghp_team", resolved.Values["GITHUB_TOKEN"])
+	assert.Equal(t, "team-db-pass", resolved.Values["DB_PASSWORD"])
+}
+
+func TestResolvePipelineSecrets_PipelineOverridesTeam(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tc, pn := newConfigStoreService(t, "master-key")
+
+	require.NoError(t, svc.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "ghp_team", secret.KindSecret))
+	require.NoError(t, svc.SetTeamConfig(ctx, tc, "DB_PASSWORD", "team-db-pass", secret.KindSecret))
+	require.NoError(t, svc.SetPipelineConfig(ctx, tc, pn, "GITHUB_TOKEN", "ghp_pipeline", secret.KindSecret))
+
+	resolved, err := svc.ResolvePipelineValues(ctx, tc, pn)
+	require.NoError(t, err)
+	assert.Equal(t, "ghp_pipeline", resolved.Values["GITHUB_TOKEN"], "pipeline entry must shadow the team one")
+	assert.Equal(t, "team-db-pass", resolved.Values["DB_PASSWORD"], "unshadowed team entries are still inherited")
+}
+
+// Only the secrets a pipeline actually names are handed out, so one build's
+// worker cannot enumerate everything the team has stored.
+func TestResolvePipelineSecrets_OnlyReferencedKeys(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tc, pn := newConfigStoreService(t, "master-key")
+
+	require.NoError(t, svc.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "ghp_team", secret.KindSecret))
+	require.NoError(t, svc.SetTeamConfig(ctx, tc, "UNRELATED_SECRET", "must-not-leak", secret.KindSecret))
+
+	resolved, err := svc.ResolvePipelineValues(ctx, tc, pn)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ghp_team", resolved.Values["GITHUB_TOKEN"])
+	assert.NotContains(t, resolved.Values, "UNRELATED_SECRET", "unreferenced entries must not be sent to the worker")
+}
+
+func TestConfigStore_NotConfigured(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tc, _ := newConfigStoreService(t, "")
+
+	// Storing a secret needs the key.
+	err := svc.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "value", secret.KindSecret)
+	assert.ErrorIs(t, err, secret.ErrNotConfigured)
+
+	// Plain entries do not, so a server with no encryption configured is still
+	// useful for shared configuration.
+	assert.NoError(t, svc.SetTeamConfig(ctx, tc, "LOG_LEVEL", "debug", secret.KindPlain))
+
+	// Neither does listing, so an operator who lost the key can still see and
+	// clean up what is stored.
+	_, err = svc.ListTeamConfig(ctx, tc)
+	assert.NoError(t, err)
+}
+
+func TestSetConfig_RejectsInvalidNames(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tc, _ := newConfigStoreService(t, "master-key")
+
+	for _, name := range []string{"", "has-dash", "has space", "1leading_digit", "has.dot"} {
+		err := svc.SetTeamConfig(ctx, tc, name, "value", secret.KindSecret)
+		assert.Errorf(t, err, "expected %q to be rejected", name)
+	}
+
+	assert.NoError(t, svc.SetTeamConfig(ctx, tc, "VALID_NAME_1", "value", secret.KindSecret))
+	assert.NoError(t, svc.SetTeamConfig(ctx, tc, "_leading_underscore", "value", secret.KindSecret))
+}
+
+// Values must be unreadable in the database without the master key.
+func TestConfigStore_SecretValuesAreEncryptedAtRest(t *testing.T) {
+	ctx := context.Background()
+	svc, db, tc, _ := newConfigStoreService(t, "master-key")
+
+	require.NoError(t, svc.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "ghp_plaintext_marker", secret.KindSecret))
+
+	var stored string
+	require.NoError(t, db.QueryRowContext(ctx, `
+		SELECT s.value FROM team_secrets AS s
+		JOIN teams AS t ON s.team_id = t.id
+		WHERE t.canonical = ? AND s.canonical = 'GITHUB_TOKEN'
+	`, tc).Scan(&stored))
+
+	assert.NotEmpty(t, stored)
+	assert.NotContains(t, stored, "ghp_plaintext_marker", "the stored column must not contain plaintext")
+}
+
+func TestSetConfig_UnknownScopeReportsClearly(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tc, _ := newConfigStoreService(t, "master-key")
+
+	err := svc.SetPipelineConfig(ctx, tc, "does-not-exist", "TOKEN", "value", secret.KindSecret)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `pipeline "does-not-exist" not found`,
+		"a missing pipeline should say so, not surface a constraint violation")
+
+	err = svc.SetTeamConfig(ctx, "no-such-team", "TOKEN", "value", secret.KindSecret)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `team "no-such-team" not found`)
+}
+
+// A plain entry resolves in the clear and is flagged so the worker will not
+// mask it, while a secret alongside it still resolves decrypted and masked.
+func TestResolvePipelineValues_PlainAndSecret(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tc, pn := newConfigStoreService(t, "master-key")
+
+	require.NoError(t, svc.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "ghp_secret", secret.KindSecret))
+	require.NoError(t, svc.SetTeamConfig(ctx, tc, "DB_PASSWORD", "log-level-debug", secret.KindPlain))
+
+	resolved, err := svc.ResolvePipelineValues(ctx, tc, pn)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ghp_secret", resolved.Values["GITHUB_TOKEN"])
+	assert.False(t, resolved.Plain["GITHUB_TOKEN"], "secrets must stay maskable")
+
+	assert.Equal(t, "log-level-debug", resolved.Values["DB_PASSWORD"])
+	assert.True(t, resolved.Plain["DB_PASSWORD"], "plain entries must be flagged so they are not masked")
+}
+
+// Plain values are stored verbatim, so an operator can read them straight out
+// of the database and the API can return them.
+func TestConfigStore_PlainValuesAreReadable(t *testing.T) {
+	ctx := context.Background()
+	svc, db, tc, _ := newConfigStoreService(t, "master-key")
+
+	require.NoError(t, svc.SetTeamConfig(ctx, tc, "LOG_LEVEL", "debug", secret.KindPlain))
+
+	var stored string
+	require.NoError(t, db.QueryRowContext(ctx, `
+		SELECT s.value FROM team_secrets AS s
+		JOIN teams AS t ON s.team_id = t.id
+		WHERE t.canonical = ? AND s.canonical = 'LOG_LEVEL'
+	`, tc).Scan(&stored))
+	assert.Equal(t, "debug", stored, "plain values are stored verbatim, not encoded")
+
+	entries, err := svc.ListTeamConfig(ctx, tc)
+	require.NoError(t, err)
+
+	var plain, sec *secret.Entry
+	require.NoError(t, svc.SetTeamConfig(ctx, tc, "API_TOKEN", "tok", secret.KindSecret))
+	entries, err = svc.ListTeamConfig(ctx, tc)
+	require.NoError(t, err)
+	for _, e := range entries {
+		switch e.Canonical {
+		case "LOG_LEVEL":
+			plain = e
+		case "API_TOKEN":
+			sec = e
+		}
+	}
+
+	require.NotNil(t, plain)
+	require.NotNil(t, sec)
+	assert.Equal(t, "debug", plain.Value, "list must return plain values")
+	assert.Empty(t, sec.Value, "list must never return a secret value")
+	assert.Equal(t, secret.KindPlain, plain.Kind)
+	assert.Equal(t, secret.KindSecret, sec.Kind)
+}
+
+// Kind must be explicit and valid; a typo must not silently store a credential
+// in the clear.
+func TestSetConfig_RejectsUnknownKind(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tc, _ := newConfigStoreService(t, "master-key")
+
+	err := svc.SetTeamConfig(ctx, tc, "NAME", "value", secret.Kind("plaintext"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid kind")
+}

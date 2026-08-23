@@ -31,19 +31,19 @@ func (k *keyStore) CreateServerKey(ctx context.Context, sk secret.ServerKey) err
 	return nil
 }
 
-func (k *keyStore) UpsertTeam(context.Context, string, secret.Secret, []byte) (uint32, error) {
+func (k *keyStore) UpsertTeam(context.Context, string, secret.Entry, []byte) (uint32, error) {
 	return 0, nil
 }
-func (k *keyStore) UpsertPipeline(context.Context, string, string, secret.Secret, []byte) (uint32, error) {
+func (k *keyStore) UpsertPipeline(context.Context, string, string, secret.Entry, []byte) (uint32, error) {
 	return 0, nil
 }
-func (k *keyStore) FilterTeam(context.Context, string) ([]*secret.Secret, error) { return nil, nil }
-func (k *keyStore) FilterPipeline(context.Context, string, string) ([]*secret.Secret, error) {
+func (k *keyStore) FilterTeam(context.Context, string) ([]*secret.Entry, error) { return nil, nil }
+func (k *keyStore) FilterPipeline(context.Context, string, string) ([]*secret.Entry, error) {
 	return nil, nil
 }
 func (k *keyStore) DeleteTeam(context.Context, string, string) error             { return nil }
 func (k *keyStore) DeletePipeline(context.Context, string, string, string) error { return nil }
-func (k *keyStore) EncryptedValues(context.Context, string, string) (map[string][]byte, error) {
+func (k *keyStore) StoredValues(context.Context, string, string) (map[string]secret.StoredValue, error) {
 	return nil, nil
 }
 
