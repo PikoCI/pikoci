@@ -919,7 +919,7 @@ func (q *PikoCI) generateImage(ctx context.Context, tc string, pp *pipeline.Pipe
 	var pipelineBuilds map[string][]*build.Build
 	if versionFilter == nil {
 		var bErr error
-		pipelineBuilds, bErr = q.Builds.FilterByPipeline(ctx, tc, pp.Canonical, nil)
+		pipelineBuilds, bErr = q.Builds.LatestBuildStatusByPipeline(ctx, tc, pp.Canonical)
 		if bErr != nil {
 			return nil, fmt.Errorf("failed to pre-fetch pipeline builds: %w", bErr)
 		}

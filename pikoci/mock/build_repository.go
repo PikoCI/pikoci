@@ -372,6 +372,21 @@ func (mr *BuildRepositoryMockRecorder) LastBuildAtByPipeline(ctx, tc any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastBuildAtByPipeline", reflect.TypeOf((*BuildRepository)(nil).LastBuildAtByPipeline), ctx, tc)
 }
 
+// LatestBuildStatusByPipeline mocks base method.
+func (m *BuildRepository) LatestBuildStatusByPipeline(ctx context.Context, tc, pn string) (map[string][]*build.Build, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LatestBuildStatusByPipeline", ctx, tc, pn)
+	ret0, _ := ret[0].(map[string][]*build.Build)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LatestBuildStatusByPipeline indicates an expected call of LatestBuildStatusByPipeline.
+func (mr *BuildRepositoryMockRecorder) LatestBuildStatusByPipeline(ctx, tc, pn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LatestBuildStatusByPipeline", reflect.TypeOf((*BuildRepository)(nil).LatestBuildStatusByPipeline), ctx, tc, pn)
+}
+
 // StartPending mocks base method.
 func (m *BuildRepository) StartPending(ctx context.Context, tc, pn, jn string, buildID uint32) error {
 	m.ctrl.T.Helper()

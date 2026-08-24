@@ -50,6 +50,10 @@ type Repository interface {
 	// FilterByPipeline returns builds across all jobs in a pipeline, optionally filtered by status.
 	// Results are grouped by job name and ordered by build ID descending within each job.
 	FilterByPipeline(ctx context.Context, tc, pn string, statuses []Status) (map[string][]*Build, error)
+	// LatestBuildStatusByPipeline returns all builds for a pipeline with only ID, BuildNumber,
+	// and Status fields populated. Callers must not rely on any other Build fields being populated.
+	// Used for pipeline image generation where steps data is not needed.
+	LatestBuildStatusByPipeline(ctx context.Context, tc, pn string) (map[string][]*Build, error)
 	// CountStarted returns the total number of builds with status "started" across all jobs.
 	CountStarted(ctx context.Context) (int, error)
 	// FailStartedBuilds transitions all builds with status "started" to "failed" with the given reason.

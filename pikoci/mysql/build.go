@@ -798,6 +798,41 @@ func (r *BuildRepository) FilterByPipeline(ctx context.Context, tc, pn string, s
 	return result, nil
 }
 
+func (r *BuildRepository) LatestBuildStatusByPipeline(ctx context.Context, tc, pn string) (map[string][]*build.Build, error) {
+	rows, err := r.querier.QueryContext(ctx, `
+		SELECT j.name, b.id, b.build_number, b.status
+		FROM builds AS b
+		JOIN jobs AS j ON b.job_id = j.id
+		JOIN pipelines AS p ON j.pipeline_id = p.id
+		JOIN teams AS t ON p.team_id = t.id
+		WHERE t.canonical = ? AND p.canonical = ?
+		ORDER BY b.id DESC
+	`, tc, pn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query build status by pipeline: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string][]*build.Build)
+	for rows.Next() {
+		var jobName, statusStr, buildNumber string
+		var id int64
+		if err := rows.Scan(&jobName, &id, &buildNumber, &statusStr); err != nil {
+			return nil, fmt.Errorf("failed to scan build status: %w", err)
+		}
+		s, _ := build.StatusString(statusStr)
+		result[jobName] = append(result[jobName], &build.Build{
+			ID:          uint32(id),
+			BuildNumber: buildNumber,
+			Status:      s,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate build statuses: %w", err)
+	}
+	return result, nil
+}
+
 func (r *BuildRepository) CountStarted(ctx context.Context) (int, error) {
 	var count int
 	err := r.querier.QueryRowContext(ctx, `SELECT COUNT(*) FROM builds WHERE status = 'started'`).Scan(&count)
