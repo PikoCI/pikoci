@@ -1026,7 +1026,7 @@ func TestLatestBuildStatusByPipeline(t *testing.T) {
 	})
 
 	t.Run("different team not included", func(t *testing.T) {
-		res2, err := db.ExecContext(ctx, `INSERT INTO teams (name, canonical) VALUES ('other-team', 'other')`)
+		res2, err := db.ExecContext(ctx, `INSERT INTO teams (name, canonical) VALUES ('other-team', 'lbs-other')`)
 		require.NoError(t, err)
 		otherTeamID, _ := res2.LastInsertId()
 
