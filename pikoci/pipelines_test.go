@@ -2830,9 +2830,31 @@ func TestListPublicJobBuilds(t *testing.T) {
 	s.Pipelines.EXPECT().FindPublic(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
 		ID: 1, Canonical: "my-pipeline",
 	}, nil)
+	// FilterSummary omits steps (NULL AS steps), so builds have no step data.
 	s.Builds.EXPECT().FilterSummary(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
+		{ID: 1, BuildNumber: "1", Status: build.Succeeded},
+	}, nil)
+
+	builds, hasMore, err := s.S.ListPublicJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 0, nil)
+	require.NoError(t, err)
+	assert.False(t, hasMore)
+	require.Len(t, builds, 1)
+	assert.Empty(t, builds[0].Steps)
+}
+
+func TestListPublicJobBuilds_SecretLogsRedacted(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	status := build.Started
+	s.Pipelines.EXPECT().FindPublic(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
+		ID: 1, Canonical: "my-pipeline",
+	}, nil)
+	// When a status filter is given, Filter is used and steps are included.
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), []build.Status{status}).Return([]*build.Build{
 		{
-			ID: 1, BuildNumber: "1", Status: build.Succeeded,
+			ID: 1, BuildNumber: "1", Status: build.Started,
 			Steps: []build.Step{
 				{Type: "get", Name: "repo", Logs: "get logs"},
 				{Type: "secret", Name: "my-secret", Logs: "secret value"},
@@ -2840,7 +2862,7 @@ func TestListPublicJobBuilds(t *testing.T) {
 		},
 	}, nil)
 
-	builds, hasMore, err := s.S.ListPublicJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 0, nil)
+	builds, hasMore, err := s.S.ListPublicJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 0, []build.Status{status})
 	require.NoError(t, err)
 	assert.False(t, hasMore)
 	require.Len(t, builds, 1)
