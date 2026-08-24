@@ -18,6 +18,9 @@ type Repository interface {
 	// Filter returns a paginated list of builds for the given team, pipeline, and job.
 	// When statuses is non-empty, only builds matching one of the given statuses are returned.
 	Filter(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32, statuses []Status) ([]*Build, error)
+	// FilterSummary is like Filter but omits the steps field for efficiency.
+	// Use this for list views where only build metadata is needed.
+	FilterSummary(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32, statuses []Status) ([]*Build, error)
 	// Update updates an existing build identified by team, pipeline, job, and build number.
 	Update(ctx context.Context, tc, pn, jn string, buildNumber string, b Build) error
 	// Delete removes a build identified by team, pipeline, job, and build number.

@@ -2830,7 +2830,7 @@ func TestListPublicJobBuilds(t *testing.T) {
 	s.Pipelines.EXPECT().FindPublic(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
 		ID: 1, Canonical: "my-pipeline",
 	}, nil)
-	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
+	s.Builds.EXPECT().FilterSummary(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
 		{
 			ID: 1, BuildNumber: "1", Status: build.Succeeded,
 			Steps: []build.Step{

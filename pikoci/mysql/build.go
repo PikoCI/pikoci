@@ -307,6 +307,59 @@ func (r *BuildRepository) Filter(ctx context.Context, tc, pn, jn string, before 
 	return builds, nil
 }
 
+func (r *BuildRepository) FilterSummary(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, error) {
+	query := `
+		SELECT b.id, b.build_number, NULL AS steps, b.job, b.status, b.error, b.started_at, b.duration, b.version_id, b.resource_canonical, b.input_values, b.retry_source_build_id
+		FROM builds AS b
+		JOIN jobs AS j
+			ON b.job_id = j.id
+		JOIN pipelines AS p
+			ON j.pipeline_id = p.id
+		JOIN teams AS t
+			ON p.team_id = t.id
+		WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?`
+	args := []interface{}{tc, pn, jn}
+
+	if len(statuses) > 0 {
+		placeholders := make([]string, len(statuses))
+		for i, s := range statuses {
+			placeholders[i] = "?"
+			args = append(args, s.String())
+		}
+		query += ` AND b.status IN (` + strings.Join(placeholders, ", ") + `)`
+	}
+
+	if after != nil {
+		query += ` AND b.id > ?`
+		args = append(args, *after)
+		query += ` ORDER BY b.id ASC`
+	} else if before != nil {
+		query += ` AND b.id < ?`
+		args = append(args, *before)
+		query += ` ORDER BY b.id DESC`
+		if limit > 0 {
+			query += fmt.Sprintf(` LIMIT %d`, limit)
+		}
+	} else {
+		query += ` ORDER BY b.id DESC`
+		if limit > 0 {
+			query += fmt.Sprintf(` LIMIT %d`, limit)
+		}
+	}
+
+	rows, err := r.querier.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter builds: %w", err)
+	}
+
+	builds, err := scanBuilds(rows)
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter builds: %w", err)
+	}
+
+	return builds, nil
+}
+
 func (r *BuildRepository) Update(ctx context.Context, tc, pn, jn string, buildNumber string, b build.Build) error {
 	dbb := newDBBuild(b)
 	res, err := r.querier.ExecContext(ctx, `

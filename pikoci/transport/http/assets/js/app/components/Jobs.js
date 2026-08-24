@@ -848,29 +848,34 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
         metaRef.current = { newestID: null, oldestID: null, hasMore: false };
       }
 
-      // Load builds
+      // Load builds (summary — no steps, for fast initial render)
       let allBuilds = await loadBuilds();
       if (cancelled) return;
 
       allBuilds = filterByTracked(allBuilds);
       setBuilds(allBuilds);
 
-      // If a specific build was requested but not in the list, fetch it
-      if (bid) {
-        const found = allBuilds.find(b => String(b.build_number) === String(bid));
-        if (!found) {
-          try {
-            const single = await fetchBuild(tc, pn, jn, bid);
-            allBuilds = sortBuilds([...allBuilds, single]);
-            allBuilds = filterByTracked(allBuilds);
-            if (!cancelled) setBuilds(allBuilds);
-          } catch { /* ignore */ }
-        }
+      // If a specific build was requested but not in the list, fetch it (sequential — needed before activate)
+      if (bid && !allBuilds.find(b => String(b.build_number) === String(bid))) {
+        try {
+          const single = await fetchBuild(tc, pn, jn, bid);
+          allBuilds = sortBuilds([...allBuilds, single]);
+          allBuilds = filterByTracked(allBuilds);
+          if (!cancelled) setBuilds(allBuilds);
+        } catch { /* ignore */ }
       }
 
       // Set active
       const requestedID = bid ? (allBuilds.find(b => String(b.build_number) === String(bid))?.id) : null;
-      doActivate(requestedID, allBuilds);
+      const active = doActivate(requestedID, allBuilds);
+
+      // Fetch full data (with steps) for the active build in parallel — summary load omits steps
+      const activeBuildNum = active?.build_number ?? allBuilds[0]?.build_number;
+      if (activeBuildNum) {
+        fetchBuild(tc, pn, jn, activeBuildNum).then(full => {
+          if (!cancelled && full) setBuilds(prev => sortBuilds(prev.map(b => b.id === full.id ? full : b)));
+        }).catch(() => {});
+      }
     };
 
     init();
@@ -918,6 +923,13 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
       const navPath = '/teams/' + tc + '/pipelines/' + pn + '/jobs/' + jn + '/builds/' + build.build_number;
       const versionParam = trackedVersionID ? '?version=' + trackedVersionID : '';
       history.replaceState(null, '', navPath + versionParam);
+    }
+    // If the build was loaded in summary mode (no steps) and is terminal, fetch full data now
+    const nonTerminal = new Set(['pending', 'started', 'waiting_for_approval']);
+    if (!build.steps?.length && !nonTerminal.has(build.status)) {
+      fetchBuild(tc, pn, jn, build.build_number).then(full => {
+        if (full) setBuilds(prev => sortBuilds(prev.map(b => b.id === full.id ? full : b)));
+      }).catch(() => {});
     }
   }, [tc, pn, jn, embedded, trackedVersionID]);
 

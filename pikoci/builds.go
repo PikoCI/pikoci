@@ -96,7 +96,15 @@ func (q *PikoCI) ListJobBuilds(ctx context.Context, tc, pc, jn string, before *u
 		fetchLimit = limit + 1
 	}
 
-	builds, err := q.Builds.Filter(ctx, tc, pc, jn, before, after, fetchLimit, statuses)
+	var (
+		builds []*build.Build
+		err    error
+	)
+	if len(statuses) == 0 {
+		builds, err = q.Builds.FilterSummary(ctx, tc, pc, jn, before, after, fetchLimit, statuses)
+	} else {
+		builds, err = q.Builds.Filter(ctx, tc, pc, jn, before, after, fetchLimit, statuses)
+	}
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to list Builds: %w", err)
 	}
