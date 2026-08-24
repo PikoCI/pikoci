@@ -63,6 +63,16 @@ func TestOAuthLoginWithKeycloak(t *testing.T) {
 	kcUser.SendKeys("testuser")
 	kcPass.SendKeys("testpassword")
 
+	// Wait for submit button (Keycloak may render form fields progressively)
+	waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+		el, err := wd.FindElement(selenium.ByCSSSelector, "#kc-login")
+		if err == nil && el != nil {
+			return true
+		}
+		el, err = wd.FindElement(selenium.ByCSSSelector, "input[type=submit]")
+		return err == nil && el != nil
+	}, 10*time.Second)
+
 	// Submit Keycloak login
 	loginBtn, err := wd.FindElement(selenium.ByCSSSelector, "#kc-login")
 	if err != nil {
@@ -71,8 +81,8 @@ func TestOAuthLoginWithKeycloak(t *testing.T) {
 	}
 	require.NoError(t, loginBtn.Click())
 
-	// Wait for profile completion page
-	waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Complete Your Profile"), 15*time.Second)
+	// Wait for profile completion page (Keycloak OAuth round-trip on arm64 can take 40s+)
+	waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Complete Your Profile"), 60*time.Second)
 
 	// Username should be pre-filled
 	usernameField, err := wd.FindElement(selenium.ByCSSSelector, "#username")

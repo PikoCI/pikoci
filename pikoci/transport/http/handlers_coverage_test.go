@@ -1877,6 +1877,46 @@ func TestRegenerateWebhookToken_Error(t *testing.T) {
 	assert.Equal(t, "regen error", got.Err)
 }
 
+// ===== FireTriggerNotifications Handler Tests =====
+
+func TestFireTriggerNotifications_Success(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	e.svc.EXPECT().FireTriggerNotifications(gomock.Any(), "main", "my-pipe", "git.repo", gomock.Any())
+
+	body := `{"triggering_resource_canonical":"git.repo","version_meta":{"ref":"abc123"}}`
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/teams/main/pipelines/my-pipe/trigger-notifications", e.adminJWT(t), body)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got FireTriggerNotificationsResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+}
+
+func TestFireTriggerNotifications_BadJSON(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/teams/main/pipelines/my-pipe/trigger-notifications", e.adminJWT(t), `{bad json}`)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestFireTriggerNotifications_NoVersionMeta(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	// nil version_meta is valid — hooks still fire with empty meta.
+	e.svc.EXPECT().FireTriggerNotifications(gomock.Any(), "main", "my-pipe", "git.repo", gomock.Any())
+
+	body := `{"triggering_resource_canonical":"git.repo"}`
+	resp := doRequest(t, http.MethodPost, e.server.URL+"/teams/main/pipelines/my-pipe/trigger-notifications", e.adminJWT(t), body)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
 func TestWebhookTrigger_Success(t *testing.T) {
 	e := newTestEnv(t)
 	e.svc.EXPECT().WebhookTrigger(gomock.Any(), "my-repo_abc123").Return(nil)

@@ -238,6 +238,16 @@ func (q *PikoCI) TriggerResourceVersion(ctx context.Context, tc, pc, rCan string
 		return fmt.Errorf("failed to find Pipeline %q: %w", pc, err)
 	}
 
+	// Look up version metadata to pass to on_trigger hooks.
+	var versionMeta map[string]interface{}
+	if v, _, vErr := q.Resources.FindVersionByID(ctx, versionID); vErr == nil && v != nil {
+		versionMeta = v.Version
+	}
+
+	// Fire on_trigger notifications synchronously before any builds are created.
+	// This guarantees that external systems see the queued state before in_progress.
+	q.fireOnTriggerHooks(ctx, p, tc, pc, rCan, versionMeta)
+
 	for _, j := range p.Jobs {
 		if j.Paused {
 			continue

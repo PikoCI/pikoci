@@ -522,3 +522,31 @@ job "build" {
 	err := validatePipelineSchema(hcl)
 	assert.NoError(t, err)
 }
+
+func TestValidatePipelineSchema_ValidOnTrigger(t *testing.T) {
+	hcl := []byte(`
+job "build" {
+  get "git" "repo" { trigger = true }
+  on_trigger {
+    notify "github-check" "ci" { status = "queued" }
+  }
+}
+`)
+	err := validatePipelineSchema(hcl)
+	assert.NoError(t, err)
+}
+
+func TestValidatePipelineSchema_OnTriggerTypo(t *testing.T) {
+	hcl := []byte(`
+job "build" {
+  get "git" "repo" { trigger = true }
+  on_trigg {
+    notify "github-check" "ci" {}
+  }
+}
+`)
+	err := validatePipelineSchema(hcl)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"on_trigg"`)
+	assert.Contains(t, err.Error(), `did you mean "on_trigger"`)
+}

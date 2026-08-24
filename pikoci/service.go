@@ -221,6 +221,12 @@ type Service interface {
 	// TriggerResourceVersion triggers immediate downstream jobs with a specific resource version.
 	TriggerResourceVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error
 
+	// FireTriggerNotifications fires on_trigger hook notifications for all jobs
+	// reachable (directly or transitively) when the given resource version becomes
+	// available. It runs synchronously before builds are created, ensuring that
+	// external systems (e.g. GitHub) see "queued" status before "in_progress".
+	FireTriggerNotifications(ctx context.Context, tc, pc, triggeringRCan string, versionMeta map[string]interface{})
+
 	// WebhookTrigger triggers a resource check using the resource's unique
 	// webhook token.
 	WebhookTrigger(ctx context.Context, token string) error

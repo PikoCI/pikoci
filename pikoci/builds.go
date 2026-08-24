@@ -579,10 +579,10 @@ func (q *PikoCI) RecoverOrphanedBuilds(ctx context.Context) (int, error) {
 	return q.Builds.FailStartedBuilds(ctx, "server shutdown: build was orphaned")
 }
 
-// resolvePassedJobNames expands for_each group names in a passed list to all
+// ResolvePassedJobNames expands for_each group names in a passed list to all
 // instance names. If a name matches a for_each group, it is replaced by all
 // instance names in that group. Non-group names are kept as-is.
-func resolvePassedJobNames(passed []string, jobs []job.Job) []string {
+func ResolvePassedJobNames(passed []string, jobs []job.Job) []string {
 	groupInstances := make(map[string][]string)
 	for _, j := range jobs {
 		if j.ForEachGroup != "" {
@@ -680,7 +680,7 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 			continue
 		}
 
-		expandedPassed := resolvePassedJobNames(g.Passed, allJobs)
+		expandedPassed := ResolvePassedJobNames(g.Passed, allJobs)
 
 		versionID, ready, err := q.Builds.FindReadyDownstreamVersion(
 			ctx, tc, pn,

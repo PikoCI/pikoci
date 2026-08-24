@@ -658,30 +658,13 @@ func (w *Worker) checkPassedConstraints(ctx context.Context, m workitem.Body, b 
 	return true, resolvedVersions
 }
 
-// resolvePassedJobNames expands for_each group names in a passed list to all
-// instance names. If a name matches a for_each group, it is replaced by all
-// instance names in that group. Non-group names are kept as-is.
+// resolvePassedJobNames is a nil-safe wrapper around pikoci.ResolvePassedJobNames
+// that accepts a pipeline pointer, extracting its job list before delegating.
 func resolvePassedJobNames(passed []string, pp *pipeline.Pipeline) []string {
 	if pp == nil {
 		return passed
 	}
-	// Build a map of group name -> instance names
-	groupInstances := make(map[string][]string)
-	for _, j := range pp.Jobs {
-		if j.ForEachGroup != "" {
-			groupInstances[j.ForEachGroup] = append(groupInstances[j.ForEachGroup], j.Name)
-		}
-	}
-
-	var expanded []string
-	for _, name := range passed {
-		if instances, ok := groupInstances[name]; ok {
-			expanded = append(expanded, instances...)
-		} else {
-			expanded = append(expanded, name)
-		}
-	}
-	return expanded
+	return pikoci.ResolvePassedJobNames(passed, pp.Jobs)
 }
 
 // checkVersionAvailability verifies that all get steps in the plan have a
@@ -2362,6 +2345,9 @@ func (w *Worker) triggerResourceJobs(ctx context.Context, m workitem.Body, pp *p
 			"resource", r.Canonical, "pinned_version", *r.PinnedVersionID, "new_version", cv.ID)
 		return
 	}
+
+	// Fire on_trigger notifications synchronously before any builds are created.
+	w.pikoci.FireTriggerNotifications(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, cv.Version)
 
 	for _, j := range pp.Jobs {
 		if j.Paused {

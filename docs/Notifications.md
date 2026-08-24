@@ -109,7 +109,7 @@ Attributes on a `notify` step are passed to the notification type's command with
 
 The special `message` attribute overrides the notification's default message.
 
-Notify steps work in all hook types (`on_success`, `on_failure`, `on_cancel`, `ensure`) and at the top level of a job plan.
+Notify steps work in all hook types (`on_success`, `on_failure`, `on_cancel`, `ensure`, `on_trigger`) and at the top level of a job plan.
 
 ## Automatic Notifications
 
@@ -518,6 +518,62 @@ job "release" {
 
 To include multiline content (like a changelog), write it to `$PIKOCI_OUTPUT` with newlines replaced by literal `\n`. The notification system converts them back to real newlines automatically.
 
+## on_trigger
+
+The `on_trigger` hook fires **before any builds are created** when a resource version is detected. It fires for every job transitively reachable from the triggering resource (direct trigger jobs and downstream jobs linked via `passed` constraints).
+
+Use `on_trigger` to report a `queued` status to external systems immediately when a commit is detected:
+
+```hcl
+job "test" {
+  get "git" "repo" { trigger = true }
+
+  on_trigger {
+    notify "github-check" "ci" { status = "queued" }
+  }
+
+  notify "github-check" "ci" { status = "in_progress" }
+
+  task "run" {
+    run "exec" { path = "make"; args = ["test"] }
+  }
+
+  on_success {
+    notify "github-check" "ci" { conclusion = "success" }
+  }
+  on_failure {
+    notify "github-check" "ci" { conclusion = "failure" }
+  }
+}
+```
+
+### on_trigger environment variables
+
+`on_trigger` runs outside of any build context. There is no `$BUILD_NUMBER`, no `$WORKDIR`, and no get/task step outputs. The following variables are available:
+
+| Variable | Description |
+|----------|-------------|
+| `$BUILD_JOB_NAME` | Job name |
+| `$BUILD_PIPELINE_NAME` | Pipeline canonical name |
+| `$BUILD_TEAM_NAME` | Team canonical name |
+| `$param_*` | Notification-level parameters (from `notification` block's `params`) |
+| `$notify_*` | Step-level parameters (from `notify` step attributes) |
+| `$version_<key>` | Version metadata from the triggering resource (e.g. `$version_ref` for a git commit SHA) |
+
+### Guidance for notification type authors
+
+If your notification type script needs a commit SHA (e.g. for `github-check`'s `head_sha`), use `$version_ref` rather than `git rev-parse HEAD`. There is no working directory in `on_trigger` context:
+
+```sh
+# in_progress (inside a build): HEAD is checked out in $WORKDIR
+HEAD_SHA=$(git -C "$WORKDIR" rev-parse HEAD)
+
+# on_trigger (no WORKDIR): use the version metadata directly
+HEAD_SHA="${notify_head_sha:-$version_ref}"
+```
+
+`on_trigger` notifications fire for all reachable jobs, including jobs that may not ultimately run. Notification scripts should be idempotent.
+
 ## Environment Variables
 
 Notify commands receive all of the following as environment variables:
@@ -534,6 +590,8 @@ Notify commands receive all of the following as environment variables:
 - `$TASK_<STEP>_<KEY>`: Values exported via `$PIKOCI_OUTPUT` from task steps
 
 These environment variables are available inside the notification type's `notify` command script. For example, you can reference `$BUILD_NUMBER` in your script even if it wasn't part of `$NOTIFY_MESSAGE`.
+
+When called from an `on_trigger` hook, only `$BUILD_JOB_NAME`, `$BUILD_PIPELINE_NAME`, `$BUILD_TEAM_NAME`, `$param_*`, `$notify_*`, and `$version_*` are set. Build-specific variables (`$BUILD_NUMBER`, `$WORKDIR`, `$GET_*`, `$TASK_*`) are not available.
 
 ## Migration from Resource-Based Notifications
 

@@ -310,6 +310,8 @@ func TestTriggerResourceVersion(t *testing.T) {
 			},
 		},
 	}, nil)
+	// FindVersionByID for on_trigger hooks (pipeline has no Raw, so hooks are skipped)
+	s.Resources.EXPECT().FindVersionByID(ctx, uint32(10)).Return(nil, "", assert.AnError)
 	// CreateJobBuild for the matching job
 	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job"}, nil)
 	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "my-job", gomock.Any()).Return(uint32(1), "1", nil)
@@ -354,6 +356,8 @@ func TestTriggerResourceVersion_SkipsPausedJobs(t *testing.T) {
 			},
 		},
 	}, nil)
+	// FindVersionByID for on_trigger hooks (pipeline has no Raw, so hooks are skipped)
+	s.Resources.EXPECT().FindVersionByID(ctx, uint32(10)).Return(nil, "", assert.AnError)
 	// No builds or sends should happen for paused jobs
 
 	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
@@ -520,6 +524,8 @@ func TestTriggerResourceVersion_SkipsPassedConstraints(t *testing.T) {
 			},
 		},
 	}, nil)
+	// FindVersionByID for on_trigger hooks (pipeline has no Raw, so hooks are skipped)
+	s.Resources.EXPECT().FindVersionByID(ctx, uint32(10)).Return(nil, "", assert.AnError)
 	// No builds should be created since the get has passed constraints
 
 	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
@@ -545,6 +551,8 @@ func TestTriggerResourceVersion_SkipsNonMatchingResource(t *testing.T) {
 			},
 		},
 	}, nil)
+	// FindVersionByID for on_trigger hooks (pipeline has no Raw, so hooks are skipped)
+	s.Resources.EXPECT().FindVersionByID(ctx, uint32(10)).Return(nil, "", assert.AnError)
 	// No builds should be created
 
 	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
@@ -570,6 +578,8 @@ func TestTriggerResourceVersion_SkipsTaskSteps(t *testing.T) {
 			},
 		},
 	}, nil)
+	// FindVersionByID for on_trigger hooks (pipeline has no Raw, so hooks are skipped)
+	s.Resources.EXPECT().FindVersionByID(ctx, uint32(10)).Return(nil, "", assert.AnError)
 
 	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
 	require.NoError(t, err)
