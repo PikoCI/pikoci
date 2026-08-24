@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Build list tabs show stale status**: Build tabs no longer stay stuck on "running" after a build completes — they now refresh automatically when a non-terminal build transitions to a terminal state.
+- **Trigger handler authorization bypass**: JSON body could override route vars to trigger jobs in unauthorized teams; body is now decoded before route vars are applied ([#644](https://github.com/PikoCI/pikoci/issues/644)).
 
 ## [0.7.0] - 2026-07-08
 
