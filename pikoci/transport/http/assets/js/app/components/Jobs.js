@@ -319,7 +319,7 @@ function ApprovalResourceRow({ rCan, passed, versionMeta, tc, pn }) {
 
 // ---------- BuildContent ----------
 
-function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
+function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry, onFullBuildFetched }) {
   const [fullBuild, setFullBuild] = useState(null);
   // Merge: use rawBuild (latest from polling) but overlay fields only in full detail
   const mergedBuild = rawBuild && fullBuild && rawBuild.id === fullBuild.id
@@ -349,10 +349,13 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
   const refreshFullBuild = useCallback(() => {
     if (rawBuild && rawBuild.build_number) {
       fetchBuild(tc, pn, jn, rawBuild.build_number).then(b => {
-        if (b) setFullBuild(b);
+        if (b) {
+          setFullBuild(b);
+          if (onFullBuildFetched) onFullBuildFetched(b);
+        }
       }).catch(() => {});
     }
-  }, [tc, pn, jn, rawBuild && rawBuild.build_number]);
+  }, [tc, pn, jn, rawBuild && rawBuild.build_number, onFullBuildFetched]);
   // Fetch on build switch
   useEffect(() => {
     if (rawBuildId && rawBuildId !== fetchedIdRef.current) {
@@ -867,15 +870,8 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
 
       // Set active
       const requestedID = bid ? (allBuilds.find(b => String(b.build_number) === String(bid))?.id) : null;
-      const active = doActivate(requestedID, allBuilds);
-
-      // Fetch full data (with steps) for the active build in parallel — summary load omits steps
-      const activeBuildNum = active?.build_number ?? allBuilds[0]?.build_number;
-      if (activeBuildNum) {
-        fetchBuild(tc, pn, jn, activeBuildNum).then(full => {
-          if (!cancelled && full) setBuilds(prev => sortBuilds(prev.map(b => b.id === full.id ? full : b)));
-        }).catch(() => {});
-      }
+      doActivate(requestedID, allBuilds);
+      // Full build data (steps) is fetched by BuildContent via onFullBuildFetched callback.
     };
 
     init();
@@ -1101,6 +1097,7 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
                 jn=${jn}
                 job=${job}
                 onRetry=${onRetry}
+                onFullBuildFetched=${full => setBuilds(prev => sortBuilds(prev.map(e => e.id === full.id ? full : e)))}
               />
             ` : null}
           </div>

@@ -349,12 +349,12 @@ func (r *BuildRepository) FilterSummary(ctx context.Context, tc, pn, jn string, 
 
 	rows, err := r.querier.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to filter builds: %w", err)
+		return nil, fmt.Errorf("failed to filter builds summary: %w", err)
 	}
 
 	builds, err := scanBuilds(rows)
 	if err != nil {
-		return nil, fmt.Errorf("failed to filter builds: %w", err)
+		return nil, fmt.Errorf("failed to filter builds summary: %w", err)
 	}
 
 	return builds, nil
