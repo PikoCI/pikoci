@@ -95,6 +95,9 @@ job "backend" {
       ]
     }
   }
+  on_trigger {
+    notify "github-check" "ci" { status = "queued" }
+  }
   on_success {
     notify "github-check" "ci" { conclusion = "success" }
   }
@@ -138,6 +141,9 @@ job "frontend" {
         args  = ["-v", "pikoci-js-tools:/pikoci-js-tools"]
       }
     }
+  }
+  on_trigger {
+    notify "github-check" "ci" { status = "queued" }
   }
   on_success {
     notify "github-check" "ci" { conclusion = "success" }
@@ -203,6 +209,9 @@ job "test-integration" {
         "-v", "pikoci-tools:/pikoci-tools",
       ]
     }
+  }
+  on_trigger {
+    notify "github-check" "ci" { status = "queued" }
   }
   on_success {
     notify "github-check" "ci" { conclusion = "success" }
@@ -299,6 +308,9 @@ job "test-backends" {
     }
   }
 
+  on_trigger {
+    notify "github-check" "ci" { status = "queued" }
+  }
   on_success {
     notify "github-check" "ci" { conclusion = "success" }
   }
