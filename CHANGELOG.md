@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`disable_retry` on jobs**: Prevents build retries via API and hides the retry button in the UI ([#617](https://github.com/PikoCI/pikoci/issues/617)).
 - **Notification integration tests**: Worker-level tests with mock HTTP server verifying notify steps, auto-notification lifecycle filtering (`on`, `jobs`, `exclude`), and message interpolation ([#608](https://github.com/PikoCI/pikoci/issues/608)).
 
-### Performance
+### Changed
 
 - **Build list page load**: `GET /jobs/:name/builds` now omits the `steps` column for list views (returning only id, build_number, status, started_at, duration), reducing a typical 50-build response from ~16MB to ~50KB. Steps are fetched on-demand when a build tab is opened ([#652](https://github.com/PikoCI/pikoci/issues/652)).
 - **Pipeline image query**: `image.dot` now uses a lightweight query (`LatestBuildStatusByPipeline`) that selects only `id`, `build_number`, and `status`, cutting response time from 6-8s to under 1s ([#652](https://github.com/PikoCI/pikoci/issues/652)).
