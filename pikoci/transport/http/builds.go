@@ -565,6 +565,10 @@ func listJobBuilds(s pikoci.Service) http.HandlerFunc {
 		var err error
 		if isPublic, _ := ctx.Value(IsPublicAccessKey).(bool); isPublic {
 			builds, hasMore, err = s.ListPublicJobBuilds(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName, before, after, limit, statuses)
+		} else if len(statuses) == 0 {
+			// Omit steps for list views when no status filter is active; steps are
+			// fetched on-demand when the user opens a specific build.
+			builds, hasMore, err = s.ListJobBuildsSummary(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName, before, after, limit, statuses)
 		} else {
 			builds, hasMore, err = s.ListJobBuilds(ctx, req.TeamCanonical, req.PipelineCanonical, req.JobName, before, after, limit, statuses)
 		}

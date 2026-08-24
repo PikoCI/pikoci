@@ -167,6 +167,10 @@ type Service interface {
 	// indicates whether more results exist. When statuses is non-empty, only
 	// builds matching one of the given statuses are returned.
 	ListJobBuilds(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, bool, error)
+	// ListJobBuildsSummary is like ListJobBuilds but omits step data for efficiency.
+	// Use this for list views where only build metadata (id, build_number, status,
+	// started_at, duration) is needed.
+	ListJobBuildsSummary(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, bool, error)
 	// GetJobBuild retrieves a single build by its build number.
 	GetJobBuild(ctx context.Context, tc, pn, jn string, buildNumber string) (*build.Build, error)
 	// CancelJobBuild cancels a running or pending build and notifies the next

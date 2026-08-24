@@ -920,13 +920,8 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
       const versionParam = trackedVersionID ? '?version=' + trackedVersionID : '';
       history.replaceState(null, '', navPath + versionParam);
     }
-    // If the build was loaded in summary mode (no steps) and is terminal, fetch full data now
-    const nonTerminal = new Set(['pending', 'started', 'waiting_for_approval']);
-    if (!build.steps?.length && !nonTerminal.has(build.status)) {
-      fetchBuild(tc, pn, jn, build.build_number).then(full => {
-        if (full) setBuilds(prev => sortBuilds(prev.map(b => b.id === full.id ? full : b)));
-      }).catch(() => {});
-    }
+    // BuildContent.refreshFullBuild fires on mount and handles fetching full data
+    // (steps, approvals, version_metadata) via the onFullBuildFetched callback.
   }, [tc, pn, jn, embedded, trackedVersionID]);
 
   // Input modal state
@@ -1097,7 +1092,11 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
                 jn=${jn}
                 job=${job}
                 onRetry=${onRetry}
-                onFullBuildFetched=${full => setBuilds(prev => sortBuilds(prev.map(e => e.id === full.id ? full : e)))}
+                onFullBuildFetched=${full => setBuilds(prev => sortBuilds(prev.map(e =>
+                  e.id === full.id
+                    ? { ...e, steps: full.steps, approvals: full.approvals, version_metadata: full.version_metadata, pinned_versions: full.pinned_versions }
+                    : e
+                )))}
               />
             ` : null}
           </div>

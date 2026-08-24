@@ -96,15 +96,42 @@ func (q *PikoCI) ListJobBuilds(ctx context.Context, tc, pc, jn string, before *u
 		fetchLimit = limit + 1
 	}
 
-	var (
-		builds []*build.Build
-		err    error
-	)
-	if len(statuses) == 0 {
-		builds, err = q.Builds.FilterSummary(ctx, tc, pc, jn, before, after, fetchLimit, statuses)
-	} else {
-		builds, err = q.Builds.Filter(ctx, tc, pc, jn, before, after, fetchLimit, statuses)
+	builds, err := q.Builds.Filter(ctx, tc, pc, jn, before, after, fetchLimit, statuses)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to list Builds: %w", err)
 	}
+
+	hasMore := false
+	if limit > 0 && uint32(len(builds)) > limit {
+		hasMore = true
+		builds = builds[:limit]
+	}
+
+	// For "after" queries the DB returns ASC order; reverse to newest-first
+	if after != nil {
+		slices.Reverse(builds)
+	}
+
+	return builds, hasMore, nil
+}
+
+// ListJobBuildsSummary is like ListJobBuilds but omits step data for efficiency.
+// Use this for list views where only build metadata is needed.
+func (q *PikoCI) ListJobBuildsSummary(ctx context.Context, tc, pc, jn string, before *uint32, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, bool, error) {
+	if !utils.ValidateCanonical(tc) {
+		return nil, false, fmt.Errorf("invalid Team Canonical format %q", tc)
+	} else if !utils.ValidateCanonical(pc) {
+		return nil, false, fmt.Errorf("invalid Pipeline Canonical format %q", pc)
+	} else if !utils.ValidateCanonical(jn) {
+		return nil, false, fmt.Errorf("invalid Job Name format %q", jn)
+	}
+
+	fetchLimit := limit
+	if limit > 0 {
+		fetchLimit = limit + 1
+	}
+
+	builds, err := q.Builds.FilterSummary(ctx, tc, pc, jn, before, after, fetchLimit, statuses)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to list Builds: %w", err)
 	}

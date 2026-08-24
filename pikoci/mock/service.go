@@ -834,6 +834,22 @@ func (mr *ServiceMockRecorder) ListJobBuilds(ctx, tc, pn, jn, before, after, lim
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListJobBuilds", reflect.TypeOf((*Service)(nil).ListJobBuilds), ctx, tc, pn, jn, before, after, limit, statuses)
 }
 
+// ListJobBuildsSummary mocks base method.
+func (m *Service) ListJobBuildsSummary(ctx context.Context, tc, pn, jn string, before, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListJobBuildsSummary", ctx, tc, pn, jn, before, after, limit, statuses)
+	ret0, _ := ret[0].([]*build.Build)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ListJobBuildsSummary indicates an expected call of ListJobBuildsSummary.
+func (mr *ServiceMockRecorder) ListJobBuildsSummary(ctx, tc, pn, jn, before, after, limit, statuses any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListJobBuildsSummary", reflect.TypeOf((*Service)(nil).ListJobBuildsSummary), ctx, tc, pn, jn, before, after, limit, statuses)
+}
+
 // ListLinkedAccounts mocks base method.
 func (m *Service) ListLinkedAccounts(ctx context.Context, userID uint32) ([]*oauthprovider.LinkedAccount, error) {
 	m.ctrl.T.Helper()

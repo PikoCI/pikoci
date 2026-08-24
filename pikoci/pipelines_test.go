@@ -2830,16 +2830,15 @@ func TestListPublicJobBuilds(t *testing.T) {
 	s.Pipelines.EXPECT().FindPublic(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
 		ID: 1, Canonical: "my-pipeline",
 	}, nil)
-	// FilterSummary omits steps (NULL AS steps), so builds have no step data.
-	s.Builds.EXPECT().FilterSummary(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
-		{ID: 1, BuildNumber: "1", Status: build.Succeeded},
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
+		{ID: 1, BuildNumber: "1", Status: build.Succeeded, Steps: []build.Step{{Type: "get", Name: "repo"}}},
 	}, nil)
 
 	builds, hasMore, err := s.S.ListPublicJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 0, nil)
 	require.NoError(t, err)
 	assert.False(t, hasMore)
 	require.Len(t, builds, 1)
-	assert.Empty(t, builds[0].Steps)
+	require.Len(t, builds[0].Steps, 1)
 }
 
 func TestListPublicJobBuilds_SecretLogsRedacted(t *testing.T) {

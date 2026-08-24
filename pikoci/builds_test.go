@@ -52,7 +52,7 @@ func TestListJobBuilds(t *testing.T) {
 	ctx := context.TODO()
 
 	// limit=0 fetches all, DB returns DESC order
-	s.Builds.EXPECT().FilterSummary(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
 		{ID: 2, BuildNumber: "2", Status: build.Started},
 		{ID: 1, BuildNumber: "1", Status: build.Succeeded},
 	}, nil)
@@ -72,7 +72,7 @@ func TestListJobBuilds_WithLimit(t *testing.T) {
 	ctx := context.TODO()
 
 	// DB returns limit+1 items (3) when we ask for limit=2 → hasMore=true
-	s.Builds.EXPECT().FilterSummary(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(3), ([]build.Status)(nil)).Return([]*build.Build{
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(3), ([]build.Status)(nil)).Return([]*build.Build{
 		{ID: 5, BuildNumber: "5"},
 		{ID: 4, BuildNumber: "4"},
 		{ID: 3, BuildNumber: "3"},
@@ -92,7 +92,7 @@ func TestListJobBuilds_Before(t *testing.T) {
 	ctx := context.TODO()
 
 	before := uint32(4)
-	s.Builds.EXPECT().FilterSummary(ctx, "main", "my-pipeline", "my-job", &before, (*uint32)(nil), uint32(3), ([]build.Status)(nil)).Return([]*build.Build{
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", &before, (*uint32)(nil), uint32(3), ([]build.Status)(nil)).Return([]*build.Build{
 		{ID: 3, BuildNumber: "3"},
 		{ID: 2, BuildNumber: "2"},
 	}, nil)
@@ -110,7 +110,7 @@ func TestListJobBuilds_After(t *testing.T) {
 
 	after := uint32(3)
 	// DB returns ASC order for after queries
-	s.Builds.EXPECT().FilterSummary(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), &after, uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), &after, uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
 		{ID: 4, BuildNumber: "4"},
 		{ID: 5, BuildNumber: "5"},
 	}, nil)
@@ -122,6 +122,41 @@ func TestListJobBuilds_After(t *testing.T) {
 	// Should be reversed to newest-first
 	assert.Equal(t, uint32(5), builds[0].ID)
 	assert.Equal(t, uint32(4), builds[1].ID)
+}
+
+func TestListJobBuilds_WithStatusFilter(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	statuses := []build.Status{build.Started}
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), statuses).Return([]*build.Build{
+		{ID: 1, BuildNumber: "1", Status: build.Started},
+	}, nil)
+
+	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 0, statuses)
+	require.NoError(t, err)
+	require.Len(t, builds, 1)
+	assert.False(t, hasMore)
+	assert.Equal(t, build.Started, builds[0].Status)
+}
+
+func TestListJobBuildsSummary(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// ListJobBuildsSummary uses FilterSummary (no steps) for efficient list views.
+	s.Builds.EXPECT().FilterSummary(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
+		{ID: 2, BuildNumber: "2", Status: build.Started},
+		{ID: 1, BuildNumber: "1", Status: build.Succeeded},
+	}, nil)
+
+	builds, hasMore, err := s.S.ListJobBuildsSummary(ctx, "main", "my-pipeline", "my-job", nil, nil, 0, nil)
+	require.NoError(t, err)
+	require.Len(t, builds, 2)
+	assert.False(t, hasMore)
+	assert.Empty(t, builds[0].Steps)
 }
 
 func TestUpdateJobBuild(t *testing.T) {

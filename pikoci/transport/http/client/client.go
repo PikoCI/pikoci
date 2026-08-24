@@ -948,6 +948,12 @@ func (cl *Client) ListJobBuilds(ctx context.Context, tc, pn, jn string, before *
 	return resp.Builds, hasMore, nil
 }
 
+// ListJobBuildsSummary delegates to ListJobBuilds; the HTTP endpoint applies
+// the summary optimization server-side when no statuses are requested.
+func (cl *Client) ListJobBuildsSummary(ctx context.Context, tc, pn, jn string, before *uint32, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, bool, error) {
+	return cl.ListJobBuilds(ctx, tc, pn, jn, before, after, limit, statuses)
+}
+
 // CreateResourceVersion creates a new version for the specified resource.
 func (cl *Client) CreateResourceVersion(ctx context.Context, tc, pn, rCan string, rv resource.Version) (*resource.Version, error) {
 	var resp thttp.CreateResourceVersionResponse
