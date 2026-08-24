@@ -662,6 +662,9 @@ var (
 		"matrix": true,
 		"if": true, "else_if": true, "else": true,
 	}
+	// ifBranchBlocks intentionally excludes on_trigger: on_trigger fires at
+	// pipeline trigger time (before any build exists), not inside conditional
+	// step branches. It is a job-level hook, not a step-level one.
 	ifBranchBlocks = map[string]bool{
 		"get": true, "task": true, "put": true, "notify": true, "service": true,
 		"in_parallel": true,

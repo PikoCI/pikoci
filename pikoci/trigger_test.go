@@ -316,28 +316,29 @@ func TestFireOnTriggerHooks_InvalidHCL_LogsWarning(t *testing.T) {
 }
 
 func TestFireOnTriggerHooks_NilNotifyPointer_Skipped(t *testing.T) {
-	// A job whose on_trigger hook has Notify==nil (type mismatch / inconsistent data)
+	// A job whose on_trigger hook has Notify==nil (e.g. invalid in-memory construction)
 	// must be silently skipped without panicking.
-	// We call the underlying goroutine logic by constructing a parsed pipeline directly.
+	//
+	// fireOnTriggerHooks cannot be called directly here because it re-parses Raw
+	// HCL, and HCL parsing never produces Notify==nil for a notify step — this
+	// guard defends against corrupted in-memory pipelines only. We therefore
+	// verify the guard condition directly against the inner-loop logic that
+	// fireOnTriggerHooks executes inside each goroutine.
 	pp := &pipeline.Pipeline{
 		Jobs: []job.Job{
 			{
 				Name: "build",
 				Plan: []job.PlanStep{makeGetStep("git", "repo", true)},
 				OnTrigger: []job.HookStep{
-					{Type: job.StepTypeNotify, Notify: nil}, // Notify ptr is nil
+					{Type: job.StepTypeNotify, Notify: nil}, // nil Notify: should be skipped
 				},
 			},
 		},
 	}
-	// Use a nil Raw so fireOnTriggerHooks returns early, but verify the goroutine
-	// logic handles nil Notify by constructing the scenario inline.
-	// Since fireOnTriggerHooks re-parses raw, we test it via the parsed path:
-	// manually run the inner loop logic that fireOnTriggerHooks uses.
 	for _, j := range pp.Jobs {
 		for _, hook := range j.OnTrigger {
 			if hook.Type != job.StepTypeNotify || hook.Notify == nil {
-				continue // ← this is the branch being exercised
+				continue // guard being verified: nil Notify is skipped, not dereferenced
 			}
 			t.Fatal("should not reach here when Notify is nil")
 		}

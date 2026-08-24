@@ -43,7 +43,12 @@ func (q *PikoCI) fireOnTriggerHooks(ctx context.Context, pp *pipeline.Pipeline, 
 
 	reachable := reachableJobs(parsed, triggeringRCan)
 
-	var wg sync.WaitGroup
+	var (
+		wg     sync.WaitGroup
+		mu     sync.Mutex
+		failed int
+		total  int
+	)
 	for _, j := range reachable {
 		if len(j.OnTrigger) == 0 {
 			continue
@@ -56,7 +61,13 @@ func (q *PikoCI) fireOnTriggerHooks(ctx context.Context, pp *pipeline.Pipeline, 
 				if hook.Type != job.StepTypeNotify || hook.Notify == nil {
 					continue
 				}
+				mu.Lock()
+				total++
+				mu.Unlock()
 				if err := runTriggerNotifyHook(ctx, q.logger, parsed, tc, pc, jCopy.Name, *hook.Notify, versionMeta); err != nil {
+					mu.Lock()
+					failed++
+					mu.Unlock()
 					q.logger.Warn("on_trigger hook failed",
 						"job", jCopy.Name,
 						"notification", hook.Notify.NotificationCanonical(),
@@ -66,6 +77,11 @@ func (q *PikoCI) fireOnTriggerHooks(ctx context.Context, pp *pipeline.Pipeline, 
 		}()
 	}
 	wg.Wait()
+	if failed > 0 {
+		q.logger.Warn("on_trigger: hooks finished with failures",
+			"failed", failed, "total", total,
+			"team", tc, "pipeline", pc)
+	}
 }
 
 // reachableJobs returns all jobs reachable when the given resource canonical
@@ -115,7 +131,7 @@ func reachableJobs(p *pipeline.Pipeline, rCan string) []job.Job {
 				if len(g.Passed) == 0 {
 					continue
 				}
-				expanded := resolvePassedJobNames(g.Passed, p.Jobs)
+				expanded := ResolvePassedJobNames(g.Passed, p.Jobs)
 				for _, passed := range expanded {
 					if passed == current {
 						reachableNames[j.Name] = true
@@ -192,7 +208,7 @@ func buildTriggerParams(nt notiftype.NotificationType, notifParams map[string]st
 	params["BUILD_PIPELINE_NAME"] = pc
 	params["BUILD_JOB_NAME"] = jn
 	params["BUILD_TEAM_NAME"] = tc
-	params["BUILD_NUMBER"] = ""
+	params["BUILD_NUMBER"] = "" // empty (not a real build yet); lets scripts detect on_trigger context via `test -z "$BUILD_NUMBER"`
 	// Version metadata with version_ prefix (e.g. version_ref for git SHA).
 	for k, v := range versionMeta {
 		params["version_"+fmt.Sprint(k)] = fmt.Sprint(v)
