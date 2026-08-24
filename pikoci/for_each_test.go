@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
@@ -540,7 +539,7 @@ job "deploy" {
 `)
 
 	// Expect FilterByPipeline for all jobs in a single query
-	s.Builds.EXPECT().FilterByPipeline(ctx, "main", "pikoci", ([]build.Status)(nil)).
+	s.Builds.EXPECT().LatestBuildStatusByPipeline(ctx, "main", "pikoci").
 		Return(nil, nil)
 	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "pikoci").
 		Return(map[string]*resource.Version{}, nil)

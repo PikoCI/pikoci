@@ -124,6 +124,41 @@ func TestListJobBuilds_After(t *testing.T) {
 	assert.Equal(t, uint32(4), builds[1].ID)
 }
 
+func TestListJobBuilds_WithStatusFilter(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	statuses := []build.Status{build.Started}
+	s.Builds.EXPECT().Filter(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), statuses).Return([]*build.Build{
+		{ID: 1, BuildNumber: "1", Status: build.Started},
+	}, nil)
+
+	builds, hasMore, err := s.S.ListJobBuilds(ctx, "main", "my-pipeline", "my-job", nil, nil, 0, statuses)
+	require.NoError(t, err)
+	require.Len(t, builds, 1)
+	assert.False(t, hasMore)
+	assert.Equal(t, build.Started, builds[0].Status)
+}
+
+func TestListJobBuildsSummary(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	// ListJobBuildsSummary uses FilterSummary (no steps) for efficient list views.
+	s.Builds.EXPECT().FilterSummary(ctx, "main", "my-pipeline", "my-job", (*uint32)(nil), (*uint32)(nil), uint32(0), ([]build.Status)(nil)).Return([]*build.Build{
+		{ID: 2, BuildNumber: "2", Status: build.Started},
+		{ID: 1, BuildNumber: "1", Status: build.Succeeded},
+	}, nil)
+
+	builds, hasMore, err := s.S.ListJobBuildsSummary(ctx, "main", "my-pipeline", "my-job", nil, nil, 0, nil)
+	require.NoError(t, err)
+	require.Len(t, builds, 2)
+	assert.False(t, hasMore)
+	assert.Empty(t, builds[0].Steps)
+}
+
 func TestUpdateJobBuild(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)

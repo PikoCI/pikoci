@@ -476,6 +476,18 @@ func (mr *ServiceMockRecorder) FindUserByID(ctx, userID any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindUserByID", reflect.TypeOf((*Service)(nil).FindUserByID), ctx, userID)
 }
 
+// FireTriggerNotifications mocks base method.
+func (m *Service) FireTriggerNotifications(ctx context.Context, tc, pc, triggeringRCan string, versionMeta map[string]any) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "FireTriggerNotifications", ctx, tc, pc, triggeringRCan, versionMeta)
+}
+
+// FireTriggerNotifications indicates an expected call of FireTriggerNotifications.
+func (mr *ServiceMockRecorder) FireTriggerNotifications(ctx, tc, pc, triggeringRCan, versionMeta any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FireTriggerNotifications", reflect.TypeOf((*Service)(nil).FireTriggerNotifications), ctx, tc, pc, triggeringRCan, versionMeta)
+}
+
 // GenerateTeamWorkerToken mocks base method.
 func (m *Service) GenerateTeamWorkerToken(ctx context.Context, tc string) (string, error) {
 	m.ctrl.T.Helper()
@@ -820,6 +832,22 @@ func (m *Service) ListJobBuilds(ctx context.Context, tc, pn, jn string, before, 
 func (mr *ServiceMockRecorder) ListJobBuilds(ctx, tc, pn, jn, before, after, limit, statuses any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListJobBuilds", reflect.TypeOf((*Service)(nil).ListJobBuilds), ctx, tc, pn, jn, before, after, limit, statuses)
+}
+
+// ListJobBuildsSummary mocks base method.
+func (m *Service) ListJobBuildsSummary(ctx context.Context, tc, pn, jn string, before, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListJobBuildsSummary", ctx, tc, pn, jn, before, after, limit, statuses)
+	ret0, _ := ret[0].([]*build.Build)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ListJobBuildsSummary indicates an expected call of ListJobBuildsSummary.
+func (mr *ServiceMockRecorder) ListJobBuildsSummary(ctx, tc, pn, jn, before, after, limit, statuses any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListJobBuildsSummary", reflect.TypeOf((*Service)(nil).ListJobBuildsSummary), ctx, tc, pn, jn, before, after, limit, statuses)
 }
 
 // ListLinkedAccounts mocks base method.
@@ -1247,18 +1275,6 @@ func (m *Service) TriggerResourceVersion(ctx context.Context, tc, pn, rCan strin
 func (mr *ServiceMockRecorder) TriggerResourceVersion(ctx, tc, pn, rCan, versionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TriggerResourceVersion", reflect.TypeOf((*Service)(nil).TriggerResourceVersion), ctx, tc, pn, rCan, versionID)
-}
-
-// FireTriggerNotifications mocks base method.
-func (m *Service) FireTriggerNotifications(ctx context.Context, tc, pc, triggeringRCan string, versionMeta map[string]interface{}) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "FireTriggerNotifications", ctx, tc, pc, triggeringRCan, versionMeta)
-}
-
-// FireTriggerNotifications indicates an expected call of FireTriggerNotifications.
-func (mr *ServiceMockRecorder) FireTriggerNotifications(ctx, tc, pc, triggeringRCan, versionMeta any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FireTriggerNotifications", reflect.TypeOf((*Service)(nil).FireTriggerNotifications), ctx, tc, pc, triggeringRCan, versionMeta)
 }
 
 // UnlinkAccount mocks base method.

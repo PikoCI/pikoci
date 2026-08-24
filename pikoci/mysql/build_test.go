@@ -955,3 +955,145 @@ func TestFilterByPipeline(t *testing.T) {
 		assert.Empty(t, result)
 	})
 }
+
+func TestFilterSummary(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'fs-pipe', 'fs-pipe')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'build')`, ppID)
+	require.NoError(t, err)
+	jobID, _ := res.LastInsertId()
+
+	steps := `[{"type":"task","name":"run","status":"succeeded","logs":"lots of log data"}]`
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number, steps) VALUES (?, 'succeeded', '1', ?)`, jobID, steps)
+	require.NoError(t, err)
+	build1ID, _ := res.LastInsertId()
+
+	_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number, steps) VALUES (?, 'failed', '2', ?)`, jobID, steps)
+	require.NoError(t, err)
+
+	br := mysql.NewBuildRepository(db, mysql.Mem)
+
+	t.Run("steps are omitted", func(t *testing.T) {
+		builds, err := br.FilterSummary(ctx, "main", "fs-pipe", "build", nil, nil, 0, nil)
+		require.NoError(t, err)
+		require.Len(t, builds, 2)
+		assert.Empty(t, builds[0].Steps, "steps should be nil in summary mode")
+		assert.Empty(t, builds[1].Steps, "steps should be nil in summary mode")
+	})
+
+	t.Run("other fields are populated", func(t *testing.T) {
+		builds, err := br.FilterSummary(ctx, "main", "fs-pipe", "build", nil, nil, 0, nil)
+		require.NoError(t, err)
+		require.Len(t, builds, 2)
+		// newest first
+		assert.Equal(t, "2", builds[0].BuildNumber)
+		assert.Equal(t, build.Failed, builds[0].Status)
+		assert.Equal(t, uint32(build1ID), builds[1].ID)
+	})
+
+	t.Run("status filter still works", func(t *testing.T) {
+		builds, err := br.FilterSummary(ctx, "main", "fs-pipe", "build", nil, nil, 0, []build.Status{build.Succeeded})
+		require.NoError(t, err)
+		require.Len(t, builds, 1)
+		assert.Equal(t, uint32(build1ID), builds[0].ID)
+		assert.Empty(t, builds[0].Steps)
+	})
+}
+
+func TestLatestBuildStatusByPipeline(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'lbs-pipe', 'lbs-pipe')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'build')`, ppID)
+	require.NoError(t, err)
+	buildJobID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number, steps) VALUES (?, 'succeeded', '1', '{"big":"data"}')`, buildJobID)
+	require.NoError(t, err)
+	buildSucceededID, _ := res.LastInsertId()
+
+	res, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number, steps) VALUES (?, 'pending', '2', '{"big":"data"}')`, buildJobID)
+	require.NoError(t, err)
+	buildPendingID, _ := res.LastInsertId()
+
+	br := mysql.NewBuildRepository(db, mysql.Mem)
+
+	t.Run("returns builds with only ID, BuildNumber, Status populated", func(t *testing.T) {
+		result, err := br.LatestBuildStatusByPipeline(ctx, "main", "lbs-pipe")
+		require.NoError(t, err)
+
+		assert.Contains(t, result, "build")
+		builds := result["build"]
+		assert.Len(t, builds, 2)
+		// Ordered by id DESC
+		assert.Equal(t, uint32(buildPendingID), builds[0].ID)
+		assert.Equal(t, "2", builds[0].BuildNumber)
+		assert.Equal(t, build.Pending, builds[0].Status)
+		// Steps must not be populated
+		assert.Empty(t, builds[0].Steps)
+
+		assert.Equal(t, uint32(buildSucceededID), builds[1].ID)
+		assert.Equal(t, "1", builds[1].BuildNumber)
+		assert.Equal(t, build.Succeeded, builds[1].Status)
+		assert.Empty(t, builds[1].Steps)
+	})
+
+	t.Run("waiting_for_approval status is returned correctly", func(t *testing.T) {
+		res2, err := db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'waiting_for_approval', '3')`, buildJobID)
+		require.NoError(t, err)
+		wfaID, _ := res2.LastInsertId()
+
+		result, err := br.LatestBuildStatusByPipeline(ctx, "main", "lbs-pipe")
+		require.NoError(t, err)
+		builds := result["build"]
+		// Newest first: wfa > pending > succeeded
+		assert.Equal(t, uint32(wfaID), builds[0].ID)
+		assert.Equal(t, build.WaitingForApproval, builds[0].Status)
+		assert.Empty(t, builds[0].Steps)
+	})
+
+	t.Run("empty result for non-existent pipeline", func(t *testing.T) {
+		result, err := br.LatestBuildStatusByPipeline(ctx, "main", "no-such-pipe")
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Empty(t, result)
+	})
+
+	t.Run("different pipeline not included", func(t *testing.T) {
+		result, err := br.LatestBuildStatusByPipeline(ctx, "main", "other-pipe")
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("different team not included", func(t *testing.T) {
+		res2, err := db.ExecContext(ctx, `INSERT INTO teams (name, canonical) VALUES ('lbs-other-team', 'lbs-other')`)
+		require.NoError(t, err)
+		otherTeamID, _ := res2.LastInsertId()
+
+		res2, err = db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (?, 'lbs-pipe', 'lbs-pipe')`, otherTeamID)
+		require.NoError(t, err)
+		otherPipeID, _ := res2.LastInsertId()
+
+		res2, err = db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'build')`, otherPipeID)
+		require.NoError(t, err)
+		otherJobID, _ := res2.LastInsertId()
+
+		_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, build_number) VALUES (?, 'succeeded', '1')`, otherJobID)
+		require.NoError(t, err)
+
+		// Query for main team only — should not include the other-team builds
+		result, err := br.LatestBuildStatusByPipeline(ctx, "main", "lbs-pipe")
+		require.NoError(t, err)
+		// Main team has 3 builds (succeeded, pending, wfa); the other team's build must not appear
+		assert.Len(t, result["build"], 3)
+	})
+}

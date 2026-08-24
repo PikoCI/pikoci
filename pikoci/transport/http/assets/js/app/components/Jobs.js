@@ -319,7 +319,7 @@ function ApprovalResourceRow({ rCan, passed, versionMeta, tc, pn }) {
 
 // ---------- BuildContent ----------
 
-function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
+function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry, onFullBuildFetched }) {
   const [fullBuild, setFullBuild] = useState(null);
   // Merge: use rawBuild (latest from polling) but overlay fields only in full detail
   const mergedBuild = rawBuild && fullBuild && rawBuild.id === fullBuild.id
@@ -349,10 +349,13 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry }) {
   const refreshFullBuild = useCallback(() => {
     if (rawBuild && rawBuild.build_number) {
       fetchBuild(tc, pn, jn, rawBuild.build_number).then(b => {
-        if (b) setFullBuild(b);
+        if (b) {
+          setFullBuild(b);
+          if (onFullBuildFetched) onFullBuildFetched(b);
+        }
       }).catch(() => {});
     }
-  }, [tc, pn, jn, rawBuild && rawBuild.build_number]);
+  }, [tc, pn, jn, rawBuild && rawBuild.build_number, onFullBuildFetched]);
   // Fetch on build switch
   useEffect(() => {
     if (rawBuildId && rawBuildId !== fetchedIdRef.current) {
@@ -848,29 +851,27 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
         metaRef.current = { newestID: null, oldestID: null, hasMore: false };
       }
 
-      // Load builds
+      // Load builds (summary — no steps, for fast initial render)
       let allBuilds = await loadBuilds();
       if (cancelled) return;
 
       allBuilds = filterByTracked(allBuilds);
       setBuilds(allBuilds);
 
-      // If a specific build was requested but not in the list, fetch it
-      if (bid) {
-        const found = allBuilds.find(b => String(b.build_number) === String(bid));
-        if (!found) {
-          try {
-            const single = await fetchBuild(tc, pn, jn, bid);
-            allBuilds = sortBuilds([...allBuilds, single]);
-            allBuilds = filterByTracked(allBuilds);
-            if (!cancelled) setBuilds(allBuilds);
-          } catch { /* ignore */ }
-        }
+      // If a specific build was requested but not in the list, fetch it (sequential — needed before activate)
+      if (bid && !allBuilds.find(b => String(b.build_number) === String(bid))) {
+        try {
+          const single = await fetchBuild(tc, pn, jn, bid);
+          allBuilds = sortBuilds([...allBuilds, single]);
+          allBuilds = filterByTracked(allBuilds);
+          if (!cancelled) setBuilds(allBuilds);
+        } catch { /* ignore */ }
       }
 
       // Set active
       const requestedID = bid ? (allBuilds.find(b => String(b.build_number) === String(bid))?.id) : null;
       doActivate(requestedID, allBuilds);
+      // Full build data (steps) is fetched by BuildContent via onFullBuildFetched callback.
     };
 
     init();
@@ -919,6 +920,8 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
       const versionParam = trackedVersionID ? '?version=' + trackedVersionID : '';
       history.replaceState(null, '', navPath + versionParam);
     }
+    // BuildContent.refreshFullBuild fires on mount and handles fetching full data
+    // (steps, approvals, version_metadata) via the onFullBuildFetched callback.
   }, [tc, pn, jn, embedded, trackedVersionID]);
 
   // Input modal state
@@ -1089,6 +1092,11 @@ export function JobBuilds({ tc, pn, jn, bid, embedded, trackedVersionID: tracked
                 jn=${jn}
                 job=${job}
                 onRetry=${onRetry}
+                onFullBuildFetched=${full => setBuilds(prev => sortBuilds(prev.map(e =>
+                  e.id === full.id
+                    ? { ...e, steps: full.steps, approvals: full.approvals, version_metadata: full.version_metadata, pinned_versions: full.pinned_versions }
+                    : e
+                )))}
               />
             ` : null}
           </div>
