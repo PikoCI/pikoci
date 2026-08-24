@@ -81,8 +81,8 @@ func TestOAuthLoginWithKeycloak(t *testing.T) {
 	}
 	require.NoError(t, loginBtn.Click())
 
-	// Wait for profile completion page (OAuth round-trip can be slow on arm64)
-	waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Complete Your Profile"), 30*time.Second)
+	// Wait for profile completion page (Keycloak OAuth round-trip on arm64 can take 40s+)
+	waitFor(t, wd, eqText(selenium.ByCSSSelector, "h1", "Complete Your Profile"), 60*time.Second)
 
 	// Username should be pre-filled
 	usernameField, err := wd.FindElement(selenium.ByCSSSelector, "#username")
