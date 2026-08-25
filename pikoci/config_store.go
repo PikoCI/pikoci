@@ -226,7 +226,10 @@ func (q *PikoCI) ResolvePipelineValues(ctx context.Context, tc, pn string) (*sec
 		Plain:  map[string]bool{},
 	}
 
-	wanted := referencedStoreKeys(pp)
+	wanted, err := referencedStoreKeys(pp)
+	if err != nil {
+		return nil, err
+	}
 	if len(wanted) == 0 {
 		return resolved, nil
 	}
@@ -263,16 +266,20 @@ func (q *PikoCI) ResolvePipelineValues(ctx context.Context, tc, pn string) (*sec
 }
 
 // referencedStoreKeys returns the names a pipeline requests from the store.
-func referencedStoreKeys(pp *pipeline.Pipeline) map[string]struct{} {
+func referencedStoreKeys(pp *pipeline.Pipeline) (map[string]struct{}, error) {
 	wanted := make(map[string]struct{})
 
 	secretVars := pp.SecretVars
 	if len(secretVars) == 0 && len(pp.Raw) > 0 {
 		// SecretVars are not persisted, so recover them from the raw HCL the
-		// same way the worker does.
-		if parsed, err := pipeline.ParseSecretVarsFromRaw(pp.Raw, nil); err == nil {
-			secretVars = parsed
+		// same way the worker does. A parse failure has to surface here:
+		// swallowing it leaves the pipeline looking like it references
+		// nothing, and the build fails later reporting every key as missing.
+		parsed, err := pipeline.ParseSecretVarsFromRaw(pp.Raw, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse the pipeline configuration: %w", err)
 		}
+		secretVars = parsed
 	}
 
 	for _, sv := range secretVars {
@@ -281,5 +288,5 @@ func referencedStoreKeys(pp *pipeline.Pipeline) map[string]struct{} {
 		}
 	}
 
-	return wanted
+	return wanted, nil
 }

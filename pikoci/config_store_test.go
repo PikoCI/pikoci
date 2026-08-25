@@ -56,13 +56,14 @@ var secretScopeSeq atomic.Int64
 // It returns the team and pipeline canonicals reserved for this test.
 func newConfigStoreService(t *testing.T, masterKey string) (*pikoci.PikoCI, *sql.DB, string, string) {
 	t.Helper()
-	ms, db, tc, pn := newConfigStoreMocks(t, masterKey)
+	ms, db, tc, pn := newConfigStoreMocks(t, masterKey, storePipelineHCL)
 	return ms.P, db, tc, pn
 }
 
 // newConfigStoreMocks is newConfigStoreService with the mocks kept, for tests
-// that assert on what was recorded rather than only on the returned value.
-func newConfigStoreMocks(t *testing.T, masterKey string) (MockService, *sql.DB, string, string) {
+// that assert on what was recorded rather than only on the returned value, and
+// with the pipeline's raw HCL under the test's control.
+func newConfigStoreMocks(t *testing.T, masterKey, raw string) (MockService, *sql.DB, string, string) {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
@@ -92,7 +93,7 @@ func newConfigStoreMocks(t *testing.T, masterKey string) (MockService, *sql.DB, 
 	ms.Pipelines.EXPECT().Find(gomock.Any(), tc, pn).Return(&pipeline.Pipeline{
 		Name:      pn,
 		Canonical: pn,
-		Raw:       []byte(storePipelineHCL),
+		Raw:       []byte(raw),
 	}, nil).AnyTimes()
 
 	return ms, db, tc, pn
@@ -287,7 +288,7 @@ func TestDeleteConfig_AuditsTheKindThatWasDeleted(t *testing.T) {
 		{"plain", secret.KindPlain, auditlog.ConfigDeleted},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			ms, _, tc, pn := newConfigStoreMocks(t, "master-key")
+			ms, _, tc, pn := newConfigStoreMocks(t, "master-key", storePipelineHCL)
 
 			require.NoError(t, ms.P.SetTeamConfig(ctx, tc, "TEAM_ENTRY", "v", tt.kind))
 			require.NoError(t, ms.P.SetPipelineConfig(ctx, tc, pn, "PIPE_ENTRY", "v", tt.kind))
@@ -316,4 +317,19 @@ func TestDeleteConfig_MissingEntry(t *testing.T) {
 
 	err = svc.DeletePipelineConfig(ctx, tc, pn, "NOPE")
 	assert.ErrorIs(t, err, pikoci.ErrConfigEntryNotFound)
+}
+
+// A malformed pipeline used to resolve to an empty value set, so the build
+// failed later reporting every referenced key as missing instead of saying the
+// configuration would not parse.
+func TestResolvePipelineValues_ReportsParseFailure(t *testing.T) {
+	ctx := context.Background()
+	ms, _, tc, pn := newConfigStoreMocks(t, "master-key", `job "broken" { this is not valid hcl`)
+
+	require.NoError(t, ms.P.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "ghp_team", secret.KindSecret))
+
+	_, err := ms.P.ResolvePipelineValues(ctx, tc, pn)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parse",
+		"the error should name the parse failure, not look like a missing key")
 }
