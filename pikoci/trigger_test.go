@@ -3,6 +3,7 @@ package pikoci
 import (
 	"context"
 	"log/slog"
+	"os"
 	"testing"
 
 	"github.com/pikoci/pikoci/pikoci/job"
@@ -423,6 +424,132 @@ func TestExecNotificationCommand_WithArgs(t *testing.T) {
 	}
 	err := execNotificationCommand(context.Background(), rc, t.TempDir(), map[string]string{"BUILD_TEAM_NAME": "my-team"})
 	require.NoError(t, err)
+}
+
+// ─── reachableJobs — production topology (3 direct + 1 downstream) ───────────
+
+func TestReachableJobs_ThreeDirectTriggers_DownstreamWithMultiplePassed(t *testing.T) {
+	// Mirrors the pikoci deploy pipeline: backend, frontend, test-integration
+	// are all direct triggers; test-backends depends on all three via passed.
+	p := &pipeline.Pipeline{Jobs: []job.Job{
+		makeJob("backend", makeGetStep("git", "pikoci_pr", true)),
+		makeJob("frontend", makeGetStep("git", "pikoci_pr", true)),
+		makeJob("test-integration", makeGetStep("git", "pikoci_pr", true)),
+		makeJob("test-backends", makeGetStep("git", "pikoci_pr", true, "backend", "frontend", "test-integration")),
+	}}
+	result := reachableJobs(p, "git.pikoci_pr")
+	require.Len(t, result, 4)
+	names := make(map[string]bool, 4)
+	for _, j := range result {
+		names[j.Name] = true
+	}
+	assert.True(t, names["backend"], "backend must be reachable")
+	assert.True(t, names["frontend"], "frontend must be reachable")
+	assert.True(t, names["test-integration"], "test-integration must be reachable")
+	assert.True(t, names["test-backends"], "test-backends must be reachable via BFS")
+}
+
+func TestReadPipeline_DownstreamJobWithPassed_HasOnTrigger(t *testing.T) {
+	// Verifies that ReadPipeline correctly populates OnTrigger for a job that
+	// has both trigger=true and passed constraints on its get step.
+	raw := []byte(`
+resource "git" "pikoci_pr" {}
+notification_type "recorder" {
+  notify "exec" { path = "/bin/true" }
+}
+notification "recorder" "ci" {}
+job "backend" {
+  get "git" "pikoci_pr" { trigger = true }
+  on_trigger {
+    notify "recorder" "ci" {}
+  }
+}
+job "test-backends" {
+  get "git" "pikoci_pr" {
+    trigger = true
+    passed  = ["backend"]
+  }
+  on_trigger {
+    notify "recorder" "ci" {}
+  }
+}
+`)
+	pp, err := ReadPipeline(context.Background(), raw, nil)
+	require.NoError(t, err)
+	require.Len(t, pp.Jobs, 2)
+
+	jobsByName := make(map[string]job.Job)
+	for _, j := range pp.Jobs {
+		jobsByName[j.Name] = j
+	}
+
+	tb, ok := jobsByName["test-backends"]
+	require.True(t, ok, "test-backends job must exist in parsed pipeline")
+	require.Len(t, tb.OnTrigger, 1, "test-backends must have on_trigger populated by ReadPipeline")
+	assert.Equal(t, job.StepTypeNotify, tb.OnTrigger[0].Type)
+
+	backend, ok := jobsByName["backend"]
+	require.True(t, ok)
+	require.Len(t, backend.OnTrigger, 1, "backend must have on_trigger populated by ReadPipeline")
+}
+
+func TestFireOnTriggerHooks_DownstreamJobWithPassed_ReceivesNotification(t *testing.T) {
+	// Verifies that on_trigger fires for a downstream job (passed constraints)
+	// not just for direct-trigger jobs. Uses per-job sentinel files to confirm
+	// each hook ran.
+	tmpDir := t.TempDir()
+	// Each job writes a sentinel file named after itself.
+	raw := []byte(`
+resource "git" "pikoci_pr" {}
+
+notification_type "recorder" {
+  notify "exec" {
+    path = "/bin/sh"
+    args = ["-c", "touch ` + tmpDir + `/$BUILD_JOB_NAME"]
+  }
+}
+
+notification "recorder" "ci" {}
+
+job "backend" {
+  get "git" "pikoci_pr" { trigger = true }
+  on_trigger {
+    notify "recorder" "ci" {}
+  }
+}
+
+job "frontend" {
+  get "git" "pikoci_pr" { trigger = true }
+  on_trigger {
+    notify "recorder" "ci" {}
+  }
+}
+
+job "test-integration" {
+  get "git" "pikoci_pr" { trigger = true }
+  on_trigger {
+    notify "recorder" "ci" {}
+  }
+}
+
+job "test-backends" {
+  get "git" "pikoci_pr" {
+    trigger = true
+    passed  = ["backend", "frontend", "test-integration"]
+  }
+  on_trigger {
+    notify "recorder" "ci" {}
+  }
+}
+`)
+	q := &PikoCI{logger: slog.Default()}
+	pp := &pipeline.Pipeline{Raw: raw}
+	q.fireOnTriggerHooks(context.Background(), pp, "main", "pikoci", "git.pikoci_pr", nil)
+
+	for _, jobName := range []string{"backend", "frontend", "test-integration", "test-backends"} {
+		_, err := os.Stat(tmpDir + "/" + jobName)
+		assert.NoError(t, err, "on_trigger must fire for job %q (sentinel file must exist)", jobName)
+	}
 }
 
 // ─── reachableJobs — outer-break branch ──────────────────────────────────────

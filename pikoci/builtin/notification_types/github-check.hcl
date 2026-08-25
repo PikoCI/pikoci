@@ -45,6 +45,11 @@ notification_type "github-check" {
         done
       fi
 
+      # Fall back to version metadata (available in on_trigger context).
+      if [ -z "$HEAD_SHA" ]; then
+        HEAD_SHA="$version_ref"
+      fi
+
       if [ -z "$HEAD_SHA" ]; then
         echo "error: no head_sha provided and git rev-parse HEAD failed" >&2
         exit 1
@@ -83,8 +88,8 @@ notification_type "github-check" {
       fi
       ID_FILE="$WORKDIR/.github-check-$${RESOURCE_NAME}.id"
 
-      if [ -n "$STATUS" ] && [ "$STATUS" = "in_progress" ]; then
-        # Create a new check run
+      if [ -n "$STATUS" ]; then
+        # Create a new check run (handles queued, in_progress, or any other status)
         BODY=$(jq -n \
           --arg name "$CHECK_NAME" \
           --arg sha "$HEAD_SHA" \
