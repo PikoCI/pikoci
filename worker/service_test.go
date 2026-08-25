@@ -200,6 +200,71 @@ func TestProcessJob_Success_TaskOnly(t *testing.T) {
 	w.processJob(ctx, m, cwd, pp)
 }
 
+func TestProcessJob_StepStartedAt(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "echo-job",
+		BuildID:           10,
+		BuildNumber:       "10",
+	}
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "echo-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeTask,
+						Task: &job.TaskStep{
+							Name: "echo",
+							Run: utils.RunnerCommand{
+								Runner: "exec",
+								Args:   []string{"hello"},
+								Params: map[string]string{
+									"path": "echo",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedStartedAt *time.Time
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "10", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			if capturedStartedAt == nil {
+				for _, s := range b.Steps {
+					if s.Status == build.Started {
+						capturedStartedAt = s.StartedAt
+						break
+					}
+				}
+			}
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	require.NotNil(t, capturedStartedAt, "started step should have StartedAt set")
+	assert.False(t, capturedStartedAt.IsZero(), "started step StartedAt should not be zero")
+}
+
 func TestProcessJob_Success_WithGetAndTask(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc := newTestWorker(ctrl)

@@ -49,18 +49,21 @@ function buildStatusBadge(status) {
   return null;
 }
 
+// Prepare a step's duration field for display (nanoseconds -> string), recursing into sub_steps.
+function prepareStep(s) {
+  const step = { ...s, duration: durationToString(s.duration) };
+  if (s.sub_steps) {
+    step.sub_steps = s.sub_steps.map(prepareStep);
+  }
+  return step;
+}
+
 // Prepare a build's duration fields for display (nanoseconds -> string)
 function prepareBuild(b) {
   if (!b) return b;
   const out = { ...b };
   out.duration = b.duration !== 0 ? durationToString(b.duration) : 0;
-  out.steps = (b.steps || []).map(s => {
-    const step = { ...s, duration: durationToString(s.duration) };
-    if (s.sub_steps) {
-      step.sub_steps = s.sub_steps.map(c => ({ ...c, duration: durationToString(c.duration) }));
-    }
-    return step;
-  });
+  out.steps = (b.steps || []).map(prepareStep);
   out.job = (b.job || []).map(j => ({ ...j, duration: durationToString(j.duration) }));
   return out;
 }
@@ -82,7 +85,7 @@ function BuildTab({ build, active, onClick }) {
 
 // ---------- StepRow ----------
 
-function StepRow({ step, expanded, onToggle, autoFollow, setAutoFollow, isAutoScrollingRef }) {
+export function StepRow({ step, expanded, onToggle, autoFollow, setAutoFollow, isAutoScrollingRef, stepElapsed }) {
   const preRef = useRef(null);
   const logs = processLogs(step.logs);
 
@@ -125,7 +128,10 @@ function StepRow({ step, expanded, onToggle, autoFollow, setAutoFollow, isAutoSc
         <span>
           <span class="piko-step-label"><i class="bi ${getStepIcon(step.type)}"></i> ${step.type || 'step'}</span>
           ${' '}${step.name}${' '}
-          <span style="color:var(--text-muted);">(${step.duration})</span>
+          ${stepElapsed && stepElapsed[step.name]
+            ? html`<span style="color:var(--text-muted);">(${stepElapsed[step.name]})</span>`
+            : html`<span style="color:var(--text-muted);">(${step.duration})</span>`
+          }
         </span>
         <span style="display:flex;align-items:center;gap:6px;">
           ${step.logs ? html`
@@ -173,7 +179,7 @@ function InputStep({ inputValues, expanded, onToggle }) {
 
 // ---------- ParallelGroup ----------
 
-function ParallelGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoFollow, setAutoFollow, isAutoScrollingRef }) {
+function ParallelGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoFollow, setAutoFollow, isAutoScrollingRef, stepElapsed }) {
   const [groupExpanded, setGroupExpanded] = useState(true);
 
   return html`
@@ -198,6 +204,7 @@ function ParallelGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoF
             autoFollow=${autoFollow}
             setAutoFollow=${setAutoFollow}
             isAutoScrollingRef=${isAutoScrollingRef}
+            stepElapsed=${stepElapsed}
           />
         `)}
       </div>
@@ -207,7 +214,7 @@ function ParallelGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoF
 
 // ---------- ConditionalGroup ----------
 
-function ConditionalGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoFollow, setAutoFollow, isAutoScrollingRef }) {
+function ConditionalGroup({ step, expandedSteps, onToggleStep, stepIndexBase, autoFollow, setAutoFollow, isAutoScrollingRef, stepElapsed }) {
   const [groupExpanded, setGroupExpanded] = useState(true);
   const branches = step.sub_steps || [];
   const entered = branches.find(b => b.status !== 'skipped');
@@ -251,6 +258,7 @@ function ConditionalGroup({ step, expandedSteps, onToggleStep, stepIndexBase, au
                       autoFollow=${autoFollow}
                       setAutoFollow=${setAutoFollow}
                       isAutoScrollingRef=${isAutoScrollingRef}
+                      stepElapsed=${stepElapsed}
                     />
                   `)}
                 </div>
@@ -332,6 +340,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry, onFu
   const [expandedSteps, setExpandedSteps] = useState({});
   const [elapsed, setElapsed] = useState('');
   const [timeAgo, setTimeAgo] = useState('');
+  const [stepElapsed, setStepElapsed] = useState({});
   const isAutoScrollingRef = useRef(false);
   const [cancelLoading, withCancelLoading] = useLoading();
   const [retryLoading, withRetryLoading] = useLoading();
@@ -385,6 +394,19 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry, onFu
     }
   }, [build]);
 
+  // Keep a ref to the most recently available steps so the interval always reads
+  // non-null data. We only update the ref when we have real steps (i.e. from the
+  // status-filtered poll or from the full-build fetch), so the elapsed keeps
+  // computing between polls even when the next render's rawBuild.steps is null.
+  const latestStepsRef = useRef(null);
+  if (rawBuild.steps) {
+    latestStepsRef.current = rawBuild.steps;
+  }
+
+  // Client-side fallback: record the first time we observe each step as 'started'.
+  // Used when the backend hasn't set started_at (e.g. older server versions).
+  const stepFirstSeenRef = useRef({});
+
   // Elapsed timer
   useEffect(() => {
     if (!build) return;
@@ -403,6 +425,25 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry, onFu
       if (rawBuild.started_at) {
         setTimeAgo(pikoTimeAgo(rawBuild.started_at));
       }
+      // Per-step elapsed: use server started_at when available, otherwise fall
+      // back to the first time the browser saw this step in 'started' state.
+      const newStepElapsed = {};
+      const computeStepElapsed = (steps) => {
+        for (const s of (steps || [])) {
+          if (s.status === 'started') {
+            const serverTs = s.started_at ? new Date(s.started_at).getTime() : null;
+            if (!stepFirstSeenRef.current[s.name]) {
+              stepFirstSeenRef.current[s.name] = serverTs || Date.now();
+            }
+            const startMs = serverTs || stepFirstSeenRef.current[s.name];
+            const secs = Math.floor((Date.now() - startMs) / 1000);
+            newStepElapsed[s.name] = durationToString(secs * 1e9);
+          }
+          if (s.sub_steps) computeStepElapsed(s.sub_steps);
+        }
+      };
+      computeStepElapsed(latestStepsRef.current);
+      setStepElapsed(newStepElapsed);
     };
     update();
     const id = setInterval(() => {
@@ -619,6 +660,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry, onFu
               autoFollow=${autoFollow}
               setAutoFollow=${setAutoFollow}
               isAutoScrollingRef=${isAutoScrollingRef}
+              stepElapsed=${stepElapsed}
             />
           `;
         }
@@ -633,6 +675,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry, onFu
               autoFollow=${autoFollow}
               setAutoFollow=${setAutoFollow}
               isAutoScrollingRef=${isAutoScrollingRef}
+              stepElapsed=${stepElapsed}
             />
           `;
         }
@@ -645,6 +688,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry, onFu
             autoFollow=${autoFollow}
             setAutoFollow=${setAutoFollow}
             isAutoScrollingRef=${isAutoScrollingRef}
+            stepElapsed=${stepElapsed}
           />
         `;
       })}
@@ -657,6 +701,7 @@ function BuildContent({ build: rawBuild, tc, pn, jn, job: jobData, onRetry, onFu
           autoFollow=${autoFollow}
           setAutoFollow=${setAutoFollow}
           isAutoScrollingRef=${isAutoScrollingRef}
+          stepElapsed=${stepElapsed}
         />
       `)}
     </div>

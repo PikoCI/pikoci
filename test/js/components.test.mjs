@@ -5,6 +5,7 @@ import { html } from 'htm/preact';
 
 import { Login } from '../../pikoci/transport/http/assets/js/app/components/Login.js';
 import { Breadcrumb } from '../../pikoci/transport/http/assets/js/app/components/Layout.js';
+import { StepRow } from '../../pikoci/transport/http/assets/js/app/components/Jobs.js';
 
 // ---------------------------------------------------------------------------
 // Login
@@ -118,3 +119,37 @@ test('Breadcrumb renders Pipelines as active when showPipelines is set', () => {
 // Note: Notice is not exported from Layout.js (it is a file-private const),
 // so we cannot import it directly. Its output is tested indirectly via
 // integration / Selenium tests.
+
+// ---------------------------------------------------------------------------
+// StepRow — running step shows live elapsed time
+// ---------------------------------------------------------------------------
+
+test('StepRow shows live elapsed time when stepElapsed is provided for a started step', () => {
+  const isAutoScrollingRef = { current: false };
+  const step = { type: 'task', name: 'build', status: 'started', duration: 0, logs: '' };
+  const output = render(html`<${StepRow}
+    step=${step}
+    expanded=${false}
+    onToggle=${() => {}}
+    autoFollow=${false}
+    setAutoFollow=${() => {}}
+    isAutoScrollingRef=${isAutoScrollingRef}
+    stepElapsed=${{ build: '00:00:42' }}
+  />`);
+  assert.ok(output.includes('00:00:42'), 'should show live elapsed time for running step');
+});
+
+test('StepRow shows duration when step is completed and stepElapsed not provided', () => {
+  const isAutoScrollingRef = { current: false };
+  const step = { type: 'task', name: 'build', status: 'succeeded', duration: '00:00:05', logs: '' };
+  const output = render(html`<${StepRow}
+    step=${step}
+    expanded=${false}
+    onToggle=${() => {}}
+    autoFollow=${false}
+    setAutoFollow=${() => {}}
+    isAutoScrollingRef=${isAutoScrollingRef}
+    stepElapsed=${{}}
+  />`);
+  assert.ok(output.includes('00:00:05'), 'should show completed step duration');
+});
