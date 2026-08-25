@@ -260,6 +260,21 @@ func TestHTTPEndpoints(t *testing.T) {
 			assert.Equal(t, "test-pipe", cr.Pipeline.Canonical)
 		})
 
+		t.Run("Create_RouteVarWinsOverEmptyBody", func(t *testing.T) {
+			body, _ := json.Marshal(struct {
+				TeamCanonical string `json:"team_canonical"`
+				Name          string `json:"name"`
+				Config        []byte `json:"config"`
+			}{TeamCanonical: "", Name: "route-var-test", Config: []byte(pipelineHCL)})
+			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/pipelines", adminJWT, string(body))
+			defer resp.Body.Close()
+			requireOK(t, resp)
+			var cr thttp.CreatePipelineResponse
+			decodeBody(t, resp, &cr)
+			assert.Empty(t, cr.Err)
+			assert.NotNil(t, cr.Pipeline)
+		})
+
 		t.Run("List", func(t *testing.T) {
 			resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/pipelines", adminJWT, "")
 			defer resp.Body.Close()
@@ -291,6 +306,17 @@ func TestHTTPEndpoints(t *testing.T) {
 
 		t.Run("Image", func(t *testing.T) {
 			resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/pipelines/test-pipe/image.dot", adminJWT, "")
+			defer resp.Body.Close()
+			requireOK(t, resp)
+		})
+
+		t.Run("CreateImage_RouteVarWinsOverEmptyBody", func(t *testing.T) {
+			body, _ := json.Marshal(struct {
+				TeamCanonical string `json:"team_canonical"`
+				Format        string `json:"format"`
+				Config        []byte `json:"config"`
+			}{TeamCanonical: "", Format: "", Config: []byte(pipelineHCL)})
+			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/pipelines/image.dot", adminJWT, string(body))
 			defer resp.Body.Close()
 			requireOK(t, resp)
 		})
@@ -622,6 +648,20 @@ func TestHTTPEndpoints(t *testing.T) {
 			decodeBody(t, resp, &cr)
 			assert.Empty(t, cr.Err)
 			assert.NotNil(t, cr.Trigger)
+		})
+
+		t.Run("Create_RouteVarWinsOverEmptyBody", func(t *testing.T) {
+			body, _ := json.Marshal(struct {
+				TeamCanonical string                 `json:"team_canonical"`
+				Name          string                 `json:"name"`
+				Version       map[string]interface{} `json:"version"`
+			}{TeamCanonical: "", Name: "", Version: map[string]interface{}{"ref": "abc123"}})
+			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/triggers/test-trigger", adminJWT, string(body))
+			defer resp.Body.Close()
+			requireOK(t, resp)
+			var cr thttp.CreateTriggerResponse
+			decodeBody(t, resp, &cr)
+			assert.Empty(t, cr.Err)
 		})
 
 		t.Run("ListAfter", func(t *testing.T) {

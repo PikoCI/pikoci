@@ -31,12 +31,12 @@ func createPipeline(s pikoci.Service) http.HandlerFunc {
 			ctx = r.Context()
 		)
 		vars := mux.Vars(r)
-		req.TeamCanonical = vars["team_canonical"]
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			encodeResponse(CreatePipelineResponse{Err: err.Error()}, w)
 			return
 		}
+		req.TeamCanonical = vars["team_canonical"]
 		pp, err := s.CreatePipeline(ctx, req.TeamCanonical, req.Name, req.Config, req.Vars)
 		var errs string
 		if err != nil {
@@ -272,13 +272,13 @@ func createPipelineImage(s pikoci.Service) http.HandlerFunc {
 			ctx = r.Context()
 		)
 		vars := mux.Vars(r)
-		req.TeamCanonical = vars["team_canonical"]
-		req.Format = vars["ext"]
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			encodeResponse(CreatePipelineImageResponse{Err: err.Error()}, w)
 			return
 		}
+		req.TeamCanonical = vars["team_canonical"]
+		req.Format = vars["ext"]
 		img, err := s.CreatePipelineImage(ctx, req.TeamCanonical, req.Config, req.Vars, req.Format)
 		if err != nil {
 			encodeResponse(CreatePipelineImageResponse{Err: err.Error()}, w)
