@@ -318,7 +318,7 @@ func scanPipelinesWithTeam(rows *sql.Rows) ([]*pipeline.WithTeam, error) {
 	result := make([]*pipeline.WithTeam, 0, len(pipelineOrder))
 	for _, id := range pipelineOrder {
 		p := pipelineMap[id]
-		sort.Slice(p.Jobs, func(i, j int) bool { return p.Jobs[i].Order < p.Jobs[j].Order })
+		sort.SliceStable(p.Jobs, func(i, j int) bool { return p.Jobs[i].Order < p.Jobs[j].Order })
 		result = append(result, p)
 	}
 	return result, nil
@@ -475,7 +475,7 @@ func scanPipelines(rows *sql.Rows) ([]*pipeline.Pipeline, error) {
 	result := make([]*pipeline.Pipeline, 0, len(pipelineOrder))
 	for _, id := range pipelineOrder {
 		p := pipelineMap[id]
-		sort.Slice(p.Jobs, func(i, j int) bool { return p.Jobs[i].Order < p.Jobs[j].Order })
+		sort.SliceStable(p.Jobs, func(i, j int) bool { return p.Jobs[i].Order < p.Jobs[j].Order })
 		result = append(result, p)
 	}
 	return result, nil

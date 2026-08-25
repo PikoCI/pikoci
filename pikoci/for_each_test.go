@@ -317,6 +317,35 @@ job "test" {
 	assert.Contains(t, err.Error(), "mutually exclusive")
 }
 
+func TestCreatePipeline_ForEachNameCollision(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclConfig := []byte(`
+resource "cron" "tick" {
+  check_interval = "@every 1m"
+}
+
+job "build--linux" {
+  get "cron" "tick" {
+    trigger = true
+  }
+}
+
+job "build" {
+  for_each = toset(["linux", "mac"])
+  get "cron" "tick" {
+    trigger = true
+  }
+}
+`)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "my-pipe", hclConfig, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already used by another job")
+}
+
 func TestCreatePipeline_ForEachEmptySet(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)

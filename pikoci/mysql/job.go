@@ -240,7 +240,7 @@ func (r *JobRepository) Filter(ctx context.Context, tc, pn string) ([]*job.Job, 
 		JOIN teams AS t
 			ON p.team_id = t.id
 		WHERE t.canonical = ? AND p.canonical = ?
-		ORDER BY j.`+"`order`"+` ASC
+		ORDER BY j.`+"`order`"+` ASC, j.id ASC
 	`, tc, pn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter jobs: %w", err)
@@ -486,7 +486,7 @@ func (r *JobRepository) FilterByForEachGroup(ctx context.Context, tc, pn, group 
 		JOIN teams AS t
 			ON p.team_id = t.id
 		WHERE t.canonical = ? AND p.canonical = ? AND j.for_each_group = ?
-		ORDER BY j.`+"`order`"+` ASC
+		ORDER BY j.`+"`order`"+` ASC, j.id ASC
 	`, tc, pn, group)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter jobs by for_each group: %w", err)
