@@ -79,17 +79,6 @@ func (w *Worker) grpcSession(ctx context.Context) error {
 		return fmt.Errorf("failed to send initial heartbeat: %w", err)
 	}
 
-	// Store stream atomically for use by job handlers
-	w.grpcStreamMu.Lock()
-	w.grpcStream = stream
-	w.grpcStreamMu.Unlock()
-
-	defer func() {
-		w.grpcStreamMu.Lock()
-		w.grpcStream = nil
-		w.grpcStreamMu.Unlock()
-	}()
-
 	// Start heartbeat sender
 	go w.grpcHeartbeatLoop(ctx, stream)
 

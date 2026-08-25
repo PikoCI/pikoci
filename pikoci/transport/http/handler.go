@@ -60,6 +60,10 @@ var publicFallbackRoutes = map[RouteName]bool{
 func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, version, commit, externalURL string, stateStore *pikoci.OAuthStateStore) http.Handler {
 	r := mux.NewRouter()
 
+	// Bounds the "API token last used" writes: without a cap, every
+	// token-authenticated request spawns its own goroutine and DB write.
+	lastUsedSlots := make(chan struct{}, 8)
+
 	auth := func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(rw http.ResponseWriter, rr *http.Request) {
 			// Determine route name early for public fallback check
@@ -107,7 +111,18 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 						rr = rr.WithContext(context.WithValue(rr.Context(), UsernameContextKey, un))
 						rr = rr.WithContext(context.WithValue(rr.Context(), pikoci.ActorContextKey, un))
 						rr = rr.WithContext(context.WithValue(rr.Context(), ApiTokenContextKey, authResult))
-						go s.UpdateApiTokenLastUsed(context.Background(), authResult.TokenID)
+						// last_used is advisory, so dropping an update
+						// under load is better than queueing it.
+						select {
+						case lastUsedSlots <- struct{}{}:
+							updCtx := context.WithoutCancel(rr.Context())
+							tokenID := authResult.TokenID
+							go func() {
+								defer func() { <-lastUsedSlots }()
+								s.UpdateApiTokenLastUsed(updCtx, tokenID)
+							}()
+						default:
+						}
 					}
 				} else {
 					// JWT auth

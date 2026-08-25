@@ -30,7 +30,6 @@ import (
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
-	"github.com/pikoci/pikoci/pikoci/workitem"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
@@ -38,6 +37,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/service"
 	"github.com/pikoci/pikoci/pikoci/utils"
 	"github.com/pikoci/pikoci/pikoci/wkr"
+	"github.com/pikoci/pikoci/pikoci/workitem"
 	"gopkg.in/yaml.v3"
 )
 
@@ -59,13 +59,13 @@ type WorkPoller interface {
 // polling or gRPC streaming. It manages build lifecycle, executes pipeline
 // steps, and supports graceful draining.
 type Worker struct {
-	pikoci            pikoci.Service
-	workPoller        WorkPoller
+	pikoci     pikoci.Service
+	workPoller WorkPoller
 
 	draining      atomic.Bool
 	drainCancelMu sync.Mutex
 	drainCancel   context.CancelFunc
-	logger      *slog.Logger
+	logger        *slog.Logger
 
 	// apiCtx is the parent server context used for DB operations.
 	// It outlives individual job contexts (which get cancelled on
@@ -98,12 +98,8 @@ type Worker struct {
 
 	// grpcClient is the gRPC client for the WorkerService.
 	grpcClient workerv1.WorkerServiceClient
-	// grpcStream is the active Execute stream (nil when not connected).
-	// Protected by grpcStreamMu.
-	grpcStreamMu sync.Mutex
-	grpcStream   workerv1.WorkerService_ExecuteClient
-
 	// jobCancels tracks active job cancel functions for gRPC cancellation.
+	// Created on first use so the zero value of Worker stays usable.
 	jobCancelsMu sync.Mutex
 	jobCancels   map[string]context.CancelFunc
 }
@@ -272,7 +268,6 @@ func (w *Worker) Run(ctx context.Context) error {
 	defer receiveCancel()
 
 	if w.GRPCAddr != "" {
-		w.jobCancels = make(map[string]context.CancelFunc)
 		return w.grpcLoop(receiveCtx)
 	}
 
@@ -3192,7 +3187,17 @@ func (w *Worker) waitForServices(ctx context.Context, m workitem.Body, b *build.
 					}
 					return
 				}
-				time.Sleep(interval)
+				select {
+				case <-time.After(interval):
+				case <-ctx.Done():
+					results <- readyResult{
+						name: svcName,
+						out:  lastOut,
+						d:    time.Since(start),
+						err:  ctx.Err(),
+					}
+					return
+				}
 			}
 		}(ss.Name, *svc.ReadyCheck, ru, readyRC, ss.Params)
 	}
@@ -3520,18 +3525,17 @@ func isDuplicateKeyError(err error) bool {
 // trackJob records a cancel function for a running job (used by gRPC mode).
 func (w *Worker) trackJob(buildID string, cancel context.CancelFunc) {
 	w.jobCancelsMu.Lock()
-	if w.jobCancels != nil {
-		w.jobCancels[buildID] = cancel
+	defer w.jobCancelsMu.Unlock()
+	if w.jobCancels == nil {
+		w.jobCancels = make(map[string]context.CancelFunc)
 	}
-	w.jobCancelsMu.Unlock()
+	w.jobCancels[buildID] = cancel
 }
 
 // untrackJob removes a job's cancel function.
 func (w *Worker) untrackJob(buildID string) {
 	w.jobCancelsMu.Lock()
-	if w.jobCancels != nil {
-		delete(w.jobCancels, buildID)
-	}
+	delete(w.jobCancels, buildID)
 	w.jobCancelsMu.Unlock()
 }
 
@@ -3549,8 +3553,5 @@ func (w *Worker) cancelJob(buildID string) {
 func (w *Worker) activeJobCount() int {
 	w.jobCancelsMu.Lock()
 	defer w.jobCancelsMu.Unlock()
-	if w.jobCancels == nil {
-		return 0
-	}
 	return len(w.jobCancels)
 }
