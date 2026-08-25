@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`passed` constraint infinite trigger loop**: `checkPassedConstraints` now requests only `succeeded`/`warning` builds, which forces the server to return full step data. Without the status filter the HTTP endpoint returned builds without steps (summary optimisation), making the version intersection always empty — every triggered build was immediately deleted and re-triggered ([#656](https://github.com/PikoCI/pikoci/issues/656)).
 - **Build list tabs show stale status**: Build tabs no longer stay stuck on "running" after a build completes — they now refresh automatically when a non-terminal build transitions to a terminal state.
 - **Trigger handler authorization bypass**: JSON body could override route vars to trigger jobs in unauthorized teams; body is now decoded before route vars are applied ([#644](https://github.com/PikoCI/pikoci/issues/644)).
 - **Active build data overwritten by stale snapshot**: The `onFullBuildFetched` callback now merges only enrichment fields (steps, approvals, version_metadata, pinned_versions) into the polling state rather than replacing the entire build object.
