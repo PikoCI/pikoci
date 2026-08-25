@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Condition variable injection**: `$VAR` references are now substituted after the expression is parsed, so a value containing spaces, quotes or operator characters cannot alter the condition logic; malformed conditions (e.g. unsupported operators) are now rejected at pipeline-save time instead of failing at build runtime ([#662](https://github.com/PikoCI/pikoci/issues/662)).
 - **`passed` constraint infinite trigger loop**: `checkPassedConstraints` now requests only `succeeded`/`warning` builds, which forces the server to return full step data. Without the status filter the HTTP endpoint returned builds without steps (summary optimisation), making the version intersection always empty — every triggered build was immediately deleted and re-triggered ([#656](https://github.com/PikoCI/pikoci/issues/656)).
 - **Concurrency fixes**: `ready_check` now respects build cancellation; API token last-used writes are bounded to 8 goroutines; gRPC server reacts to send errors without waiting for recv; unused `grpcStream` field removed ([#658](https://github.com/PikoCI/pikoci/issues/658)).
 - **`for_each` name collision**: expanding a `for_each` job now errors at pipeline-save time if the generated name (e.g. `build--linux`) collides with an explicitly declared job ([#660](https://github.com/PikoCI/pikoci/issues/660)).
