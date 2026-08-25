@@ -153,6 +153,9 @@ test('StepRow shows duration when step is completed and stepElapsed not provided
     stepElapsed=${{}}
   />`);
   assert.ok(output.includes('00:00:05'), 'should show completed step duration');
+});
+
+// ---------------------------------------------------------------------------
 // ConfigStore — EntryRow
 // ---------------------------------------------------------------------------
 
