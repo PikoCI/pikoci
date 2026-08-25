@@ -271,7 +271,9 @@ func TestSetConfig_RejectsUnknownKind(t *testing.T) {
 
 	err := svc.SetTeamConfig(ctx, tc, "NAME", "value", secret.Kind("plaintext"))
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid kind")
+	assert.ErrorIs(t, err, pikoci.ErrConfigInvalidRequest,
+		"an unknown kind is a caller mistake, so the transport can answer 400")
+	assert.Contains(t, err.Error(), "plaintext", "the message should name the bad kind")
 }
 
 // A delete used to always audit config.deleted, even for a secret, so the log
