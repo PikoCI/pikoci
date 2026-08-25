@@ -69,6 +69,10 @@ func runTests(m *testing.M) int {
 	var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, alr, nil, suow, jwtSecret, wn, logger)
 	svc.StartScheduler(ctx)
 
+	// Wire the configuration store with a master key, so the secret paths are
+	// exercised rather than short-circuiting as unconfigured.
+	svc.EnableConfigStore(mysql.NewSecretRepository(db), "integration-master-key")
+
 	var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.Mem, "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)
 	pikoURL = server.URL
