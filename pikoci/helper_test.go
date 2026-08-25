@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/mock"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"go.uber.org/mock/gomock"
@@ -32,6 +33,8 @@ type MockService struct {
 	Workers           *mock.WorkerRepository
 	ApiTokens         *mock.ApiTokenRepository
 	AuditLogs         *mock.AuditLogRepository
+	// Audited collects every audit entry written through AuditLogs.
+	Audited *[]auditlog.Entry
 
 	S pikoci.Service
 	P *pikoci.PikoCI
@@ -69,7 +72,14 @@ func newService(ctrl *gomock.Controller) MockService {
 	})
 
 	alr := mock.NewAuditLogRepository(ctrl)
-	alr.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	// Record what was audited so tests can assert on the action, rather than
+	// only that some audit call happened.
+	audited := &[]auditlog.Entry{}
+	alr.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ string, e auditlog.Entry) error {
+			*audited = append(*audited, e)
+			return nil
+		}).AnyTimes()
 
 	p := pikoci.New(context.TODO(), ur, tr, pr, jr, rr, rtr, br, rur, str, tgr, wr, atr, alr, nil, suow, []byte("test-secret"), nil, nil)
 	return MockService{
@@ -88,6 +98,7 @@ func newService(ctrl *gomock.Controller) MockService {
 		Workers:           wr,
 		ApiTokens:         atr,
 		AuditLogs:         alr,
+		Audited:           audited,
 
 		S: p,
 		P: p,

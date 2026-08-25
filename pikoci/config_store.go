@@ -2,6 +2,7 @@ package pikoci
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 
@@ -73,12 +74,36 @@ func (q *PikoCI) prepareEntry(ctx context.Context, name, value string, kind secr
 	return e, ciphertext, nil
 }
 
+// ErrConfigEntryNotFound reports that no entry by that name is stored in the
+// scope that was asked about.
+var ErrConfigEntryNotFound = errors.New("configuration entry not found")
+
 // auditCreated returns the audit action for storing an entry of this kind.
 func auditCreated(kind secret.Kind) auditlog.Action {
 	if kind == secret.KindPlain {
 		return auditlog.ConfigCreated
 	}
 	return auditlog.SecretCreated
+}
+
+// auditDeleted returns the audit action for removing an entry of this kind.
+func auditDeleted(kind secret.Kind) auditlog.Action {
+	if kind == secret.KindPlain {
+		return auditlog.ConfigDeleted
+	}
+	return auditlog.SecretDeleted
+}
+
+// entryKind finds the kind of the named entry among entries. A delete has to
+// ask before removing the row, because afterwards there is nothing left to
+// tell a secret from a plain value.
+func entryKind(entries []*secret.Entry, name string) (secret.Kind, error) {
+	for _, e := range entries {
+		if e.Canonical == name {
+			return e.Kind, nil
+		}
+	}
+	return "", fmt.Errorf("%q: %w", name, ErrConfigEntryNotFound)
 }
 
 // SetTeamConfig stores a team-scoped entry, replacing any existing entry with
@@ -139,11 +164,20 @@ func (q *PikoCI) DeleteTeamConfig(ctx context.Context, tc, name string) error {
 	if err := q.configStoreReady(); err != nil {
 		return err
 	}
+	entries, err := q.Config.FilterTeam(ctx, tc)
+	if err != nil {
+		return err
+	}
+	kind, err := entryKind(entries, name)
+	if err != nil {
+		return err
+	}
+
 	if err := q.Config.DeleteTeam(ctx, tc, name); err != nil {
 		return err
 	}
 
-	q.audit(ctx, tc, auditlog.ConfigDeleted, "config", name, nil)
+	q.audit(ctx, tc, auditDeleted(kind), "config", name, nil)
 
 	return nil
 }
@@ -153,11 +187,20 @@ func (q *PikoCI) DeletePipelineConfig(ctx context.Context, tc, pn, name string) 
 	if err := q.configStoreReady(); err != nil {
 		return err
 	}
+	entries, err := q.Config.FilterPipeline(ctx, tc, pn)
+	if err != nil {
+		return err
+	}
+	kind, err := entryKind(entries, name)
+	if err != nil {
+		return err
+	}
+
 	if err := q.Config.DeletePipeline(ctx, tc, pn, name); err != nil {
 		return err
 	}
 
-	q.audit(ctx, tc, auditlog.ConfigDeleted, "config", name, map[string]interface{}{"pipeline": pn})
+	q.audit(ctx, tc, auditDeleted(kind), "config", name, map[string]interface{}{"pipeline": pn})
 
 	return nil
 }

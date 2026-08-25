@@ -12,6 +12,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
@@ -55,6 +56,14 @@ var secretScopeSeq atomic.Int64
 // It returns the team and pipeline canonicals reserved for this test.
 func newConfigStoreService(t *testing.T, masterKey string) (*pikoci.PikoCI, *sql.DB, string, string) {
 	t.Helper()
+	ms, db, tc, pn := newConfigStoreMocks(t, masterKey)
+	return ms.P, db, tc, pn
+}
+
+// newConfigStoreMocks is newConfigStoreService with the mocks kept, for tests
+// that assert on what was recorded rather than only on the returned value.
+func newConfigStoreMocks(t *testing.T, masterKey string) (MockService, *sql.DB, string, string) {
+	t.Helper()
 
 	ctrl := gomock.NewController(t)
 	ms := newService(ctrl)
@@ -86,7 +95,7 @@ func newConfigStoreService(t *testing.T, masterKey string) (*pikoci.PikoCI, *sql
 		Raw:       []byte(storePipelineHCL),
 	}, nil).AnyTimes()
 
-	return ms.P, db, tc, pn
+	return ms, db, tc, pn
 }
 
 func TestResolvePipelineSecrets(t *testing.T) {
@@ -262,4 +271,49 @@ func TestSetConfig_RejectsUnknownKind(t *testing.T) {
 	err := svc.SetTeamConfig(ctx, tc, "NAME", "value", secret.Kind("plaintext"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid kind")
+}
+
+// A delete used to always audit config.deleted, even for a secret, so the log
+// disagreed with the secret.created entry the same entry was stored under.
+func TestDeleteConfig_AuditsTheKindThatWasDeleted(t *testing.T) {
+	ctx := context.Background()
+
+	for _, tt := range []struct {
+		name string
+		kind secret.Kind
+		want auditlog.Action
+	}{
+		{"secret", secret.KindSecret, auditlog.SecretDeleted},
+		{"plain", secret.KindPlain, auditlog.ConfigDeleted},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ms, _, tc, pn := newConfigStoreMocks(t, "master-key")
+
+			require.NoError(t, ms.P.SetTeamConfig(ctx, tc, "TEAM_ENTRY", "v", tt.kind))
+			require.NoError(t, ms.P.SetPipelineConfig(ctx, tc, pn, "PIPE_ENTRY", "v", tt.kind))
+
+			require.NoError(t, ms.P.DeleteTeamConfig(ctx, tc, "TEAM_ENTRY"))
+			require.NoError(t, ms.P.DeletePipelineConfig(ctx, tc, pn, "PIPE_ENTRY"))
+
+			var deletes []auditlog.Action
+			for _, e := range *ms.Audited {
+				if e.Action == auditlog.SecretDeleted || e.Action == auditlog.ConfigDeleted {
+					deletes = append(deletes, e.Action)
+				}
+			}
+			assert.Equal(t, []auditlog.Action{tt.want, tt.want}, deletes,
+				"team and pipeline deletes should both audit the entry's own kind")
+		})
+	}
+}
+
+func TestDeleteConfig_MissingEntry(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tc, pn := newConfigStoreService(t, "master-key")
+
+	err := svc.DeleteTeamConfig(ctx, tc, "NOPE")
+	assert.ErrorIs(t, err, pikoci.ErrConfigEntryNotFound)
+
+	err = svc.DeletePipelineConfig(ctx, tc, pn, "NOPE")
+	assert.ErrorIs(t, err, pikoci.ErrConfigEntryNotFound)
 }
