@@ -246,10 +246,13 @@ func execNotificationCommand(ctx context.Context, rc *utils.RunnerCommand, workD
 		return fmt.Errorf("notification exec: empty command path for runner %q", rc.Runner)
 	}
 
-	var args []string
-	for _, a := range rc.Args {
-		args = append(args, os.Expand(a, envFn))
-	}
+	// Pass args as-is without os.Expand: params are already set as env vars
+	// on the subprocess, so the shell expands $param_*, $notify_*, $version_*
+	// etc. natively. Calling os.Expand here would destroy shell-assigned
+	// variable references (e.g. $HEAD_SHA set mid-script) by expanding them
+	// to empty strings before the shell runs.
+	args := make([]string, len(rc.Args))
+	copy(args, rc.Args)
 
 	cmd := exec.CommandContext(ctx, path, args...)
 	cmd.Dir = workDir
