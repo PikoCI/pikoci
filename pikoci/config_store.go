@@ -30,17 +30,25 @@ func (q *PikoCI) EnableConfigStore(sr secret.Repository, masterKey string) {
 	q.Cipher = secret.NewCipher(masterKey, sr)
 }
 
+// ErrConfigStoreUnavailable reports that this server has no configuration
+// store wired up, so nothing can be stored or read.
+var ErrConfigStoreUnavailable = errors.New("configuration storage is not available on this server")
+
+// ErrConfigInvalidRequest reports a caller mistake rather than a server-side
+// failure: a name that is not a valid identifier, or an unknown kind.
+var ErrConfigInvalidRequest = errors.New("invalid configuration request")
+
 // configStoreReady reports whether the store was wired up at all.
 func (q *PikoCI) configStoreReady() error {
 	if q.Config == nil || q.Cipher == nil {
-		return fmt.Errorf("configuration storage is not available on this server")
+		return ErrConfigStoreUnavailable
 	}
 	return nil
 }
 
 func validateConfigName(name string) error {
 	if !configNameRe.MatchString(name) {
-		return fmt.Errorf("invalid name %q: must start with a letter or underscore and contain only letters, digits and underscores", name)
+		return fmt.Errorf("%w: name %q must start with a letter or underscore and contain only letters, digits and underscores", ErrConfigInvalidRequest, name)
 	}
 	return nil
 }
@@ -52,7 +60,7 @@ func (q *PikoCI) prepareEntry(ctx context.Context, name, value string, kind secr
 		return secret.Entry{}, nil, err
 	}
 	if !kind.Valid() {
-		return secret.Entry{}, nil, fmt.Errorf("invalid kind %q: must be %q or %q", kind, secret.KindSecret, secret.KindPlain)
+		return secret.Entry{}, nil, fmt.Errorf("%w: kind %q must be %q or %q", ErrConfigInvalidRequest, kind, secret.KindSecret, secret.KindPlain)
 	}
 	if err := validateConfigName(name); err != nil {
 		return secret.Entry{}, nil, err

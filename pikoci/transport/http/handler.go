@@ -454,6 +454,20 @@ func encodeError(errs string, w http.ResponseWriter) {
 	encodeResponse(ErrorResponse{Err: errs}, w)
 }
 
+// encodeErrorStatus is encodeError for handlers that can tell one failure from
+// another: a missing entry from a malformed request from a server-side fault.
+// encodeResponse can only ever say 400, because it infers the status from the
+// presence of an error rather than from its cause.
+//
+// The body keeps ErrorResponse's shape, which is what both the API client and
+// the UI already read on any non-2xx.
+func encodeErrorStatus(errs string, status int, w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(ErrorResponse{Err: errs})
+}
+
 // ErrorResponse represents a JSON error response returned by the API.
 type ErrorResponse struct {
 	Err string `json:"error"`

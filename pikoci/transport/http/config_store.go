@@ -2,12 +2,30 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/gorilla/mux"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/secret"
 )
+
+// configErrorStatus maps a store failure to the status that describes it.
+//
+// Anything unrecognised is a server-side fault: storage errors and cipher
+// failures are not the caller's doing, so they must not be reported as a bad
+// request. Permission failures never reach here, being settled by the auth
+// middleware before the handler runs.
+func configErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, pikoci.ErrConfigEntryNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, pikoci.ErrConfigInvalidRequest):
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
+}
 
 // SetConfigRequest is the body for storing a configuration entry.
 //
@@ -69,15 +87,15 @@ func setTeamConfig(s pikoci.Service) http.HandlerFunc {
 
 		req, ok := decodeSetConfig(r)
 		if !ok {
-			encodeResponse(SetConfigResponse{Err: "invalid request body"}, w)
+			encodeErrorStatus("invalid request body", http.StatusBadRequest, w)
 			return
 		}
 
-		var errs string
 		if err := s.SetTeamConfig(r.Context(), tc, req.Name, req.Value, req.Kind); err != nil {
-			errs = err.Error()
+			encodeErrorStatus(err.Error(), configErrorStatus(err), w)
+			return
 		}
-		encodeResponse(SetConfigResponse{Err: errs}, w)
+		encodeResponse(SetConfigResponse{}, w)
 	}
 }
 
@@ -88,15 +106,15 @@ func setPipelineConfig(s pikoci.Service) http.HandlerFunc {
 
 		req, ok := decodeSetConfig(r)
 		if !ok {
-			encodeResponse(SetConfigResponse{Err: "invalid request body"}, w)
+			encodeErrorStatus("invalid request body", http.StatusBadRequest, w)
 			return
 		}
 
-		var errs string
 		if err := s.SetPipelineConfig(r.Context(), tc, pn, req.Name, req.Value, req.Kind); err != nil {
-			errs = err.Error()
+			encodeErrorStatus(err.Error(), configErrorStatus(err), w)
+			return
 		}
-		encodeResponse(SetConfigResponse{Err: errs}, w)
+		encodeResponse(SetConfigResponse{}, w)
 	}
 }
 
@@ -105,11 +123,11 @@ func listTeamConfig(s pikoci.Service) http.HandlerFunc {
 		tc := mux.Vars(r)["team_canonical"]
 
 		entries, err := s.ListTeamConfig(r.Context(), tc)
-		var errs string
 		if err != nil {
-			errs = err.Error()
+			encodeErrorStatus(err.Error(), configErrorStatus(err), w)
+			return
 		}
-		encodeResponse(ListConfigResponse{Data: entries, Err: errs}, w)
+		encodeResponse(ListConfigResponse{Data: entries}, w)
 	}
 }
 
@@ -119,11 +137,11 @@ func listPipelineConfig(s pikoci.Service) http.HandlerFunc {
 		tc, pn := vars["team_canonical"], vars["pipeline_canonical"]
 
 		entries, err := s.ListPipelineConfig(r.Context(), tc, pn)
-		var errs string
 		if err != nil {
-			errs = err.Error()
+			encodeErrorStatus(err.Error(), configErrorStatus(err), w)
+			return
 		}
-		encodeResponse(ListConfigResponse{Data: entries, Err: errs}, w)
+		encodeResponse(ListConfigResponse{Data: entries}, w)
 	}
 }
 
@@ -132,11 +150,11 @@ func deleteTeamConfig(s pikoci.Service) http.HandlerFunc {
 		vars := mux.Vars(r)
 		tc, name := vars["team_canonical"], vars["config_name"]
 
-		var errs string
 		if err := s.DeleteTeamConfig(r.Context(), tc, name); err != nil {
-			errs = err.Error()
+			encodeErrorStatus(err.Error(), configErrorStatus(err), w)
+			return
 		}
-		encodeResponse(DeleteConfigResponse{Err: errs}, w)
+		encodeResponse(DeleteConfigResponse{}, w)
 	}
 }
 
@@ -145,11 +163,11 @@ func deletePipelineConfig(s pikoci.Service) http.HandlerFunc {
 		vars := mux.Vars(r)
 		tc, pn, name := vars["team_canonical"], vars["pipeline_canonical"], vars["config_name"]
 
-		var errs string
 		if err := s.DeletePipelineConfig(r.Context(), tc, pn, name); err != nil {
-			errs = err.Error()
+			encodeErrorStatus(err.Error(), configErrorStatus(err), w)
+			return
 		}
-		encodeResponse(DeleteConfigResponse{Err: errs}, w)
+		encodeResponse(DeleteConfigResponse{}, w)
 	}
 }
 
@@ -163,7 +181,7 @@ func getPipelineConfigValues(s pikoci.Service) http.HandlerFunc {
 
 		resolved, err := s.ResolvePipelineValues(r.Context(), tc, pn)
 		if err != nil {
-			encodeResponse(ConfigValuesResponse{Err: err.Error()}, w)
+			encodeErrorStatus(err.Error(), configErrorStatus(err), w)
 			return
 		}
 		encodeResponse(ConfigValuesResponse{Data: resolved.Values, Plain: resolved.Plain}, w)
