@@ -816,7 +816,7 @@ func (w *Worker) runInParallelStep(
 	// Add parent step placeholder
 	parentIdx := len(b.Steps)
 	b.Steps = append(b.Steps, build.Step{
-		Type: "in_parallel", Status: build.Started,
+		Type: "in_parallel", Status: build.Started, StartedAt: nowPtr(),
 	})
 	w.updateBuild(ctx, m, *b)
 
@@ -1039,7 +1039,7 @@ func (w *Worker) runIfStep(
 		label = ifStep.Branches[0].Label
 	}
 	b.Steps = append(b.Steps, build.Step{
-		Type: "if", Name: label, Status: build.Started,
+		Type: "if", Name: label, Status: build.Started, StartedAt: nowPtr(),
 	})
 	w.updateBuild(ctx, m, *b)
 
@@ -1081,7 +1081,7 @@ func (w *Worker) runIfStep(
 			// shows the entered branch immediately.
 			branchIdx := len(subSteps)
 			subSteps = append(subSteps, build.Step{
-				Type: branch.Type, Name: branchName, Status: build.Started,
+				Type: branch.Type, Name: branchName, Status: build.Started, StartedAt: nowPtr(),
 			})
 			b.Steps[parentIdx].SubSteps = subSteps
 			w.updateBuild(ctx, m, *b)
@@ -1265,7 +1265,7 @@ func (w *Worker) runGetStep(ctx context.Context, m workitem.Body, b *build.Build
 
 	// Append a "running" step and persist it
 	stepIdx := len(b.Steps)
-	b.Steps = append(b.Steps, build.Step{Type: "get", Name: g.Name, Status: build.Started})
+	b.Steps = append(b.Steps, build.Step{Type: "get", Name: g.Name, Status: build.Started, StartedAt: nowPtr()})
 	w.updateBuild(ctx, m, *b)
 
 	out := formatParamWarnings(pullWarnings)
@@ -1458,7 +1458,7 @@ func (w *Worker) runTaskStep(ctx context.Context, m workitem.Body, b *build.Buil
 
 	// Append a "running" step and persist it
 	stepIdx := len(b.Steps)
-	b.Steps = append(b.Steps, build.Step{Type: "task", Name: t.Name, Status: build.Started})
+	b.Steps = append(b.Steps, build.Step{Type: "task", Name: t.Name, Status: build.Started, StartedAt: nowPtr()})
 	w.updateBuild(ctx, m, *b)
 
 	out := formatParamWarnings(taskWarnings)
@@ -1624,7 +1624,7 @@ func (w *Worker) runPutStep(ctx context.Context, m workitem.Body, b *build.Build
 
 	// Append a "running" step and persist it
 	stepIdx := len(b.Steps)
-	b.Steps = append(b.Steps, build.Step{Type: "put", Name: p.Name, Status: build.Started})
+	b.Steps = append(b.Steps, build.Step{Type: "put", Name: p.Name, Status: build.Started, StartedAt: nowPtr()})
 	w.updateBuild(ctx, m, *b)
 
 	out := formatParamWarnings(putWarnings)
@@ -1831,7 +1831,7 @@ func (w *Worker) runNotifyStep(ctx context.Context, m workitem.Body, b *build.Bu
 
 	// Append a "running" step and persist it
 	stepIdx := len(b.Steps)
-	b.Steps = append(b.Steps, build.Step{Type: "notify", Name: n.Name, Status: build.Started})
+	b.Steps = append(b.Steps, build.Step{Type: "notify", Name: n.Name, Status: build.Started, StartedAt: nowPtr()})
 	w.updateBuild(ctx, m, *b)
 
 	out := formatParamWarnings(notifyWarnings)
@@ -2080,7 +2080,7 @@ func (w *Worker) runHooks(ctx context.Context, m workitem.Body, b *build.Build, 
 
 			// Append a "running" step and persist it
 			stepIdx := len(*steps)
-			*steps = append(*steps, build.Step{Type: "hook", Name: name, Status: build.Started})
+			*steps = append(*steps, build.Step{Type: "hook", Name: name, Status: build.Started, StartedAt: nowPtr()})
 			w.updateBuild(ctx, m, *b)
 
 			onPartialLog := func(partial string) {
@@ -2455,6 +2455,9 @@ func (w *Worker) failBuild(_ context.Context, m workitem.Body, b build.Build, er
 	}
 }
 
+// nowPtr returns a pointer to the current time, used when setting build.Step.StartedAt.
+func nowPtr() *time.Time { t := time.Now(); return &t }
+
 // updateBuildWithRetry retries the UpdateJobBuild call with exponential backoff.
 // This gives separated workers the best chance to report results when the server
 // is restarting.
@@ -2823,7 +2826,7 @@ func (w *Worker) startServices(ctx context.Context, m workitem.Body, b *build.Bu
 
 		// Append a "running" step and persist it
 		stepIdx := len(b.Steps)
-		b.Steps = append(b.Steps, build.Step{Type: "service", Name: ss.Name + ":start", Status: build.Started})
+		b.Steps = append(b.Steps, build.Step{Type: "service", Name: ss.Name + ":start", Status: build.Started, StartedAt: nowPtr()})
 		w.updateBuild(ctx, m, *b)
 
 		svcWarnStr := formatParamWarnings(svcWarnings)
@@ -3107,7 +3110,7 @@ func (w *Worker) waitForServices(ctx context.Context, m workitem.Body, b *build.
 			continue
 		}
 		idx := len(b.Steps)
-		b.Steps = append(b.Steps, build.Step{Type: "service", Name: ss.Name + ":ready", Status: build.Started})
+		b.Steps = append(b.Steps, build.Step{Type: "service", Name: ss.Name + ":ready", Status: build.Started, StartedAt: nowPtr()})
 		refs = append(refs, readyStepRef{name: ss.Name, stepIdx: idx})
 	}
 	if len(refs) > 0 {
@@ -3266,7 +3269,7 @@ func (w *Worker) stopServices(m workitem.Body, b *build.Build, cwd string, pp *p
 
 		// Append a "running" step and persist it
 		stepIdx := len(b.Steps)
-		b.Steps = append(b.Steps, build.Step{Type: "service", Name: ss.Name + ":stop", Status: build.Started})
+		b.Steps = append(b.Steps, build.Step{Type: "service", Name: ss.Name + ":stop", Status: build.Started, StartedAt: nowPtr()})
 		w.updateBuild(stopCtx, m, *b)
 
 		stopWarnStr := formatParamWarnings(stopWarnings)

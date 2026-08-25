@@ -123,5 +123,6 @@ type Step struct {
 	Logs      string        `json:"logs"`
 	Duration  time.Duration `json:"duration"`
 	Status    Status        `json:"status"`
+	StartedAt *time.Time    `json:"started_at,omitempty"`
 	SubSteps  []Step        `json:"sub_steps,omitempty"`
 }

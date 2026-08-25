@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Running step elapsed time not shown**: Steps currently in progress now display a live-updating elapsed timer (matching the format of completed steps), consistent with the global build timer already shown at the top of the page ([#655](https://github.com/PikoCI/pikoci/issues/655)).
 - **Services inside `if` branches not stopped**: services started within an `if` branch are now returned to the plan runner and stopped correctly, even when the branch fails ([#664](https://github.com/PikoCI/pikoci/issues/664)).
 - **Consecutive `if` blocks merged into one chain**: a second `if` block now starts an independent conditional chain; previously it was treated as a continuation, causing `else`/`else_if` blocks to attach to the wrong `if` ([#664](https://github.com/PikoCI/pikoci/issues/664)).
 - **Condition variable injection**: `$VAR` references are now substituted after the expression is parsed, so a value containing spaces, quotes or operator characters cannot alter the condition logic; malformed conditions (e.g. unsupported operators) are now rejected at pipeline-save time instead of failing at build runtime ([#662](https://github.com/PikoCI/pikoci/issues/662)).
