@@ -29,13 +29,13 @@ func createTrigger(s pikoci.Service) http.HandlerFunc {
 			ctx = r.Context()
 		)
 		vars := mux.Vars(r)
-		req.TeamCanonical = vars["team_canonical"]
-		req.Name = vars["trigger_name"]
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			encodeResponse(CreateTriggerResponse{Err: err.Error()}, w)
 			return
 		}
+		req.TeamCanonical = vars["team_canonical"]
+		req.Name = vars["trigger_name"]
 		t, err := s.CreateTrigger(ctx, req.TeamCanonical, req.Name, req.Version)
 		var errs string
 		if err != nil {
