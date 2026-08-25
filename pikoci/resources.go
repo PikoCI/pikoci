@@ -261,12 +261,10 @@ func (q *PikoCI) TriggerResourceVersion(ctx context.Context, tc, pc, rCan string
 				continue
 			}
 
-			inputVals, _ := resolveInputValues(j.Inputs, nil, false)
 			bb := build.Build{
 				Status:            build.Pending,
 				VersionID:         versionID,
 				ResourceCanonical: rCan,
-				InputValues:       inputVals,
 			}
 
 			_, err := q.CreateJobBuild(ctx, tc, pc, j.Name, bb)
