@@ -61,14 +61,14 @@ Secret values are encrypted to the public half.
 `--team-canonical` is always required; `--pipeline` narrows the scope.
 
 ```bash
-# Plain value, given inline
-pikoci client config set LOG_LEVEL debug --team-canonical main
+# Secret (the default): prompted, so it does not land in shell history
+pikoci client config set GITHUB_TOKEN --team-canonical main
 
-# Secret: prompted, so it does not land in shell history
-pikoci client config set GITHUB_TOKEN --secret --team-canonical main
+# Plain value, given inline
+pikoci client config set LOG_LEVEL debug --plain --team-canonical main
 
 # Pipeline-scoped
-pikoci client config set DATABASE_URL --secret --team-canonical main --pipeline api
+pikoci client config set DATABASE_URL --team-canonical main --pipeline api
 ```
 
 ```text
@@ -76,11 +76,14 @@ GITHUB_TOKEN: ********
 secret "GITHUB_TOKEN" stored
 ```
 
+Values are stored as secrets unless you pass `--plain`, so a forgotten flag
+over-protects a plain value rather than leaking a credential.
+
 Passing a secret as a command-line argument is refused, because it would be
 visible in shell history and the process list. For scripting, pipe it in:
 
 ```bash
-echo -n "$TOKEN" | pikoci client config set GITHUB_TOKEN --secret --team-canonical main --stdin
+echo -n "$TOKEN" | pikoci client config set GITHUB_TOKEN --team-canonical main --stdin
 ```
 
 ## Listing and deleting

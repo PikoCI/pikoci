@@ -16,8 +16,9 @@ var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage stored configuration and secrets",
 	Long: "Manage configuration values stored by PikoCI.\n\n" +
-		"Plain values are stored as-is and shown in build logs. Values stored with\n" +
-		"--secret are encrypted at rest, masked in build logs, and never displayed again.",
+		"Values are stored as secrets by default: encrypted at rest, masked in build\n" +
+		"logs, and never displayed again. Values stored with --plain are kept as-is\n" +
+		"and shown in build logs.",
 }
 
 func init() {
@@ -31,7 +32,7 @@ func init() {
 	configCmd.MarkPersistentFlagRequired("team-canonical")
 	configCmd.PersistentFlags().String("pipeline", "", "Scope the entry to a single pipeline instead of the whole team")
 
-	configSetCmd.Flags().Bool("secret", false, "Store the value encrypted, masked in build logs and never displayed again")
+	configSetCmd.Flags().Bool("plain", false, "Store the value as-is: readable back and shown in build logs. Without it the value is stored as a secret")
 	configSetCmd.Flags().String("value", "", "Value to store. For secrets prefer omitting this and entering it at the prompt so it does not land in shell history")
 	configSetCmd.Flags().Bool("stdin", false, "Read the value from stdin")
 }
@@ -46,7 +47,10 @@ var configSetCmd = &cobra.Command{
 		jwt, _ := cmd.Flags().GetString("jwt")
 		tc, _ := cmd.Flags().GetString("team-canonical")
 		pn, _ := cmd.Flags().GetString("pipeline")
-		isSecret, _ := cmd.Flags().GetBool("secret")
+		// Secret is the default: a forgotten flag then over-protects a plain
+		// value rather than silently storing a credential in the clear.
+		isPlain, _ := cmd.Flags().GetBool("plain")
+		isSecret := !isPlain
 		value, _ := cmd.Flags().GetString("value")
 		fromStdin, _ := cmd.Flags().GetBool("stdin")
 		name := args[0]
@@ -56,7 +60,7 @@ var configSetCmd = &cobra.Command{
 				return fmt.Errorf("value given both as an argument and as --value")
 			}
 			if isSecret {
-				return fmt.Errorf("refusing to read a secret from the command line, where it is visible in shell history and the process list: omit the value to be prompted, or use --stdin")
+				return fmt.Errorf("refusing to read a secret from the command line, where it is visible in shell history and the process list: omit the value to be prompted, use --stdin, or pass --plain if it is not sensitive")
 			}
 			value = args[1]
 		}
