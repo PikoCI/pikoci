@@ -7322,6 +7322,92 @@ func TestProcessJob_ServiceStep_StartAndStop(t *testing.T) {
 	assert.True(t, found, "expected my-db:stop step")
 }
 
+func TestProcessJob_ServiceStep_InsideIfBranchIsStopped(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "service-if-job",
+		BuildID:           10,
+		BuildNumber:       "332",
+	}
+
+	pp := &pipeline.Pipeline{
+		ID:   1,
+		Name: "test-pipeline",
+		Jobs: []job.Job{
+			{
+				ID:   1,
+				Name: "service-if-job",
+				Plan: []job.PlanStep{
+					{
+						Type: job.StepTypeIf,
+						If: &job.IfStep{
+							Branches: []job.IfBranch{
+								{
+									Type:      "if",
+									Label:     "always",
+									Condition: "'a' == 'a'",
+									Steps: []job.PlanStep{
+										{
+											Type:    job.StepTypeService,
+											Service: &job.ServiceStep{Name: "my-db"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Services: []service.Service{
+			{
+				ID:   1,
+				Name: "my-db",
+				Start: utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"starting db"},
+					Params: map[string]string{"path": "echo"},
+				},
+				Stop: utils.RunnerCommand{
+					Runner: "exec",
+					Args:   []string{"stopping db"},
+					Params: map[string]string{"path": "echo"},
+				},
+			},
+		},
+		Runners: []runner.Runner{
+			{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}},
+		},
+	}
+	cwd := t.TempDir()
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).
+		Return(&pp.Jobs[0], nil)
+
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "332", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(ctx, m, cwd, pp)
+
+	assert.Equal(t, build.Succeeded, capturedBuild.Status)
+	found := false
+	for _, s := range capturedBuild.Steps {
+		if s.Name == "my-db:stop" && s.Type == "service" {
+			found = true
+		}
+	}
+	assert.True(t, found, "service started inside an if branch must still be stopped")
+}
+
 func TestProcessJob_ServiceStep_StartFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc := newTestWorker(ctrl)
@@ -10377,4 +10463,103 @@ func TestProcessJob_IfStep_BranchFailure(t *testing.T) {
 	require.Len(t, ifParent.SubSteps, 2)
 	assert.Equal(t, build.Failed, ifParent.SubSteps[0].Status, "entered branch should be failed")
 	assert.Equal(t, build.Skipped, ifParent.SubSteps[1].Status, "else branch should be skipped")
+}
+
+func TestProcessJob_IfStep_ConditionErrorFailsParentStep(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	ifJob := job.Job{
+		ID: 1, Name: "deploy",
+		Plan: []job.PlanStep{
+			{
+				Type: job.StepTypeIf,
+				If: &job.IfStep{
+					Branches: []job.IfBranch{
+						{Type: "if", Label: "broken", Condition: "'unterminated == 'x'"},
+					},
+				},
+			},
+		},
+	}
+
+	svc.EXPECT().GetJobBuild(gomock.Any(), "main", "test-pipeline", "deploy", "33").
+		Return(&build.Build{ID: 33, BuildNumber: "33", Status: build.Started, StartedAt: time.Now()}, nil).AnyTimes()
+	svc.EXPECT().GetPipelineJob(gomock.Any(), "main", "test-pipeline", "deploy").Return(&ifJob, nil)
+	svc.EXPECT().NotifySerialGroupPendingBuilds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	svc.EXPECT().FindBuildGetVersions(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	svc.EXPECT().EvaluateDownstreamJobs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	var lastBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), "main", "test-pipeline", "deploy", "33", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			lastBuild = b
+			return nil
+		}).AnyTimes()
+
+	w := &Worker{pikoci: svc, logger: logger}
+	pp := &pipeline.Pipeline{ID: 1, Name: "test-pipeline", Jobs: []job.Job{ifJob}}
+	m := workitem.Body{TeamCanonical: "main", PipelineCanonical: "test-pipeline", JobName: "deploy", BuildID: 33, BuildNumber: "33"}
+
+	w.processJob(context.Background(), m, t.TempDir(), pp)
+
+	assert.Equal(t, build.Failed, lastBuild.Status)
+	require.NotEmpty(t, lastBuild.Steps)
+	assert.Equal(t, "if", lastBuild.Steps[0].Type)
+	assert.Equal(t, build.Failed, lastBuild.Steps[0].Status, "if parent should be failed on condition error")
+}
+
+func TestProcessJob_ServiceStep_InsideFailingIfBranchIsStopped(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	m := workitem.Body{
+		TeamCanonical: "main", PipelineCanonical: "test-pipeline",
+		JobName: "service-if-fail", BuildID: 11, BuildNumber: "333",
+	}
+	pp := &pipeline.Pipeline{
+		ID: 1, Name: "test-pipeline",
+		Jobs: []job.Job{{
+			ID: 1, Name: "service-if-fail",
+			Plan: []job.PlanStep{{
+				Type: job.StepTypeIf,
+				If: &job.IfStep{Branches: []job.IfBranch{{
+					Type: "if", Label: "always", Condition: "'a' == 'a'",
+					Steps: []job.PlanStep{
+						{Type: job.StepTypeService, Service: &job.ServiceStep{Name: "my-db"}},
+						{Type: job.StepTypeTask, Task: &job.TaskStep{
+							Name: "boom",
+							Run:  utils.RunnerCommand{Runner: "exec", Args: []string{"-ec", "exit 1"}, Params: map[string]string{"path": "/bin/sh"}},
+						}},
+					},
+				}}},
+			}},
+		}},
+		Services: []service.Service{{
+			ID: 1, Name: "my-db",
+			Start: utils.RunnerCommand{Runner: "exec", Args: []string{"starting db"}, Params: map[string]string{"path": "echo"}},
+			Stop:  utils.RunnerCommand{Runner: "exec", Args: []string{"stopping db"}, Params: map[string]string{"path": "echo"}},
+		}},
+		Runners: []runner.Runner{{Name: "exec", Run: utils.RunCommand{Path: "$path", Args: []string{"$args"}}}},
+	}
+
+	svc.EXPECT().GetPipelineJob(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName).Return(&pp.Jobs[0], nil)
+	var capturedBuild build.Build
+	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "333", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			capturedBuild = b
+			return nil
+		}).AnyTimes()
+
+	w.processJob(context.Background(), m, t.TempDir(), pp)
+
+	assert.Equal(t, build.Failed, capturedBuild.Status)
+	found := false
+	for _, s := range capturedBuild.Steps {
+		if s.Name == "my-db:stop" && s.Type == "service" {
+			found = true
+		}
+	}
+	assert.True(t, found, "service started inside a failing if branch must still be stopped")
 }

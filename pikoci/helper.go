@@ -1955,6 +1955,11 @@ func parseJobPlansFromPairs(pairs []jobBlockPair, services []service.Service) (m
 					if len(branches) == 0 && cb.Type != "if" {
 						break
 					}
+					// A second "if" opens a new, independent chain rather than
+					// another branch of this one.
+					if len(branches) > 0 && cb.Type == "if" {
+						break
+					}
 
 					branch := job.IfBranch{Type: cb.Type}
 					if len(cb.Labels) > 0 {
@@ -1995,6 +2000,12 @@ func parseJobPlansFromPairs(pairs []jobBlockPair, services []service.Service) (m
 						break
 					}
 					blockI++
+				}
+				if len(branches) == 0 {
+					// Only reachable from a stray else/else_if, which the schema
+					// validator already rejects. Erroring here keeps the block
+					// index moving; falling through would loop forever.
+					return nil, nil, nil, fmt.Errorf("%s block without a preceding if block", allBlocks[ifBlockIdx].Type)
 				}
 				blockI-- // outer loop will increment
 

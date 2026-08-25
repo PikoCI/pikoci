@@ -784,7 +784,9 @@ func (w *Worker) runPlan(ctx context.Context, m workitem.Body, b *build.Build, c
 			if ps.If == nil {
 				continue
 			}
-			if w.runIfStep(ctx, m, b, cwd, pp, *ps.If, ps, resolvedVersions, exportedVars, secretVals, resolved) {
+			ifFailed, ifServices := w.runIfStep(ctx, m, b, cwd, pp, *ps.If, ps, resolvedVersions, exportedVars, secretVals, resolved)
+			allStartedServices = append(allStartedServices, ifServices...)
+			if ifFailed {
 				return true, resolved, exportedVars
 			}
 		}
@@ -1003,7 +1005,7 @@ func (w *Worker) runIfStep(
 	cwd string, pp *pipeline.Pipeline, ifStep job.IfStep,
 	ps job.PlanStep, resolvedVersions map[string]uint32,
 	exportedVars map[string]string, secretVals []string, resolved map[string]string,
-) bool {
+) (bool, []job.ServiceStep) {
 	start := time.Now()
 
 	if len(ifStep.Branches) == 0 {
@@ -1011,8 +1013,12 @@ func (w *Worker) runIfStep(
 			Type: "if", Status: build.Succeeded, Duration: 0,
 		})
 		w.updateBuild(ctx, m, *b)
-		return false
+		return false, nil
 	}
+
+	// Services started inside a branch are handed back to the caller, which
+	// owns stopping every service the plan started.
+	var branchServices []job.ServiceStep
 
 	// Build condition vars from exportedVars + build metadata + input values
 	condVars := make(map[string]string)
@@ -1046,8 +1052,10 @@ func (w *Worker) runIfStep(
 		}
 		result, err := condition.Evaluate(branch.Condition, condVars)
 		if err != nil {
+			b.Steps[parentIdx].Status = build.Failed
+			b.Steps[parentIdx].Duration = time.Since(start)
 			w.failBuild(ctx, m, *b, fmt.Errorf("condition evaluation error in %s %q: %w", branch.Type, branch.Label, err))
-			return true
+			return true, branchServices
 		}
 		if result {
 			selectedIdx = i
@@ -1130,6 +1138,7 @@ func (w *Worker) runIfStep(
 					if innerPS.Service != nil {
 						batch := []job.ServiceStep{*innerPS.Service}
 						startedServices := w.startServices(ctx, m, localBuild, cwd, pp, batch, secretVals)
+						branchServices = append(branchServices, startedServices...)
 						if len(startedServices) != len(batch) {
 							failed = true
 						} else if !w.waitForServices(ctx, m, localBuild, cwd, pp, startedServices, secretVals) {
@@ -1179,7 +1188,7 @@ func (w *Worker) runIfStep(
 	}
 	w.runHooks(ctx, m, b, &b.Steps, cwd, pp, "", ps.Ensure, "ensure", resolved, exportedVars)
 
-	return failed
+	return failed, branchServices
 }
 
 // runGetStep runs a single get step (resource pull).

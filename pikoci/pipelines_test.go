@@ -5343,3 +5343,59 @@ job "simple" {
 	assert.Equal(t, "if", capturedJob.Plan[1].If.Branches[0].Type)
 	assert.Equal(t, "check", capturedJob.Plan[1].If.Branches[0].Label)
 }
+
+func TestCreatePipeline_Conditional_IndependentChains(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	hclData := []byte(`
+resource "cron" "tick" { check_interval = "@every 30s" }
+job "simple" {
+  get "cron" "tick" { trigger = true }
+  if "first" {
+    condition = "$GET_TICK_TS != ''"
+    task "a" {
+      run "exec" { args = ["echo", "a"] }
+    }
+  }
+  if "second" {
+    condition = "$GET_TICK_TS != ''"
+    task "b" {
+      run "exec" { args = ["echo", "b"] }
+    }
+  }
+  else {
+    task "c" {
+      run "exec" { args = ["echo", "c"] }
+    }
+  }
+}
+`)
+
+	var capturedJob job.Job
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "simple-pipeline", gomock.Any()).DoAndReturn(
+		func(_ context.Context, _, _ string, j job.Job) (uint32, error) {
+			capturedJob = j
+			return uint32(1), nil
+		}).Times(1)
+	s.Resources.EXPECT().Create(ctx, "main", "simple-pipeline", gomock.Any()).Return(uint32(1), nil).Times(1)
+	s.Pipelines.EXPECT().Find(ctx, "main", "simple-pipeline").Return(&pipeline.Pipeline{Name: "simple-pipeline"}, nil)
+
+	pp, err := s.S.CreatePipeline(ctx, "main", "simple-pipeline", hclData, nil)
+	require.NoError(t, err)
+	require.NotNil(t, pp)
+
+	// Two separate if blocks are two separate chains, and the else belongs to
+	// the second one only.
+	require.Len(t, capturedJob.Plan, 3)
+	require.NotNil(t, capturedJob.Plan[1].If)
+	require.Len(t, capturedJob.Plan[1].If.Branches, 1)
+	assert.Equal(t, "first", capturedJob.Plan[1].If.Branches[0].Label)
+
+	require.NotNil(t, capturedJob.Plan[2].If)
+	require.Len(t, capturedJob.Plan[2].If.Branches, 2)
+	assert.Equal(t, "second", capturedJob.Plan[2].If.Branches[0].Label)
+	assert.Equal(t, "else", capturedJob.Plan[2].If.Branches[1].Type)
+}
