@@ -28,6 +28,8 @@ notification_type "github-check" {
 }
 ```
 
+The definition is fetched and stored when you run `pipelines update`. If the upstream source is updated (bug fix, new feature), re-run `pipelines update` with no other changes to pick up the latest version. See [#668](https://github.com/PikoCI/pikoci/issues/668) for future automatic detection of upstream changes.
+
 ### Parameters
 
 - `params` - List of parameter names that notifications of this type can provide.
