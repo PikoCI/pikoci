@@ -416,7 +416,6 @@ func TestExecNotificationCommand_FallbackToRunner(t *testing.T) {
 }
 
 func TestExecNotificationCommand_WithArgs(t *testing.T) {
-	// Args are expanded with env vars from params before being passed to the command.
 	rc := &utils.RunnerCommand{
 		Runner: "exec",
 		Params: map[string]string{"path": "/bin/echo"},
@@ -424,6 +423,27 @@ func TestExecNotificationCommand_WithArgs(t *testing.T) {
 	}
 	err := execNotificationCommand(context.Background(), rc, t.TempDir(), map[string]string{"BUILD_TEAM_NAME": "my-team"})
 	require.NoError(t, err)
+}
+
+func TestExecNotificationCommand_ShellAssignedVarsNotExpandedByGo(t *testing.T) {
+	// Regression: args must NOT be pre-expanded by os.Expand before being passed
+	// to the shell. If they were, $VAL in the condition below would be expanded to
+	// "" by Go (it is not in the params map), causing the shell to exit non-zero.
+	// With the fix, the shell assigns VAL from the notify_status env var and the
+	// condition succeeds.
+	rc := &utils.RunnerCommand{
+		Runner: "exec",
+		Params: map[string]string{"path": "/bin/sh"},
+		Args: []string{
+			"-ec",
+			`VAL="$notify_status"
+[ "$VAL" = "queued" ]`,
+		},
+	}
+	err := execNotificationCommand(context.Background(), rc, t.TempDir(), map[string]string{
+		"notify_status": "queued",
+	})
+	require.NoError(t, err, "shell-assigned variable must not be destroyed by Go os.Expand before shell runs")
 }
 
 // ─── reachableJobs — production topology (3 direct + 1 downstream) ───────────
