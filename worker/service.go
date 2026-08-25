@@ -28,6 +28,7 @@ import (
 	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
+	"github.com/pikoci/pikoci/pikoci/condition"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
@@ -1043,7 +1044,7 @@ func (w *Worker) runIfStep(
 			selectedIdx = i
 			break
 		}
-		result, err := EvaluateCondition(branch.Condition, condVars)
+		result, err := condition.Evaluate(branch.Condition, condVars)
 		if err != nil {
 			w.failBuild(ctx, m, *b, fmt.Errorf("condition evaluation error in %s %q: %w", branch.Type, branch.Label, err))
 			return true

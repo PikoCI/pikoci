@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/hcl/v2/hclsimple"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/pikoci/pikoci/pikoci/builtin"
+	"github.com/pikoci/pikoci/pikoci/condition"
 	"github.com/pikoci/pikoci/pikoci/job"
 	"github.com/pikoci/pikoci/pikoci/notification"
 	"github.com/pikoci/pikoci/pikoci/notiftype"
@@ -92,22 +93,22 @@ type hclApproveBlock struct {
 
 // hclJob is the intermediate HCL-decoded job with separate get/task/put/notify arrays.
 type hclJob struct {
-	Name         string           `hcl:"name,label"`
-	Tags         []string         `hcl:"tags,optional"`
-	Concurrency  int              `hcl:"concurrency,optional"`
-	SerialGroups []string         `hcl:"serial_groups,optional"`
-	Timeout      string           `hcl:"timeout,optional"`
-	DisableRetry bool             `hcl:"disable_retry,optional"`
-	AllowFailure  bool             `hcl:"allow_failure,optional"`
-	Interruptible bool             `hcl:"interruptible,optional"`
-	Get          []hclGetStep     `hcl:"get,block"`
-	Task         []hclTaskStep    `hcl:"task,block"`
-	Put          []hclPutStep     `hcl:"put,block"`
-	Notify       []hclNotifyStep  `hcl:"notify,block"`
-	Service      []hclServiceRef      `hcl:"service,block"`
-	InParallel   []hclInParallelBlock `hcl:"in_parallel,block"`
-	Approve      []hclApproveBlock    `hcl:"approve,block"`
-	Input        []hclInput           `hcl:"input,block"`
+	Name          string               `hcl:"name,label"`
+	Tags          []string             `hcl:"tags,optional"`
+	Concurrency   int                  `hcl:"concurrency,optional"`
+	SerialGroups  []string             `hcl:"serial_groups,optional"`
+	Timeout       string               `hcl:"timeout,optional"`
+	DisableRetry  bool                 `hcl:"disable_retry,optional"`
+	AllowFailure  bool                 `hcl:"allow_failure,optional"`
+	Interruptible bool                 `hcl:"interruptible,optional"`
+	Get           []hclGetStep         `hcl:"get,block"`
+	Task          []hclTaskStep        `hcl:"task,block"`
+	Put           []hclPutStep         `hcl:"put,block"`
+	Notify        []hclNotifyStep      `hcl:"notify,block"`
+	Service       []hclServiceRef      `hcl:"service,block"`
+	InParallel    []hclInParallelBlock `hcl:"in_parallel,block"`
+	Approve       []hclApproveBlock    `hcl:"approve,block"`
+	Input         []hclInput           `hcl:"input,block"`
 
 	Remain hcl.Body `hcl:",remain"` // absorbs hook blocks; parsed by parseHooks from AST
 }
@@ -282,12 +283,12 @@ type hclNotifyStep struct {
 
 // hclInParallelBlock is the HCL-decoded in_parallel block inside a job.
 type hclInParallelBlock struct {
-	Limit    int              `hcl:"limit,optional"`
-	FailFast bool             `hcl:"fail_fast,optional"`
-	Get      []hclGetStep     `hcl:"get,block"`
-	Task     []hclTaskStep    `hcl:"task,block"`
-	Put      []hclPutStep     `hcl:"put,block"`
-	Notify   []hclNotifyStep  `hcl:"notify,block"`
+	Limit    int             `hcl:"limit,optional"`
+	FailFast bool            `hcl:"fail_fast,optional"`
+	Get      []hclGetStep    `hcl:"get,block"`
+	Task     []hclTaskStep   `hcl:"task,block"`
+	Put      []hclPutStep    `hcl:"put,block"`
+	Notify   []hclNotifyStep `hcl:"notify,block"`
 
 	Remain hcl.Body `hcl:",remain"`
 }
@@ -301,16 +302,16 @@ type hclServiceRef struct {
 
 // hclPipeline is the intermediate HCL-decoded pipeline.
 type hclPipeline struct {
-	Name              string                        `json:"name"`
-	Jobs              []hclJob                      `hcl:"job,block"`
-	Resources         []resource.Resource           `hcl:"resource,block"`
-	ResourceTypes     []hclResourceType             `hcl:"resource_type,block"`
-	NotificationTypes []hclNotificationType         `hcl:"notification_type,block"`
-	Notifications     []notification.Notification   `hcl:"notification,block"`
-	Runners           []hclRunnerDef                `hcl:"runner_type,block"`
-	SecretTypes       []hclSecretType               `hcl:"secret_type,block"`
-	Services          []hclService                  `hcl:"service_type,block"`
-	Remain            hcl.Body                      `hcl:",remain"`
+	Name              string                      `json:"name"`
+	Jobs              []hclJob                    `hcl:"job,block"`
+	Resources         []resource.Resource         `hcl:"resource,block"`
+	ResourceTypes     []hclResourceType           `hcl:"resource_type,block"`
+	NotificationTypes []hclNotificationType       `hcl:"notification_type,block"`
+	Notifications     []notification.Notification `hcl:"notification,block"`
+	Runners           []hclRunnerDef              `hcl:"runner_type,block"`
+	SecretTypes       []hclSecretType             `hcl:"secret_type,block"`
+	Services          []hclService                `hcl:"service_type,block"`
+	Remain            hcl.Body                    `hcl:",remain"`
 }
 
 // hclFunctions returns the set of built-in HCL functions available in pipeline
@@ -365,19 +366,19 @@ func hclFunctions() map[string]function.Function {
 		"sum":          sumFunc,
 		"transpose":    transposeFunc,
 		// Numeric
-		"abs":     stdlib.AbsoluteFunc,
-		"ceil":    stdlib.CeilFunc,
-		"floor":   stdlib.FloorFunc,
-		"log":     stdlib.LogFunc,
-		"max":     stdlib.MaxFunc,
-		"min":     stdlib.MinFunc,
+		"abs":      stdlib.AbsoluteFunc,
+		"ceil":     stdlib.CeilFunc,
+		"floor":    stdlib.FloorFunc,
+		"log":      stdlib.LogFunc,
+		"max":      stdlib.MaxFunc,
+		"min":      stdlib.MinFunc,
 		"parseint": stdlib.ParseIntFunc,
-		"pow":     stdlib.PowFunc,
-		"signum":  stdlib.SignumFunc,
+		"pow":      stdlib.PowFunc,
+		"signum":   stdlib.SignumFunc,
 		// Encoding
-		"jsonencode":  stdlib.JSONEncodeFunc,
-		"jsondecode":  stdlib.JSONDecodeFunc,
-		"csvdecode":   stdlib.CSVDecodeFunc,
+		"jsonencode":   stdlib.JSONEncodeFunc,
+		"jsondecode":   stdlib.JSONDecodeFunc,
+		"csvdecode":    stdlib.CSVDecodeFunc,
 		"base64encode": base64encodeFunc,
 		"base64decode": base64decodeFunc,
 		"urlencode":    urlencodeFunc,
@@ -390,12 +391,12 @@ func hclFunctions() map[string]function.Function {
 		"regexall":     stdlib.RegexAllFunc,
 		"regexreplace": stdlib.RegexReplaceFunc,
 		// Set
-		"toset":           tosetFunc,
-		"setproduct":      stdlib.SetProductFunc,
-		"setintersection": stdlib.SetIntersectionFunc,
-		"setunion":        stdlib.SetUnionFunc,
-		"setsubtract":              stdlib.SetSubtractFunc,
-		"setsymmetricdifference":   stdlib.SetSymmetricDifferenceFunc,
+		"toset":                  tosetFunc,
+		"setproduct":             stdlib.SetProductFunc,
+		"setintersection":        stdlib.SetIntersectionFunc,
+		"setunion":               stdlib.SetUnionFunc,
+		"setsubtract":            stdlib.SetSubtractFunc,
+		"setsymmetricdifference": stdlib.SetSymmetricDifferenceFunc,
 		// Type conversion
 		"tostring": makeToFunc(cty.String),
 		"tonumber": makeToFunc(cty.Number),
@@ -659,8 +660,8 @@ var (
 		"in_parallel": true, "approve": true, "input": true,
 		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
 		"on_trigger": true,
-		"matrix": true,
-		"if": true, "else_if": true, "else": true,
+		"matrix":     true,
+		"if":         true, "else_if": true, "else": true,
 	}
 	// ifBranchBlocks intentionally excludes on_trigger: on_trigger fires at
 	// pipeline trigger time (before any build exists), not inside conditional
@@ -668,10 +669,10 @@ var (
 	ifBranchBlocks = map[string]bool{
 		"get": true, "task": true, "put": true, "notify": true, "service": true,
 		"in_parallel": true,
-		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
+		"on_success":  true, "on_failure": true, "on_cancel": true, "ensure": true,
 	}
 	ifBlockKnownAttrs = []string{"condition"}
-	stepHookBlocks = map[string]bool{
+	stepHookBlocks    = map[string]bool{
 		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
 	}
 	// runnerCommandKnownAttrs are the structurally-parsed attributes of a
@@ -683,19 +684,19 @@ var (
 	readyCheckKnownAttrs = []string{"args", "interval", "timeout"}
 	// Known attributes for each step/block type that uses hcl.Body Remain.
 	// Typos of these silently go into Remain and are ignored.
-	getStepKnownAttrs  = []string{"passed", "trigger", "timeout", "attempts"}
-	taskStepKnownAttrs = []string{"timeout", "attempts", "inputs", "outputs"}
-	putStepKnownAttrs  = []string{"timeout", "attempts"}
+	getStepKnownAttrs    = []string{"passed", "trigger", "timeout", "attempts"}
+	taskStepKnownAttrs   = []string{"timeout", "attempts", "inputs", "outputs"}
+	putStepKnownAttrs    = []string{"timeout", "attempts"}
 	notifyStepKnownAttrs = []string{"message"}
-	jobKnownAttrs          = []string{"concurrency", "serial_groups", "timeout", "disable_retry", "allow_failure", "interruptible"}
-	inParallelKnownAttrs   = []string{"limit", "fail_fast"}
-	inParallelBlocks       = map[string]bool{
+	jobKnownAttrs        = []string{"concurrency", "serial_groups", "timeout", "disable_retry", "allow_failure", "interruptible"}
+	inParallelKnownAttrs = []string{"limit", "fail_fast"}
+	inParallelBlocks     = map[string]bool{
 		"get": true, "task": true, "put": true, "notify": true,
 		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
 	}
 	// Known blocks inside task steps (run + hooks).
 	taskKnownBlocks = map[string]bool{
-		"run": true,
+		"run":        true,
 		"on_success": true, "on_failure": true, "on_cancel": true, "ensure": true,
 	}
 )
@@ -1567,20 +1568,20 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 		}
 		jh := jobHooksMap[hj.Name]
 		j := job.Job{
-			Name:         hj.Name,
-			Tags:         hj.Tags,
-			Concurrency:  hj.Concurrency,
-			SerialGroups: hj.SerialGroups,
-			Timeout:      jobTimeout,
-			DisableRetry: hj.DisableRetry,
+			Name:          hj.Name,
+			Tags:          hj.Tags,
+			Concurrency:   hj.Concurrency,
+			SerialGroups:  hj.SerialGroups,
+			Timeout:       jobTimeout,
+			DisableRetry:  hj.DisableRetry,
 			AllowFailure:  hj.AllowFailure,
 			Interruptible: hj.Interruptible,
-			Plan:         jobPlans[hj.Name],
-			OnSuccess:    jh.OnSuccess,
-			OnFailure:    jh.OnFailure,
-			OnCancel:     jh.OnCancel,
-			Ensure:       jh.Ensure,
-			OnTrigger:    jh.OnTrigger,
+			Plan:          jobPlans[hj.Name],
+			OnSuccess:     jh.OnSuccess,
+			OnFailure:     jh.OnFailure,
+			OnCancel:      jh.OnCancel,
+			Ensure:        jh.Ensure,
+			OnTrigger:     jh.OnTrigger,
 		}
 		if len(hj.Approve) > 0 {
 			ab := hj.Approve[0]
@@ -1968,6 +1969,9 @@ func parseJobPlansFromPairs(pairs []jobBlockPair, services []service.Service) (m
 								return nil, nil, nil, fmt.Errorf("failed to evaluate condition in %s block: %s", cb.Type, vd.Error())
 							}
 							branch.Condition = val.AsString()
+							if cErr := condition.Validate(branch.Condition); cErr != nil {
+								return nil, nil, nil, fmt.Errorf("invalid condition in %s block: %w", cb.Type, cErr)
+							}
 						}
 					}
 
@@ -2292,8 +2296,8 @@ func parseJobPlansFromPairs(pairs []jobBlockPair, services []service.Service) (m
 							notifyParams[name] = val.AsString()
 						}
 						innerPlan = append(innerPlan, job.PlanStep{
-							Type:   job.StepTypeNotify,
-							Notify: &job.NotifyStep{Type: n.Type, Name: n.Name, Params: notifyParams, Message: n.Message},
+							Type:      job.StepTypeNotify,
+							Notify:    &job.NotifyStep{Type: n.Type, Name: n.Name, Params: notifyParams, Message: n.Message},
 							OnSuccess: parseHooks(ipInner, pairEctx, "on_success"),
 							OnFailure: parseHooks(ipInner, pairEctx, "on_failure"),
 							OnCancel:  parseHooks(ipInner, pairEctx, "on_cancel"),
@@ -2517,7 +2521,7 @@ func parseInnerStepsFromAST(blocks []*hclsyntax.Block, ectx *hcl.EvalContext, se
 			}
 			ns.Params = params
 			steps = append(steps, job.PlanStep{
-				Type: job.StepTypeNotify,
+				Type:      job.StepTypeNotify,
 				Notify:    &ns,
 				OnSuccess: parseHooks(b, ectx, "on_success"),
 				OnFailure: parseHooks(b, ectx, "on_failure"),

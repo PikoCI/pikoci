@@ -1,4 +1,4 @@
-package worker
+package condition
 
 import (
 	"testing"
@@ -35,7 +35,7 @@ var allVars = map[string]string{
 	"INPUT_count":   "3",
 }
 
-func TestEvaluateCondition(t *testing.T) {
+func TestEvaluate(t *testing.T) {
 	tests := []struct {
 		name      string
 		condition string
@@ -111,7 +111,7 @@ func TestEvaluateCondition(t *testing.T) {
 		// When $UNDEFINED expands to empty, "contains ''" becomes a bare word
 		// "contains" followed by trailing text — this is an error, not a match.
 		// Users should quote or compare the empty var differently.
-		{"contains undefined empty is error", "$UNDEFINED contains ''", false, true},
+		{"contains undefined empty", "$UNDEFINED contains ''", true, false},
 
 		// ── !contains (negated substring) ──
 		{"!contains GET no match", "$GET_APP_BRANCH !contains 'dev'", true, false},
@@ -222,7 +222,7 @@ func TestEvaluateCondition(t *testing.T) {
 		{"and-or precedence all paths false", "$GET_APP_BRANCH == 'develop' || $BUILD_NUMBER == '99' && $INPUT_env == 'staging'", false, false},
 
 		// ── Whitespace edge cases ──
-		{"whitespace only", "   ", false, false},
+		{"whitespace only", "   ", true, false},
 		{"extra whitespace around operators", "  $GET_APP_BRANCH   ==   'main'  ", true, false},
 		{"tabs and spaces", "\t$BUILD_NUMBER\t==\t'42'\t", true, false},
 
@@ -232,12 +232,12 @@ func TestEvaluateCondition(t *testing.T) {
 		{"trailing text", "$GET_APP_BRANCH == 'main' extratext", false, true},
 		{"extra closing paren", "$GET_APP_BRANCH == 'main')", false, true},
 		{"empty parens", "()", false, false}, // parses inner as empty → "" → falsy
-		{"contains undefined empty is error", "$UNDEFINED contains ''", false, true},
+		{"contains undefined empty", "$UNDEFINED contains ''", true, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := EvaluateCondition(tt.condition, allVars)
+			got, err := Evaluate(tt.condition, allVars)
 			if tt.wantErr {
 				require.Error(t, err)
 				return
@@ -248,20 +248,20 @@ func TestEvaluateCondition(t *testing.T) {
 	}
 }
 
-func TestEvaluateCondition_NilVars(t *testing.T) {
+func TestEvaluate_NilVars(t *testing.T) {
 	// Nil vars map should not panic; all vars expand to ""
-	result, err := EvaluateCondition("$FOO == ''", nil)
+	result, err := Evaluate("$FOO == ''", nil)
 	require.NoError(t, err)
 	assert.True(t, result)
 }
 
-func TestEvaluateCondition_EmptyVars(t *testing.T) {
-	result, err := EvaluateCondition("$FOO == ''", map[string]string{})
+func TestEvaluate_EmptyVars(t *testing.T) {
+	result, err := Evaluate("$FOO == ''", map[string]string{})
 	require.NoError(t, err)
 	assert.True(t, result)
 }
 
-func TestEvaluateCondition_SpecialCharValues(t *testing.T) {
+func TestEvaluate_SpecialCharValues(t *testing.T) {
 	vars := map[string]string{
 		"GET_APP_BRANCH":     "feature/my-branch",
 		"TASK_BUILD_VERSION": "1.2.3-rc.1",
@@ -283,14 +283,14 @@ func TestEvaluateCondition_SpecialCharValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := EvaluateCondition(tt.condition, vars)
+			got, err := Evaluate(tt.condition, vars)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
 }
 
-func TestEvaluateCondition_ValuesWithSpaces(t *testing.T) {
+func TestEvaluate_ValuesWithSpaces(t *testing.T) {
 	// When a variable expands to a value with spaces, the bare word parser
 	// reads only until the first space. This means variables containing
 	// spaces produce errors when used unquoted — users should avoid spaces
@@ -306,11 +306,11 @@ func TestEvaluateCondition_ValuesWithSpaces(t *testing.T) {
 		want      bool
 		wantErr   bool
 	}{
-		// Space in expanded var causes trailing text errors because the
-		// bare word parser splits on whitespace.
-		{"space value eq is error", "$TASK_BUILD_MSG == 'hello world'", false, true},
-		{"space value contains is error", "$TASK_BUILD_MSG contains 'hello'", false, true},
-		{"space input eq is error", "$INPUT_label == 'deploy to prod'", false, true},
+		// A variable is expanded after the expression is tokenized, so spaces
+		// in its value are part of the value and nothing else.
+		{"space value eq", "$TASK_BUILD_MSG == 'hello world'", true, false},
+		{"space value contains", "$TASK_BUILD_MSG contains 'hello'", true, false},
+		{"space input eq", "$INPUT_label == 'deploy to prod'", true, false},
 		// Quoted literal comparison still works fine
 		{"space value eq both quoted", "'hello world' == 'hello world'", true, false},
 		{"space value contains both quoted", "'hello world' contains 'hello'", true, false},
@@ -318,7 +318,7 @@ func TestEvaluateCondition_ValuesWithSpaces(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := EvaluateCondition(tt.condition, vars)
+			got, err := Evaluate(tt.condition, vars)
 			if tt.wantErr {
 				require.Error(t, err)
 				return
@@ -329,17 +329,67 @@ func TestEvaluateCondition_ValuesWithSpaces(t *testing.T) {
 	}
 }
 
-func TestEvaluateCondition_SingleQuotesInValues(t *testing.T) {
-	// Single quotes inside values cannot be represented in single-quoted
-	// strings, but they can appear as bare words or in variable values.
+func TestEvaluate_SingleQuotesInValues(t *testing.T) {
+	// A quote inside a variable value is data, not syntax, because the value
+	// is substituted after the expression has been parsed.
 	vars := map[string]string{
 		"TASK_BUILD_MSG": "it's done",
 	}
 
-	// The var expands to: it's done contains 'done'
-	// Bare word reads "it", then the single quote starts a quoted string "'s done contains '"
-	// which is "s done contains ", then "done'" is trailing — this is an error.
-	result, err := EvaluateCondition("$TASK_BUILD_MSG contains 'done'", vars)
-	require.Error(t, err)
-	_ = result
+	result, err := Evaluate("$TASK_BUILD_MSG contains 'done'", vars)
+	require.NoError(t, err)
+	assert.True(t, result)
+}
+
+func TestEvaluate_ValueCannotInjectSyntax(t *testing.T) {
+	// A value that looks like expression syntax must be compared as data,
+	// otherwise a job input could rewrite the condition guarding a branch.
+	vars := map[string]string{
+		"INPUT_env": "x' || '1' == '1",
+		"GET_TAG":   "v1 == v1",
+	}
+
+	result, err := Evaluate("$INPUT_env == 'prod'", vars)
+	require.NoError(t, err)
+	assert.False(t, result)
+
+	result, err = Evaluate("$GET_TAG == 'prod'", vars)
+	require.NoError(t, err)
+	assert.False(t, result)
+}
+
+func TestEvaluate_FalseIsNotTruthy(t *testing.T) {
+	vars := map[string]string{
+		"FLAG_OFF": "false",
+		"ZERO":     "0",
+		"FLAG_ON":  "true",
+		"WORD":     "yes",
+	}
+
+	for condition, want := range map[string]bool{
+		"$FLAG_OFF":  false,
+		"$ZERO":      false,
+		"$UNDEFINED": false,
+		"$FLAG_ON":   true,
+		"$WORD":      true,
+	} {
+		got, err := Evaluate(condition, vars)
+		require.NoError(t, err, condition)
+		assert.Equal(t, want, got, "condition: %s", condition)
+	}
+}
+
+func TestEvaluate_MalformedIsAnError(t *testing.T) {
+	vars := map[string]string{"S": "hello", "FLAG": "false"}
+
+	for _, condition := range []string{
+		"$S contains",
+		"'a' == 'a' &&",
+		"$S ==",
+		"!$FLAG",
+		"$S >= 5",
+	} {
+		_, err := Evaluate(condition, vars)
+		require.Error(t, err, "condition %q should be rejected", condition)
+	}
 }

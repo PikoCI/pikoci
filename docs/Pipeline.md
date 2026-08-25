@@ -925,7 +925,7 @@ job "deploy" {
 
 #### Condition operators
 
-Conditions are evaluated at runtime after `$VAR` expansion. Supported operators:
+Conditions are evaluated at runtime. Supported operators:
 
 | Operator | Meaning |
 |----------|---------|
@@ -940,6 +940,13 @@ Conditions are evaluated at runtime after `$VAR` expansion. Supported operators:
 
 Parentheses are supported for grouping: `($GET_APP_BRANCH == 'main' || $GET_APP_BRANCH == 'develop') && $TASK_TEST_EXIT_CODE == '0'`
 
+There is no negation operator. Use `!=` or `!contains` instead of `!`.
+
+A `$VAR` reference is substituted after the expression is parsed, so a value
+containing spaces, quotes or operator characters is always compared as data and
+never changes the meaning of the condition. Quoting a variable
+(`'$TASK_MSG' == 'ok'`) is not required.
+
 #### Available variables
 
 - `$GET_<STEP>_<KEY>` — resource version metadata from get steps
@@ -951,6 +958,7 @@ Parentheses are supported for grouping: `($GET_APP_BRANCH == 'main' || $GET_APP_
 
 - **No match:** If no `if`/`else_if` condition is true and there is no `else`, all branches are skipped and execution continues.
 - **Empty condition:** Treated as `true` (always enters the branch).
+- **Bare value:** A condition with no operator (e.g. `$INPUT_deploy`) is true when the value is non-empty and is not `false` or `0`.
 - **Malformed condition:** The build fails with an error message.
 - **Failure:** If a step inside the entered branch fails, the job fails. There is no fallthrough to the next branch.
 - **Exported variables:** Variables exported by steps in the selected branch are available to subsequent steps after the conditional block.
