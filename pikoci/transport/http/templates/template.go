@@ -6,7 +6,7 @@ package templates
 import (
 	"embed"
 	"io/fs"
-	"path/filepath"
+	"path"
 	"text/template"
 )
 
@@ -19,7 +19,7 @@ const (
 
 var (
 	// layoutsDir is the directory containing layout template files.
-	layoutsDir = filepath.Join(viewsDir, "layouts")
+	layoutsDir = path.Join(viewsDir, "layouts")
 
 	//go:embed views/layouts/*
 	files embed.FS
@@ -37,19 +37,19 @@ func init() {
 	loadTemplates(viewsDir)
 }
 
-func loadTemplates(path string) error {
-	tmplFiles, err := fs.ReadDir(files, path)
+func loadTemplates(p string) error {
+	tmplFiles, err := fs.ReadDir(files, p)
 	if err != nil {
 		panic(err)
 	}
 
 	for _, tmpl := range tmplFiles {
 		if tmpl.IsDir() {
-			loadTemplates(filepath.Join(path, tmpl.Name()))
+			loadTemplates(path.Join(p, tmpl.Name()))
 			continue
 		}
 
-		newpath := filepath.Join(path, tmpl.Name())
+		newpath := path.Join(p, tmpl.Name())
 
 		if _, ok := Templates[newpath]; ok {
 			continue
@@ -57,7 +57,7 @@ func loadTemplates(path string) error {
 
 		pt := template.New(tmpl.Name())
 
-		pt, err := pt.ParseFS(files, newpath, filepath.Join(layoutsDir, extension))
+		pt, err := pt.ParseFS(files, newpath, path.Join(layoutsDir, extension))
 		if err != nil {
 			panic(err)
 		}
