@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Windows startup panic loading embedded templates**: template path lookups now use `path.Join` instead of `filepath.Join`, since `embed.FS` requires forward slashes on every OS ([#641](https://github.com/PikoCI/pikoci/issues/641)).
 - **Running step elapsed time not shown**: Steps currently in progress now display a live-updating elapsed timer (matching the format of completed steps), consistent with the global build timer already shown at the top of the page ([#655](https://github.com/PikoCI/pikoci/issues/655)).
 - **Services inside `if` branches not stopped**: services started within an `if` branch are now returned to the plan runner and stopped correctly, even when the branch fails ([#664](https://github.com/PikoCI/pikoci/issues/664)).
 - **Consecutive `if` blocks merged into one chain**: a second `if` block now starts an independent conditional chain; previously it was treated as a continuation, causing `else`/`else_if` blocks to attach to the wrong `if` ([#664](https://github.com/PikoCI/pikoci/issues/664)).
