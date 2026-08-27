@@ -4,12 +4,12 @@ import { html } from 'htm/preact';
 import { useState, useEffect } from 'preact/hooks';
 import { route } from 'preact-router';
 import { hasTeamRole } from '../state.js';
-import { fetchConfig, setConfig, deleteConfig, fetchTeam, fetchPipeline } from '../api.js';
+import { fetchSecrets, setSecret, deleteSecret, fetchTeam, fetchPipeline } from '../api.js';
 import { useRequireAuth } from '../hooks.js';
 import { showToast } from '../toast.js';
 import { Breadcrumb } from './Layout.js';
 
-// Mirrors the server-side rule in pikoci/config_store.go: names are used
+// Mirrors the server-side rule in pikoci/secret_store.go: names are used
 // verbatim as lookup keys, so they must look like environment variables.
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,254}$/;
 
@@ -35,11 +35,51 @@ export function mergeEntries(teamEntries, pipelineEntries) {
 }
 
 // ---------------------------------------------------------------------------
-// ConfigPanel – the shared table + form, used for both team and pipeline scope.
-// Passing pn switches it to the pipeline scope.
+// Data wiring, kept out of the component so it can be tested directly: the
+// unit tests render to a string, which never runs an effect.
 // ---------------------------------------------------------------------------
 
-export function ConfigPanel({ tc, pn }) {
+// loadEntries returns the rows to display and, separately, the ones this scope
+// owns. They differ only for a pipeline, where the displayed set also carries
+// the team entries it inherits.
+//
+// A failing leg yields no entries rather than rejecting: a pipeline is still
+// worth showing when the team scope cannot be read, and vice versa.
+export function loadEntries(tc, pn) {
+  if (!pn) {
+    return fetchSecrets(tc).then(data => ({
+      entries: data || [], ownEntries: data || [],
+    }));
+  }
+
+  // A pipeline shows its effective set, so the team scope is fetched too.
+  // Both endpoints require the same role on the same team, so this exposes
+  // nothing the viewer could not already read.
+  return Promise.all([
+    fetchSecrets(tc, pn).catch(() => []),
+    fetchSecrets(tc).catch(() => []),
+  ]).then(([own, team]) => ({
+    entries: mergeEntries(team, own),
+    ownEntries: own || [],
+  }));
+}
+
+// saveEntry stores an entry. The server treats a repeated name as a replace,
+// so this is also the update path; nothing has to be deleted first.
+export function saveEntry(tc, pn, entry) {
+  return setSecret(tc, pn, entry);
+}
+
+export function removeEntry(tc, pn, canonical) {
+  return deleteSecret(tc, pn, canonical);
+}
+
+// ---------------------------------------------------------------------------
+// SecretsPanel – the shared table + form, used for both team and pipeline
+// scope. Passing pn switches it to the pipeline scope.
+// ---------------------------------------------------------------------------
+
+export function SecretsPanel({ tc, pn }) {
   const [entries, setEntries] = useState([]);
   // Entries owned by this scope, as opposed to inherited ones. The new-entry
   // form checks duplicates against these: a name that exists only at team
@@ -47,36 +87,37 @@ export function ConfigPanel({ tc, pn }) {
   const [ownEntries, setOwnEntries] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [showNew, setShowNew] = useState(false);
+  // Canonical name of the row being edited, or null.
+  const [editing, setEditing] = useState(null);
 
   const canWrite = hasTeamRole(tc, 'maintain');
 
   const load = () => {
-    if (!pn) {
-      fetchConfig(tc)
-        .then(data => { setEntries(data || []); setOwnEntries(data || []); setLoaded(true); })
-        .catch(() => setLoaded(true));
-      return;
-    }
-
-    // A pipeline shows its effective set, so the team scope is fetched too.
-    // Both endpoints require the same role on the same team, so this exposes
-    // nothing the viewer could not already read.
-    Promise.all([
-      fetchConfig(tc, pn).catch(() => []),
-      fetchConfig(tc).catch(() => []),
-    ]).then(([own, team]) => {
-      setOwnEntries(own || []);
-      setEntries(mergeEntries(team, own));
-      setLoaded(true);
-    }).catch(() => setLoaded(true));
+    loadEntries(tc, pn)
+      .then(({ entries: rows, ownEntries: own }) => {
+        setEntries(rows);
+        setOwnEntries(own);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
   };
 
   useEffect(() => { load(); }, [tc, pn]);
 
   const onAdd = (entry) => {
-    return setConfig(tc, pn, entry).then(() => {
+    return saveEntry(tc, pn, entry).then(() => {
       showToast(entry.kind === 'secret' ? 'Secret stored' : 'Value stored', 'success');
       setShowNew(false);
+      load();
+    });
+  };
+
+  // Kind is taken from the stored entry, never from the form: a replace must
+  // not be able to turn a secret into a plain value.
+  const onSave = (entry, value) => {
+    return saveEntry(tc, pn, { name: entry.name, value, kind: entry.kind }).then(() => {
+      showToast(entry.kind === 'secret' ? 'Secret updated' : 'Value updated', 'success');
+      setEditing(null);
       load();
     });
   };
@@ -84,7 +125,7 @@ export function ConfigPanel({ tc, pn }) {
   const onDelete = (entry) => {
     const label = entry.kind === 'secret' ? 'secret' : 'value';
     if (!confirm("Are you sure you want to delete the " + label + " '" + entry.name + "'?")) return;
-    deleteConfig(tc, pn, entry.canonical).then(() => {
+    removeEntry(tc, pn, entry.canonical).then(() => {
       showToast('Deleted', 'success');
       // Reload rather than filtering: deleting a pipeline override should
       // reveal the team entry it was shadowing.
@@ -97,11 +138,11 @@ export function ConfigPanel({ tc, pn }) {
   return html`
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h3 class="h5 fw-bold mb-0">
-        ${pn ? 'Pipeline Configuration' : 'Team Configuration'}
+        ${pn ? 'Pipeline Secrets' : 'Team Secrets'}
       </h3>
       ${canWrite && html`
-        <button type="button" id="new-config" class="btn btn-success"
-          onClick=${() => setShowNew(v => !v)}>
+        <button type="button" id="new-secret" class="btn btn-success"
+          onClick=${() => { setEditing(null); setShowNew(v => !v); }}>
           <i class="bi bi-plus-lg"></i> New Entry
         </button>
       `}
@@ -109,7 +150,8 @@ export function ConfigPanel({ tc, pn }) {
 
     <p class="text-muted small">
       Secrets are encrypted at rest and masked in build logs; their values are never
-      shown again. Plain values are stored as-is and printed in build logs.
+      shown again, though they can be replaced. Plain values are stored as-is and
+      printed in build logs.
       ${pn
         ? ' This is the effective set for the pipeline: entries inherited from the team are shown alongside its own, which override them by name.'
         : ' Team entries are available to every pipeline in the team.'}
@@ -127,7 +169,7 @@ export function ConfigPanel({ tc, pn }) {
           <th scope="col" class="col-2">Options</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="secrets-body">
         ${showNew && html`
           <${NewEntryRow} onAdd=${onAdd} onCancel=${() => setShowNew(false)}
             existing=${ownEntries} teamEntries=${pn ? entries.filter(e => e.inherited) : []}
@@ -136,22 +178,28 @@ export function ConfigPanel({ tc, pn }) {
         ${entries.length === 0 && !showNew && html`
           <tr><td colspan=${pn ? 5 : 4} class="text-muted">No entries yet.</td></tr>
         `}
-        ${entries.map(e => html`
-          <${EntryRow} key=${e.canonical} entry=${e} canWrite=${canWrite}
-            onDelete=${onDelete} showScope=${!!pn} tc=${tc} />
-        `)}
+        ${entries.map(e => (editing === e.canonical
+          ? html`
+            <${EditEntryRow} key=${e.canonical} entry=${e} onSave=${onSave}
+              onCancel=${() => setEditing(null)} showScope=${!!pn} />
+          `
+          : html`
+            <${EntryRow} key=${e.canonical} entry=${e} canWrite=${canWrite}
+              onEdit=${() => { setShowNew(false); setEditing(e.canonical); }}
+              onDelete=${onDelete} showScope=${!!pn} tc=${tc} />
+          `))}
       </tbody>
     </table>
   `;
 }
 
-// Exported for tests: ConfigPanel renders nothing until its fetch resolves,
+// Exported for tests: SecretsPanel renders nothing until its fetch resolves,
 // so the rows are the testable surface.
-export function EntryRow({ entry, canWrite, onDelete, showScope, tc }) {
+export function EntryRow({ entry, canWrite, onEdit, onDelete, showScope, tc }) {
   const isSecret = entry.kind === 'secret';
 
   return html`
-    <tr class=${entry.inherited ? 'table-light' : ''}>
+    <tr class=${'piko-secret-row' + (entry.inherited ? ' table-light' : '')} data-name=${entry.canonical}>
       <td><code>${entry.name}</code></td>
       <td>
         ${isSecret
@@ -178,17 +226,71 @@ export function EntryRow({ entry, canWrite, onDelete, showScope, tc }) {
       `}
       <td>
         ${entry.inherited
-          ? html`<a class="btn btn-sm btn-outline-secondary" href=${'/teams/' + tc + '/config'} data-native
+          ? html`<a class="btn btn-sm btn-outline-secondary" href=${'/teams/' + tc + '/secrets'} data-native
               title="Inherited entries are managed on the team"
-              onClick=${(e) => { e.preventDefault(); route('/teams/' + tc + '/config'); }}>
+              onClick=${(e) => { e.preventDefault(); route('/teams/' + tc + '/secrets'); }}>
               <i class="bi bi-box-arrow-up-right"></i> Team
             </a>`
           : canWrite && html`
-            <button type="button" class="btn btn-sm btn-danger delete-config"
+            <button type="button" class="btn btn-sm btn-outline-primary edit-secret"
+              data-name=${entry.canonical} title="Replace the value" onClick=${() => onEdit(entry)}>
+              <i class="bi bi-pencil"></i>
+            </button>
+            ${' '}
+            <button type="button" class="btn btn-sm btn-danger delete-secret"
               data-name=${entry.canonical} onClick=${() => onDelete(entry)}>
               <i class="bi bi-trash"></i>
             </button>
           `}
+      </td>
+    </tr>
+  `;
+}
+
+// EditEntryRow replaces a row in place to swap its value. The name and the
+// kind are fixed: the point is to replace a value without a window in which
+// the entry does not exist, so re-creating it under a new shape is a delete
+// followed by an add, not an edit.
+export function EditEntryRow({ entry, onSave, onCancel, showScope }) {
+  const isSecret = entry.kind === 'secret';
+  // A secret's value is never returned, so there is nothing to prefill. A
+  // plain value starts from what is stored, so a small correction is a small
+  // edit rather than a retype.
+  const [value, setValue] = useState(isSecret ? '' : (entry.value || ''));
+  const [saving, setSaving] = useState(false);
+
+  const canSave = value !== '' && !saving;
+
+  const submit = () => {
+    if (!canSave) return;
+    setSaving(true);
+    onSave(entry, value).catch(() => setSaving(false));
+  };
+
+  return html`
+    <tr class="piko-secret-row" data-name=${entry.canonical}>
+      <td><code>${entry.name}</code></td>
+      <td>
+        ${isSecret
+          ? html`<span class="badge bg-warning text-dark"><i class="bi bi-lock-fill"></i> secret</span>`
+          : html`<span class="badge bg-secondary">plain</span>`}
+      </td>
+      <td>
+        <input type=${isSecret ? 'password' : 'text'} class="form-control" id="secret-edit-value"
+          autocomplete="off" placeholder=${isSecret ? 'New value' : ''}
+          value=${value} onInput=${e => setValue(e.target.value)}
+          onKeyDown=${e => { if (e.key === 'Enter') submit(); }} />
+      </td>
+      ${showScope && html`<td></td>`}
+      <td>
+        <button type="button" id="save-secret-edit" class="btn btn-sm btn-success"
+          disabled=${!canSave} onClick=${submit}>
+          <i class="bi bi-check-lg"></i>
+        </button>
+        ${' '}
+        <button type="button" id="cancel-secret-edit" class="btn btn-sm btn-secondary" onClick=${onCancel}>
+          <i class="bi bi-x-lg"></i>
+        </button>
       </td>
     </tr>
   `;
@@ -218,7 +320,7 @@ export function NewEntryRow({ onAdd, onCancel, existing, teamEntries, showScope 
   return html`
     <tr>
       <td>
-        <input type="text" class="form-control" id="config-name" placeholder="GITHUB_TOKEN"
+        <input type="text" class="form-control" id="secret-name" placeholder="GITHUB_TOKEN"
           value=${name} onInput=${e => setName(e.target.value)}
           onKeyDown=${e => { if (e.key === 'Enter') submit(); }} />
         ${trimmed !== '' && !nameValid && html`
@@ -227,7 +329,9 @@ export function NewEntryRow({ onAdd, onCancel, existing, teamEntries, showScope 
           </div>
         `}
         ${duplicate && html`
-          <div class="form-text text-danger">An entry named ${trimmed} already exists.</div>
+          <div class="form-text text-danger">
+            An entry named ${trimmed} already exists. Edit it to replace its value.
+          </div>
         `}
         ${!duplicate && willOverride && html`
           <div class="form-text text-primary">
@@ -237,25 +341,25 @@ export function NewEntryRow({ onAdd, onCancel, existing, teamEntries, showScope 
       </td>
       <td>
         <div class="form-check">
-          <input class="form-check-input" type="checkbox" id="config-secret"
+          <input class="form-check-input" type="checkbox" id="secret-kind"
             checked=${isSecret} onChange=${e => setIsSecret(e.target.checked)} />
-          <label class="form-check-label" for="config-secret">Secret</label>
+          <label class="form-check-label" for="secret-kind">Secret</label>
         </div>
       </td>
       <td>
-        <input type=${isSecret ? 'password' : 'text'} class="form-control" id="config-value"
+        <input type=${isSecret ? 'password' : 'text'} class="form-control" id="secret-value"
           autocomplete="off" placeholder=${isSecret ? '' : 'debug'}
           value=${value} onInput=${e => setValue(e.target.value)}
           onKeyDown=${e => { if (e.key === 'Enter') submit(); }} />
       </td>
       ${showScope && html`<td></td>`}
       <td>
-        <button type="button" id="save-config" class="btn btn-sm btn-success"
+        <button type="button" id="save-secret" class="btn btn-sm btn-success"
           disabled=${!canSave} onClick=${submit}>
           <i class="bi bi-check-lg"></i>
         </button>
         ${' '}
-        <button type="button" class="btn btn-sm btn-secondary" onClick=${onCancel}>
+        <button type="button" id="cancel-secret" class="btn btn-sm btn-secondary" onClick=${onCancel}>
           <i class="bi bi-x-lg"></i>
         </button>
       </td>
@@ -264,11 +368,11 @@ export function NewEntryRow({ onAdd, onCancel, existing, teamEntries, showScope 
 }
 
 // ---------------------------------------------------------------------------
-// PipelineConfig – standalone page for the pipeline scope.
+// PipelineSecrets – standalone page for the pipeline scope.
 // The team scope is rendered as a tab inside TeamShow instead.
 // ---------------------------------------------------------------------------
 
-export function PipelineConfig({ tc, pn }) {
+export function PipelineSecrets({ tc, pn }) {
   useRequireAuth();
   const [team, setTeam] = useState(null);
   const [pipeline, setPipeline] = useState(null);
@@ -280,15 +384,10 @@ export function PipelineConfig({ tc, pn }) {
 
   if (!team || !pipeline) return null;
 
+  // Going back is the breadcrumb's job, the same as on every other page.
   return html`
-    <${Breadcrumb} team=${team} pipeline=${pipeline} />
-    <div class="d-flex align-items-center justify-content-between mb-3">
-      <h1 class="h4 fw-bold mb-0">${pipeline.name}</h1>
-      <button type="button" class="btn btn-secondary"
-        onClick=${() => route('/teams/' + tc + '/pipelines/' + pn)}>
-        <i class="bi bi-arrow-left"></i> Back to Pipeline
-      </button>
-    </div>
-    <${ConfigPanel} tc=${tc} pn=${pn} />
+    <${Breadcrumb} team=${team} pipeline=${pipeline} secrets=${true} />
+    <h1 class="h4 fw-bold mb-3">${pipeline.name}</h1>
+    <${SecretsPanel} tc=${tc} pn=${pn} />
   `;
 }

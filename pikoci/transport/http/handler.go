@@ -393,14 +393,14 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodGet).Path("/admin/auth-settings").Name(GetAdminAuthSettings.String()).Handler(getAdminAuthSettings(s))
 	api.Methods(http.MethodPut).Path("/admin/auth-settings").Name(UpdateAdminAuthSettings.String()).Handler(updateAdminAuthSettings(s))
 
-	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/config").Name(SetTeamConfig.String()).Handler(setTeamConfig(s))
-	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/config").Name(ListTeamConfig.String()).Handler(listTeamConfig(s))
-	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/config/{config_name}").Name(DeleteTeamConfig.String()).Handler(deleteTeamConfig(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/secrets").Name(SetTeamSecret.String()).Handler(setTeamSecret(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/secrets").Name(ListTeamSecrets.String()).Handler(listTeamSecrets(s))
+	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/secrets/{secret_name}").Name(DeleteTeamSecret.String()).Handler(deleteTeamSecret(s))
 
-	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/config").Name(SetPipelineConfig.String()).Handler(setPipelineConfig(s))
-	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/config").Name(ListPipelineConfig.String()).Handler(listPipelineConfig(s))
-	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/config/{config_name}").Name(DeletePipelineConfig.String()).Handler(deletePipelineConfig(s))
-	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/config-values").Name(GetPipelineConfigValues.String()).Handler(getPipelineConfigValues(s))
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/secrets").Name(SetPipelineSecret.String()).Handler(setPipelineSecret(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/secrets").Name(ListPipelineSecrets.String()).Handler(listPipelineSecrets(s))
+	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/secrets/{secret_name}").Name(DeletePipelineSecret.String()).Handler(deletePipelineSecret(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/secret-values").Name(GetPipelineSecretValues.String()).Handler(getPipelineSecretValues(s))
 
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/audit").Name(ListAuditLog.String()).Handler(listAuditLog(s))
 

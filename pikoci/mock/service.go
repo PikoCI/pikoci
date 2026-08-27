@@ -332,18 +332,18 @@ func (mr *ServiceMockRecorder) DeletePipeline(ctx, tc, pn any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePipeline", reflect.TypeOf((*Service)(nil).DeletePipeline), ctx, tc, pn)
 }
 
-// DeletePipelineConfig mocks base method.
-func (m *Service) DeletePipelineConfig(ctx context.Context, tc, pn, name string) error {
+// DeletePipelineSecret mocks base method.
+func (m *Service) DeletePipelineSecret(ctx context.Context, tc, pn, name string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeletePipelineConfig", ctx, tc, pn, name)
+	ret := m.ctrl.Call(m, "DeletePipelineSecret", ctx, tc, pn, name)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DeletePipelineConfig indicates an expected call of DeletePipelineConfig.
-func (mr *ServiceMockRecorder) DeletePipelineConfig(ctx, tc, pn, name any) *gomock.Call {
+// DeletePipelineSecret indicates an expected call of DeletePipelineSecret.
+func (mr *ServiceMockRecorder) DeletePipelineSecret(ctx, tc, pn, name any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePipelineConfig", reflect.TypeOf((*Service)(nil).DeletePipelineConfig), ctx, tc, pn, name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePipelineSecret", reflect.TypeOf((*Service)(nil).DeletePipelineSecret), ctx, tc, pn, name)
 }
 
 // DeleteTeam mocks base method.
@@ -360,20 +360,6 @@ func (mr *ServiceMockRecorder) DeleteTeam(ctx, tc any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTeam", reflect.TypeOf((*Service)(nil).DeleteTeam), ctx, tc)
 }
 
-// DeleteTeamConfig mocks base method.
-func (m *Service) DeleteTeamConfig(ctx context.Context, tc, name string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteTeamConfig", ctx, tc, name)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteTeamConfig indicates an expected call of DeleteTeamConfig.
-func (mr *ServiceMockRecorder) DeleteTeamConfig(ctx, tc, name any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTeamConfig", reflect.TypeOf((*Service)(nil).DeleteTeamConfig), ctx, tc, name)
-}
-
 // DeleteTeamMember mocks base method.
 func (m *Service) DeleteTeamMember(ctx context.Context, tc, mc string) error {
 	m.ctrl.T.Helper()
@@ -386,6 +372,20 @@ func (m *Service) DeleteTeamMember(ctx context.Context, tc, mc string) error {
 func (mr *ServiceMockRecorder) DeleteTeamMember(ctx, tc, mc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTeamMember", reflect.TypeOf((*Service)(nil).DeleteTeamMember), ctx, tc, mc)
+}
+
+// DeleteTeamSecret mocks base method.
+func (m *Service) DeleteTeamSecret(ctx context.Context, tc, name string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteTeamSecret", ctx, tc, name)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteTeamSecret indicates an expected call of DeleteTeamSecret.
+func (mr *ServiceMockRecorder) DeleteTeamSecret(ctx, tc, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTeamSecret", reflect.TypeOf((*Service)(nil).DeleteTeamSecret), ctx, tc, name)
 }
 
 // DeleteUser mocks base method.
@@ -909,21 +909,6 @@ func (mr *ServiceMockRecorder) ListOAuthProviders(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOAuthProviders", reflect.TypeOf((*Service)(nil).ListOAuthProviders), ctx)
 }
 
-// ListPipelineConfig mocks base method.
-func (m *Service) ListPipelineConfig(ctx context.Context, tc, pn string) ([]*secret.Entry, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListPipelineConfig", ctx, tc, pn)
-	ret0, _ := ret[0].([]*secret.Entry)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListPipelineConfig indicates an expected call of ListPipelineConfig.
-func (mr *ServiceMockRecorder) ListPipelineConfig(ctx, tc, pn any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPipelineConfig", reflect.TypeOf((*Service)(nil).ListPipelineConfig), ctx, tc, pn)
-}
-
 // ListPipelineJobs mocks base method.
 func (m *Service) ListPipelineJobs(ctx context.Context, tc, pn string) ([]job.WithStatus, error) {
 	m.ctrl.T.Helper()
@@ -952,6 +937,21 @@ func (m *Service) ListPipelineResources(ctx context.Context, tc, pn string) ([]*
 func (mr *ServiceMockRecorder) ListPipelineResources(ctx, tc, pn any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPipelineResources", reflect.TypeOf((*Service)(nil).ListPipelineResources), ctx, tc, pn)
+}
+
+// ListPipelineSecrets mocks base method.
+func (m *Service) ListPipelineSecrets(ctx context.Context, tc, pn string) ([]*secret.Entry, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPipelineSecrets", ctx, tc, pn)
+	ret0, _ := ret[0].([]*secret.Entry)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPipelineSecrets indicates an expected call of ListPipelineSecrets.
+func (mr *ServiceMockRecorder) ListPipelineSecrets(ctx, tc, pn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPipelineSecrets", reflect.TypeOf((*Service)(nil).ListPipelineSecrets), ctx, tc, pn)
 }
 
 // ListPipelines mocks base method.
@@ -1047,19 +1047,19 @@ func (mr *ServiceMockRecorder) ListResourceVersions(ctx, tc, pn, rCan, before, a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListResourceVersions", reflect.TypeOf((*Service)(nil).ListResourceVersions), ctx, tc, pn, rCan, before, after, limit)
 }
 
-// ListTeamConfig mocks base method.
-func (m *Service) ListTeamConfig(ctx context.Context, tc string) ([]*secret.Entry, error) {
+// ListTeamSecrets mocks base method.
+func (m *Service) ListTeamSecrets(ctx context.Context, tc string) ([]*secret.Entry, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListTeamConfig", ctx, tc)
+	ret := m.ctrl.Call(m, "ListTeamSecrets", ctx, tc)
 	ret0, _ := ret[0].([]*secret.Entry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ListTeamConfig indicates an expected call of ListTeamConfig.
-func (mr *ServiceMockRecorder) ListTeamConfig(ctx, tc any) *gomock.Call {
+// ListTeamSecrets indicates an expected call of ListTeamSecrets.
+func (mr *ServiceMockRecorder) ListTeamSecrets(ctx, tc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTeamConfig", reflect.TypeOf((*Service)(nil).ListTeamConfig), ctx, tc)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTeamSecrets", reflect.TypeOf((*Service)(nil).ListTeamSecrets), ctx, tc)
 }
 
 // ListTeams mocks base method.
@@ -1280,20 +1280,6 @@ func (mr *ServiceMockRecorder) RetryJobBuild(ctx, tc, pn, jn, buildNumber any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryJobBuild", reflect.TypeOf((*Service)(nil).RetryJobBuild), ctx, tc, pn, jn, buildNumber)
 }
 
-// SetPipelineConfig mocks base method.
-func (m *Service) SetPipelineConfig(ctx context.Context, tc, pn, name, value string, kind secret.Kind) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetPipelineConfig", ctx, tc, pn, name, value, kind)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetPipelineConfig indicates an expected call of SetPipelineConfig.
-func (mr *ServiceMockRecorder) SetPipelineConfig(ctx, tc, pn, name, value, kind any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPipelineConfig", reflect.TypeOf((*Service)(nil).SetPipelineConfig), ctx, tc, pn, name, value, kind)
-}
-
 // SetPipelinePublic mocks base method.
 func (m *Service) SetPipelinePublic(ctx context.Context, tc, pn string, public bool) error {
 	m.ctrl.T.Helper()
@@ -1308,18 +1294,32 @@ func (mr *ServiceMockRecorder) SetPipelinePublic(ctx, tc, pn, public any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPipelinePublic", reflect.TypeOf((*Service)(nil).SetPipelinePublic), ctx, tc, pn, public)
 }
 
-// SetTeamConfig mocks base method.
-func (m *Service) SetTeamConfig(ctx context.Context, tc, name, value string, kind secret.Kind) error {
+// SetPipelineSecret mocks base method.
+func (m *Service) SetPipelineSecret(ctx context.Context, tc, pn, name, value string, kind secret.Kind) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetTeamConfig", ctx, tc, name, value, kind)
+	ret := m.ctrl.Call(m, "SetPipelineSecret", ctx, tc, pn, name, value, kind)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SetTeamConfig indicates an expected call of SetTeamConfig.
-func (mr *ServiceMockRecorder) SetTeamConfig(ctx, tc, name, value, kind any) *gomock.Call {
+// SetPipelineSecret indicates an expected call of SetPipelineSecret.
+func (mr *ServiceMockRecorder) SetPipelineSecret(ctx, tc, pn, name, value, kind any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTeamConfig", reflect.TypeOf((*Service)(nil).SetTeamConfig), ctx, tc, name, value, kind)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPipelineSecret", reflect.TypeOf((*Service)(nil).SetPipelineSecret), ctx, tc, pn, name, value, kind)
+}
+
+// SetTeamSecret mocks base method.
+func (m *Service) SetTeamSecret(ctx context.Context, tc, name, value string, kind secret.Kind) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetTeamSecret", ctx, tc, name, value, kind)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetTeamSecret indicates an expected call of SetTeamSecret.
+func (mr *ServiceMockRecorder) SetTeamSecret(ctx, tc, name, value, kind any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTeamSecret", reflect.TypeOf((*Service)(nil).SetTeamSecret), ctx, tc, name, value, kind)
 }
 
 // StartPendingBuild mocks base method.

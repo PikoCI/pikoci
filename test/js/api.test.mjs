@@ -189,11 +189,11 @@ test('getTeamWorkerToken: returns empty string when no token', async () => {
   }
 });
 
-// --- Config store ---
+// --- Secret store ---
 
-import { fetchConfig, setConfig, deleteConfig } from '../../pikoci/transport/http/assets/js/app/api.js';
+import { fetchSecrets, setSecret, deleteSecret } from '../../pikoci/transport/http/assets/js/app/api.js';
 
-test('fetchConfig: uses the team endpoint when no pipeline is given', async () => {
+test('fetchSecrets: uses the team endpoint when no pipeline is given', async () => {
   const original = globalThis.fetch;
   let capturedUrl;
   globalThis.fetch = (url) => {
@@ -201,14 +201,14 @@ test('fetchConfig: uses the team endpoint when no pipeline is given', async () =
     return Promise.resolve(mockResponse(200, { data: [] }));
   };
   try {
-    await fetchConfig('main');
-    assert.equal(capturedUrl, '/teams/main/config');
+    await fetchSecrets('main');
+    assert.equal(capturedUrl, '/teams/main/secrets');
   } finally {
     globalThis.fetch = original;
   }
 });
 
-test('fetchConfig: uses the pipeline endpoint when a pipeline is given', async () => {
+test('fetchSecrets: uses the pipeline endpoint when a pipeline is given', async () => {
   const original = globalThis.fetch;
   let capturedUrl;
   globalThis.fetch = (url) => {
@@ -216,14 +216,14 @@ test('fetchConfig: uses the pipeline endpoint when a pipeline is given', async (
     return Promise.resolve(mockResponse(200, { data: [] }));
   };
   try {
-    await fetchConfig('main', 'web');
-    assert.equal(capturedUrl, '/teams/main/pipelines/web/config');
+    await fetchSecrets('main', 'web');
+    assert.equal(capturedUrl, '/teams/main/pipelines/web/secrets');
   } finally {
     globalThis.fetch = original;
   }
 });
 
-test('setConfig: POSTs the name, value and kind', async () => {
+test('setSecret: POSTs the name, value and kind', async () => {
   const original = globalThis.fetch;
   let capturedUrl, capturedOpts;
   globalThis.fetch = (url, opts) => {
@@ -232,8 +232,8 @@ test('setConfig: POSTs the name, value and kind', async () => {
     return Promise.resolve(mockResponse(200, {}));
   };
   try {
-    await setConfig('main', null, { name: 'LOG_LEVEL', value: 'debug', kind: 'plain' });
-    assert.equal(capturedUrl, '/teams/main/config');
+    await setSecret('main', null, { name: 'LOG_LEVEL', value: 'debug', kind: 'plain' });
+    assert.equal(capturedUrl, '/teams/main/secrets');
     assert.equal(capturedOpts.method, 'POST');
     assert.deepEqual(JSON.parse(capturedOpts.body), { name: 'LOG_LEVEL', value: 'debug', kind: 'plain' });
   } finally {
@@ -242,7 +242,7 @@ test('setConfig: POSTs the name, value and kind', async () => {
 });
 
 // Names are used verbatim as lookup keys, so they must survive the path segment.
-test('deleteConfig: escapes the name in the path', async () => {
+test('deleteSecret: escapes the name in the path', async () => {
   const original = globalThis.fetch;
   let capturedUrl, capturedOpts;
   globalThis.fetch = (url, opts) => {
@@ -251,8 +251,8 @@ test('deleteConfig: escapes the name in the path', async () => {
     return Promise.resolve(mockResponse(200, {}));
   };
   try {
-    await deleteConfig('main', 'web', 'A B');
-    assert.equal(capturedUrl, '/teams/main/pipelines/web/config/A%20B');
+    await deleteSecret('main', 'web', 'A B');
+    assert.equal(capturedUrl, '/teams/main/pipelines/web/secrets/A%20B');
     assert.equal(capturedOpts.method, 'DELETE');
   } finally {
     globalThis.fetch = original;

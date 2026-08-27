@@ -1,10 +1,10 @@
 ---
-description: "Store configuration and secrets directly in PikoCI. Secrets are encrypted at rest and masked in logs; plain values are shown in the clear. Managed over the API or CLI."
+description: "Store secrets and plain configuration values directly in PikoCI. Secrets are encrypted at rest and masked in logs; plain values are shown in the clear. Managed over the API or CLI."
 ---
 
-# Configuration and Secrets
+# Secrets
 
-PikoCI can store configuration itself, so credentials never have to live on a
+PikoCI can store secrets itself, so credentials never have to live on a
 worker filesystem or in an external vault. Entries are managed over the API or
 the CLI and referenced from a pipeline through the built-in `pikoci` secret
 type.
@@ -62,13 +62,13 @@ Secret values are encrypted to the public half.
 
 ```bash
 # Secret (the default): prompted, so it does not land in shell history
-pikoci client config set GITHUB_TOKEN --team-canonical main
+pikoci client secrets set GITHUB_TOKEN --team-canonical main
 
 # Plain value, given inline
-pikoci client config set LOG_LEVEL debug --plain --team-canonical main
+pikoci client secrets set LOG_LEVEL debug --plain --team-canonical main
 
 # Pipeline-scoped
-pikoci client config set DATABASE_URL --team-canonical main --pipeline api
+pikoci client secrets set DATABASE_URL --team-canonical main --pipeline api
 ```
 
 ```text
@@ -83,14 +83,14 @@ Passing a secret as a command-line argument is refused, because it would be
 visible in shell history and the process list. For scripting, pipe it in:
 
 ```bash
-echo -n "$TOKEN" | pikoci client config set GITHUB_TOKEN --team-canonical main --stdin
+echo -n "$TOKEN" | pikoci client secrets set GITHUB_TOKEN --team-canonical main --stdin
 ```
 
 ## Listing and deleting
 
 ```bash
-pikoci client config list --team-canonical main
-pikoci client config delete GITHUB_TOKEN --team-canonical main
+pikoci client secrets list --team-canonical main
+pikoci client secrets delete GITHUB_TOKEN --team-canonical main
 ```
 
 Listing shows plain values in full and secret entries as metadata only. **No
@@ -164,8 +164,8 @@ Note that `read` is enough to see **plain values in full**, since they are
 non-sensitive by definition. Secret values are never returned at any role.
 
 Writes are recorded in the [audit log](Audit-Log.md) as `secret.created` /
-`secret.deleted` and `config.created` / `config.deleted`, by name only — never
-the value.
+`secret.deleted` for secrets and `plain.created` / `plain.deleted` for plain
+values, by name only — never the value.
 
 ## Workers need a team-scoped token
 

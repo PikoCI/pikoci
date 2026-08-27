@@ -12,34 +12,34 @@ import (
 	"github.com/pikoci/pikoci/pikoci/secret"
 )
 
-var configCmd = &cobra.Command{
-	Use:   "config",
-	Short: "Manage stored configuration and secrets",
-	Long: "Manage configuration values stored by PikoCI.\n\n" +
+var secretsCmd = &cobra.Command{
+	Use:   "secrets",
+	Short: "Manage secrets and plain values stored by PikoCI",
+	Long: "Manage the secrets PikoCI stores for a team or a pipeline.\n\n" +
 		"Values are stored as secrets by default: encrypted at rest, masked in build\n" +
 		"logs, and never displayed again. Values stored with --plain are kept as-is\n" +
 		"and shown in build logs.",
 }
 
 func init() {
-	configCmd.AddCommand(configSetCmd)
-	configCmd.AddCommand(configListCmd)
-	configCmd.AddCommand(configDeleteCmd)
+	secretsCmd.AddCommand(secretsSetCmd)
+	secretsCmd.AddCommand(secretsListCmd)
+	secretsCmd.AddCommand(secretsDeleteCmd)
 
 	// --team-canonical is required for every operation: ownership and
 	// authorization must be explicit rather than inferred from local context.
-	configCmd.PersistentFlags().String("team-canonical", "", "Team the entry belongs to")
-	configCmd.MarkPersistentFlagRequired("team-canonical")
-	configCmd.PersistentFlags().String("pipeline", "", "Scope the entry to a single pipeline instead of the whole team")
+	secretsCmd.PersistentFlags().String("team-canonical", "", "Team the entry belongs to")
+	secretsCmd.MarkPersistentFlagRequired("team-canonical")
+	secretsCmd.PersistentFlags().String("pipeline", "", "Scope the entry to a single pipeline instead of the whole team")
 
-	configSetCmd.Flags().Bool("plain", false, "Store the value as-is: readable back and shown in build logs. Without it the value is stored as a secret")
-	configSetCmd.Flags().String("value", "", "Value to store. For secrets prefer omitting this and entering it at the prompt so it does not land in shell history")
-	configSetCmd.Flags().Bool("stdin", false, "Read the value from stdin")
+	secretsSetCmd.Flags().Bool("plain", false, "Store the value as-is: readable back and shown in build logs. Without it the value is stored as a secret")
+	secretsSetCmd.Flags().String("value", "", "Value to store. For secrets prefer omitting this and entering it at the prompt so it does not land in shell history")
+	secretsSetCmd.Flags().Bool("stdin", false, "Read the value from stdin")
 }
 
-var configSetCmd = &cobra.Command{
+var secretsSetCmd = &cobra.Command{
 	Use:          "set <NAME> [VALUE]",
-	Short:        "Stores or replaces a configuration value",
+	Short:        "Stores or replaces a secret or plain value",
 	Args:         cobra.RangeArgs(1, 2),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -70,7 +70,7 @@ var configSetCmd = &cobra.Command{
 			kind = secret.KindSecret
 		}
 
-		value, err := readConfigValue(cmd, name, value, fromStdin, isSecret)
+		value, err := readSecretValue(cmd, name, value, fromStdin, isSecret)
 		if err != nil {
 			return err
 		}
@@ -81,9 +81,9 @@ var configSetCmd = &cobra.Command{
 		}
 
 		if pn != "" {
-			err = c.SetPipelineConfig(cmd.Context(), tc, pn, name, value, kind)
+			err = c.SetPipelineSecret(cmd.Context(), tc, pn, name, value, kind)
 		} else {
-			err = c.SetTeamConfig(cmd.Context(), tc, name, value, kind)
+			err = c.SetTeamSecret(cmd.Context(), tc, name, value, kind)
 		}
 		if err != nil {
 			return err
@@ -94,9 +94,9 @@ var configSetCmd = &cobra.Command{
 	},
 }
 
-// readConfigValue resolves the value from the flag, stdin, or an interactive
+// readSecretValue resolves the value from the flag, stdin, or an interactive
 // prompt. Secrets are echoed off; plain values are read normally.
-func readConfigValue(cmd *cobra.Command, name, value string, fromStdin, isSecret bool) (string, error) {
+func readSecretValue(cmd *cobra.Command, name, value string, fromStdin, isSecret bool) (string, error) {
 	if value != "" && fromStdin {
 		return "", fmt.Errorf("--value and --stdin are mutually exclusive")
 	}
@@ -145,7 +145,7 @@ func readConfigValue(cmd *cobra.Command, name, value string, fromStdin, isSecret
 	return string(b), nil
 }
 
-var configListCmd = &cobra.Command{
+var secretsListCmd = &cobra.Command{
 	Use:          "list",
 	Short:        "Lists stored entries. Plain values are shown; secret values never are",
 	SilenceUsage: true,
@@ -161,7 +161,7 @@ var configListCmd = &cobra.Command{
 		}
 
 		if pn != "" {
-			entries, err := c.ListPipelineConfig(cmd.Context(), tc, pn)
+			entries, err := c.ListPipelineSecrets(cmd.Context(), tc, pn)
 			if err != nil {
 				return err
 			}
@@ -169,7 +169,7 @@ var configListCmd = &cobra.Command{
 			return nil
 		}
 
-		entries, err := c.ListTeamConfig(cmd.Context(), tc)
+		entries, err := c.ListTeamSecrets(cmd.Context(), tc)
 		if err != nil {
 			return err
 		}
@@ -179,7 +179,7 @@ var configListCmd = &cobra.Command{
 	},
 }
 
-var configDeleteCmd = &cobra.Command{
+var secretsDeleteCmd = &cobra.Command{
 	Use:          "delete <NAME>",
 	Short:        "Removes a stored entry",
 	Args:         cobra.ExactArgs(1),
@@ -197,9 +197,9 @@ var configDeleteCmd = &cobra.Command{
 		}
 
 		if pn != "" {
-			err = c.DeletePipelineConfig(cmd.Context(), tc, pn, name)
+			err = c.DeletePipelineSecret(cmd.Context(), tc, pn, name)
 		} else {
-			err = c.DeleteTeamConfig(cmd.Context(), tc, name)
+			err = c.DeleteTeamSecret(cmd.Context(), tc, name)
 		}
 		if err != nil {
 			return err

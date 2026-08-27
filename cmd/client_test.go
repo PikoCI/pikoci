@@ -23,14 +23,14 @@ func TestCommandTree(t *testing.T) {
 		parentName  string
 		subcommands []string
 	}{
-		{clientCmd, "client", []string{"login", "pipelines", "jobs", "users", "teams", "builds", "resources", "triggers", "export", "config"}},
+		{clientCmd, "client", []string{"login", "pipelines", "jobs", "users", "teams", "builds", "resources", "triggers", "export", "secrets"}},
 		{usersCmd, "users", []string{"create", "list", "update", "delete", "change-password"}},
 		{teamsCmd, "teams", []string{"create", "list", "get", "update", "delete", "members"}},
 		{teamsMembersCmd, "members", []string{"create", "update", "delete"}},
 		{buildsCmd, "builds", []string{"list", "get", "delete", "cancel", "retry", "approve", "reject", "report"}},
 		{resourcesCmd, "resources", []string{"get", "trigger", "versions", "webhook-regenerate"}},
 		{triggersCmd, "triggers", []string{"create", "list"}},
-		{configCmd, "config", []string{"set", "list", "delete"}},
+		{secretsCmd, "secrets", []string{"set", "list", "delete"}},
 	}
 
 	for _, tt := range tests {

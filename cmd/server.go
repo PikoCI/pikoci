@@ -139,7 +139,7 @@ var serverCmd = &cobra.Command{
 		// exactly as before and secret operations report that they are not
 		// configured, rather than failing startup for everyone who does not
 		// use secrets.
-		svc.EnableConfigStore(sr, cfg.SecretKey)
+		svc.EnableSecretStore(sr, cfg.SecretKey)
 		if cfg.SecretKey == "" {
 			logger.Info("secret encryption disabled: set --secret-key or PIKOCI_SECRET_KEY to store and read secrets. Plain config entries still work")
 		}

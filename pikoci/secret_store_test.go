@@ -51,19 +51,19 @@ job "deploy" {
 // reaches the same database and fixed names would collide across tests.
 var secretScopeSeq atomic.Int64
 
-// newConfigStoreService builds a service backed by a real in-memory database
+// newSecretStoreService builds a service backed by a real in-memory database
 // and a real cipher, so the test exercises actual encryption rather than a mock.
 // It returns the team and pipeline canonicals reserved for this test.
-func newConfigStoreService(t *testing.T, masterKey string) (*pikoci.PikoCI, *sql.DB, string, string) {
+func newSecretStoreService(t *testing.T, masterKey string) (*pikoci.PikoCI, *sql.DB, string, string) {
 	t.Helper()
-	ms, db, tc, pn := newConfigStoreMocks(t, masterKey, storePipelineHCL)
+	ms, db, tc, pn := newSecretStoreMocks(t, masterKey, storePipelineHCL)
 	return ms.P, db, tc, pn
 }
 
-// newConfigStoreMocks is newConfigStoreService with the mocks kept, for tests
+// newSecretStoreMocks is newSecretStoreService with the mocks kept, for tests
 // that assert on what was recorded rather than only on the returned value, and
 // with the pipeline's raw HCL under the test's control.
-func newConfigStoreMocks(t *testing.T, masterKey, raw string) (MockService, *sql.DB, string, string) {
+func newSecretStoreMocks(t *testing.T, masterKey, raw string) (MockService, *sql.DB, string, string) {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
@@ -88,7 +88,7 @@ func newConfigStoreMocks(t *testing.T, masterKey, raw string) (MockService, *sql
 	_, err = db.Exec(`INSERT INTO pipelines (team_id, name, canonical) VALUES (?, ?, ?)`, teamID, pn, pn)
 	require.NoError(t, err)
 
-	ms.P.EnableConfigStore(mysql.NewSecretRepository(db), masterKey)
+	ms.P.EnableSecretStore(mysql.NewSecretRepository(db), masterKey)
 
 	ms.Pipelines.EXPECT().Find(gomock.Any(), tc, pn).Return(&pipeline.Pipeline{
 		Name:      pn,
@@ -101,10 +101,10 @@ func newConfigStoreMocks(t *testing.T, masterKey, raw string) (MockService, *sql
 
 func TestResolvePipelineSecrets(t *testing.T) {
 	ctx := context.Background()
-	svc, _, tc, pn := newConfigStoreService(t, "master-key")
+	svc, _, tc, pn := newSecretStoreService(t, "master-key")
 
-	require.NoError(t, svc.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "ghp_team", secret.KindSecret))
-	require.NoError(t, svc.SetTeamConfig(ctx, tc, "DB_PASSWORD", "team-db-pass", secret.KindSecret))
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "GITHUB_TOKEN", "ghp_team", secret.KindSecret))
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "DB_PASSWORD", "team-db-pass", secret.KindSecret))
 
 	resolved, err := svc.ResolvePipelineValues(ctx, tc, pn)
 	require.NoError(t, err)
@@ -114,11 +114,11 @@ func TestResolvePipelineSecrets(t *testing.T) {
 
 func TestResolvePipelineSecrets_PipelineOverridesTeam(t *testing.T) {
 	ctx := context.Background()
-	svc, _, tc, pn := newConfigStoreService(t, "master-key")
+	svc, _, tc, pn := newSecretStoreService(t, "master-key")
 
-	require.NoError(t, svc.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "ghp_team", secret.KindSecret))
-	require.NoError(t, svc.SetTeamConfig(ctx, tc, "DB_PASSWORD", "team-db-pass", secret.KindSecret))
-	require.NoError(t, svc.SetPipelineConfig(ctx, tc, pn, "GITHUB_TOKEN", "ghp_pipeline", secret.KindSecret))
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "GITHUB_TOKEN", "ghp_team", secret.KindSecret))
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "DB_PASSWORD", "team-db-pass", secret.KindSecret))
+	require.NoError(t, svc.SetPipelineSecret(ctx, tc, pn, "GITHUB_TOKEN", "ghp_pipeline", secret.KindSecret))
 
 	resolved, err := svc.ResolvePipelineValues(ctx, tc, pn)
 	require.NoError(t, err)
@@ -130,10 +130,10 @@ func TestResolvePipelineSecrets_PipelineOverridesTeam(t *testing.T) {
 // worker cannot enumerate everything the team has stored.
 func TestResolvePipelineSecrets_OnlyReferencedKeys(t *testing.T) {
 	ctx := context.Background()
-	svc, _, tc, pn := newConfigStoreService(t, "master-key")
+	svc, _, tc, pn := newSecretStoreService(t, "master-key")
 
-	require.NoError(t, svc.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "ghp_team", secret.KindSecret))
-	require.NoError(t, svc.SetTeamConfig(ctx, tc, "UNRELATED_SECRET", "must-not-leak", secret.KindSecret))
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "GITHUB_TOKEN", "ghp_team", secret.KindSecret))
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "UNRELATED_SECRET", "must-not-leak", secret.KindSecret))
 
 	resolved, err := svc.ResolvePipelineValues(ctx, tc, pn)
 	require.NoError(t, err)
@@ -142,43 +142,43 @@ func TestResolvePipelineSecrets_OnlyReferencedKeys(t *testing.T) {
 	assert.NotContains(t, resolved.Values, "UNRELATED_SECRET", "unreferenced entries must not be sent to the worker")
 }
 
-func TestConfigStore_NotConfigured(t *testing.T) {
+func TestSecretStore_NotConfigured(t *testing.T) {
 	ctx := context.Background()
-	svc, _, tc, _ := newConfigStoreService(t, "")
+	svc, _, tc, _ := newSecretStoreService(t, "")
 
 	// Storing a secret needs the key.
-	err := svc.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "value", secret.KindSecret)
+	err := svc.SetTeamSecret(ctx, tc, "GITHUB_TOKEN", "value", secret.KindSecret)
 	assert.ErrorIs(t, err, secret.ErrNotConfigured)
 
 	// Plain entries do not, so a server with no encryption configured is still
-	// useful for shared configuration.
-	assert.NoError(t, svc.SetTeamConfig(ctx, tc, "LOG_LEVEL", "debug", secret.KindPlain))
+	// useful for shared plain values.
+	assert.NoError(t, svc.SetTeamSecret(ctx, tc, "LOG_LEVEL", "debug", secret.KindPlain))
 
 	// Neither does listing, so an operator who lost the key can still see and
 	// clean up what is stored.
-	_, err = svc.ListTeamConfig(ctx, tc)
+	_, err = svc.ListTeamSecrets(ctx, tc)
 	assert.NoError(t, err)
 }
 
-func TestSetConfig_RejectsInvalidNames(t *testing.T) {
+func TestSetSecret_RejectsInvalidNames(t *testing.T) {
 	ctx := context.Background()
-	svc, _, tc, _ := newConfigStoreService(t, "master-key")
+	svc, _, tc, _ := newSecretStoreService(t, "master-key")
 
 	for _, name := range []string{"", "has-dash", "has space", "1leading_digit", "has.dot"} {
-		err := svc.SetTeamConfig(ctx, tc, name, "value", secret.KindSecret)
+		err := svc.SetTeamSecret(ctx, tc, name, "value", secret.KindSecret)
 		assert.Errorf(t, err, "expected %q to be rejected", name)
 	}
 
-	assert.NoError(t, svc.SetTeamConfig(ctx, tc, "VALID_NAME_1", "value", secret.KindSecret))
-	assert.NoError(t, svc.SetTeamConfig(ctx, tc, "_leading_underscore", "value", secret.KindSecret))
+	assert.NoError(t, svc.SetTeamSecret(ctx, tc, "VALID_NAME_1", "value", secret.KindSecret))
+	assert.NoError(t, svc.SetTeamSecret(ctx, tc, "_leading_underscore", "value", secret.KindSecret))
 }
 
 // Values must be unreadable in the database without the master key.
-func TestConfigStore_SecretValuesAreEncryptedAtRest(t *testing.T) {
+func TestSecretStore_SecretValuesAreEncryptedAtRest(t *testing.T) {
 	ctx := context.Background()
-	svc, db, tc, _ := newConfigStoreService(t, "master-key")
+	svc, db, tc, _ := newSecretStoreService(t, "master-key")
 
-	require.NoError(t, svc.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "ghp_plaintext_marker", secret.KindSecret))
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "GITHUB_TOKEN", "ghp_plaintext_marker", secret.KindSecret))
 
 	var stored string
 	require.NoError(t, db.QueryRowContext(ctx, `
@@ -191,16 +191,16 @@ func TestConfigStore_SecretValuesAreEncryptedAtRest(t *testing.T) {
 	assert.NotContains(t, stored, "ghp_plaintext_marker", "the stored column must not contain plaintext")
 }
 
-func TestSetConfig_UnknownScopeReportsClearly(t *testing.T) {
+func TestSetSecret_UnknownScopeReportsClearly(t *testing.T) {
 	ctx := context.Background()
-	svc, _, tc, _ := newConfigStoreService(t, "master-key")
+	svc, _, tc, _ := newSecretStoreService(t, "master-key")
 
-	err := svc.SetPipelineConfig(ctx, tc, "does-not-exist", "TOKEN", "value", secret.KindSecret)
+	err := svc.SetPipelineSecret(ctx, tc, "does-not-exist", "TOKEN", "value", secret.KindSecret)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `pipeline "does-not-exist" not found`,
 		"a missing pipeline should say so, not surface a constraint violation")
 
-	err = svc.SetTeamConfig(ctx, "no-such-team", "TOKEN", "value", secret.KindSecret)
+	err = svc.SetTeamSecret(ctx, "no-such-team", "TOKEN", "value", secret.KindSecret)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `team "no-such-team" not found`)
 }
@@ -209,10 +209,10 @@ func TestSetConfig_UnknownScopeReportsClearly(t *testing.T) {
 // mask it, while a secret alongside it still resolves decrypted and masked.
 func TestResolvePipelineValues_PlainAndSecret(t *testing.T) {
 	ctx := context.Background()
-	svc, _, tc, pn := newConfigStoreService(t, "master-key")
+	svc, _, tc, pn := newSecretStoreService(t, "master-key")
 
-	require.NoError(t, svc.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "ghp_secret", secret.KindSecret))
-	require.NoError(t, svc.SetTeamConfig(ctx, tc, "DB_PASSWORD", "log-level-debug", secret.KindPlain))
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "GITHUB_TOKEN", "ghp_secret", secret.KindSecret))
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "DB_PASSWORD", "log-level-debug", secret.KindPlain))
 
 	resolved, err := svc.ResolvePipelineValues(ctx, tc, pn)
 	require.NoError(t, err)
@@ -226,11 +226,11 @@ func TestResolvePipelineValues_PlainAndSecret(t *testing.T) {
 
 // Plain values are stored verbatim, so an operator can read them straight out
 // of the database and the API can return them.
-func TestConfigStore_PlainValuesAreReadable(t *testing.T) {
+func TestSecretStore_PlainValuesAreReadable(t *testing.T) {
 	ctx := context.Background()
-	svc, db, tc, _ := newConfigStoreService(t, "master-key")
+	svc, db, tc, _ := newSecretStoreService(t, "master-key")
 
-	require.NoError(t, svc.SetTeamConfig(ctx, tc, "LOG_LEVEL", "debug", secret.KindPlain))
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "LOG_LEVEL", "debug", secret.KindPlain))
 
 	var stored string
 	require.NoError(t, db.QueryRowContext(ctx, `
@@ -240,9 +240,9 @@ func TestConfigStore_PlainValuesAreReadable(t *testing.T) {
 	`, tc).Scan(&stored))
 	assert.Equal(t, "debug", stored, "plain values are stored verbatim, not encoded")
 
-	require.NoError(t, svc.SetTeamConfig(ctx, tc, "API_TOKEN", "tok", secret.KindSecret))
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "API_TOKEN", "tok", secret.KindSecret))
 
-	entries, err := svc.ListTeamConfig(ctx, tc)
+	entries, err := svc.ListTeamSecrets(ctx, tc)
 	require.NoError(t, err)
 
 	var plain, sec *secret.Entry
@@ -265,20 +265,70 @@ func TestConfigStore_PlainValuesAreReadable(t *testing.T) {
 
 // Kind must be explicit and valid; a typo must not silently store a credential
 // in the clear.
-func TestSetConfig_RejectsUnknownKind(t *testing.T) {
+func TestSetSecret_RejectsUnknownKind(t *testing.T) {
 	ctx := context.Background()
-	svc, _, tc, _ := newConfigStoreService(t, "master-key")
+	svc, _, tc, _ := newSecretStoreService(t, "master-key")
 
-	err := svc.SetTeamConfig(ctx, tc, "NAME", "value", secret.Kind("plaintext"))
+	err := svc.SetTeamSecret(ctx, tc, "NAME", "value", secret.Kind("plaintext"))
 	require.Error(t, err)
-	assert.ErrorIs(t, err, pikoci.ErrConfigInvalidRequest,
+	assert.ErrorIs(t, err, pikoci.ErrSecretInvalidRequest,
 		"an unknown kind is a caller mistake, so the transport can answer 400")
 	assert.Contains(t, err.Error(), "plaintext", "the message should name the bad kind")
 }
 
-// A delete used to always audit config.deleted, even for a secret, so the log
+// Storing the same name again replaces the value. This is how the UI updates a
+// secret: there is no window in which the entry does not exist.
+func TestSetSecret_ReplacesTheValueInPlace(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tc, pn := newSecretStoreService(t, "master-key")
+
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "LOG_LEVEL", "debug", secret.KindPlain))
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "LOG_LEVEL", "info", secret.KindPlain))
+
+	entries, err := svc.ListTeamSecrets(ctx, tc)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "a replace must not add a second row")
+	assert.Equal(t, "info", entries[0].Value)
+
+	require.NoError(t, svc.SetPipelineSecret(ctx, tc, pn, "DB_URL", "one", secret.KindPlain))
+	require.NoError(t, svc.SetPipelineSecret(ctx, tc, pn, "DB_URL", "two", secret.KindPlain))
+
+	pipeEntries, err := svc.ListPipelineSecrets(ctx, tc, pn)
+	require.NoError(t, err)
+	require.Len(t, pipeEntries, 1)
+	assert.Equal(t, "two", pipeEntries[0].Value)
+}
+
+// Because a set is a replace, it must not also be able to change the kind: the
+// storage layer overwrites the kind column, so an unguarded set would turn a
+// secret into a plain value that is then printed in build logs.
+func TestSetSecret_RefusesToChangeTheKindOfAnExistingEntry(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tc, pn := newSecretStoreService(t, "master-key")
+
+	require.NoError(t, svc.SetTeamSecret(ctx, tc, "API_TOKEN", "tok", secret.KindSecret))
+
+	err := svc.SetTeamSecret(ctx, tc, "API_TOKEN", "tok", secret.KindPlain)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, pikoci.ErrSecretInvalidRequest,
+		"changing the kind is a caller mistake, so the transport can answer 400")
+
+	entries, err := svc.ListTeamSecrets(ctx, tc)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, secret.KindSecret, entries[0].Kind, "the stored kind must be untouched")
+	assert.Empty(t, entries[0].Value, "it must still be treated as a secret")
+
+	// The same rule applies at pipeline scope.
+	require.NoError(t, svc.SetPipelineSecret(ctx, tc, pn, "LOG_LEVEL", "debug", secret.KindPlain))
+	err = svc.SetPipelineSecret(ctx, tc, pn, "LOG_LEVEL", "debug", secret.KindSecret)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, pikoci.ErrSecretInvalidRequest)
+}
+
+// A delete used to always audit plain.deleted, even for a secret, so the log
 // disagreed with the secret.created entry the same entry was stored under.
-func TestDeleteConfig_AuditsTheKindThatWasDeleted(t *testing.T) {
+func TestDeleteSecret_AuditsTheKindThatWasDeleted(t *testing.T) {
 	ctx := context.Background()
 
 	for _, tt := range []struct {
@@ -287,20 +337,20 @@ func TestDeleteConfig_AuditsTheKindThatWasDeleted(t *testing.T) {
 		want auditlog.Action
 	}{
 		{"secret", secret.KindSecret, auditlog.SecretDeleted},
-		{"plain", secret.KindPlain, auditlog.ConfigDeleted},
+		{"plain", secret.KindPlain, auditlog.PlainDeleted},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			ms, _, tc, pn := newConfigStoreMocks(t, "master-key", storePipelineHCL)
+			ms, _, tc, pn := newSecretStoreMocks(t, "master-key", storePipelineHCL)
 
-			require.NoError(t, ms.P.SetTeamConfig(ctx, tc, "TEAM_ENTRY", "v", tt.kind))
-			require.NoError(t, ms.P.SetPipelineConfig(ctx, tc, pn, "PIPE_ENTRY", "v", tt.kind))
+			require.NoError(t, ms.P.SetTeamSecret(ctx, tc, "TEAM_ENTRY", "v", tt.kind))
+			require.NoError(t, ms.P.SetPipelineSecret(ctx, tc, pn, "PIPE_ENTRY", "v", tt.kind))
 
-			require.NoError(t, ms.P.DeleteTeamConfig(ctx, tc, "TEAM_ENTRY"))
-			require.NoError(t, ms.P.DeletePipelineConfig(ctx, tc, pn, "PIPE_ENTRY"))
+			require.NoError(t, ms.P.DeleteTeamSecret(ctx, tc, "TEAM_ENTRY"))
+			require.NoError(t, ms.P.DeletePipelineSecret(ctx, tc, pn, "PIPE_ENTRY"))
 
 			var deletes []auditlog.Action
 			for _, e := range *ms.Audited {
-				if e.Action == auditlog.SecretDeleted || e.Action == auditlog.ConfigDeleted {
+				if e.Action == auditlog.SecretDeleted || e.Action == auditlog.PlainDeleted {
 					deletes = append(deletes, e.Action)
 				}
 			}
@@ -310,15 +360,15 @@ func TestDeleteConfig_AuditsTheKindThatWasDeleted(t *testing.T) {
 	}
 }
 
-func TestDeleteConfig_MissingEntry(t *testing.T) {
+func TestDeleteSecret_MissingEntry(t *testing.T) {
 	ctx := context.Background()
-	svc, _, tc, pn := newConfigStoreService(t, "master-key")
+	svc, _, tc, pn := newSecretStoreService(t, "master-key")
 
-	err := svc.DeleteTeamConfig(ctx, tc, "NOPE")
-	assert.ErrorIs(t, err, pikoci.ErrConfigEntryNotFound)
+	err := svc.DeleteTeamSecret(ctx, tc, "NOPE")
+	assert.ErrorIs(t, err, pikoci.ErrSecretEntryNotFound)
 
-	err = svc.DeletePipelineConfig(ctx, tc, pn, "NOPE")
-	assert.ErrorIs(t, err, pikoci.ErrConfigEntryNotFound)
+	err = svc.DeletePipelineSecret(ctx, tc, pn, "NOPE")
+	assert.ErrorIs(t, err, pikoci.ErrSecretEntryNotFound)
 }
 
 // A malformed pipeline used to resolve to an empty value set, so the build
@@ -326,9 +376,9 @@ func TestDeleteConfig_MissingEntry(t *testing.T) {
 // configuration would not parse.
 func TestResolvePipelineValues_ReportsParseFailure(t *testing.T) {
 	ctx := context.Background()
-	ms, _, tc, pn := newConfigStoreMocks(t, "master-key", `job "broken" { this is not valid hcl`)
+	ms, _, tc, pn := newSecretStoreMocks(t, "master-key", `job "broken" { this is not valid hcl`)
 
-	require.NoError(t, ms.P.SetTeamConfig(ctx, tc, "GITHUB_TOKEN", "ghp_team", secret.KindSecret))
+	require.NoError(t, ms.P.SetTeamSecret(ctx, tc, "GITHUB_TOKEN", "ghp_team", secret.KindSecret))
 
 	_, err := ms.P.ResolvePipelineValues(ctx, tc, pn)
 	require.Error(t, err)

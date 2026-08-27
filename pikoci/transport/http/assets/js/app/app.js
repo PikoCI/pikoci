@@ -18,7 +18,7 @@ import { UsersList, UserNew, UserShow, Profile } from './components/Users.js';
 import { OAuthCallback } from './components/OAuthCallback.js';
 import { OAuthCompleteProfile } from './components/OAuthCompleteProfile.js';
 import { OAuthAdmin } from './components/OAuthAdmin.js';
-import { PipelineConfig } from './components/ConfigStore.js';
+import { PipelineSecrets } from './components/Secrets.js';
 
 // Handle OAuth server redirects. The server uses query params on the root path
 // (e.g., /?oauth_action=complete-profile&token=...) because HTTP redirects
@@ -64,7 +64,7 @@ function App() {
         <${PipelineNew} path="/teams/:tc/pipelines/new" />
         <${PipelineShow} path="/teams/:tc/pipelines/:pn" />
         <${PipelineEdit} path="/teams/:tc/pipelines/:pn/edit" />
-        <${PipelineConfig} path="/teams/:tc/pipelines/:pn/config" />
+        <${PipelineSecrets} path="/teams/:tc/pipelines/:pn/secrets" />
         <${JobBuilds} path="/teams/:tc/pipelines/:pn/jobs/:jn/builds/:bid?" />
         <${ResourceVersions} path="/teams/:tc/pipelines/:pn/resources/:rCan/versions" />
         <${WorkersList} path="/workers" />

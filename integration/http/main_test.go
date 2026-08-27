@@ -71,7 +71,7 @@ func runTests(m *testing.M) int {
 
 	// Wire the configuration store with a master key, so the secret paths are
 	// exercised rather than short-circuiting as unconfigured.
-	svc.EnableConfigStore(mysql.NewSecretRepository(db), "integration-master-key")
+	svc.EnableSecretStore(mysql.NewSecretRepository(db), "integration-master-key")
 
 	var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, mysql.Mem, "test", "abc1234", "", nil)
 	server := httptest.NewServer(handler)

@@ -73,6 +73,8 @@ func runTests(m *testing.M) int {
 	alr := mysql.NewAuditLogRepository(db)
 	opr := mysql.NewOAuthProviderRepository(db)
 	var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, alr, opr, suow, jwtSecret, wn, logger)
+	// The secret store is opt-in, so the UI tests need it wired up explicitly.
+	svc.EnableSecretStore(mysql.NewSecretRepository(db), "integration-master-key")
 	svc.StartScheduler(ctx)
 
 	oauthStateStore := pikoci.NewOAuthStateStore(ctx)

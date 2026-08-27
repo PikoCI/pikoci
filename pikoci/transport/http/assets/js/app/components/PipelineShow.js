@@ -478,9 +478,9 @@ export function PipelineShow({ tc, pn }) {
     route('/teams/' + tc + '/pipelines/' + pn + '/edit');
   }, [tc, pn]);
 
-  const clickConfig = useCallback((e) => {
+  const clickSecrets = useCallback((e) => {
     e.preventDefault();
-    route('/teams/' + tc + '/pipelines/' + pn + '/config');
+    route('/teams/' + tc + '/pipelines/' + pn + '/secrets');
   }, [tc, pn]);
 
   const clickDelete = useCallback((e) => {
@@ -546,7 +546,7 @@ export function PipelineShow({ tc, pn }) {
           }
         `}
         ${isMaintainer && html`
-          <button type="button" id="config-pipeline" class="btn btn-secondary" onClick=${clickConfig}><i class="bi bi-key"></i> Config</button>
+          <button type="button" id="secrets-pipeline" class="btn btn-secondary" onClick=${clickSecrets}><i class="bi bi-key"></i> Secrets</button>
           <button type="button" id="edit-pipeline" class="btn btn-info" onClick=${clickEdit}><i class="bi bi-pencil"></i> Edit</button>
           <button type="button" id="delete-pipeline" class="btn btn-danger" onClick=${clickDelete}><i class="bi bi-trash"></i> Delete</button>
         `}

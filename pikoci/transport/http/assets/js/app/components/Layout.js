@@ -142,7 +142,7 @@ const Header = () => {
 
 // --- Breadcrumb ---
 
-export const Breadcrumb = ({ team, pipeline, job, resource, showPipelines }) => {
+export const Breadcrumb = ({ team, pipeline, job, resource, secrets, showPipelines }) => {
   const link = (href, text) => html`
     <a href=${href} data-native onClick=${e => { e.preventDefault(); route(href); }}>${text}</a>
   `;
@@ -163,11 +163,14 @@ export const Breadcrumb = ({ team, pipeline, job, resource, showPipelines }) => 
             <li class="breadcrumb-item">${link('/teams/' + team.canonical + '/pipelines', 'Pipelines')}</li>
           `}
         `}
-        ${pipeline && !job && !resource && html`
+        ${pipeline && !job && !resource && !secrets && html`
           <li class="breadcrumb-item active">${pipeline.name}</li>
         `}
-        ${team && pipeline && (job || resource) && html`
+        ${team && pipeline && (job || resource || secrets) && html`
           <li class="breadcrumb-item">${link('/teams/' + team.canonical + '/pipelines/' + pipeline.canonical, pipeline.name)}</li>
+        `}
+        ${secrets && html`
+          <li class="breadcrumb-item active">Secrets</li>
         `}
         ${job && html`
           <li class="breadcrumb-item active">Jobs</li>

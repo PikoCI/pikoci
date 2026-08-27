@@ -102,21 +102,21 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 		{"global admin can update auth settings", http.MethodPut, "/admin/auth-settings", role.Admin, true, true},
 		{"non-global-admin denied update auth settings", http.MethodPut, "/admin/auth-settings", role.Admin, false, false},
 
-		// --- Config store: writes need maintain, listing needs read ---
-		{"maintainer can set team config", http.MethodPost, "/teams/main/config", role.Maintain, false, true},
-		{"operator denied set team config", http.MethodPost, "/teams/main/config", role.Write, false, false},
-		{"viewer can list team config", http.MethodGet, "/teams/main/config", role.Read, false, true},
-		{"maintainer can delete team config", http.MethodDelete, "/teams/main/config/TOKEN", role.Maintain, false, true},
-		{"operator denied delete team config", http.MethodDelete, "/teams/main/config/TOKEN", role.Write, false, false},
-		{"maintainer can set pipeline config", http.MethodPost, "/teams/main/pipelines/p/config", role.Maintain, false, true},
-		{"operator denied set pipeline config", http.MethodPost, "/teams/main/pipelines/p/config", role.Write, false, false},
-		{"viewer can list pipeline config", http.MethodGet, "/teams/main/pipelines/p/config", role.Read, false, true},
-		{"maintainer can delete pipeline config", http.MethodDelete, "/teams/main/pipelines/p/config/TOKEN", role.Maintain, false, true},
+		// --- Secret store: writes need maintain, listing needs read ---
+		{"maintainer can set team secret", http.MethodPost, "/teams/main/secrets", role.Maintain, false, true},
+		{"operator denied set team secret", http.MethodPost, "/teams/main/secrets", role.Write, false, false},
+		{"viewer can list team secret", http.MethodGet, "/teams/main/secrets", role.Read, false, true},
+		{"maintainer can delete team secret", http.MethodDelete, "/teams/main/secrets/TOKEN", role.Maintain, false, true},
+		{"operator denied delete team secret", http.MethodDelete, "/teams/main/secrets/TOKEN", role.Write, false, false},
+		{"maintainer can set pipeline secret", http.MethodPost, "/teams/main/pipelines/p/secrets", role.Maintain, false, true},
+		{"operator denied set pipeline secret", http.MethodPost, "/teams/main/pipelines/p/secrets", role.Write, false, false},
+		{"viewer can list pipeline secret", http.MethodGet, "/teams/main/pipelines/p/secrets", role.Read, false, true},
+		{"maintainer can delete pipeline secret", http.MethodDelete, "/teams/main/pipelines/p/secrets/TOKEN", role.Maintain, false, true},
 
 		// There is deliberately no secret-reveal API: resolved values are for
 		// workers only, so even a team admin is denied.
-		{"admin denied reading config values", http.MethodGet, "/teams/main/pipelines/p/config-values", role.Admin, false, false},
-		{"global admin denied reading config values", http.MethodGet, "/teams/main/pipelines/p/config-values", role.Admin, true, false},
+		{"admin denied reading secret values", http.MethodGet, "/teams/main/pipelines/p/secret-values", role.Admin, false, false},
+		{"global admin denied reading secret values", http.MethodGet, "/teams/main/pipelines/p/secret-values", role.Admin, true, false},
 
 		// --- Profile linked accounts: any authenticated user (role.Read) ---
 		{"viewer can list linked accounts", http.MethodGet, "/profile/linked-accounts", role.Read, false, true},
@@ -170,12 +170,12 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 			svc.EXPECT().UpdateAuthSettings(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			svc.EXPECT().ListLinkedAccounts(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 			svc.EXPECT().UnlinkAccount(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-			svc.EXPECT().SetTeamConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-			svc.EXPECT().SetPipelineConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-			svc.EXPECT().ListTeamConfig(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-			svc.EXPECT().ListPipelineConfig(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-			svc.EXPECT().DeleteTeamConfig(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-			svc.EXPECT().DeletePipelineConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().SetTeamSecret(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().SetPipelineSecret(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().ListTeamSecrets(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+			svc.EXPECT().ListPipelineSecrets(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+			svc.EXPECT().DeleteTeamSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().DeletePipelineSecret(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			svc.EXPECT().ResolvePipelineValues(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
 			// Sign JWT
@@ -935,12 +935,12 @@ func TestApiTokenAuth_TeamScopedTokenVariousRoutes(t *testing.T) {
 	}
 }
 
-// TestWorkerTokenConfigValuesAuthorization guards the secret-values route
+// TestWorkerTokenSecretValuesAuthorization guards the secret-values route
 // against the blanket worker bypass in the auth middleware, which otherwise
 // treats any "is_from_worker" JWT as an admin and skips authorization
 // entirely. Without the workerScopedRoutes exemption, any worker token —
 // including an unscoped global one — could read every team's secrets.
-func TestWorkerTokenConfigValuesAuthorization(t *testing.T) {
+func TestWorkerTokenSecretValuesAuthorization(t *testing.T) {
 	tests := []struct {
 		name string
 		// teamCanonical is the team claim on the worker JWT; empty means an
@@ -952,19 +952,19 @@ func TestWorkerTokenConfigValuesAuthorization(t *testing.T) {
 		{
 			name:          "team-scoped worker reads its own team",
 			teamCanonical: "main",
-			path:          "/teams/main/pipelines/p/config-values",
+			path:          "/teams/main/pipelines/p/secret-values",
 			wantOK:        true,
 		},
 		{
 			name:          "team-scoped worker denied another team",
 			teamCanonical: "main",
-			path:          "/teams/other/pipelines/p/config-values",
+			path:          "/teams/other/pipelines/p/secret-values",
 			wantOK:        false,
 		},
 		{
 			name:          "unscoped global worker denied",
 			teamCanonical: "",
-			path:          "/teams/main/pipelines/p/config-values",
+			path:          "/teams/main/pipelines/p/secret-values",
 			wantOK:        false,
 		},
 	}

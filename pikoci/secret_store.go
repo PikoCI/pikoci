@@ -12,43 +12,43 @@ import (
 	"github.com/pikoci/pikoci/pikoci/sectype"
 )
 
-// configNameRe constrains entry names to the shape of an environment
+// secretNameRe constrains entry names to the shape of an environment
 // variable. Names are used verbatim as the lookup key from a pipeline's
 // secret block, so unlike other entities they are not slugified: turning
 // GITHUB_TOKEN into github-token would break `key = "GITHUB_TOKEN"`.
-var configNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,254}$`)
+var secretNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,254}$`)
 
-// EnableConfigStore wires up the configuration store. An empty masterKey
+// EnableSecretStore wires up the secret store. An empty masterKey
 // leaves the store fully usable for plain entries but unconfigured for
 // secrets, which then fail with secret.ErrNotConfigured instead of silently
 // storing plaintext.
 //
 // This is deliberately post-construction rather than a New parameter: the
 // store is optional, so `pikoci run` and the pipeline editor never need it.
-func (q *PikoCI) EnableConfigStore(sr secret.Repository, masterKey string) {
-	q.Config = sr
+func (q *PikoCI) EnableSecretStore(sr secret.Repository, masterKey string) {
+	q.Secrets = sr
 	q.Cipher = secret.NewCipher(masterKey, sr)
 }
 
-// ErrConfigStoreUnavailable reports that this server has no configuration
-// store wired up, so nothing can be stored or read.
-var ErrConfigStoreUnavailable = errors.New("configuration storage is not available on this server")
+// ErrSecretStoreUnavailable reports that this server has no secret store
+// wired up, so nothing can be stored or read.
+var ErrSecretStoreUnavailable = errors.New("secret storage is not available on this server")
 
-// ErrConfigInvalidRequest reports a caller mistake rather than a server-side
+// ErrSecretInvalidRequest reports a caller mistake rather than a server-side
 // failure: a name that is not a valid identifier, or an unknown kind.
-var ErrConfigInvalidRequest = errors.New("invalid configuration request")
+var ErrSecretInvalidRequest = errors.New("invalid secret request")
 
-// configStoreReady reports whether the store was wired up at all.
-func (q *PikoCI) configStoreReady() error {
-	if q.Config == nil || q.Cipher == nil {
-		return ErrConfigStoreUnavailable
+// secretStoreReady reports whether the store was wired up at all.
+func (q *PikoCI) secretStoreReady() error {
+	if q.Secrets == nil || q.Cipher == nil {
+		return ErrSecretStoreUnavailable
 	}
 	return nil
 }
 
-func validateConfigName(name string) error {
-	if !configNameRe.MatchString(name) {
-		return fmt.Errorf("%w: name %q must start with a letter or underscore and contain only letters, digits and underscores", ErrConfigInvalidRequest, name)
+func validateSecretName(name string) error {
+	if !secretNameRe.MatchString(name) {
+		return fmt.Errorf("%w: name %q must start with a letter or underscore and contain only letters, digits and underscores", ErrSecretInvalidRequest, name)
 	}
 	return nil
 }
@@ -56,13 +56,13 @@ func validateConfigName(name string) error {
 // prepareEntry validates the request and produces the entry plus the bytes to
 // store: ciphertext for a secret, the value itself for a plain entry.
 func (q *PikoCI) prepareEntry(ctx context.Context, name, value string, kind secret.Kind, scope secret.Scope) (secret.Entry, []byte, error) {
-	if err := q.configStoreReady(); err != nil {
+	if err := q.secretStoreReady(); err != nil {
 		return secret.Entry{}, nil, err
 	}
 	if !kind.Valid() {
-		return secret.Entry{}, nil, fmt.Errorf("%w: kind %q must be %q or %q", ErrConfigInvalidRequest, kind, secret.KindSecret, secret.KindPlain)
+		return secret.Entry{}, nil, fmt.Errorf("%w: kind %q must be %q or %q", ErrSecretInvalidRequest, kind, secret.KindSecret, secret.KindPlain)
 	}
-	if err := validateConfigName(name); err != nil {
+	if err := validateSecretName(name); err != nil {
 		return secret.Entry{}, nil, err
 	}
 
@@ -82,14 +82,14 @@ func (q *PikoCI) prepareEntry(ctx context.Context, name, value string, kind secr
 	return e, ciphertext, nil
 }
 
-// ErrConfigEntryNotFound reports that no entry by that name is stored in the
+// ErrSecretEntryNotFound reports that no entry by that name is stored in the
 // scope that was asked about.
-var ErrConfigEntryNotFound = errors.New("configuration entry not found")
+var ErrSecretEntryNotFound = errors.New("secret entry not found")
 
 // auditCreated returns the audit action for storing an entry of this kind.
 func auditCreated(kind secret.Kind) auditlog.Action {
 	if kind == secret.KindPlain {
-		return auditlog.ConfigCreated
+		return auditlog.PlainCreated
 	}
 	return auditlog.SecretCreated
 }
@@ -97,7 +97,7 @@ func auditCreated(kind secret.Kind) auditlog.Action {
 // auditDeleted returns the audit action for removing an entry of this kind.
 func auditDeleted(kind secret.Kind) auditlog.Action {
 	if kind == secret.KindPlain {
-		return auditlog.ConfigDeleted
+		return auditlog.PlainDeleted
 	}
 	return auditlog.SecretDeleted
 }
@@ -111,68 +111,103 @@ func entryKind(entries []*secret.Entry, name string) (secret.Kind, error) {
 			return e.Kind, nil
 		}
 	}
-	return "", fmt.Errorf("%q: %w", name, ErrConfigEntryNotFound)
+	return "", fmt.Errorf("%q: %w", name, ErrSecretEntryNotFound)
 }
 
-// SetTeamConfig stores a team-scoped entry, replacing any existing entry with
-// the same name.
-func (q *PikoCI) SetTeamConfig(ctx context.Context, tc, name, value string, kind secret.Kind) error {
+// checkKindUnchanged rejects a set that would change the kind of an entry that
+// already exists. A set is a replace, which is how a value is updated without
+// a window in which the entry is absent; the storage layer would happily
+// overwrite the kind along with it, silently turning a secret into a plain
+// value that is then printed in build logs.
+//
+// Switching kind deliberately stays a delete followed by a create.
+func checkKindUnchanged(entries []*secret.Entry, name string, kind secret.Kind) error {
+	stored, err := entryKind(entries, name)
+	if err != nil {
+		// Nothing stored under that name yet, so there is no kind to keep.
+		return nil
+	}
+	if stored == kind {
+		return nil
+	}
+	return fmt.Errorf("%w: %q is already stored as %s; delete it before storing it as %s", ErrSecretInvalidRequest, name, stored, kind)
+}
+
+// SetTeamSecret stores a team-scoped entry, replacing the value of any
+// existing entry with the same name.
+func (q *PikoCI) SetTeamSecret(ctx context.Context, tc, name, value string, kind secret.Kind) error {
 	e, data, err := q.prepareEntry(ctx, name, value, kind, secret.TeamScope)
 	if err != nil {
 		return err
 	}
 
-	if _, err := q.Config.UpsertTeam(ctx, tc, e, data); err != nil {
+	entries, err := q.Secrets.FilterTeam(ctx, tc)
+	if err != nil {
+		return err
+	}
+	if err := checkKindUnchanged(entries, e.Canonical, kind); err != nil {
+		return err
+	}
+
+	if _, err := q.Secrets.UpsertTeam(ctx, tc, e, data); err != nil {
 		return fmt.Errorf("failed to store %q: %w", name, err)
 	}
 
-	q.audit(ctx, tc, auditCreated(kind), "config", name, nil)
+	q.audit(ctx, tc, auditCreated(kind), "secret", name, nil)
 
 	return nil
 }
 
-// SetPipelineConfig stores a pipeline-scoped entry, replacing any existing
-// entry with the same name.
-func (q *PikoCI) SetPipelineConfig(ctx context.Context, tc, pn, name, value string, kind secret.Kind) error {
+// SetPipelineSecret stores a pipeline-scoped entry, replacing the value of any
+// existing entry with the same name.
+func (q *PikoCI) SetPipelineSecret(ctx context.Context, tc, pn, name, value string, kind secret.Kind) error {
 	e, data, err := q.prepareEntry(ctx, name, value, kind, secret.PipelineScope)
 	if err != nil {
 		return err
 	}
 
-	if _, err := q.Config.UpsertPipeline(ctx, tc, pn, e, data); err != nil {
+	entries, err := q.Secrets.FilterPipeline(ctx, tc, pn)
+	if err != nil {
+		return err
+	}
+	if err := checkKindUnchanged(entries, e.Canonical, kind); err != nil {
+		return err
+	}
+
+	if _, err := q.Secrets.UpsertPipeline(ctx, tc, pn, e, data); err != nil {
 		return fmt.Errorf("failed to store %q: %w", name, err)
 	}
 
-	q.audit(ctx, tc, auditCreated(kind), "config", name, map[string]interface{}{"pipeline": pn})
+	q.audit(ctx, tc, auditCreated(kind), "secret", name, map[string]interface{}{"pipeline": pn})
 
 	return nil
 }
 
-// ListTeamConfig returns the team-scoped entries. Plain entries carry their
+// ListTeamSecrets returns the team-scoped entries. Plain entries carry their
 // value; secret values are never returned.
-func (q *PikoCI) ListTeamConfig(ctx context.Context, tc string) ([]*secret.Entry, error) {
-	if err := q.configStoreReady(); err != nil {
+func (q *PikoCI) ListTeamSecrets(ctx context.Context, tc string) ([]*secret.Entry, error) {
+	if err := q.secretStoreReady(); err != nil {
 		return nil, err
 	}
-	return q.Config.FilterTeam(ctx, tc)
+	return q.Secrets.FilterTeam(ctx, tc)
 }
 
-// ListPipelineConfig returns the pipeline-scoped entries. Plain entries carry
+// ListPipelineSecrets returns the pipeline-scoped entries. Plain entries carry
 // their value; secret values are never returned.
-func (q *PikoCI) ListPipelineConfig(ctx context.Context, tc, pn string) ([]*secret.Entry, error) {
-	if err := q.configStoreReady(); err != nil {
+func (q *PikoCI) ListPipelineSecrets(ctx context.Context, tc, pn string) ([]*secret.Entry, error) {
+	if err := q.secretStoreReady(); err != nil {
 		return nil, err
 	}
-	return q.Config.FilterPipeline(ctx, tc, pn)
+	return q.Secrets.FilterPipeline(ctx, tc, pn)
 }
 
-// DeleteTeamConfig removes a team-scoped entry. It does not need the master
+// DeleteTeamSecret removes a team-scoped entry. It does not need the master
 // key, so an entry can still be cleaned up after the key is lost.
-func (q *PikoCI) DeleteTeamConfig(ctx context.Context, tc, name string) error {
-	if err := q.configStoreReady(); err != nil {
+func (q *PikoCI) DeleteTeamSecret(ctx context.Context, tc, name string) error {
+	if err := q.secretStoreReady(); err != nil {
 		return err
 	}
-	entries, err := q.Config.FilterTeam(ctx, tc)
+	entries, err := q.Secrets.FilterTeam(ctx, tc)
 	if err != nil {
 		return err
 	}
@@ -181,21 +216,21 @@ func (q *PikoCI) DeleteTeamConfig(ctx context.Context, tc, name string) error {
 		return err
 	}
 
-	if err := q.Config.DeleteTeam(ctx, tc, name); err != nil {
+	if err := q.Secrets.DeleteTeam(ctx, tc, name); err != nil {
 		return err
 	}
 
-	q.audit(ctx, tc, auditDeleted(kind), "config", name, nil)
+	q.audit(ctx, tc, auditDeleted(kind), "secret", name, nil)
 
 	return nil
 }
 
-// DeletePipelineConfig removes a pipeline-scoped entry.
-func (q *PikoCI) DeletePipelineConfig(ctx context.Context, tc, pn, name string) error {
-	if err := q.configStoreReady(); err != nil {
+// DeletePipelineSecret removes a pipeline-scoped entry.
+func (q *PikoCI) DeletePipelineSecret(ctx context.Context, tc, pn, name string) error {
+	if err := q.secretStoreReady(); err != nil {
 		return err
 	}
-	entries, err := q.Config.FilterPipeline(ctx, tc, pn)
+	entries, err := q.Secrets.FilterPipeline(ctx, tc, pn)
 	if err != nil {
 		return err
 	}
@@ -204,11 +239,11 @@ func (q *PikoCI) DeletePipelineConfig(ctx context.Context, tc, pn, name string) 
 		return err
 	}
 
-	if err := q.Config.DeletePipeline(ctx, tc, pn, name); err != nil {
+	if err := q.Secrets.DeletePipeline(ctx, tc, pn, name); err != nil {
 		return err
 	}
 
-	q.audit(ctx, tc, auditDeleted(kind), "config", name, map[string]interface{}{"pipeline": pn})
+	q.audit(ctx, tc, auditDeleted(kind), "secret", name, map[string]interface{}{"pipeline": pn})
 
 	return nil
 }
@@ -220,7 +255,7 @@ func (q *PikoCI) DeletePipelineConfig(ctx context.Context, tc, pn, name string) 
 // block are returned, so a compromised worker cannot enumerate everything the
 // team has stored.
 func (q *PikoCI) ResolvePipelineValues(ctx context.Context, tc, pn string) (*secret.Resolved, error) {
-	if err := q.configStoreReady(); err != nil {
+	if err := q.secretStoreReady(); err != nil {
 		return nil, err
 	}
 
@@ -242,9 +277,9 @@ func (q *PikoCI) ResolvePipelineValues(ctx context.Context, tc, pn string) (*sec
 		return resolved, nil
 	}
 
-	stored, err := q.Config.StoredValues(ctx, tc, pn)
+	stored, err := q.Secrets.StoredValues(ctx, tc, pn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load configuration: %w", err)
+		return nil, fmt.Errorf("failed to load stored secrets: %w", err)
 	}
 
 	for name := range wanted {
@@ -256,7 +291,7 @@ func (q *PikoCI) ResolvePipelineValues(ctx context.Context, tc, pn string) (*sec
 		}
 
 		// Plain entries resolve without the cipher, so a pipeline using only
-		// plain configuration works on a server with no master key.
+		// plain values work on a server with no master key.
 		if sv.Kind == secret.KindPlain {
 			resolved.Values[name] = string(sv.Data)
 			resolved.Plain[name] = true

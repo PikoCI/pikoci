@@ -31,8 +31,8 @@ const (
 	SecretCreated Action = "secret.created"
 	SecretDeleted Action = "secret.deleted"
 
-	ConfigCreated Action = "config.created"
-	ConfigDeleted Action = "config.deleted"
+	PlainCreated Action = "plain.created"
+	PlainDeleted Action = "plain.deleted"
 
 	MemberAdded       Action = "member.added"
 	MemberRemoved     Action = "member.removed"

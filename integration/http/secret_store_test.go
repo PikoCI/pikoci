@@ -14,9 +14,9 @@ import (
 	thttp "github.com/pikoci/pikoci/pikoci/transport/http"
 )
 
-// configPipelineHCL references one stored secret and one stored plain value,
+// secretPipelineHCL references one stored secret and one stored plain value,
 // so a resolve returns both kinds and marks only the plain one as plain.
-const configPipelineHCL = `
+const secretPipelineHCL = `
 variable "gh_token" {
   type = string
   secret "pikoci" {
@@ -53,20 +53,20 @@ func findEntry(entries []*secret.Entry, name string) *secret.Entry {
 
 func listTeamEntries(t *testing.T, jwt, tc string) []*secret.Entry {
 	t.Helper()
-	resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/"+tc+"/config", jwt, "")
+	resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/"+tc+"/secrets", jwt, "")
 	defer resp.Body.Close()
 	requireOK(t, resp)
-	var got thttp.ListConfigResponse
+	var got thttp.ListSecretsResponse
 	decodeBody(t, resp, &got)
 	require.Empty(t, got.Err)
 	return got.Data
 }
 
-func TestConfigStore_FullLifecycle(t *testing.T) {
+func TestSecretStore_FullLifecycle(t *testing.T) {
 	adminJWT := loginAndGetJWT(t, pikoURL, "admin", "admin123")
 
 	resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/pipelines", adminJWT,
-		`{"name":"cfg-pipe","config":"`+base64.StdEncoding.EncodeToString([]byte(configPipelineHCL))+`"}`)
+		`{"name":"cfg-pipe","config":"`+base64.StdEncoding.EncodeToString([]byte(secretPipelineHCL))+`"}`)
 	resp.Body.Close()
 	requireOK(t, resp)
 
@@ -75,7 +75,7 @@ func TestConfigStore_FullLifecycle(t *testing.T) {
 			`{"name":"CFG_TOKEN","value":"team-token","kind":"secret"}`,
 			`{"name":"CFG_LOG_LEVEL","value":"debug","kind":"plain"}`,
 		} {
-			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/config", adminJWT, body)
+			resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/secrets", adminJWT, body)
 			defer resp.Body.Close()
 			requireOK(t, resp)
 		}
@@ -96,7 +96,7 @@ func TestConfigStore_FullLifecycle(t *testing.T) {
 	})
 
 	t.Run("kind defaults to secret when omitted", func(t *testing.T) {
-		resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/config", adminJWT,
+		resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/secrets", adminJWT,
 			`{"name":"CFG_NO_KIND","value":"unspecified"}`)
 		resp.Body.Close()
 		requireOK(t, resp)
@@ -109,15 +109,15 @@ func TestConfigStore_FullLifecycle(t *testing.T) {
 	})
 
 	t.Run("a pipeline entry shadows the team entry of the same name", func(t *testing.T) {
-		resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/pipelines/cfg-pipe/config", adminJWT,
+		resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/pipelines/cfg-pipe/secrets", adminJWT,
 			`{"name":"CFG_TOKEN","value":"pipe-token","kind":"secret"}`)
 		resp.Body.Close()
 		requireOK(t, resp)
 
-		resp = doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/pipelines/cfg-pipe/config", adminJWT, "")
+		resp = doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/pipelines/cfg-pipe/secrets", adminJWT, "")
 		defer resp.Body.Close()
 		requireOK(t, resp)
-		var got thttp.ListConfigResponse
+		var got thttp.ListSecretsResponse
 		decodeBody(t, resp, &got)
 		require.NotNil(t, findEntry(got.Data, "CFG_TOKEN"))
 	})
@@ -131,11 +131,11 @@ func TestConfigStore_FullLifecycle(t *testing.T) {
 		require.NotEmpty(t, tok.Token)
 
 		resp = doJSONRequest(t, http.MethodGet,
-			pikoURL+"/teams/main/pipelines/cfg-pipe/config-values", tok.Token, "")
+			pikoURL+"/teams/main/pipelines/cfg-pipe/secret-values", tok.Token, "")
 		defer resp.Body.Close()
 		requireOK(t, resp)
 
-		var got thttp.ConfigValuesResponse
+		var got thttp.SecretValuesResponse
 		decodeBody(t, resp, &got)
 		require.Empty(t, got.Err)
 
@@ -153,7 +153,7 @@ func TestConfigStore_FullLifecycle(t *testing.T) {
 
 	t.Run("a user JWT cannot reach the resolve route", func(t *testing.T) {
 		resp := doJSONRequest(t, http.MethodGet,
-			pikoURL+"/teams/main/pipelines/cfg-pipe/config-values", adminJWT, "")
+			pikoURL+"/teams/main/pipelines/cfg-pipe/secret-values", adminJWT, "")
 		defer resp.Body.Close()
 		assert.NotEqual(t, http.StatusOK, resp.StatusCode,
 			"resolved plaintext is for workers only")
@@ -161,7 +161,7 @@ func TestConfigStore_FullLifecycle(t *testing.T) {
 
 	t.Run("delete removes the entry", func(t *testing.T) {
 		resp := doJSONRequest(t, http.MethodDelete,
-			pikoURL+"/teams/main/config/CFG_NO_KIND", adminJWT, "")
+			pikoURL+"/teams/main/secrets/CFG_NO_KIND", adminJWT, "")
 		resp.Body.Close()
 		requireOK(t, resp)
 
@@ -171,7 +171,7 @@ func TestConfigStore_FullLifecycle(t *testing.T) {
 
 // The store used to answer every failure with 400, so a caller could not tell
 // a missing entry from a malformed name.
-func TestConfigStore_ErrorStatuses(t *testing.T) {
+func TestSecretStore_ErrorStatuses(t *testing.T) {
 	adminJWT := loginAndGetJWT(t, pikoURL, "admin", "admin123")
 
 	for _, tt := range []struct {
@@ -184,33 +184,33 @@ func TestConfigStore_ErrorStatuses(t *testing.T) {
 		{
 			name:   "deleting an entry that is not there is 404",
 			method: http.MethodDelete,
-			path:   "/teams/main/config/NOT_STORED",
+			path:   "/teams/main/secrets/NOT_STORED",
 			want:   http.StatusNotFound,
 		},
 		{
 			name:   "deleting a pipeline entry that is not there is 404",
 			method: http.MethodDelete,
-			path:   "/teams/main/pipelines/cfg-pipe/config/NOT_STORED",
+			path:   "/teams/main/pipelines/cfg-pipe/secrets/NOT_STORED",
 			want:   http.StatusNotFound,
 		},
 		{
 			name:   "a name that is not an identifier is 400",
 			method: http.MethodPost,
-			path:   "/teams/main/config",
+			path:   "/teams/main/secrets",
 			body:   `{"name":"not a valid name","value":"x","kind":"plain"}`,
 			want:   http.StatusBadRequest,
 		},
 		{
 			name:   "an unknown kind is 400",
 			method: http.MethodPost,
-			path:   "/teams/main/config",
+			path:   "/teams/main/secrets",
 			body:   `{"name":"CFG_BAD_KIND","value":"x","kind":"neither"}`,
 			want:   http.StatusBadRequest,
 		},
 		{
 			name:   "a malformed body is 400",
 			method: http.MethodPost,
-			path:   "/teams/main/config",
+			path:   "/teams/main/secrets",
 			body:   `{"name":`,
 			want:   http.StatusBadRequest,
 		},
@@ -228,7 +228,7 @@ func TestConfigStore_ErrorStatuses(t *testing.T) {
 	}
 }
 
-func TestConfigStore_RBAC(t *testing.T) {
+func TestSecretStore_RBAC(t *testing.T) {
 	adminJWT := loginAndGetJWT(t, pikoURL, "admin", "admin123")
 
 	users := []struct{ username, password, role string }{
@@ -253,31 +253,31 @@ func TestConfigStore_RBAC(t *testing.T) {
 	}
 
 	t.Run("read can list", func(t *testing.T) {
-		resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/config", jwts["read"], "")
+		resp := doJSONRequest(t, http.MethodGet, pikoURL+"/teams/main/secrets", jwts["read"], "")
 		defer resp.Body.Close()
 		requireOK(t, resp)
 	})
 
 	t.Run("read cannot store", func(t *testing.T) {
-		resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/config", jwts["read"],
+		resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/secrets", jwts["read"],
 			`{"name":"CFG_DENIED","value":"x","kind":"plain"}`)
 		defer resp.Body.Close()
 		assert.NotEqual(t, http.StatusOK, resp.StatusCode)
 	})
 
 	t.Run("read cannot delete", func(t *testing.T) {
-		resp := doJSONRequest(t, http.MethodDelete, pikoURL+"/teams/main/config/CFG_TOKEN", jwts["read"], "")
+		resp := doJSONRequest(t, http.MethodDelete, pikoURL+"/teams/main/secrets/CFG_TOKEN", jwts["read"], "")
 		defer resp.Body.Close()
 		assert.NotEqual(t, http.StatusOK, resp.StatusCode)
 	})
 
 	t.Run("maintain can store and delete", func(t *testing.T) {
-		resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/config", jwts["maintain"],
+		resp := doJSONRequest(t, http.MethodPost, pikoURL+"/teams/main/secrets", jwts["maintain"],
 			`{"name":"CFG_BY_MAINTAIN","value":"x","kind":"plain"}`)
 		resp.Body.Close()
 		requireOK(t, resp)
 
-		resp = doJSONRequest(t, http.MethodDelete, pikoURL+"/teams/main/config/CFG_BY_MAINTAIN", jwts["maintain"], "")
+		resp = doJSONRequest(t, http.MethodDelete, pikoURL+"/teams/main/secrets/CFG_BY_MAINTAIN", jwts["maintain"], "")
 		resp.Body.Close()
 		requireOK(t, resp)
 	})
