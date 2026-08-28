@@ -207,6 +207,14 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 				return
 			}
 
+			// Some routes are closed to workers outright, so the blanket bypass
+			// below must not reach them however the token is scoped.
+			if isFromWorker && workerDeniedRoutes[crn] {
+				l.Error("worker token rejected", "route", crn.String())
+				encodeError("This endpoint is not available to workers", rw)
+				return
+			}
+
 			// Some routes expose data that the blanket worker bypass below must
 			// not hand out unconditionally. A worker reaching one of those has
 			// to prove it holds a team-scoped token for the team in the path.

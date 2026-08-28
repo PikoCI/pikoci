@@ -1012,6 +1012,92 @@ func TestWorkerTokenSecretValuesAuthorization(t *testing.T) {
 	}
 }
 
+// TestWorkerTokenDeniedOnSecretManagement covers the other half of the same
+// bypass: a worker has no business managing entries, only reading the values
+// resolved for the build it is running. Every management route must refuse a
+// worker token, and — unlike the secret-values route — scoping the token to the
+// team in the path must not help, because a build agent holding a standing
+// credential over a team's whole secret store is the thing being prevented.
+//
+// Before this was fixed, a global worker token could list every team's entries
+// (including plain values in the clear), overwrite them and delete them.
+func TestWorkerTokenDeniedOnSecretManagement(t *testing.T) {
+	routes := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{"list team secrets", http.MethodGet, "/teams/main/secrets"},
+		{"set team secret", http.MethodPost, "/teams/main/secrets"},
+		{"delete team secret", http.MethodDelete, "/teams/main/secrets/TOKEN"},
+		{"list pipeline secrets", http.MethodGet, "/teams/main/pipelines/p/secrets"},
+		{"set pipeline secret", http.MethodPost, "/teams/main/pipelines/p/secrets"},
+		{"delete pipeline secret", http.MethodDelete, "/teams/main/pipelines/p/secrets/TOKEN"},
+	}
+
+	// Empty means an unscoped global worker token. "main" matches the team in
+	// every path above, so it is the case that proves this is a denial rather
+	// than merely a scope check.
+	scopes := []struct {
+		name          string
+		teamCanonical string
+	}{
+		{"unscoped global worker", ""},
+		{"worker scoped to this very team", "main"},
+	}
+
+	for _, rt := range routes {
+		for _, sc := range scopes {
+			t.Run(rt.name+"/"+sc.name, func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				svc := mock.NewService(ctrl)
+				jwtSecret := []byte("test-secret")
+				handler := Handler(svc, jwtSecret, slog.Default(), nil, "", "test", "abc", "", nil)
+				server := httptest.NewServer(handler)
+				defer server.Close()
+
+				// Stubbed permissively: if the middleware ever lets a worker
+				// through, the service would answer and the assertions below
+				// would catch it. No call is expected.
+				svc.EXPECT().ListTeamSecrets(gomock.Any(), gomock.Any()).
+					Return([]*secret.Entry{{Name: "TOKEN", Canonical: "TOKEN", Kind: secret.KindPlain, Value: "leaked"}}, nil).AnyTimes()
+				svc.EXPECT().ListPipelineSecrets(gomock.Any(), gomock.Any(), gomock.Any()).
+					Return([]*secret.Entry{{Name: "TOKEN", Canonical: "TOKEN", Kind: secret.KindPlain, Value: "leaked"}}, nil).AnyTimes()
+				svc.EXPECT().SetTeamSecret(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				svc.EXPECT().SetPipelineSecret(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				svc.EXPECT().DeleteTeamSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				svc.EXPECT().DeletePipelineSecret(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+				claims := jwt.MapClaims{"is_from_worker": true}
+				if sc.teamCanonical != "" {
+					claims["team_canonical"] = sc.teamCanonical
+				}
+				token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+				jwtStr, err := token.SignedString(jwtSecret)
+				require.NoError(t, err)
+
+				req, err := http.NewRequest(rt.method, server.URL+rt.path,
+					strings.NewReader(`{"name":"TOKEN","value":"v","kind":"plain"}`))
+				require.NoError(t, err)
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+jwtStr)
+
+				resp, err := http.DefaultClient.Do(req)
+				require.NoError(t, err)
+				defer resp.Body.Close()
+
+				body, err := io.ReadAll(resp.Body)
+				require.NoError(t, err)
+
+				assert.Equal(t, http.StatusBadRequest, resp.StatusCode,
+					"a worker token must be refused on %s %s", rt.method, rt.path)
+				assert.NotContains(t, string(body), "leaked",
+					"a denied request must not leak stored values")
+			})
+		}
+	}
+}
+
 // Workers keep their blanket bypass on ordinary routes; only the routes listed
 // in workerScopedRoutes require a team-scoped token.
 func TestWorkerTokenStillBypassesOrdinaryRoutes(t *testing.T) {
