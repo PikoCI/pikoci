@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/cycloidio/sqlr"
+
 	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/build"
 	"github.com/pikoci/pikoci/pikoci/job"
@@ -15,6 +17,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
+	"github.com/pikoci/pikoci/pikoci/secret"
 	"github.com/pikoci/pikoci/pikoci/sectype"
 	"github.com/pikoci/pikoci/pikoci/team"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -39,6 +42,7 @@ type unitOfWork struct {
 	notificationTypes notiftype.Repository
 	notifications     notification.Repository
 	apiTokens         apitoken.Repository
+	secrets           secret.Repository
 }
 
 // NewStartUnitOfWork returns a StartUnitOfWork backed by a real SQL database.
@@ -151,4 +155,30 @@ func (u *unitOfWork) ApiTokens() apitoken.Repository {
 		u.apiTokens = mysql.NewApiTokenRepository(u.tx)
 	}
 	return u.apiTokens
+}
+
+func (u *unitOfWork) Secrets() secret.Repository {
+	if u.secrets == nil {
+		u.secrets = mysql.NewSecretRepository(u.querier())
+	}
+	return u.secrets
+}
+
+// querier returns the querier a repository should be built with.
+//
+// An *sql.Tx passes SQL through untouched, but PostgreSQL needs ? placeholders
+// rewritten to $N and INSERTs given a RETURNING clause, which is what
+// PGQuerier does for the non-transactional repositories in cmd/server.go.
+//
+// The accessors above still hand out the bare u.tx, so they are broken on
+// PostgreSQL — CreateTeam fails there with a syntax error. That is a
+// pre-existing bug, reported separately rather than fixed here: it is not
+// this branch's to change, and widening it would alter every UoW path. The
+// secret store, however, works on PostgreSQL today via the wrapped querier,
+// so it uses this to avoid regressing on the way into the transaction.
+func (u *unitOfWork) querier() sqlr.Querier {
+	if mysql.IsPostgreSQL(u.dbSystem) {
+		return mysql.NewPGQuerier(u.tx)
+	}
+	return u.tx
 }

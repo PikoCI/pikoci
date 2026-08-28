@@ -88,7 +88,9 @@ func newSecretStoreMocks(t *testing.T, masterKey, raw string) (MockService, *sql
 	_, err = db.Exec(`INSERT INTO pipelines (team_id, name, canonical) VALUES (?, ?, ?)`, teamID, pn, pn)
 	require.NoError(t, err)
 
-	ms.P.EnableSecretStore(mysql.NewSecretRepository(db), masterKey)
+	sr := mysql.NewSecretRepository(db)
+	ms.P.EnableSecretStore(sr, masterKey)
+	ms.withSecretRepo(sr)
 
 	ms.Pipelines.EXPECT().Find(gomock.Any(), tc, pn).Return(&pipeline.Pipeline{
 		Name:      pn,

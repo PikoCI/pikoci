@@ -6,6 +6,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/mock"
+	"github.com/pikoci/pikoci/pikoci/secret"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"go.uber.org/mock/gomock"
 	"golang.org/x/crypto/bcrypt"
@@ -32,6 +33,7 @@ type MockService struct {
 	Notifications     *mock.NotificationRepository
 	Workers           *mock.WorkerRepository
 	ApiTokens         *mock.ApiTokenRepository
+	Secrets           *mock.SecretRepository
 	AuditLogs         *mock.AuditLogRepository
 	// Audited collects every audit entry written through AuditLogs.
 	Audited *[]auditlog.Entry
@@ -55,6 +57,7 @@ func newService(ctrl *gomock.Controller) MockService {
 	nr := mock.NewNotificationRepository(ctrl)
 	wr := mock.NewWorkerRepository(ctrl)
 	atr := mock.NewApiTokenRepository(ctrl)
+	secr := mock.NewSecretRepository(ctrl)
 
 	suow := unitwork.NewNoopStartUnitOfWork(unitwork.Repositories{
 		UsersRepo:             ur,
@@ -69,6 +72,7 @@ func newService(ctrl *gomock.Controller) MockService {
 		NotificationTypesRepo: ntr,
 		NotificationsRepo:     nr,
 		ApiTokensRepo:         atr,
+		SecretsRepo:           secr,
 	})
 
 	alr := mock.NewAuditLogRepository(ctrl)
@@ -97,10 +101,34 @@ func newService(ctrl *gomock.Controller) MockService {
 		Notifications:     nr,
 		Workers:           wr,
 		ApiTokens:         atr,
+		Secrets:           secr,
 		AuditLogs:         alr,
 		Audited:           audited,
 
 		S: p,
 		P: p,
 	}
+}
+
+
+// withSecretRepo rebuilds the noop unit of work so it hands out this secret
+// repository. Tests that exercise the real store need the transactional
+// accessor to return the same repository EnableSecretStore was given, rather
+// than the mock the other repositories use.
+func (ms MockService) withSecretRepo(sr secret.Repository) {
+	ms.P.StartUoW = unitwork.NewNoopStartUnitOfWork(unitwork.Repositories{
+		UsersRepo:             ms.Users,
+		TeamsRepo:             ms.Teams,
+		PipelinesRepo:         ms.Pipelines,
+		JobsRepo:              ms.Jobs,
+		ResourcesRepo:         ms.Resources,
+		ResourceTypesRepo:     ms.ResourceTypes,
+		BuildsRepo:            ms.Builds,
+		RunnersRepo:           ms.Runners,
+		SecretTypesRepo:       ms.SecretTypes,
+		NotificationTypesRepo: ms.NotificationTypes,
+		NotificationsRepo:     ms.Notifications,
+		ApiTokensRepo:         ms.ApiTokens,
+		SecretsRepo:           sr,
+	})
 }

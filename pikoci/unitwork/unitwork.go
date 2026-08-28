@@ -16,6 +16,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
+	"github.com/pikoci/pikoci/pikoci/secret"
 	"github.com/pikoci/pikoci/pikoci/sectype"
 	"github.com/pikoci/pikoci/pikoci/team"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -54,6 +55,8 @@ type UnitOfWork interface {
 	Notifications() notification.Repository
 	// ApiTokens returns the API token repository for this transaction.
 	ApiTokens() apitoken.Repository
+	// Secrets returns the secret store repository for this transaction.
+	Secrets() secret.Repository
 }
 
 // Repositories holds all repository interfaces, used to construct a noop UoW for testing.
@@ -70,4 +73,5 @@ type Repositories struct {
 	NotificationTypesRepo notiftype.Repository
 	NotificationsRepo     notification.Repository
 	ApiTokensRepo         apitoken.Repository
+	SecretsRepo           secret.Repository
 }

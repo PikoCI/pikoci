@@ -10,6 +10,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/secret"
 	"github.com/pikoci/pikoci/pikoci/sectype"
+	"github.com/pikoci/pikoci/pikoci/unitwork"
 )
 
 // secretNameRe constrains entry names to the shape of an environment
@@ -136,21 +137,31 @@ func checkKindUnchanged(entries []*secret.Entry, name string, kind secret.Kind) 
 // SetTeamSecret stores a team-scoped entry, replacing the value of any
 // existing entry with the same name.
 func (q *PikoCI) SetTeamSecret(ctx context.Context, tc, name, value string, kind secret.Kind) error {
+	// Outside the transaction on purpose: encryption is expensive, and the
+	// cipher reads the server identity through its own repository, so it would
+	// escape the transaction anyway.
 	e, data, err := q.prepareEntry(ctx, name, value, kind, secret.TeamScope)
 	if err != nil {
 		return err
 	}
 
-	entries, err := q.Secrets.FilterTeam(ctx, tc)
+	err = q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
+		entries, err := uow.Secrets().FilterTeam(ctx, tc)
+		if err != nil {
+			return err
+		}
+		if err := checkKindUnchanged(entries, e.Canonical, kind); err != nil {
+			return err
+		}
+
+		if _, err := uow.Secrets().UpsertTeam(ctx, tc, e, data); err != nil {
+			return fmt.Errorf("failed to store %q: %w", name, err)
+		}
+
+		return nil
+	})
 	if err != nil {
 		return err
-	}
-	if err := checkKindUnchanged(entries, e.Canonical, kind); err != nil {
-		return err
-	}
-
-	if _, err := q.Secrets.UpsertTeam(ctx, tc, e, data); err != nil {
-		return fmt.Errorf("failed to store %q: %w", name, err)
 	}
 
 	q.audit(ctx, tc, auditCreated(kind), "secret", name, nil)
@@ -166,16 +177,23 @@ func (q *PikoCI) SetPipelineSecret(ctx context.Context, tc, pn, name, value stri
 		return err
 	}
 
-	entries, err := q.Secrets.FilterPipeline(ctx, tc, pn)
+	err = q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
+		entries, err := uow.Secrets().FilterPipeline(ctx, tc, pn)
+		if err != nil {
+			return err
+		}
+		if err := checkKindUnchanged(entries, e.Canonical, kind); err != nil {
+			return err
+		}
+
+		if _, err := uow.Secrets().UpsertPipeline(ctx, tc, pn, e, data); err != nil {
+			return fmt.Errorf("failed to store %q: %w", name, err)
+		}
+
+		return nil
+	})
 	if err != nil {
 		return err
-	}
-	if err := checkKindUnchanged(entries, e.Canonical, kind); err != nil {
-		return err
-	}
-
-	if _, err := q.Secrets.UpsertPipeline(ctx, tc, pn, e, data); err != nil {
-		return fmt.Errorf("failed to store %q: %w", name, err)
 	}
 
 	q.audit(ctx, tc, auditCreated(kind), "secret", name, map[string]interface{}{"pipeline": pn})
@@ -207,16 +225,23 @@ func (q *PikoCI) DeleteTeamSecret(ctx context.Context, tc, name string) error {
 	if err := q.secretStoreReady(); err != nil {
 		return err
 	}
-	entries, err := q.Secrets.FilterTeam(ctx, tc)
-	if err != nil {
-		return err
-	}
-	kind, err := entryKind(entries, name)
-	if err != nil {
-		return err
-	}
 
-	if err := q.Secrets.DeleteTeam(ctx, tc, name); err != nil {
+	// The kind is read inside the transaction because it decides which audit
+	// action is written, and the row is gone once the delete lands.
+	var kind secret.Kind
+	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
+		entries, err := uow.Secrets().FilterTeam(ctx, tc)
+		if err != nil {
+			return err
+		}
+		kind, err = entryKind(entries, name)
+		if err != nil {
+			return err
+		}
+
+		return uow.Secrets().DeleteTeam(ctx, tc, name)
+	})
+	if err != nil {
 		return err
 	}
 
@@ -230,16 +255,21 @@ func (q *PikoCI) DeletePipelineSecret(ctx context.Context, tc, pn, name string) 
 	if err := q.secretStoreReady(); err != nil {
 		return err
 	}
-	entries, err := q.Secrets.FilterPipeline(ctx, tc, pn)
-	if err != nil {
-		return err
-	}
-	kind, err := entryKind(entries, name)
-	if err != nil {
-		return err
-	}
 
-	if err := q.Secrets.DeletePipeline(ctx, tc, pn, name); err != nil {
+	var kind secret.Kind
+	err := q.StartUoW(ctx, func(uow unitwork.UnitOfWork) error {
+		entries, err := uow.Secrets().FilterPipeline(ctx, tc, pn)
+		if err != nil {
+			return err
+		}
+		kind, err = entryKind(entries, name)
+		if err != nil {
+			return err
+		}
+
+		return uow.Secrets().DeletePipeline(ctx, tc, pn, name)
+	})
+	if err != nil {
 		return err
 	}
 
