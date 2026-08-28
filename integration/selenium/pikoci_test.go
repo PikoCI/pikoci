@@ -1251,8 +1251,10 @@ job "gen" {
 
 				waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#tab-secrets", "active", true), 5*time.Second)
 
-				_, err = wd.FindElement(selenium.ByCSSSelector, "#new-secret")
-				require.NoError(t, err, "admin should be able to add an entry")
+				// The tab going active only means the route matched. The panel
+				// itself renders nothing until its fetch resolves, so wait for
+				// the panel rather than probing straight after the tab.
+				waitFor(t, wd, hasElement("#new-secret"), 5*time.Second)
 			})
 			t.Run("Add Plain Value", func(t *testing.T) {
 				addSecretEntry(t, wd, "LOG_LEVEL", "debug", false)
@@ -2734,6 +2736,16 @@ func eqText(by, value, txt string) waitForFn {
 	}
 }
 
+// hasElement waits for a selector to be present at all. Useful where a
+// component renders nothing until its fetch resolves, so the surrounding page
+// is ready before the element it owns exists.
+func hasElement(selector string) waitForFn {
+	return func(t *testing.T, wd selenium.WebDriver) bool {
+		_, err := wd.FindElement(selenium.ByCSSSelector, selector)
+		return err == nil
+	}
+}
+
 // secretRowSelector addresses one row of the secrets table by the entry it
 // holds. The table is rebuilt after every mutation, so a row has to be looked
 // up again rather than held on to.
@@ -2770,6 +2782,10 @@ func secretRowContains(name, want string) waitForFn {
 func addSecretEntry(t *testing.T, wd selenium.WebDriver, name, value string, isSecret bool) {
 	t.Helper()
 
+	// The panel renders nothing until its fetch resolves, and every mutation
+	// reloads it, so the button has to be waited for rather than assumed.
+	waitFor(t, wd, hasElement("#new-secret"), 5*time.Second)
+
 	newBtn, err := wd.FindElement(selenium.ByCSSSelector, "#new-secret")
 	require.NoError(t, err)
 	require.NoError(t, newBtn.Click())
@@ -2802,6 +2818,8 @@ func addSecretEntry(t *testing.T, wd selenium.WebDriver, name, value string, isS
 // never retyped, and the entry is never removed first.
 func editSecretEntry(t *testing.T, wd selenium.WebDriver, name, value string) {
 	t.Helper()
+
+	waitFor(t, wd, hasElement(secretRowSelector(name)+" .edit-secret"), 5*time.Second)
 
 	edit, err := wd.FindElement(selenium.ByCSSSelector, secretRowSelector(name)+" .edit-secret")
 	require.NoError(t, err)
