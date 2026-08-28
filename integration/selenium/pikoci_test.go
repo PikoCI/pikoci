@@ -2164,6 +2164,11 @@ job "gen" {
 			require.Error(t, err, "viewer should not see Edit button")
 			_, err = wd.FindElement(selenium.ByCSSSelector, "#delete-pipeline")
 			require.Error(t, err, "viewer should not see Delete button")
+
+			// Listing needs only read, so this one stays: it is not a
+			// maintainer action like the two above.
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#secrets-pipeline")
+			require.NoError(t, err, "viewer should still see the Secrets button")
 		})
 		t.Run("No pause button", func(t *testing.T) {
 			_, err = wd.FindElement(selenium.ByCSSSelector, "#pause-pipeline")
@@ -2372,6 +2377,11 @@ job "gen" {
 				_, err := wd.FindElement(selenium.ByCSSSelector, "div#pipeline-graph>svg")
 				return err == nil
 			}, 5*time.Second)
+
+			// An anonymous visitor holds no team role, so the Secrets button is
+			// hidden even though it only needs read.
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#secrets-pipeline")
+			require.Error(t, err, "anonymous visitor should not see the Secrets button")
 		})
 
 		t.Run("ViewSwitcherPublic", func(t *testing.T) {
