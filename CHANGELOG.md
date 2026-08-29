@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Second `get` in a job never resolved**: a build carries the version of the resource whose check produced it, and `buildPullParams` applied that id to every `get` in the plan. For any other resource the lookup searched a different resource's history for an id that could not be there, failing the build with `no version found for resource "..."` — so a job getting two resources could never run, whichever one triggered. The queue's version now applies only to the resource named by `ResourceCanonical`; every other `get` falls through to its latest, as the priority comment already described.
 - **Windows startup panic loading embedded templates**: template path lookups now use `path.Join` instead of `filepath.Join`, since `embed.FS` requires forward slashes on every OS ([#641](https://github.com/PikoCI/pikoci/issues/641)).
 - **Running step elapsed time not shown**: Steps currently in progress now display a live-updating elapsed timer (matching the format of completed steps), consistent with the global build timer already shown at the top of the page ([#655](https://github.com/PikoCI/pikoci/issues/655)).
 - **Services inside `if` branches not stopped**: services started within an `if` branch are now returned to the plan runner and stopped correctly, even when the branch fails ([#664](https://github.com/PikoCI/pikoci/issues/664)).

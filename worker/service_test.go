@@ -1712,6 +1712,46 @@ func TestBuildPullParams_WithVersionID(t *testing.T) {
 	assert.Equal(t, uint32(5), vid)
 }
 
+// A job may get more than one resource. The build carries the version of the
+// resource whose check triggered it; every other resource in the plan takes its
+// latest, because that id means nothing in another resource's history.
+func TestBuildPullParams_OtherResourceInJob_UsesLatest(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	// Triggered by a check on git.app, carrying that resource's version 5.
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           10,
+		ResourceCanonical: "git.app",
+		VersionID:         5,
+	}
+	b := build.Build{ID: 73, BuildNumber: "73"}
+
+	rt := restype.ResourceType{
+		Pull: &utils.RunnerCommand{
+			Params: map[string]string{},
+		},
+	}
+	// ... but this step gets the other resource, whose versions are 6 and 7.
+	r := resource.Resource{Canonical: "git.lib"}
+	g := job.GetStep{}
+
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.lib", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+		Return([]*resource.Version{
+			{ID: 6, Version: map[string]interface{}{"ref": "old"}},
+			{ID: 7, Version: map[string]interface{}{"ref": "newest"}},
+		}, false, nil).AnyTimes()
+
+	params, vid, _ := w.buildPullParams(ctx, m, &b, rt, r, g, 0)
+	require.NotNil(t, params, "the build must not fail because version 5 belongs to another resource")
+	assert.Equal(t, "newest", params["version_ref"])
+	assert.Equal(t, uint32(7), vid)
+}
+
 func TestBuildPullParams_NoVersionID_UsesLatest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc := newTestWorker(ctrl)
