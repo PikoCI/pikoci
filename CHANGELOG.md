@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Build list tabs show stale status**: Build tabs no longer stay stuck on "running" after a build completes — they now refresh automatically when a non-terminal build transitions to a terminal state.
 - **Trigger handler authorization bypass**: JSON body could override route vars to trigger jobs in unauthorized teams; body is now decoded before route vars are applied ([#644](https://github.com/PikoCI/pikoci/issues/644)).
 - **Active build data overwritten by stale snapshot**: The `onFullBuildFetched` callback now merges only enrichment fields (steps, approvals, version_metadata, pinned_versions) into the polling state rather than replacing the entire build object.
+- **Git resource check recording a bogus empty-ref version**: The `git` resource type's check now fails instead of returning an empty ref when `ls-remote` finds no matching ref, so a transient anonymous-request failure no longer gets recorded as a new version and triggers builds that fail on checkout ([#676](https://github.com/PikoCI/pikoci/issues/676)).
 
 ## [0.7.0] - 2026-07-08
 
