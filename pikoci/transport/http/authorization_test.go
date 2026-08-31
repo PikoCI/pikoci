@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/mock"
 	"github.com/pikoci/pikoci/pikoci/role"
+	"github.com/pikoci/pikoci/pikoci/secret"
 	"github.com/pikoci/pikoci/pikoci/user"
 	"go.uber.org/mock/gomock"
 )
@@ -100,6 +102,22 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 		{"global admin can update auth settings", http.MethodPut, "/admin/auth-settings", role.Admin, true, true},
 		{"non-global-admin denied update auth settings", http.MethodPut, "/admin/auth-settings", role.Admin, false, false},
 
+		// --- Secret store: writes need maintain, listing needs read ---
+		{"maintainer can set team secret", http.MethodPost, "/teams/main/secrets", role.Maintain, false, true},
+		{"operator denied set team secret", http.MethodPost, "/teams/main/secrets", role.Write, false, false},
+		{"viewer can list team secret", http.MethodGet, "/teams/main/secrets", role.Read, false, true},
+		{"maintainer can delete team secret", http.MethodDelete, "/teams/main/secrets/TOKEN", role.Maintain, false, true},
+		{"operator denied delete team secret", http.MethodDelete, "/teams/main/secrets/TOKEN", role.Write, false, false},
+		{"maintainer can set pipeline secret", http.MethodPost, "/teams/main/pipelines/p/secrets", role.Maintain, false, true},
+		{"operator denied set pipeline secret", http.MethodPost, "/teams/main/pipelines/p/secrets", role.Write, false, false},
+		{"viewer can list pipeline secret", http.MethodGet, "/teams/main/pipelines/p/secrets", role.Read, false, true},
+		{"maintainer can delete pipeline secret", http.MethodDelete, "/teams/main/pipelines/p/secrets/TOKEN", role.Maintain, false, true},
+
+		// There is deliberately no secret-reveal API: resolved values are for
+		// workers only, so even a team admin is denied.
+		{"admin denied reading secret values", http.MethodGet, "/teams/main/pipelines/p/secret-values", role.Admin, false, false},
+		{"global admin denied reading secret values", http.MethodGet, "/teams/main/pipelines/p/secret-values", role.Admin, true, false},
+
 		// --- Profile linked accounts: any authenticated user (role.Read) ---
 		{"viewer can list linked accounts", http.MethodGet, "/profile/linked-accounts", role.Read, false, true},
 		{"viewer can unlink account", http.MethodDelete, "/profile/linked-accounts/github", role.Read, false, true},
@@ -152,6 +170,13 @@ func TestRoleAuthorizationMatrix(t *testing.T) {
 			svc.EXPECT().UpdateAuthSettings(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			svc.EXPECT().ListLinkedAccounts(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 			svc.EXPECT().UnlinkAccount(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().SetTeamSecret(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().SetPipelineSecret(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().ListTeamSecrets(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+			svc.EXPECT().ListPipelineSecrets(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+			svc.EXPECT().DeleteTeamSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().DeletePipelineSecret(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			svc.EXPECT().ResolvePipelineValues(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
 			// Sign JWT
 			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user": um, "token_gen": um.TokenGen})
@@ -908,4 +933,195 @@ func TestApiTokenAuth_TeamScopedTokenVariousRoutes(t *testing.T) {
 				"team-scoped token for my-team should be denied on %s to wrong-team", rt.name)
 		})
 	}
+}
+
+// TestWorkerTokenSecretValuesAuthorization guards the secret-values route
+// against the blanket worker bypass in the auth middleware, which otherwise
+// treats any "is_from_worker" JWT as an admin and skips authorization
+// entirely. Without the workerScopedRoutes exemption, any worker token —
+// including an unscoped global one — could read every team's secrets.
+func TestWorkerTokenSecretValuesAuthorization(t *testing.T) {
+	tests := []struct {
+		name string
+		// teamCanonical is the team claim on the worker JWT; empty means an
+		// unscoped global worker token.
+		teamCanonical string
+		path          string
+		wantOK        bool
+	}{
+		{
+			name:          "team-scoped worker reads its own team",
+			teamCanonical: "main",
+			path:          "/teams/main/pipelines/p/secret-values",
+			wantOK:        true,
+		},
+		{
+			name:          "team-scoped worker denied another team",
+			teamCanonical: "main",
+			path:          "/teams/other/pipelines/p/secret-values",
+			wantOK:        false,
+		},
+		{
+			name:          "unscoped global worker denied",
+			teamCanonical: "",
+			path:          "/teams/main/pipelines/p/secret-values",
+			wantOK:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			svc := mock.NewService(ctrl)
+			jwtSecret := []byte("test-secret")
+			handler := Handler(svc, jwtSecret, slog.Default(), nil, "", "test", "abc", "", nil)
+			server := httptest.NewServer(handler)
+			defer server.Close()
+
+			svc.EXPECT().ResolvePipelineValues(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(&secret.Resolved{Values: map[string]string{"TOKEN": "value"}}, nil).AnyTimes()
+
+			claims := jwt.MapClaims{"is_from_worker": true}
+			if tt.teamCanonical != "" {
+				claims["team_canonical"] = tt.teamCanonical
+			}
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+			jwtStr, err := token.SignedString(jwtSecret)
+			require.NoError(t, err)
+
+			req, err := http.NewRequest(http.MethodGet, server.URL+tt.path, strings.NewReader("{}"))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+jwtStr)
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+
+			if tt.wantOK {
+				assert.Equal(t, http.StatusOK, resp.StatusCode)
+				assert.Contains(t, string(body), "TOKEN")
+			} else {
+				assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+				assert.NotContains(t, string(body), "value", "a denied request must not leak secret values")
+			}
+		})
+	}
+}
+
+// TestWorkerTokenDeniedOnSecretManagement covers the other half of the same
+// bypass: a worker has no business managing entries, only reading the values
+// resolved for the build it is running. Every management route must refuse a
+// worker token, and — unlike the secret-values route — scoping the token to the
+// team in the path must not help, because a build agent holding a standing
+// credential over a team's whole secret store is the thing being prevented.
+//
+// Before this was fixed, a global worker token could list every team's entries
+// (including plain values in the clear), overwrite them and delete them.
+func TestWorkerTokenDeniedOnSecretManagement(t *testing.T) {
+	routes := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{"list team secrets", http.MethodGet, "/teams/main/secrets"},
+		{"set team secret", http.MethodPost, "/teams/main/secrets"},
+		{"delete team secret", http.MethodDelete, "/teams/main/secrets/TOKEN"},
+		{"list pipeline secrets", http.MethodGet, "/teams/main/pipelines/p/secrets"},
+		{"set pipeline secret", http.MethodPost, "/teams/main/pipelines/p/secrets"},
+		{"delete pipeline secret", http.MethodDelete, "/teams/main/pipelines/p/secrets/TOKEN"},
+	}
+
+	// Empty means an unscoped global worker token. "main" matches the team in
+	// every path above, so it is the case that proves this is a denial rather
+	// than merely a scope check.
+	scopes := []struct {
+		name          string
+		teamCanonical string
+	}{
+		{"unscoped global worker", ""},
+		{"worker scoped to this very team", "main"},
+	}
+
+	for _, rt := range routes {
+		for _, sc := range scopes {
+			t.Run(rt.name+"/"+sc.name, func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				svc := mock.NewService(ctrl)
+				jwtSecret := []byte("test-secret")
+				handler := Handler(svc, jwtSecret, slog.Default(), nil, "", "test", "abc", "", nil)
+				server := httptest.NewServer(handler)
+				defer server.Close()
+
+				// Stubbed permissively: if the middleware ever lets a worker
+				// through, the service would answer and the assertions below
+				// would catch it. No call is expected.
+				svc.EXPECT().ListTeamSecrets(gomock.Any(), gomock.Any()).
+					Return([]*secret.Entry{{Name: "TOKEN", Canonical: "TOKEN", Kind: secret.KindPlain, Value: "leaked"}}, nil).AnyTimes()
+				svc.EXPECT().ListPipelineSecrets(gomock.Any(), gomock.Any(), gomock.Any()).
+					Return([]*secret.Entry{{Name: "TOKEN", Canonical: "TOKEN", Kind: secret.KindPlain, Value: "leaked"}}, nil).AnyTimes()
+				svc.EXPECT().SetTeamSecret(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				svc.EXPECT().SetPipelineSecret(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				svc.EXPECT().DeleteTeamSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				svc.EXPECT().DeletePipelineSecret(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+				claims := jwt.MapClaims{"is_from_worker": true}
+				if sc.teamCanonical != "" {
+					claims["team_canonical"] = sc.teamCanonical
+				}
+				token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+				jwtStr, err := token.SignedString(jwtSecret)
+				require.NoError(t, err)
+
+				req, err := http.NewRequest(rt.method, server.URL+rt.path,
+					strings.NewReader(`{"name":"TOKEN","value":"v","kind":"plain"}`))
+				require.NoError(t, err)
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+jwtStr)
+
+				resp, err := http.DefaultClient.Do(req)
+				require.NoError(t, err)
+				defer resp.Body.Close()
+
+				body, err := io.ReadAll(resp.Body)
+				require.NoError(t, err)
+
+				assert.Equal(t, http.StatusBadRequest, resp.StatusCode,
+					"a worker token must be refused on %s %s", rt.method, rt.path)
+				assert.NotContains(t, string(body), "leaked",
+					"a denied request must not leak stored values")
+			})
+		}
+	}
+}
+
+// Workers keep their blanket bypass on ordinary routes; only the routes listed
+// in workerScopedRoutes require a team-scoped token.
+func TestWorkerTokenStillBypassesOrdinaryRoutes(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	jwtSecret := []byte("test-secret")
+	handler := Handler(svc, jwtSecret, slog.Default(), nil, "", "test", "abc", "", nil)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	svc.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"is_from_worker": true})
+	jwtStr, err := token.SignedString(jwtSecret)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines", strings.NewReader("{}"))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+jwtStr)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "unscoped worker tokens must still work on ordinary routes")
 }

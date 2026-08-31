@@ -188,3 +188,73 @@ test('getTeamWorkerToken: returns empty string when no token', async () => {
     globalThis.fetch = original;
   }
 });
+
+// --- Secret store ---
+
+import { fetchSecrets, setSecret, deleteSecret } from '../../pikoci/transport/http/assets/js/app/api.js';
+
+test('fetchSecrets: uses the team endpoint when no pipeline is given', async () => {
+  const original = globalThis.fetch;
+  let capturedUrl;
+  globalThis.fetch = (url) => {
+    capturedUrl = url;
+    return Promise.resolve(mockResponse(200, { data: [] }));
+  };
+  try {
+    await fetchSecrets('main');
+    assert.equal(capturedUrl, '/teams/main/secrets');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('fetchSecrets: uses the pipeline endpoint when a pipeline is given', async () => {
+  const original = globalThis.fetch;
+  let capturedUrl;
+  globalThis.fetch = (url) => {
+    capturedUrl = url;
+    return Promise.resolve(mockResponse(200, { data: [] }));
+  };
+  try {
+    await fetchSecrets('main', 'web');
+    assert.equal(capturedUrl, '/teams/main/pipelines/web/secrets');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('setSecret: POSTs the name, value and kind', async () => {
+  const original = globalThis.fetch;
+  let capturedUrl, capturedOpts;
+  globalThis.fetch = (url, opts) => {
+    capturedUrl = url;
+    capturedOpts = opts;
+    return Promise.resolve(mockResponse(200, {}));
+  };
+  try {
+    await setSecret('main', null, { name: 'LOG_LEVEL', value: 'debug', kind: 'plain' });
+    assert.equal(capturedUrl, '/teams/main/secrets');
+    assert.equal(capturedOpts.method, 'POST');
+    assert.deepEqual(JSON.parse(capturedOpts.body), { name: 'LOG_LEVEL', value: 'debug', kind: 'plain' });
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+// Names are used verbatim as lookup keys, so they must survive the path segment.
+test('deleteSecret: escapes the name in the path', async () => {
+  const original = globalThis.fetch;
+  let capturedUrl, capturedOpts;
+  globalThis.fetch = (url, opts) => {
+    capturedUrl = url;
+    capturedOpts = opts;
+    return Promise.resolve(mockResponse(200, {}));
+  };
+  try {
+    await deleteSecret('main', 'web', 'A B');
+    assert.equal(capturedUrl, '/teams/main/pipelines/web/secrets/A%20B');
+    assert.equal(capturedOpts.method, 'DELETE');
+  } finally {
+    globalThis.fetch = original;
+  }
+});

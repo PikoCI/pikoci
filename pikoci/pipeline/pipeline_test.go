@@ -317,10 +317,28 @@ func TestPipeline_SecretType(t *testing.T) {
 		assert.False(t, ok)
 	})
 
-	t.Run("returns false on empty pipeline", func(t *testing.T) {
+	t.Run("falls back to built-ins on empty pipeline", func(t *testing.T) {
+		// Built-in names resolve without a secret_type block, matching
+		// ResourceType and NotificationType. Reference validation already
+		// accepts them, so returning false here used to let a pipeline pass
+		// validation and then fail at build time.
 		empty := &pipeline.Pipeline{}
-		_, ok := empty.SecretType("vault")
+		st, ok := empty.SecretType("vault")
+		assert.True(t, ok)
+		assert.Equal(t, "vault", st.Name)
+	})
+
+	t.Run("returns false on empty pipeline for a non-built-in", func(t *testing.T) {
+		empty := &pipeline.Pipeline{}
+		_, ok := empty.SecretType("unknown")
 		assert.False(t, ok)
+	})
+
+	t.Run("resolves the built-in secret store", func(t *testing.T) {
+		empty := &pipeline.Pipeline{}
+		st, ok := empty.SecretType("pikoci")
+		assert.True(t, ok)
+		assert.Empty(t, st.Get.Runner, "the store is resolved natively, not by a runner command")
 	})
 }
 

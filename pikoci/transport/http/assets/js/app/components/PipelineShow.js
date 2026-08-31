@@ -478,6 +478,11 @@ export function PipelineShow({ tc, pn }) {
     route('/teams/' + tc + '/pipelines/' + pn + '/edit');
   }, [tc, pn]);
 
+  const clickSecrets = useCallback((e) => {
+    e.preventDefault();
+    route('/teams/' + tc + '/pipelines/' + pn + '/secrets');
+  }, [tc, pn]);
+
   const clickDelete = useCallback((e) => {
     e.preventDefault();
     if (confirm("Are you sure you want to delete Pipeline '" + (pipeline ? pipeline.name : pn) + "'")) {
@@ -522,6 +527,10 @@ export function PipelineShow({ tc, pn }) {
 
   const isOperator = hasTeamRole(tc, 'write');
   const isMaintainer = hasTeamRole(tc, 'maintain');
+  // Listing secrets only needs read, matching the API and the team-level tab.
+  // Still gated rather than always shown: a public pipeline renders this page
+  // for anonymous visitors, who have no team role at all.
+  const canReadSecrets = hasTeamRole(tc, 'read');
   const hasPaused = pipeline.jobs && pipeline.jobs.some(j => j.paused);
   const shareUrls = getShareUrls();
   const showGraphView = currentView === 'graph';
@@ -539,6 +548,9 @@ export function PipelineShow({ tc, pn }) {
             ? html`<button type="button" id="unpause-pipeline" class="btn btn-primary" onClick=${clickUnpause}><i class="bi bi-play-circle"></i> Unpause</button>`
             : html`<button type="button" id="pause-pipeline" class="btn btn-primary" onClick=${clickPause}><i class="bi bi-pause-circle"></i> Pause</button>`
           }
+        `}
+        ${canReadSecrets && html`
+          <button type="button" id="secrets-pipeline" class="btn btn-secondary" onClick=${clickSecrets}><i class="bi bi-key"></i> Secrets</button>
         `}
         ${isMaintainer && html`
           <button type="button" id="edit-pipeline" class="btn btn-info" onClick=${clickEdit}><i class="bi bi-pencil"></i> Edit</button>

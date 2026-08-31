@@ -123,8 +123,63 @@ var (
 		CreateApiToken: jwtOnly(requireRole(role.Read)),
 		ListApiTokens:  jwtOnly(requireRole(role.Read)),
 		DeleteApiToken: jwtOnly(requireRole(role.Read)),
+
+		// Secret store. Writes match the other pipeline-configuration routes at
+		// Maintain. Listing is Read and returns plain values in the clear;
+		// secret values are never returned at any role.
+		SetTeamSecret:        requireRole(role.Maintain),
+		ListTeamSecrets:      requireRole(role.Read),
+		DeleteTeamSecret:     requireRole(role.Maintain),
+		SetPipelineSecret:    requireRole(role.Maintain),
+		ListPipelineSecrets:  requireRole(role.Read),
+		DeletePipelineSecret: requireRole(role.Maintain),
+
+		// Resolved values are for workers only. Reaching this as a user is
+		// always a denial: there is deliberately no secret-reveal API.
+		GetPipelineSecretValues: workerOnly,
+	}
+
+	// workerScopedRoutes are routes that a worker JWT must be explicitly
+	// authorized for, instead of being waved through by the blanket
+	// "is_from_worker implies admin" bypass in the auth middleware. A worker
+	// reaching one of these must present a team-scoped token whose team
+	// matches the team in the request path.
+	//
+	// Without this, any worker token — including an unscoped global one —
+	// could read every team's secrets.
+	workerScopedRoutes = map[RouteName]bool{
+		GetPipelineSecretValues: true,
+	}
+
+	// workerDeniedRoutes are routes no worker may reach at all, whatever its
+	// token is scoped to. They are the counterpart to workerScopedRoutes: that
+	// map narrows the blanket bypass, this one removes it.
+	//
+	// A worker only ever needs the values resolved for the build it is
+	// running, which is GetPipelineSecretValues and nothing else. Managing
+	// entries is a human action, so a worker token — which lives on a build
+	// agent, and in the global case is printed to the server log at startup
+	// and never rotates — must not be able to read, write or delete them.
+	// Scoping is not enough here: a team-scoped token would still be a
+	// standing credential over that team's whole secret store.
+	//
+	// These cannot be expressed in routeAuthorization, because the middleware
+	// never consults that table for a worker.
+	workerDeniedRoutes = map[RouteName]bool{
+		SetTeamSecret:        true,
+		ListTeamSecrets:      true,
+		DeleteTeamSecret:     true,
+		SetPipelineSecret:    true,
+		ListPipelineSecrets:  true,
+		DeletePipelineSecret: true,
 	}
 )
+
+// workerOnly rejects every non-worker caller. Workers never reach it: the auth
+// middleware handles them via workerScopedRoutes before consulting this table.
+func workerOnly(ctx context.Context, s pikoci.Service, un, tc string) error {
+	return fmt.Errorf("this endpoint is only available to workers")
+}
 
 func nothing(ctx context.Context, s pikoci.Service, un, tc string) error { return nil }
 

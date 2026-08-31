@@ -28,6 +28,12 @@ const (
 	BuildRejected      Action = "build.rejected"
 	BuildMarkedWarning Action = "build.marked_warning"
 
+	SecretCreated Action = "secret.created"
+	SecretDeleted Action = "secret.deleted"
+
+	PlainCreated Action = "plain.created"
+	PlainDeleted Action = "plain.deleted"
+
 	MemberAdded       Action = "member.added"
 	MemberRemoved     Action = "member.removed"
 	MemberRoleChanged Action = "member.role_changed"

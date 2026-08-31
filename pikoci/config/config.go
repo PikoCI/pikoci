@@ -13,6 +13,11 @@ type Config struct {
 
 	JWTSecret string `mapstructure:"jwt-secret"`
 
+	// SecretKey wraps the server's stored encryption identity. Unlike
+	// JWTSecret it is optional: without it the server starts normally and only
+	// the secret store is unavailable.
+	SecretKey string `mapstructure:"secret-key"`
+
 	Users []string `mapstructure:"users"`
 
 	// MySQL

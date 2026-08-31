@@ -12,6 +12,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/restype"
 	"github.com/pikoci/pikoci/pikoci/runner"
+	"github.com/pikoci/pikoci/pikoci/secret"
 	"github.com/pikoci/pikoci/pikoci/sectype"
 	"github.com/pikoci/pikoci/pikoci/team"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -54,3 +55,4 @@ func (u *noopUnitOfWork) Notifications() notification.Repository {
 func (u *noopUnitOfWork) ApiTokens() apitoken.Repository {
 	return u.repos.ApiTokensRepo
 }
+func (u *noopUnitOfWork) Secrets() secret.Repository     { return u.repos.SecretsRepo }

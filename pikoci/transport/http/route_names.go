@@ -166,6 +166,22 @@ const (
 	// DeleteApiToken is the route for deleting an API token.
 	DeleteApiToken
 
+	// SetTeamSecret is the route for storing a team-scoped secret entry.
+	SetTeamSecret
+	// ListTeamSecrets is the route for listing team-scoped secret entries.
+	ListTeamSecrets
+	// DeleteTeamSecret is the route for removing a team-scoped secret entry.
+	DeleteTeamSecret
+	// SetPipelineSecret is the route for storing a pipeline-scoped secret entry.
+	SetPipelineSecret
+	// ListPipelineSecrets is the route for listing pipeline-scoped secret entries.
+	ListPipelineSecrets
+	// DeletePipelineSecret is the route for removing a pipeline-scoped secret entry.
+	DeletePipelineSecret
+	// GetPipelineSecretValues is the worker-only route for fetching resolved
+	// secret values for a pipeline.
+	GetPipelineSecretValues
+
 	// ListAuditLog is the route for listing audit log entries for a team.
 	ListAuditLog
 

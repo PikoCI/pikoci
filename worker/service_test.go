@@ -1497,7 +1497,7 @@ func TestRunHooks(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "60", gomock.Any()).
 		Return(nil).AnyTimes()
 
-	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "task-name", hooks, "on_success", nil, nil)
+	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "task-name", hooks, "on_success", nil, nil, nil)
 
 	require.Len(t, b.Job, 2)
 	assert.Equal(t, "task-name:0:on_success", b.Job[0].Name)
@@ -1528,7 +1528,7 @@ func TestRunHooks_SingleHook_NoIndex(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "61", gomock.Any()).
 		Return(nil).AnyTimes()
 
-	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "step", hooks, "ensure", nil, nil)
+	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "step", hooks, "ensure", nil, nil, nil)
 
 	require.Len(t, b.Job, 1)
 	assert.Equal(t, "step:ensure", b.Job[0].Name)
@@ -1558,7 +1558,7 @@ func TestRunHooks_JobLevel_NoStepName(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "62", gomock.Any()).
 		Return(nil).AnyTimes()
 
-	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", hooks, "on_failure", nil, nil)
+	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "", hooks, "on_failure", nil, nil, nil)
 
 	require.Len(t, b.Job, 1)
 	assert.Equal(t, "on_failure", b.Job[0].Name)
@@ -1593,7 +1593,7 @@ func TestRunHooks_FailedRunner_StepMarkedFailed(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "70", gomock.Any()).
 		Return(nil).AnyTimes()
 
-	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "step", hooks, "on_success", nil, nil)
+	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "step", hooks, "on_success", nil, nil, nil)
 
 	require.Len(t, b.Job, 1)
 	assert.Equal(t, build.Failed, b.Job[0].Status, "hook step should be marked as failed")
@@ -1630,7 +1630,7 @@ func TestRunHooks_MixedSuccess_StepStatuses(t *testing.T) {
 	svc.EXPECT().UpdateJobBuild(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, m.JobName, "71", gomock.Any()).
 		Return(nil).AnyTimes()
 
-	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "step", hooks, "ensure", nil, nil)
+	w.runHooks(ctx, m, &b, &b.Job, cwd, pp, "step", hooks, "ensure", nil, nil, nil)
 
 	require.Len(t, b.Job, 2)
 	assert.Equal(t, build.Succeeded, b.Job[0].Status, "first hook should succeed")
@@ -2608,10 +2608,27 @@ func TestSecretValuesFromResolved(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := secretValuesFromResolved(tt.resolved)
+			got := secretValuesFromResolved(tt.resolved, nil)
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// Plain configuration must stay out of the mask list. Masking it would print
+// ***  instead of a log level or a URL, defeating the point of the kind.
+func TestSecretValuesFromResolved_SkipsPlain(t *testing.T) {
+	resolved := map[string]string{
+		"__pikoci_secret:pikoci::API_TOKEN__": "ghp_supersecret",
+		"__pikoci_secret:pikoci::LOG_LEVEL__": "debugging",
+	}
+	unmasked := map[string]struct{}{
+		"__pikoci_secret:pikoci::LOG_LEVEL__": {},
+	}
+
+	got := secretValuesFromResolved(resolved, unmasked)
+
+	assert.Equal(t, []string{"ghp_supersecret"}, got)
+	assert.NotContains(t, got, "debugging", "plain values must never be masked")
 }
 
 func TestMaskSecrets(t *testing.T) {
@@ -3427,7 +3444,7 @@ func TestFetchSecrets_RawFormat(t *testing.T) {
 	}
 
 	secrets := map[string]string{"pem": ""}
-	result, err := w.fetchSecrets(ctx, cwd, pp, secrets)
+	result, _, err := w.fetchSecrets(ctx, cwd, "main", pp, secrets)
 	require.NoError(t, err)
 	assert.Equal(t, pemContent, result["secret_content"], "raw format should return trimmed file content under 'content' key")
 }

@@ -126,6 +126,7 @@ var serverCmd = &cobra.Command{
 		atr := mysql.NewApiTokenRepository(querier)
 		alr := mysql.NewAuditLogRepository(querier)
 		opr := mysql.NewOAuthProviderRepository(querier)
+		sr := mysql.NewSecretRepository(querier)
 
 		suow := unitwork.NewStartUnitOfWork(db, cfg.DBSystem)
 
@@ -133,6 +134,15 @@ var serverCmd = &cobra.Command{
 
 		logger.Info("initializing service")
 		var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, wr, atr, alr, opr, suow, jwtSecret, wn, logger)
+
+		// The secret store is optional. With no --secret-key the server runs
+		// exactly as before and secret operations report that they are not
+		// configured, rather than failing startup for everyone who does not
+		// use secrets.
+		svc.EnableSecretStore(sr, cfg.SecretKey)
+		if cfg.SecretKey == "" {
+			logger.Info("secret encryption disabled: set --secret-key or PIKOCI_SECRET_KEY to store and read secrets. Plain config entries still work")
+		}
 
 		if cfg.SessionLifetime != "" && cfg.SessionLifetime != "0" {
 			d, err := duration.Parse(cfg.SessionLifetime)
@@ -406,6 +416,7 @@ func init() {
 
 	serverCmd.Flags().IntP("port", "p", 8080, "Port in which to start the server")
 	serverCmd.Flags().String("jwt-secret", "", "Declares the Secret used to sign the JWT when user login")
+	serverCmd.Flags().String("secret-key", "", "Master key used to encrypt stored secrets (env PIKOCI_SECRET_KEY). Optional: without it the secret store is unavailable. Losing it makes every stored secret unrecoverable")
 	serverCmd.Flags().StringSlice("users", nil, "List of Users as 'USERNAME:HASH-PASSWORD' to create at startup or override default passwords. Use the 'user-password' command to generate hashes")
 	serverCmd.Flags().String("db-system", mysql.Mem, "Which DB system to use (mem, sqlite, mysql, postgresql)")
 	serverCmd.Flags().String("db-host", "", "Database Host")
@@ -431,6 +442,11 @@ func init() {
 	// Env var support: JWT_SECRET, DB_SYSTEM, etc.
 	serverViper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	serverViper.AutomaticEnv()
+
+	// The master key is bound explicitly so it can be given the unambiguous
+	// PIKOCI_SECRET_KEY name. AutomaticEnv alone would only match the bare
+	// SECRET_KEY, which is generic enough to collide in a shared environment.
+	serverViper.BindEnv("secret-key", "PIKOCI_SECRET_KEY", "SECRET_KEY")
 }
 
 func parseSlogLevel(s string) slog.Level {

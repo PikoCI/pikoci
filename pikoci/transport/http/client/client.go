@@ -20,6 +20,7 @@ import (
 	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/pikoci/pikoci/pikoci/role"
+	"github.com/pikoci/pikoci/pikoci/secret"
 	"github.com/pikoci/pikoci/pikoci/team"
 	thttp "github.com/pikoci/pikoci/pikoci/transport/http"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -1451,4 +1452,122 @@ func (cl *Client) CreateOAuthUserLink(ctx context.Context, link oauthprovider.Us
 }
 func (cl *Client) FindUserByID(ctx context.Context, userID uint32) (*user.User, error) {
 	return nil, fmt.Errorf("not implemented")
+}
+
+// SetTeamSecret stores a team-scoped secret store entry.
+func (cl *Client) SetTeamSecret(ctx context.Context, tc, name, value string, kind secret.Kind) error {
+	var resp thttp.SetSecretResponse
+
+	req := thttp.SetSecretRequest{Name: name, Value: value, Kind: kind}
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/secrets", cl.url, tc), req, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return nil
+}
+
+// SetPipelineSecret stores a pipeline-scoped secret store entry.
+func (cl *Client) SetPipelineSecret(ctx context.Context, tc, pn, name, value string, kind secret.Kind) error {
+	var resp thttp.SetSecretResponse
+
+	req := thttp.SetSecretRequest{Name: name, Value: value, Kind: kind}
+	err := cl.Request(ctx, http.MethodPost, fmt.Sprintf("%s/teams/%s/pipelines/%s/secrets", cl.url, tc, pn), req, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return nil
+}
+
+// ListTeamSecrets returns the team-scoped entries. Plain entries carry their
+// value; secret values are never returned.
+func (cl *Client) ListTeamSecrets(ctx context.Context, tc string) ([]*secret.Entry, error) {
+	var resp thttp.ListSecretsResponse
+
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/secrets", cl.url, tc), nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return resp.Data, nil
+}
+
+// ListPipelineSecrets returns the pipeline-scoped entries. Plain entries carry
+// their value; secret values are never returned.
+func (cl *Client) ListPipelineSecrets(ctx context.Context, tc, pn string) ([]*secret.Entry, error) {
+	var resp thttp.ListSecretsResponse
+
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/secrets", cl.url, tc, pn), nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return resp.Data, nil
+}
+
+// DeleteTeamSecret removes a team-scoped entry.
+func (cl *Client) DeleteTeamSecret(ctx context.Context, tc, name string) error {
+	var resp thttp.DeleteSecretResponse
+
+	err := cl.Request(ctx, http.MethodDelete, fmt.Sprintf("%s/teams/%s/secrets/%s", cl.url, tc, name), nil, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return nil
+}
+
+// DeletePipelineSecret removes a pipeline-scoped entry.
+func (cl *Client) DeletePipelineSecret(ctx context.Context, tc, pn, name string) error {
+	var resp thttp.DeleteSecretResponse
+
+	err := cl.Request(ctx, http.MethodDelete, fmt.Sprintf("%s/teams/%s/pipelines/%s/secrets/%s", cl.url, tc, pn, name), nil, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return nil
+}
+
+// ResolvePipelineValues fetches resolved secret values for a pipeline. This is
+// the worker's path to the store and requires the client to be authenticated
+// with a team-scoped worker token.
+func (cl *Client) ResolvePipelineValues(ctx context.Context, tc, pn string) (*secret.Resolved, error) {
+	var resp thttp.SecretValuesResponse
+
+	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/secret-values", cl.url, tc, pn), nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return nil, fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return &secret.Resolved{Values: resp.Data, Plain: resp.Plain}, nil
 }

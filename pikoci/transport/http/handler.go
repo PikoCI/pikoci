@@ -207,6 +207,35 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 				return
 			}
 
+			// Some routes are closed to workers outright, so the blanket bypass
+			// below must not reach them however the token is scoped.
+			if isFromWorker && workerDeniedRoutes[crn] {
+				l.Error("worker token rejected", "route", crn.String())
+				encodeError("This endpoint is not available to workers", rw)
+				return
+			}
+
+			// Some routes expose data that the blanket worker bypass below must
+			// not hand out unconditionally. A worker reaching one of those has
+			// to prove it holds a team-scoped token for the team in the path.
+			if isFromWorker && workerScopedRoutes[crn] {
+				vars := mux.Vars(rr)
+				tc := vars["team_canonical"]
+				wtc, _ := rr.Context().Value(WorkerTeamCanonicalKey).(string)
+				if wtc == "" {
+					l.Error("unscoped worker token rejected", "route", crn.String())
+					encodeError("This endpoint requires a team-scoped worker token", rw)
+					return
+				}
+				if wtc != tc {
+					l.Error("worker token team mismatch", "route", crn.String(), "token_team", wtc, "requested_team", tc)
+					encodeError("Worker token is not scoped to this team", rw)
+					return
+				}
+				h.ServeHTTP(rw, rr)
+				return
+			}
+
 			// If the JWT has the 'is_from_worker' we assume admin
 			// so we do not even have to Authorize anything
 			if !isFromWorker {
@@ -372,6 +401,15 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodGet).Path("/admin/auth-settings").Name(GetAdminAuthSettings.String()).Handler(getAdminAuthSettings(s))
 	api.Methods(http.MethodPut).Path("/admin/auth-settings").Name(UpdateAdminAuthSettings.String()).Handler(updateAdminAuthSettings(s))
 
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/secrets").Name(SetTeamSecret.String()).Handler(setTeamSecret(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/secrets").Name(ListTeamSecrets.String()).Handler(listTeamSecrets(s))
+	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/secrets/{secret_name}").Name(DeleteTeamSecret.String()).Handler(deleteTeamSecret(s))
+
+	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/secrets").Name(SetPipelineSecret.String()).Handler(setPipelineSecret(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/secrets").Name(ListPipelineSecrets.String()).Handler(listPipelineSecrets(s))
+	api.Methods(http.MethodDelete).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/secrets/{secret_name}").Name(DeletePipelineSecret.String()).Handler(deletePipelineSecret(s))
+	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/secret-values").Name(GetPipelineSecretValues.String()).Handler(getPipelineSecretValues(s))
+
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/audit").Name(ListAuditLog.String()).Handler(listAuditLog(s))
 
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/triggers/{trigger_name}").Name(CreateTrigger.String()).Handler(createTrigger(s))
@@ -422,6 +460,20 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 // encodeError writes an error response as JSON to the response writer.
 func encodeError(errs string, w http.ResponseWriter) {
 	encodeResponse(ErrorResponse{Err: errs}, w)
+}
+
+// encodeErrorStatus is encodeError for handlers that can tell one failure from
+// another: a missing entry from a malformed request from a server-side fault.
+// encodeResponse can only ever say 400, because it infers the status from the
+// presence of an error rather than from its cause.
+//
+// The body keeps ErrorResponse's shape, which is what both the API client and
+// the UI already read on any non-2xx.
+func encodeErrorStatus(errs string, status int, w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(ErrorResponse{Err: errs})
 }
 
 // ErrorResponse represents a JSON error response returned by the API.

@@ -8,6 +8,7 @@ import { fetchTeams, createTeam, fetchTeam, updateTeam, deleteTeam, fetchUsers, 
 import { useRequireAuth, useLoading } from '../hooks.js';
 import { showToast } from '../toast.js';
 import { Breadcrumb } from './Layout.js';
+import { SecretsPanel } from './Secrets.js';
 
 const ASSIGNABLE_ROLES = ['read', 'write', 'maintain', 'admin'];
 
@@ -119,10 +120,10 @@ export function TeamNew() {
 }
 
 // ---------------------------------------------------------------------------
-// TeamShow – team detail with tabs: Settings | Members | Workers | Audit Log
+// TeamShow – team detail with tabs: Settings | Members | Secrets | Workers | Audit Log
 // ---------------------------------------------------------------------------
 
-const VALID_TABS = ['settings', 'members', 'workers', 'audit'];
+const VALID_TABS = ['settings', 'members', 'secrets', 'workers', 'audit'];
 
 export function TeamShow({ tc, tab }) {
   useRequireAuth();
@@ -170,6 +171,12 @@ export function TeamShow({ tc, tab }) {
           <i class="bi bi-people"></i> Members
         </a>
       </li>
+      <li class="nav-item">
+        <a class="nav-link${activeTab === 'secrets' ? ' active' : ''}" href=${'/teams/' + tc + '/secrets'} data-native id="tab-secrets"
+          onClick=${(e) => { e.preventDefault(); switchTab('secrets'); }}>
+          <i class="bi bi-key"></i> Secrets
+        </a>
+      </li>
       ${hasTeamRole(tc, 'admin') && html`
         <li class="nav-item">
           <a class="nav-link${activeTab === 'workers' ? ' active' : ''}" href=${'/teams/' + tc + '/workers'} data-native id="tab-workers"
@@ -187,6 +194,7 @@ export function TeamShow({ tc, tab }) {
     </ul>
     ${activeTab === 'settings' && html`<${SettingsTab} tc=${tc} team=${team} />`}
     ${activeTab === 'members' && html`<${MembersTab} tc=${tc} members=${members} setMembers=${setMembers} loadTeam=${loadTeam} />`}
+    ${activeTab === 'secrets' && html`<${SecretsPanel} tc=${tc} />`}
     ${activeTab === 'workers' && hasTeamRole(tc, 'admin') && html`<${WorkersTab} tc=${tc} />`}
     ${activeTab === 'audit' && html`<${AuditLogTab} tc=${tc} />`}
   `;

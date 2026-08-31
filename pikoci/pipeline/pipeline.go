@@ -163,6 +163,13 @@ func (pp *Pipeline) SecretType(stn string) (sectype.SecretType, bool) {
 		}
 	}
 
+	// Fall back to built-ins, matching ResourceType and NotificationType.
+	// Reference validation already accepts built-in names, so without this a
+	// pipeline could pass validation and then fail at build time.
+	if st, ok := builtin.SecretTypes()[stn]; ok {
+		return st, true
+	}
+
 	return sectype.SecretType{}, false
 }
 

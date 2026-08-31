@@ -1238,6 +1238,128 @@ job "gen" {
 			require.NoError(t, err)
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain\nPipelines"), 5*time.Second)
 		})
+		t.Run("Secrets", func(t *testing.T) {
+			// Always restore browser state for subsequent tests
+			defer func() {
+				wd.Get(pikoURL + "/teams/main/pipelines")
+				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain\nPipelines"), 5*time.Second)
+			}()
+
+			t.Run("Team Tab", func(t *testing.T) {
+				err := wd.Get(pikoURL + "/teams/main/secrets")
+				require.NoError(t, err)
+
+				waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#tab-secrets", "active", true), 5*time.Second)
+
+				// The tab going active only means the route matched. The panel
+				// itself renders nothing until its fetch resolves, so wait for
+				// the panel rather than probing straight after the tab.
+				waitFor(t, wd, hasElement("#new-secret"), 5*time.Second)
+			})
+			t.Run("Add Plain Value", func(t *testing.T) {
+				addSecretEntry(t, wd, "LOG_LEVEL", "debug", false)
+
+				waitFor(t, wd, secretRowContains("LOG_LEVEL", "debug"), 5*time.Second)
+			})
+			t.Run("Add Secret", func(t *testing.T) {
+				addSecretEntry(t, wd, "API_TOKEN", "supersecret", true)
+
+				waitFor(t, wd, secretRowContains("API_TOKEN", "••••••••"), 5*time.Second)
+
+				src, err := wd.PageSource()
+				require.NoError(t, err)
+				require.NotContains(t, src, "supersecret", "a stored secret must never come back to the page")
+			})
+			// The whole point of editing in place: the entry keeps existing
+			// while its value is replaced, so a build never sees it missing.
+			t.Run("Replace A Secret Value", func(t *testing.T) {
+				before, err := wd.FindElements(selenium.ByCSSSelector, "#secrets-body .piko-secret-row")
+				require.NoError(t, err)
+
+				editSecretEntry(t, wd, "API_TOKEN", "rotatedsecret")
+
+				waitFor(t, wd, secretRowContains("API_TOKEN", "••••••••"), 5*time.Second)
+
+				after, err := wd.FindElements(selenium.ByCSSSelector, "#secrets-body .piko-secret-row")
+				require.NoError(t, err)
+				require.Equal(t, len(before), len(after), "a replace must not add or drop a row")
+
+				src, err := wd.PageSource()
+				require.NoError(t, err)
+				require.NotContains(t, src, "rotatedsecret", "the replacement must not be echoed back either")
+			})
+			t.Run("Replace A Plain Value", func(t *testing.T) {
+				editSecretEntry(t, wd, "LOG_LEVEL", "info")
+
+				waitFor(t, wd, secretRowContains("LOG_LEVEL", "info"), 5*time.Second)
+			})
+			t.Run("Delete", func(t *testing.T) {
+				del, err := wd.FindElement(selenium.ByCSSSelector, secretRowSelector("LOG_LEVEL")+" .delete-secret")
+				require.NoError(t, err)
+				err = del.Click()
+				require.NoError(t, err)
+
+				err = wd.AcceptAlert()
+				require.NoError(t, err)
+
+				waitFor(t, wd, hasSecretRow("LOG_LEVEL", false), 5*time.Second)
+
+				_, err = wd.FindElement(selenium.ByCSSSelector, secretRowSelector("API_TOKEN"))
+				require.NoError(t, err, "deleting one entry must not disturb the others")
+			})
+			t.Run("Pipeline Scope", func(t *testing.T) {
+				err := wd.Get(pikoURL + "/teams/main/pipelines/cron")
+				require.NoError(t, err)
+				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain\nPipelines\ncron"), 5*time.Second)
+
+				btn, err := wd.FindElement(selenium.ByCSSSelector, "#secrets-pipeline")
+				require.NoError(t, err)
+				err = btn.Click()
+				require.NoError(t, err)
+
+				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain\nPipelines\ncron\nSecrets"), 5*time.Second)
+
+				// Navigation is the breadcrumb's job here, as on every other page.
+				src, err := wd.PageSource()
+				require.NoError(t, err)
+				require.NotContains(t, src, "Back to Pipeline", "the breadcrumb replaces the back button")
+			})
+			t.Run("Inherits Team Entries", func(t *testing.T) {
+				waitFor(t, wd, secretRowContains("API_TOKEN", "inherited"), 5*time.Second)
+
+				_, err := wd.FindElement(selenium.ByCSSSelector, secretRowSelector("API_TOKEN")+" .delete-secret")
+				require.Error(t, err, "an inherited entry is managed on the team, not here")
+				_, err = wd.FindElement(selenium.ByCSSSelector, secretRowSelector("API_TOKEN")+" .edit-secret")
+				require.Error(t, err, "an inherited entry is edited on the team, not here")
+			})
+			t.Run("Pipeline Override", func(t *testing.T) {
+				addSecretEntry(t, wd, "API_TOKEN", "pipeline-scoped", true)
+
+				waitFor(t, wd, secretRowContains("API_TOKEN", "overrides team"), 5*time.Second)
+
+				rows, err := wd.FindElements(selenium.ByCSSSelector, secretRowSelector("API_TOKEN"))
+				require.NoError(t, err)
+				require.Equal(t, 1, len(rows), "a shadowed team entry must not also be listed")
+
+				del, err := wd.FindElement(selenium.ByCSSSelector, secretRowSelector("API_TOKEN")+" .delete-secret")
+				require.NoError(t, err, "the pipeline owns this one, so it can remove it")
+				err = del.Click()
+				require.NoError(t, err)
+				err = wd.AcceptAlert()
+				require.NoError(t, err)
+
+				// Removing the override reveals the team entry it was hiding.
+				waitFor(t, wd, secretRowContains("API_TOKEN", "inherited"), 5*time.Second)
+			})
+			t.Run("Breadcrumb Returns To The Pipeline", func(t *testing.T) {
+				crumb, err := wd.FindElement(selenium.ByCSSSelector, `#breadcrumb a[href="/teams/main/pipelines/cron"]`)
+				require.NoError(t, err)
+				err = crumb.Click()
+				require.NoError(t, err)
+
+				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain\nPipelines\ncron"), 5*time.Second)
+			})
+		})
 		t.Run("Users Page", func(t *testing.T) {
 			// Open navbar dropdown and click Users
 			navLink, err := wd.FindElement(selenium.ByCSSSelector, ".navbar .nav-link")
@@ -2044,6 +2166,11 @@ job "gen" {
 			require.Error(t, err, "viewer should not see Edit button")
 			_, err = wd.FindElement(selenium.ByCSSSelector, "#delete-pipeline")
 			require.Error(t, err, "viewer should not see Delete button")
+
+			// Listing needs only read, so this one stays: it is not a
+			// maintainer action like the two above.
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#secrets-pipeline")
+			require.NoError(t, err, "viewer should still see the Secrets button")
 		})
 		t.Run("No pause button", func(t *testing.T) {
 			_, err = wd.FindElement(selenium.ByCSSSelector, "#pause-pipeline")
@@ -2087,6 +2214,22 @@ job "gen" {
 			roleSelects, err := wd.FindElements(selenium.ByCSSSelector, "select.form-select-sm")
 			require.NoError(t, err)
 			require.Equal(t, 0, len(roleSelects), "viewer should not see role dropdowns")
+		})
+		// read is enough to list entries — plain values are non-sensitive by
+		// definition — but not to change any of them.
+		t.Run("Secrets are read-only", func(t *testing.T) {
+			err := wd.Get(pikoURL + "/teams/main/secrets")
+			require.NoError(t, err)
+
+			waitFor(t, wd, waitForClass(selenium.ByCSSSelector, "#tab-secrets", "active", true), 5*time.Second)
+			waitFor(t, wd, hasSecretRow("API_TOKEN", true), 5*time.Second)
+
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#new-secret")
+			require.Error(t, err, "viewer should not see New Entry button")
+			_, err = wd.FindElement(selenium.ByCSSSelector, ".edit-secret")
+			require.Error(t, err, "viewer should not see Edit button")
+			_, err = wd.FindElement(selenium.ByCSSSelector, ".delete-secret")
+			require.Error(t, err, "viewer should not see Delete button")
 		})
 		t.Run("Logout", func(t *testing.T) {
 			navLink, err := wd.FindElement(selenium.ByCSSSelector, ".navbar .nav-link")
@@ -2236,6 +2379,11 @@ job "gen" {
 				_, err := wd.FindElement(selenium.ByCSSSelector, "div#pipeline-graph>svg")
 				return err == nil
 			}, 5*time.Second)
+
+			// An anonymous visitor holds no team role, so the Secrets button is
+			// hidden even though it only needs read.
+			_, err = wd.FindElement(selenium.ByCSSSelector, "#secrets-pipeline")
+			require.Error(t, err, "anonymous visitor should not see the Secrets button")
 		})
 
 		t.Run("ViewSwitcherPublic", func(t *testing.T) {
@@ -2586,6 +2734,110 @@ func eqText(by, value, txt string) waitForFn {
 
 		return weTxt == txt
 	}
+}
+
+// hasElement waits for a selector to be present at all. Useful where a
+// component renders nothing until its fetch resolves, so the surrounding page
+// is ready before the element it owns exists.
+func hasElement(selector string) waitForFn {
+	return func(t *testing.T, wd selenium.WebDriver) bool {
+		_, err := wd.FindElement(selenium.ByCSSSelector, selector)
+		return err == nil
+	}
+}
+
+// secretRowSelector addresses one row of the secrets table by the entry it
+// holds. The table is rebuilt after every mutation, so a row has to be looked
+// up again rather than held on to.
+func secretRowSelector(name string) string {
+	return `#secrets-body .piko-secret-row[data-name="` + name + `"]`
+}
+
+// hasSecretRow waits for a row to appear (want true) or to go away.
+func hasSecretRow(name string, want bool) waitForFn {
+	return func(t *testing.T, wd selenium.WebDriver) bool {
+		_, err := wd.FindElement(selenium.ByCSSSelector, secretRowSelector(name))
+		return (err == nil) == want
+	}
+}
+
+// secretRowContains waits for a row to render some text: its value, or one of
+// the scope badges.
+func secretRowContains(name, want string) waitForFn {
+	return func(t *testing.T, wd selenium.WebDriver) bool {
+		el, err := wd.FindElement(selenium.ByCSSSelector, secretRowSelector(name))
+		if err != nil {
+			return false
+		}
+		txt, err := el.Text()
+		if err != nil {
+			return false
+		}
+		return strings.Contains(txt, want)
+	}
+}
+
+// addSecretEntry drives the new-entry form. Entries are secret by default, so
+// a plain one has to untick the box.
+func addSecretEntry(t *testing.T, wd selenium.WebDriver, name, value string, isSecret bool) {
+	t.Helper()
+
+	// The panel renders nothing until its fetch resolves, and every mutation
+	// reloads it, so the button has to be waited for rather than assumed.
+	waitFor(t, wd, hasElement("#new-secret"), 5*time.Second)
+
+	newBtn, err := wd.FindElement(selenium.ByCSSSelector, "#new-secret")
+	require.NoError(t, err)
+	require.NoError(t, newBtn.Click())
+
+	waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+		_, err := wd.FindElement(selenium.ByCSSSelector, "#secret-name")
+		return err == nil
+	}, 5*time.Second)
+
+	nameInput, err := wd.FindElement(selenium.ByCSSSelector, "#secret-name")
+	require.NoError(t, err)
+	require.NoError(t, nameInput.SendKeys(name))
+
+	if !isSecret {
+		kind, err := wd.FindElement(selenium.ByCSSSelector, "#secret-kind")
+		require.NoError(t, err)
+		require.NoError(t, kind.Click())
+	}
+
+	valueInput, err := wd.FindElement(selenium.ByCSSSelector, "#secret-value")
+	require.NoError(t, err)
+	require.NoError(t, valueInput.SendKeys(value))
+
+	save, err := wd.FindElement(selenium.ByCSSSelector, "#save-secret")
+	require.NoError(t, err)
+	require.NoError(t, save.Click())
+}
+
+// editSecretEntry replaces the value of an existing row in place. The name is
+// never retyped, and the entry is never removed first.
+func editSecretEntry(t *testing.T, wd selenium.WebDriver, name, value string) {
+	t.Helper()
+
+	waitFor(t, wd, hasElement(secretRowSelector(name)+" .edit-secret"), 5*time.Second)
+
+	edit, err := wd.FindElement(selenium.ByCSSSelector, secretRowSelector(name)+" .edit-secret")
+	require.NoError(t, err)
+	require.NoError(t, edit.Click())
+
+	waitFor(t, wd, func(t *testing.T, wd selenium.WebDriver) bool {
+		_, err := wd.FindElement(selenium.ByCSSSelector, "#secret-edit-value")
+		return err == nil
+	}, 5*time.Second)
+
+	input, err := wd.FindElement(selenium.ByCSSSelector, "#secret-edit-value")
+	require.NoError(t, err)
+	require.NoError(t, input.Clear())
+	require.NoError(t, input.SendKeys(value))
+
+	save, err := wd.FindElement(selenium.ByCSSSelector, "#save-secret-edit")
+	require.NoError(t, err)
+	require.NoError(t, save.Click())
 }
 
 func containsString(s, substr string) bool {

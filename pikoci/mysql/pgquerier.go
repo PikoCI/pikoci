@@ -4,15 +4,20 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+
+	"github.com/cycloidio/sqlr"
 )
 
-// PGQuerier wraps a *sql.DB and rewrites ? placeholders to $N for PostgreSQL.
+// PGQuerier wraps a querier and rewrites ? placeholders to $N for PostgreSQL.
 type PGQuerier struct {
-	db *sql.DB
+	db sqlr.Querier
 }
 
-// NewPGQuerier returns a PGQuerier wrapping the given *sql.DB.
-func NewPGQuerier(db *sql.DB) *PGQuerier {
+// NewPGQuerier returns a PGQuerier wrapping the given querier. It takes the
+// interface rather than *sql.DB so a transaction can be wrapped too: inside a
+// unit of work the repositories are handed an *sql.Tx, which does no rewriting
+// of its own.
+func NewPGQuerier(db sqlr.Querier) *PGQuerier {
 	return &PGQuerier{db: db}
 }
 
