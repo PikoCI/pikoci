@@ -185,6 +185,24 @@ func TestGitCheck_LsRemote_WithBranch(t *testing.T) {
 	assert.Equal(t, expectedSHA, versions[0]["ref"])
 }
 
+func TestGitCheck_LsRemote_NoMatchingRef_Fails(t *testing.T) {
+	bareDir := t.TempDir()
+	cmd := exec.Command("git", "init", "--bare")
+	cmd.Dir = bareDir
+	initOut, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git init --bare failed: %s", initOut)
+
+	rts := builtin.ResourceTypes()
+	rt := rts["git"]
+
+	out, err := runScript(t, rt.Check, t.TempDir(), map[string]string{
+		"param_url":    bareDir,
+		"param_branch": "does-not-exist",
+	})
+	require.Error(t, err, "expected git check to fail when ls-remote finds no ref, got: %s", out)
+	assert.Contains(t, out, "no ref")
+}
+
 func TestGitCheck_GitHubAPI_ReturnsSingleVersion(t *testing.T) {
 	cannedCommits := `[{"sha":"abc123"}]`
 	curlDir, logFile := fakeCurlDir(t, cannedCommits)
