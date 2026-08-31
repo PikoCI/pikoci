@@ -254,6 +254,10 @@ resource_type "git" {
       if [ -z "$REF" ]; then
         REF=$(git ls-remote "$URL" HEAD | awk '{print $1}')
       fi
+      if [ -z "$REF" ]; then
+        echo "error: git ls-remote returned no ref for $URL $BRANCH" >&2
+        exit 1
+      fi
       echo "[{\"ref\":\"$REF\"}]"
       EOT
     ]
