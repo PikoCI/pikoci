@@ -1990,9 +1990,17 @@ func (w *Worker) buildPullParams(ctx context.Context, m workitem.Body, b *build.
 		return nil, 0, nil
 	}
 
-	// Version priority: resolvedVersionID (from passed constraints) > m.VersionID (from queue) > latest
+	// Version priority: resolvedVersionID (from passed constraints) > m.VersionID
+	// (from queue) > latest.
+	//
+	// The queue's version belongs to the one resource whose check produced this
+	// build, named by m.ResourceCanonical. Applying it to any other resource in
+	// the same job looks for that id among a different resource's versions,
+	// finds nothing, and fails the build with "no version found" — which is why
+	// a job with two gets could never run: whichever resource triggered
+	// resolved, and the other one always failed.
 	versionID := resolvedVersionID
-	if versionID == 0 {
+	if versionID == 0 && m.ResourceCanonical == r.Canonical {
 		versionID = m.VersionID
 	}
 
