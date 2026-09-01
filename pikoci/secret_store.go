@@ -155,6 +155,9 @@ func (q *PikoCI) SetTeamSecret(ctx context.Context, tc, name, value string, kind
 		}
 
 		if _, err := uow.Secrets().UpsertTeam(ctx, tc, e, data); err != nil {
+			if errors.Is(err, secret.ErrScopeNotFound) {
+				return fmt.Errorf("%w: %v", ErrSecretEntryNotFound, err)
+			}
 			return fmt.Errorf("failed to store %q: %w", name, err)
 		}
 
@@ -187,6 +190,9 @@ func (q *PikoCI) SetPipelineSecret(ctx context.Context, tc, pn, name, value stri
 		}
 
 		if _, err := uow.Secrets().UpsertPipeline(ctx, tc, pn, e, data); err != nil {
+			if errors.Is(err, secret.ErrScopeNotFound) {
+				return fmt.Errorf("%w: %v", ErrSecretEntryNotFound, err)
+			}
 			return fmt.Errorf("failed to store %q: %w", name, err)
 		}
 

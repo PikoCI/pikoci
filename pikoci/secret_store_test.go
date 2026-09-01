@@ -199,11 +199,14 @@ func TestSetSecret_UnknownScopeReportsClearly(t *testing.T) {
 
 	err := svc.SetPipelineSecret(ctx, tc, "does-not-exist", "TOKEN", "value", secret.KindSecret)
 	require.Error(t, err)
+	assert.ErrorIs(t, err, pikoci.ErrSecretEntryNotFound,
+		"a missing pipeline must map to the same sentinel the HTTP layer maps to 404")
 	assert.Contains(t, err.Error(), `pipeline "does-not-exist" not found`,
 		"a missing pipeline should say so, not surface a constraint violation")
 
 	err = svc.SetTeamSecret(ctx, "no-such-team", "TOKEN", "value", secret.KindSecret)
 	require.Error(t, err)
+	assert.ErrorIs(t, err, pikoci.ErrSecretEntryNotFound)
 	assert.Contains(t, err.Error(), `team "no-such-team" not found`)
 }
 
