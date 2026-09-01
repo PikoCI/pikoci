@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -173,6 +174,18 @@ func TestSetSecret_RejectsInvalidNames(t *testing.T) {
 
 	assert.NoError(t, svc.SetTeamSecret(ctx, tc, "VALID_NAME_1", "value", secret.KindSecret))
 	assert.NoError(t, svc.SetTeamSecret(ctx, tc, "_leading_underscore", "value", secret.KindSecret))
+}
+
+func TestSetSecret_RejectsNameOverMaxLength(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tc, _ := newSecretStoreService(t, "master-key")
+
+	tooLong := "A" + strings.Repeat("b", 255) // 256 chars, over the VARCHAR(255) column
+	err := svc.SetTeamSecret(ctx, tc, tooLong, "value", secret.KindSecret)
+	assert.Error(t, err)
+
+	fits := "A" + strings.Repeat("b", 254) // exactly 255 chars
+	assert.NoError(t, svc.SetTeamSecret(ctx, tc, fits, "value", secret.KindSecret))
 }
 
 // Values must be unreadable in the database without the master key.
