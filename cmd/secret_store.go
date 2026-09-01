@@ -21,6 +21,11 @@ var secretsCmd = &cobra.Command{
 		"and shown in build logs.",
 }
 
+// secretCommandLineRefusal is returned whenever a secret value would land on
+// the command line — as a positional argument or via --value — where it is
+// visible in shell history and the process list.
+const secretCommandLineRefusal = "refusing to read a secret from the command line, where it is visible in shell history and the process list: omit the value to be prompted, use --stdin, or pass --plain if it is not sensitive"
+
 func init() {
 	secretsCmd.AddCommand(secretsSetCmd)
 	secretsCmd.AddCommand(secretsListCmd)
@@ -60,7 +65,7 @@ var secretsSetCmd = &cobra.Command{
 				return fmt.Errorf("value given both as an argument and as --value")
 			}
 			if isSecret {
-				return fmt.Errorf("refusing to read a secret from the command line, where it is visible in shell history and the process list: omit the value to be prompted, use --stdin, or pass --plain if it is not sensitive")
+				return fmt.Errorf("%s", secretCommandLineRefusal)
 			}
 			value = args[1]
 		}
@@ -102,6 +107,9 @@ func readSecretValue(cmd *cobra.Command, name, value string, fromStdin, isSecret
 	}
 
 	if value != "" {
+		if isSecret {
+			return "", fmt.Errorf("%s", secretCommandLineRefusal)
+		}
 		return value, nil
 	}
 
