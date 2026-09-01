@@ -37,6 +37,8 @@ const (
 	ApiTokenContextKey contextKey = "api_token_context_key"
 	// WorkerTeamCanonicalKey is the context key for the team canonical from a team-scoped worker JWT.
 	WorkerTeamCanonicalKey contextKey = "worker_team_canonical_key"
+	// WorkerSaltKey is the context key for the salt claim from a team-scoped worker JWT.
+	WorkerSaltKey contextKey = "worker_salt_key"
 )
 
 // publicFallbackRoutes lists routes that can fall back to public pipeline access
@@ -147,6 +149,9 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 									authFailed = true
 								} else if wtc, ok := claims["team_canonical"].(string); ok && wtc != "" {
 									rr = rr.WithContext(context.WithValue(rr.Context(), WorkerTeamCanonicalKey, wtc))
+									if salt, ok := claims["salt"].(string); ok && salt != "" {
+										rr = rr.WithContext(context.WithValue(rr.Context(), WorkerSaltKey, salt))
+									}
 								}
 							} else {
 								un, ok = userClaim["username"].(string)
@@ -217,7 +222,9 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 
 			// Some routes expose data that the blanket worker bypass below must
 			// not hand out unconditionally. A worker reaching one of those has
-			// to prove it holds a team-scoped token for the team in the path.
+			// to prove it holds a team-scoped token for the team in the path,
+			// and that token's salt claim must still match the team's current
+			// DB-stored salt so a regenerated (revoked) token stops working.
 			if isFromWorker && workerScopedRoutes[crn] {
 				vars := mux.Vars(rr)
 				tc := vars["team_canonical"]
@@ -230,6 +237,23 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 				if wtc != tc {
 					l.Error("worker token team mismatch", "route", crn.String(), "token_team", wtc, "requested_team", tc)
 					encodeError("Worker token is not scoped to this team", rw)
+					return
+				}
+				salt, _ := rr.Context().Value(WorkerSaltKey).(string)
+				if salt == "" {
+					l.Error("worker token missing salt claim", "route", crn.String())
+					encodeError("Worker token is missing its salt claim", rw)
+					return
+				}
+				valid, err := s.VerifyTeamWorkerTokenSalt(rr.Context(), tc, salt)
+				if err != nil {
+					l.Error("failed to verify worker token salt", "route", crn.String(), "error", err)
+					encodeError("Failed to verify worker token", rw)
+					return
+				}
+				if !valid {
+					l.Error("worker token salt mismatch or revoked", "route", crn.String())
+					encodeError("Worker token has been revoked", rw)
 					return
 				}
 				h.ServeHTTP(rw, rr)
