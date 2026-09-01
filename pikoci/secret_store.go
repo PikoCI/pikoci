@@ -133,6 +133,16 @@ func checkKindUnchanged(entries []*secret.Entry, name string, kind secret.Kind) 
 	return fmt.Errorf("%w: %q is already stored as %s; delete it before storing it as %s", ErrSecretInvalidRequest, name, stored, kind)
 }
 
+// wrapStoreErr translates a scope-not-found failure from the storage layer
+// into ErrSecretEntryNotFound, matching the sentinel the HTTP layer maps to
+// 404 rather than 500. Any other storage failure is wrapped plainly.
+func wrapStoreErr(name string, err error) error {
+	if errors.Is(err, secret.ErrScopeNotFound) {
+		return fmt.Errorf("%w: %v", ErrSecretEntryNotFound, err)
+	}
+	return fmt.Errorf("failed to store %q: %w", name, err)
+}
+
 // SetTeamSecret stores a team-scoped entry, replacing the value of any
 // existing entry with the same name.
 func (q *PikoCI) SetTeamSecret(ctx context.Context, tc, name, value string, kind secret.Kind) error {
@@ -154,10 +164,7 @@ func (q *PikoCI) SetTeamSecret(ctx context.Context, tc, name, value string, kind
 		}
 
 		if _, err := uow.Secrets().UpsertTeam(ctx, tc, e, data); err != nil {
-			if errors.Is(err, secret.ErrScopeNotFound) {
-				return fmt.Errorf("%w: %v", ErrSecretEntryNotFound, err)
-			}
-			return fmt.Errorf("failed to store %q: %w", name, err)
+			return wrapStoreErr(name, err)
 		}
 
 		return nil
@@ -189,10 +196,7 @@ func (q *PikoCI) SetPipelineSecret(ctx context.Context, tc, pn, name, value stri
 		}
 
 		if _, err := uow.Secrets().UpsertPipeline(ctx, tc, pn, e, data); err != nil {
-			if errors.Is(err, secret.ErrScopeNotFound) {
-				return fmt.Errorf("%w: %v", ErrSecretEntryNotFound, err)
-			}
-			return fmt.Errorf("failed to store %q: %w", name, err)
+			return wrapStoreErr(name, err)
 		}
 
 		return nil

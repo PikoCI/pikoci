@@ -142,6 +142,9 @@ func readSecretValue(cmd *cobra.Command, name, value string, fromStdin, isSecret
 	} else {
 		var line string
 		line, err = readLine(os.Stdin)
+		if err == nil && strings.TrimSpace(line) == "" {
+			return "", fmt.Errorf("no value provided")
+		}
 		b = []byte(line)
 	}
 	if err != nil {

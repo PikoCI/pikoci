@@ -37,8 +37,6 @@ const (
 	ApiTokenContextKey contextKey = "api_token_context_key"
 	// WorkerTeamCanonicalKey is the context key for the team canonical from a team-scoped worker JWT.
 	WorkerTeamCanonicalKey contextKey = "worker_team_canonical_key"
-	// WorkerSaltKey is the context key for the salt claim from a team-scoped worker JWT.
-	WorkerSaltKey contextKey = "worker_salt_key"
 )
 
 // publicFallbackRoutes lists routes that can fall back to public pipeline access
@@ -149,9 +147,6 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 									authFailed = true
 								} else if wtc, ok := claims["team_canonical"].(string); ok && wtc != "" {
 									rr = rr.WithContext(context.WithValue(rr.Context(), WorkerTeamCanonicalKey, wtc))
-									if salt, ok := claims["salt"].(string); ok && salt != "" {
-										rr = rr.WithContext(context.WithValue(rr.Context(), WorkerSaltKey, salt))
-									}
 								}
 							} else {
 								un, ok = userClaim["username"].(string)
@@ -239,7 +234,10 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 					encodeError("Worker token is not scoped to this team", rw)
 					return
 				}
-				salt, _ := rr.Context().Value(WorkerSaltKey).(string)
+				var salt string
+				if jwtClaims != nil {
+					salt, _ = jwtClaims["salt"].(string)
+				}
 				if salt == "" {
 					l.Error("worker token missing salt claim", "route", crn.String())
 					encodeError("Worker token is missing its salt claim", rw)
