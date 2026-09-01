@@ -1408,6 +1408,11 @@ func (cl *Client) GetTeamWorkerToken(ctx context.Context, tc string) (string, er
 	return resp.Token, nil
 }
 
+// VerifyTeamWorkerTokenSalt is not implemented on the client (server-side only).
+func (cl *Client) VerifyTeamWorkerTokenSalt(ctx context.Context, tc, salt string) (bool, error) {
+	return false, fmt.Errorf("VerifyTeamWorkerTokenSalt is not available on the client")
+}
+
 // OAuth stubs — the HTTP client is only used for worker and CLI operations,
 // not for OAuth flows.
 

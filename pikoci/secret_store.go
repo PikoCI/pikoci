@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 
 	"github.com/pikoci/pikoci/pikoci/auditlog"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
@@ -12,12 +11,6 @@ import (
 	"github.com/pikoci/pikoci/pikoci/sectype"
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 )
-
-// secretNameRe constrains entry names to the shape of an environment
-// variable. Names are used verbatim as the lookup key from a pipeline's
-// secret block, so unlike other entities they are not slugified: turning
-// GITHUB_TOKEN into github-token would break `key = "GITHUB_TOKEN"`.
-var secretNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,254}$`)
 
 // EnableSecretStore wires up the secret store. An empty masterKey
 // leaves the store fully usable for plain entries but unconfigured for
@@ -47,8 +40,14 @@ func (q *PikoCI) secretStoreReady() error {
 	return nil
 }
 
+// validateSecretName constrains entry names to the shape of an environment
+// variable, reusing the same character-class rule pipeline input names use
+// (validInputName, in helper.go) plus the VARCHAR(255) bound the secrets
+// tables enforce. Names are used verbatim as the lookup key from a pipeline's
+// secret block, so unlike other entities they are not slugified: turning
+// GITHUB_TOKEN into github-token would break `key = "GITHUB_TOKEN"`.
 func validateSecretName(name string) error {
-	if !secretNameRe.MatchString(name) {
+	if !validInputName.MatchString(name) || len(name) > 255 {
 		return fmt.Errorf("%w: name %q must start with a letter or underscore and contain only letters, digits and underscores", ErrSecretInvalidRequest, name)
 	}
 	return nil
@@ -134,6 +133,16 @@ func checkKindUnchanged(entries []*secret.Entry, name string, kind secret.Kind) 
 	return fmt.Errorf("%w: %q is already stored as %s; delete it before storing it as %s", ErrSecretInvalidRequest, name, stored, kind)
 }
 
+// wrapStoreErr translates a scope-not-found failure from the storage layer
+// into ErrSecretEntryNotFound, matching the sentinel the HTTP layer maps to
+// 404 rather than 500. Any other storage failure is wrapped plainly.
+func wrapStoreErr(name string, err error) error {
+	if errors.Is(err, secret.ErrScopeNotFound) {
+		return fmt.Errorf("%w: %v", ErrSecretEntryNotFound, err)
+	}
+	return fmt.Errorf("failed to store %q: %w", name, err)
+}
+
 // SetTeamSecret stores a team-scoped entry, replacing the value of any
 // existing entry with the same name.
 func (q *PikoCI) SetTeamSecret(ctx context.Context, tc, name, value string, kind secret.Kind) error {
@@ -155,7 +164,7 @@ func (q *PikoCI) SetTeamSecret(ctx context.Context, tc, name, value string, kind
 		}
 
 		if _, err := uow.Secrets().UpsertTeam(ctx, tc, e, data); err != nil {
-			return fmt.Errorf("failed to store %q: %w", name, err)
+			return wrapStoreErr(name, err)
 		}
 
 		return nil
@@ -187,7 +196,7 @@ func (q *PikoCI) SetPipelineSecret(ctx context.Context, tc, pn, name, value stri
 		}
 
 		if _, err := uow.Secrets().UpsertPipeline(ctx, tc, pn, e, data); err != nil {
-			return fmt.Errorf("failed to store %q: %w", name, err)
+			return wrapStoreErr(name, err)
 		}
 
 		return nil

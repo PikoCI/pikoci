@@ -5,7 +5,16 @@
 // build time.
 package secret
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+// ErrScopeNotFound reports that the team or pipeline an entry was scoped to
+// does not exist. It is returned by the storage layer, which cannot import
+// the pikoci package's ErrSecretEntryNotFound (that would be an import
+// cycle) — callers in pikoci translate it at the service boundary instead.
+var ErrScopeNotFound = errors.New("scope not found")
 
 // Scope identifies what an entry is attached to.
 type Scope string
