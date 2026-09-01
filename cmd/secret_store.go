@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -140,7 +141,7 @@ func readSecretValue(cmd *cobra.Command, name, value string, fromStdin, isSecret
 		fmt.Fprintln(os.Stderr)
 	} else {
 		var line string
-		_, err = fmt.Scanln(&line)
+		line, err = readLine(os.Stdin)
 		b = []byte(line)
 	}
 	if err != nil {
@@ -151,6 +152,17 @@ func readSecretValue(cmd *cobra.Command, name, value string, fromStdin, isSecret
 	}
 
 	return string(b), nil
+}
+
+// readLine reads one line from r, preserving internal spaces — unlike
+// fmt.Scanln, which splits on whitespace and errors on anything but a single
+// token followed immediately by a newline.
+func readLine(r io.Reader) (string, error) {
+	line, err := bufio.NewReader(r).ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	return strings.TrimRight(line, "\r\n"), nil
 }
 
 var secretsListCmd = &cobra.Command{

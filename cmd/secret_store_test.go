@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -27,4 +28,22 @@ func TestReadSecretValue_ValueAndStdinMutuallyExclusive(t *testing.T) {
 	_, err := readSecretValue(cmd, "TOKEN", "x", true, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mutually exclusive")
+}
+
+func TestReadLine_PreservesSpaces(t *testing.T) {
+	got, err := readLine(strings.NewReader("staging server\n"))
+	require.NoError(t, err)
+	assert.Equal(t, "staging server", got)
+}
+
+func TestReadLine_NoTrailingNewline(t *testing.T) {
+	got, err := readLine(strings.NewReader("staging server"))
+	require.NoError(t, err)
+	assert.Equal(t, "staging server", got)
+}
+
+func TestReadLine_TrimsCarriageReturn(t *testing.T) {
+	got, err := readLine(strings.NewReader("staging server\r\n"))
+	require.NoError(t, err)
+	assert.Equal(t, "staging server", got)
 }
