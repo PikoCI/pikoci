@@ -290,7 +290,7 @@ var serverCmd = &cobra.Command{
 			pipelineConfig := serverViper.GetString("pipeline-config")
 			pipelineVars := serverViper.GetString("vars")
 			teamCanonical := serverViper.GetString("team-canonical")
-			err = createPipeline(ctx, svc, teamCanonical, pipelineName, pipelineConfig, pipelineVars)
+			err = createOrUpdatePipeline(ctx, svc, teamCanonical, pipelineName, pipelineConfig, pipelineVars)
 			if err != nil {
 				return err
 			}
