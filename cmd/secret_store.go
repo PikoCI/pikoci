@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -20,6 +21,11 @@ var secretsCmd = &cobra.Command{
 		"logs, and never displayed again. Values stored with --plain are kept as-is\n" +
 		"and shown in build logs.",
 }
+
+// secretCommandLineRefusal is returned whenever a secret value would land on
+// the command line — as a positional argument or via --value — where it is
+// visible in shell history and the process list.
+const secretCommandLineRefusal = "refusing to read a secret from the command line, where it is visible in shell history and the process list: omit the value to be prompted, use --stdin, or pass --plain if it is not sensitive"
 
 func init() {
 	secretsCmd.AddCommand(secretsSetCmd)
@@ -60,7 +66,7 @@ var secretsSetCmd = &cobra.Command{
 				return fmt.Errorf("value given both as an argument and as --value")
 			}
 			if isSecret {
-				return fmt.Errorf("refusing to read a secret from the command line, where it is visible in shell history and the process list: omit the value to be prompted, use --stdin, or pass --plain if it is not sensitive")
+				return fmt.Errorf("%s", secretCommandLineRefusal)
 			}
 			value = args[1]
 		}
@@ -102,6 +108,9 @@ func readSecretValue(cmd *cobra.Command, name, value string, fromStdin, isSecret
 	}
 
 	if value != "" {
+		if isSecret {
+			return "", fmt.Errorf("%s", secretCommandLineRefusal)
+		}
 		return value, nil
 	}
 
@@ -132,7 +141,10 @@ func readSecretValue(cmd *cobra.Command, name, value string, fromStdin, isSecret
 		fmt.Fprintln(os.Stderr)
 	} else {
 		var line string
-		_, err = fmt.Scanln(&line)
+		line, err = readLine(os.Stdin)
+		if err == nil && strings.TrimSpace(line) == "" {
+			return "", fmt.Errorf("no value provided")
+		}
 		b = []byte(line)
 	}
 	if err != nil {
@@ -143,6 +155,17 @@ func readSecretValue(cmd *cobra.Command, name, value string, fromStdin, isSecret
 	}
 
 	return string(b), nil
+}
+
+// readLine reads one line from r, preserving internal spaces — unlike
+// fmt.Scanln, which splits on whitespace and errors on anything but a single
+// token followed immediately by a newline.
+func readLine(r io.Reader) (string, error) {
+	line, err := bufio.NewReader(r).ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	return strings.TrimRight(line, "\r\n"), nil
 }
 
 var secretsListCmd = &cobra.Command{

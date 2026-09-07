@@ -156,7 +156,7 @@ func (r *SecretRepository) resolveTeamID(ctx context.Context, tc string) (uint32
 	var id uint32
 	err := r.querier.QueryRowContext(ctx, `SELECT id FROM teams WHERE canonical = ?`, tc).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, fmt.Errorf("team %q not found", tc)
+		return 0, fmt.Errorf("%w: team %q not found", secret.ErrScopeNotFound, tc)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("failed to find team %q: %w", tc, err)
@@ -172,7 +172,7 @@ func (r *SecretRepository) resolvePipelineID(ctx context.Context, tc, pn string)
 		WHERE t.canonical = ? AND p.canonical = ?
 	`, tc, pn).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, fmt.Errorf("pipeline %q not found in team %q", pn, tc)
+		return 0, fmt.Errorf("%w: pipeline %q not found in team %q", secret.ErrScopeNotFound, pn, tc)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("failed to find pipeline %q: %w", pn, err)

@@ -946,24 +946,49 @@ func TestWorkerTokenSecretValuesAuthorization(t *testing.T) {
 		// teamCanonical is the team claim on the worker JWT; empty means an
 		// unscoped global worker token.
 		teamCanonical string
-		path          string
-		wantOK        bool
+		// salt is the salt claim on the worker JWT; empty means the claim is
+		// omitted entirely.
+		salt string
+		// saltValid is what VerifyTeamWorkerTokenSalt should report for salt.
+		// Only consulted (mock set up) when teamCanonical and salt are both set.
+		saltValid bool
+		path      string
+		wantOK    bool
 	}{
 		{
 			name:          "team-scoped worker reads its own team",
 			teamCanonical: "main",
+			salt:          "current-salt",
+			saltValid:     true,
 			path:          "/teams/main/pipelines/p/secret-values",
 			wantOK:        true,
 		},
 		{
 			name:          "team-scoped worker denied another team",
 			teamCanonical: "main",
+			salt:          "current-salt",
+			saltValid:     true,
 			path:          "/teams/other/pipelines/p/secret-values",
 			wantOK:        false,
 		},
 		{
 			name:          "unscoped global worker denied",
 			teamCanonical: "",
+			path:          "/teams/main/pipelines/p/secret-values",
+			wantOK:        false,
+		},
+		{
+			name:          "team-scoped worker denied after token rotation (stale salt)",
+			teamCanonical: "main",
+			salt:          "stale-salt",
+			saltValid:     false,
+			path:          "/teams/main/pipelines/p/secret-values",
+			wantOK:        false,
+		},
+		{
+			name:          "team-scoped worker denied when JWT carries no salt claim",
+			teamCanonical: "main",
+			salt:          "",
 			path:          "/teams/main/pipelines/p/secret-values",
 			wantOK:        false,
 		},
@@ -980,10 +1005,17 @@ func TestWorkerTokenSecretValuesAuthorization(t *testing.T) {
 
 			svc.EXPECT().ResolvePipelineValues(gomock.Any(), gomock.Any(), gomock.Any()).
 				Return(&secret.Resolved{Values: map[string]string{"TOKEN": "value"}}, nil).AnyTimes()
+			if tt.teamCanonical != "" && tt.salt != "" {
+				svc.EXPECT().VerifyTeamWorkerTokenSalt(gomock.Any(), tt.teamCanonical, tt.salt).
+					Return(tt.saltValid, nil).AnyTimes()
+			}
 
 			claims := jwt.MapClaims{"is_from_worker": true}
 			if tt.teamCanonical != "" {
 				claims["team_canonical"] = tt.teamCanonical
+			}
+			if tt.salt != "" {
+				claims["salt"] = tt.salt
 			}
 			token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 			jwtStr, err := token.SignedString(jwtSecret)
@@ -1010,6 +1042,39 @@ func TestWorkerTokenSecretValuesAuthorization(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestWorkerTokenRevokedAfterTokenRegeneration is the end-to-end version of
+// the salt checks above: it simulates an admin regenerating a team's worker
+// token (changing the DB-side salt) and confirms a worker still holding the
+// old token is denied, proving revocation actually works over HTTP.
+func TestWorkerTokenRevokedAfterTokenRegeneration(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mock.NewService(ctrl)
+	jwtSecret := []byte("test-secret")
+	handler := Handler(svc, jwtSecret, slog.Default(), nil, "", "test", "abc", "", nil)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	// The admin's regeneration replaced the DB salt with "new-salt"; this
+	// worker's JWT still carries the pre-rotation "old-salt".
+	svc.EXPECT().VerifyTeamWorkerTokenSalt(gomock.Any(), "main", "old-salt").Return(false, nil)
+
+	claims := jwt.MapClaims{"is_from_worker": true, "team_canonical": "main", "salt": "old-salt"}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	jwtStr, err := token.SignedString(jwtSecret)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines/p/secret-values", strings.NewReader("{}"))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+jwtStr)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "a token signed with a rotated-out salt must be denied")
 }
 
 // TestWorkerTokenDeniedOnSecretManagement covers the other half of the same
