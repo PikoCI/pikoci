@@ -303,6 +303,10 @@ type Service interface {
 	// GetTeamWorkerToken returns the current team worker token, or empty string
 	// if none has been generated.
 	GetTeamWorkerToken(ctx context.Context, tc string) (string, error)
+	// VerifyTeamWorkerTokenSalt reports whether salt is still the team's
+	// current worker token salt, i.e. whether a team-scoped worker JWT
+	// carrying it has not been revoked by a token regeneration.
+	VerifyTeamWorkerTokenSalt(ctx context.Context, tc, salt string) (bool, error)
 
 	// GetAuthMethods returns the enabled auth methods for the login page.
 	GetAuthMethods(ctx context.Context) (*oauthprovider.AuthMethods, error)

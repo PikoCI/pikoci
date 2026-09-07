@@ -126,6 +126,30 @@ func TestSecret_ServerKeyRoundTrip(t *testing.T) {
 		"a second key must be rejected so stored values are never orphaned")
 }
 
+func TestSecret_UpsertTeam_TeamNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+	repo := mysql.NewSecretRepository(db)
+
+	s := secret.Entry{Name: "TOKEN", Canonical: "token", Kind: secret.KindSecret}
+	_, err := repo.UpsertTeam(ctx, "no-such-team", s, []byte("cipher"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, secret.ErrScopeNotFound)
+	assert.Contains(t, err.Error(), `team "no-such-team" not found`)
+}
+
+func TestSecret_UpsertPipeline_PipelineNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+	repo := mysql.NewSecretRepository(db)
+
+	s := secret.Entry{Name: "TOKEN", Canonical: "token", Kind: secret.KindSecret}
+	_, err := repo.UpsertPipeline(ctx, "main", "no-such-pipeline", s, []byte("cipher"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, secret.ErrScopeNotFound)
+	assert.Contains(t, err.Error(), `pipeline "no-such-pipeline" not found in team "main"`)
+}
+
 // findSecret locates a secret by canonical name. Tests share one in-memory
 // database, so assertions are scoped to names rather than to list length.
 func findSecret(secrets []*secret.Entry, canonical string) *secret.Entry {

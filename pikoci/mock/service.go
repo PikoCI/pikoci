@@ -1600,6 +1600,21 @@ func (mr *ServiceMockRecorder) UserLogin(ctx, un, pass any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UserLogin", reflect.TypeOf((*Service)(nil).UserLogin), ctx, un, pass)
 }
 
+// VerifyTeamWorkerTokenSalt mocks base method.
+func (m *Service) VerifyTeamWorkerTokenSalt(ctx context.Context, tc, salt string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyTeamWorkerTokenSalt", ctx, tc, salt)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VerifyTeamWorkerTokenSalt indicates an expected call of VerifyTeamWorkerTokenSalt.
+func (mr *ServiceMockRecorder) VerifyTeamWorkerTokenSalt(ctx, tc, salt any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyTeamWorkerTokenSalt", reflect.TypeOf((*Service)(nil).VerifyTeamWorkerTokenSalt), ctx, tc, salt)
+}
+
 // WebhookTrigger mocks base method.
 func (m *Service) WebhookTrigger(ctx context.Context, token string) error {
 	m.ctrl.T.Helper()

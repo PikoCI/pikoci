@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -175,6 +176,18 @@ func TestSetSecret_RejectsInvalidNames(t *testing.T) {
 	assert.NoError(t, svc.SetTeamSecret(ctx, tc, "_leading_underscore", "value", secret.KindSecret))
 }
 
+func TestSetSecret_RejectsNameOverMaxLength(t *testing.T) {
+	ctx := context.Background()
+	svc, _, tc, _ := newSecretStoreService(t, "master-key")
+
+	tooLong := "A" + strings.Repeat("b", 255) // 256 chars, over the VARCHAR(255) column
+	err := svc.SetTeamSecret(ctx, tc, tooLong, "value", secret.KindSecret)
+	assert.Error(t, err)
+
+	fits := "A" + strings.Repeat("b", 254) // exactly 255 chars
+	assert.NoError(t, svc.SetTeamSecret(ctx, tc, fits, "value", secret.KindSecret))
+}
+
 // Values must be unreadable in the database without the master key.
 func TestSecretStore_SecretValuesAreEncryptedAtRest(t *testing.T) {
 	ctx := context.Background()
@@ -199,11 +212,14 @@ func TestSetSecret_UnknownScopeReportsClearly(t *testing.T) {
 
 	err := svc.SetPipelineSecret(ctx, tc, "does-not-exist", "TOKEN", "value", secret.KindSecret)
 	require.Error(t, err)
+	assert.ErrorIs(t, err, pikoci.ErrSecretEntryNotFound,
+		"a missing pipeline must map to the same sentinel the HTTP layer maps to 404")
 	assert.Contains(t, err.Error(), `pipeline "does-not-exist" not found`,
 		"a missing pipeline should say so, not surface a constraint violation")
 
 	err = svc.SetTeamSecret(ctx, "no-such-team", "TOKEN", "value", secret.KindSecret)
 	require.Error(t, err)
+	assert.ErrorIs(t, err, pikoci.ErrSecretEntryNotFound)
 	assert.Contains(t, err.Error(), `team "no-such-team" not found`)
 }
 

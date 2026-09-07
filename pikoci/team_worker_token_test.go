@@ -114,3 +114,51 @@ func TestGenerateTeamWorkerToken_RoundTrip(t *testing.T) {
 	salt, _ := claims["salt"].(string)
 	assert.Equal(t, storedSalt, salt, "salt claim must match stored salt")
 }
+
+func TestVerifyTeamWorkerTokenSalt_Valid(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Teams.EXPECT().FindWorkerTokenSalt(gomock.Any(), "main").Return("current-salt", nil)
+
+	valid, err := s.P.VerifyTeamWorkerTokenSalt(ctx, "main", "current-salt")
+	require.NoError(t, err)
+	assert.True(t, valid)
+}
+
+func TestVerifyTeamWorkerTokenSalt_Stale(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Teams.EXPECT().FindWorkerTokenSalt(gomock.Any(), "main").Return("current-salt", nil)
+
+	valid, err := s.P.VerifyTeamWorkerTokenSalt(ctx, "main", "stale-salt")
+	require.NoError(t, err)
+	assert.False(t, valid, "a rotated salt must invalidate the old token")
+}
+
+func TestVerifyTeamWorkerTokenSalt_NoTokenGenerated(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Teams.EXPECT().FindWorkerTokenSalt(gomock.Any(), "main").Return("", nil)
+
+	valid, err := s.P.VerifyTeamWorkerTokenSalt(ctx, "main", "any-salt")
+	require.NoError(t, err)
+	assert.False(t, valid)
+}
+
+func TestVerifyTeamWorkerTokenSalt_LookupError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Teams.EXPECT().FindWorkerTokenSalt(gomock.Any(), "main").Return("", fmt.Errorf("db connection lost"))
+
+	_, err := s.P.VerifyTeamWorkerTokenSalt(ctx, "main", "any-salt")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to find worker token salt")
+}
