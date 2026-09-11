@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/pikoci/pikoci/pikoci/apitoken"
 	"github.com/pikoci/pikoci/pikoci/mock"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/secret"
 	"github.com/pikoci/pikoci/pikoci/user"
@@ -1163,30 +1164,171 @@ func TestWorkerTokenDeniedOnSecretManagement(t *testing.T) {
 	}
 }
 
-// Workers keep their blanket bypass on ordinary routes; only the routes listed
-// in workerScopedRoutes require a team-scoped token.
-func TestWorkerTokenStillBypassesOrdinaryRoutes(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	svc := mock.NewService(ctrl)
-	jwtSecret := []byte("test-secret")
-	handler := Handler(svc, jwtSecret, slog.Default(), nil, "", "test", "abc", "", nil)
-	server := httptest.NewServer(handler)
-	defer server.Close()
+// A worker token reaches only the routes in workerRoutes. The middleware
+// never consults routeAuthorization for a worker, so before this was an
+// allowlist every route not explicitly denied was open to any worker token —
+// including the pipeline-write routes. A pipeline config holds the commands
+// workers run, so a worker token that can rewrite one controls what executes
+// on every agent. The global token is printed to the server log at startup,
+// never expires and never rotates, which is what made that bad.
+func TestWorkerTokenAllowlist(t *testing.T) {
+	// Every case is a team-scoped route under "main"; the token is scoped to
+	// "main" in the second scope so the denials cannot be explained by a
+	// team mismatch.
+	routes := []struct {
+		name    string
+		method  string
+		path    string
+		allowed bool
+	}{
+		// What a worker legitimately does.
+		{"get pipeline", http.MethodGet, "/teams/main/pipelines/p", true},
+		{"start pending build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/start-pending", true},
+		{"list resource versions", http.MethodGet, "/teams/main/pipelines/p/resources/r/versions", true},
 
-	svc.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+		// The bug: pipeline writes were reachable with a worker token.
+		{"create pipeline", http.MethodPost, "/teams/main/pipelines", false},
+		{"update pipeline", http.MethodPut, "/teams/main/pipelines/p", false},
+		{"delete pipeline", http.MethodDelete, "/teams/main/pipelines/p", false},
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"is_from_worker": true})
-	jwtStr, err := token.SignedString(jwtSecret)
-	require.NoError(t, err)
+		// Other human-only routes that the old deny-list never covered.
+		{"list pipelines", http.MethodGet, "/teams/main/pipelines", false},
+		{"trigger job", http.MethodPost, "/teams/main/pipelines/p/jobs/j/trigger", false},
+		{"generate team worker token", http.MethodPost, "/teams/main/worker-token", false},
+		{"list users", http.MethodGet, "/users", false},
+	}
 
-	req, err := http.NewRequest(http.MethodGet, server.URL+"/teams/main/pipelines", strings.NewReader("{}"))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+jwtStr)
+	scopes := []struct {
+		name          string
+		teamCanonical string
+	}{
+		{"unscoped global worker", ""},
+		{"worker scoped to this very team", "main"},
+	}
 
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
+	for _, rt := range routes {
+		for _, sc := range scopes {
+			t.Run(rt.name+"/"+sc.name, func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				svc := mock.NewService(ctrl)
+				jwtSecret := []byte("test-secret")
+				handler := Handler(svc, jwtSecret, slog.Default(), nil, "", "test", "abc", "", nil)
+				server := httptest.NewServer(handler)
+				defer server.Close()
 
-	assert.Equal(t, http.StatusOK, resp.StatusCode, "unscoped worker tokens must still work on ordinary routes")
+				// Permissive stubs for the allowed routes, and for the denied
+				// ones so that a middleware regression shows up as a 200 here
+				// rather than an unexpected-call panic.
+				svc.EXPECT().GetPipeline(gomock.Any(), gomock.Any(), gomock.Any()).Return(&pipeline.Pipeline{}, nil).AnyTimes()
+				svc.EXPECT().StartPendingBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+				svc.EXPECT().ListResourceVersions(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, false, nil).AnyTimes()
+				svc.EXPECT().CreatePipeline(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&pipeline.Pipeline{}, nil).AnyTimes()
+				svc.EXPECT().UpdatePipeline(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&pipeline.Pipeline{}, nil).AnyTimes()
+				svc.EXPECT().DeletePipeline(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				svc.EXPECT().ListPipelines(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+				svc.EXPECT().TriggerPipelineJob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				svc.EXPECT().GenerateTeamWorkerToken(gomock.Any(), gomock.Any()).Return("", nil).AnyTimes()
+				svc.EXPECT().ListUsers(gomock.Any()).Return(nil, nil).AnyTimes()
+
+				claims := jwt.MapClaims{"is_from_worker": true}
+				if sc.teamCanonical != "" {
+					claims["team_canonical"] = sc.teamCanonical
+				}
+				token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+				jwtStr, err := token.SignedString(jwtSecret)
+				require.NoError(t, err)
+
+				req, err := http.NewRequest(rt.method, server.URL+rt.path, strings.NewReader(`{}`))
+				require.NoError(t, err)
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+jwtStr)
+
+				resp, err := http.DefaultClient.Do(req)
+				require.NoError(t, err)
+				defer resp.Body.Close()
+
+				body, err := io.ReadAll(resp.Body)
+				require.NoError(t, err)
+
+				if rt.allowed {
+					assert.NotContains(t, string(body), "not available to workers",
+						"a worker token must reach %s %s", rt.method, rt.path)
+					assert.NotEqual(t, http.StatusUnauthorized, resp.StatusCode)
+				} else {
+					assert.Equal(t, http.StatusBadRequest, resp.StatusCode,
+						"a worker token must be refused on %s %s", rt.method, rt.path)
+					assert.Contains(t, string(body), "not available to workers")
+				}
+			})
+		}
+	}
+}
+
+// A team-scoped worker token stays inside its team on every allowlisted
+// route, not only the ones that also verify the salt. Before this, the team
+// check ran only inside the workerScopedRoutes branch, so a token scoped to
+// one team could drive builds in every other team.
+func TestWorkerTokenScopedToTeamOnEveryRoute(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		wantErr string
+	}{
+		{"own team", "/teams/main/pipelines/p/jobs/j/builds/start-pending", ""},
+		{"other team", "/teams/other/pipelines/p/jobs/j/builds/start-pending", "not scoped to this team"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			svc := mock.NewService(ctrl)
+			jwtSecret := []byte("test-secret")
+			handler := Handler(svc, jwtSecret, slog.Default(), nil, "", "test", "abc", "", nil)
+			server := httptest.NewServer(handler)
+			defer server.Close()
+
+			svc.EXPECT().StartPendingBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+				"is_from_worker": true,
+				"team_canonical": "main",
+				"salt":           "s",
+			})
+			jwtStr, err := token.SignedString(jwtSecret)
+			require.NoError(t, err)
+
+			req, err := http.NewRequest(http.MethodPost, server.URL+tt.path, strings.NewReader(`{}`))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+jwtStr)
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+
+			if tt.wantErr == "" {
+				assert.Equal(t, http.StatusOK, resp.StatusCode, "a scoped token must work inside its own team")
+			} else {
+				assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+				assert.Contains(t, string(body), tt.wantErr)
+			}
+		})
+	}
+}
+
+// The allowlist has to be internally consistent: a route that needs a scoped
+// token must be reachable in the first place, and every allowlisted route
+// must be a real route with an authorization entry — otherwise a typo would
+// silently close a route to workers or open a route that does not exist.
+func TestWorkerRoutesConsistent(t *testing.T) {
+	for rn := range workerScopedRoutes {
+		assert.True(t, workerRoutes[rn], "workerScopedRoutes entry %s is not in workerRoutes", rn)
+	}
+	for rn := range workerRoutes {
+		_, ok := routeAuthorization[rn]
+		assert.True(t, ok, "workerRoutes entry %s has no routeAuthorization entry", rn)
+	}
 }
