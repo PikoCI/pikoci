@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Graph zoom**: plain mouse wheel now scrolls the page over a pipeline graph; zoom with Ctrl/⌘+wheel, trackpad pinch, or the +/− buttons. Fullscreen still zooms on wheel.
+- **Pipeline editor**: the Update/Create button now sits above the graph preview instead of below it.
 - **Build list page load**: `GET /jobs/:name/builds` now omits the `steps` column for list views (returning only id, build_number, status, started_at, duration), reducing a typical 50-build response from ~16MB to ~50KB. Steps are fetched on-demand when a build tab is opened ([#652](https://github.com/PikoCI/pikoci/issues/652)).
 - **Pipeline image query**: `image.dot` now uses a lightweight query (`LatestBuildStatusByPipeline`) that selects only `id`, `build_number`, and `status`, cutting response time from 6-8s to under 1s ([#652](https://github.com/PikoCI/pikoci/issues/652)).
 

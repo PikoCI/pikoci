@@ -739,6 +739,9 @@ export function Editor({ pipeline, teamCanonical, onSave, onSaveSuccess }) {
           <div class="piko-graph-bottom-body" id="graph-fullscreen" ref=${graphFsRef}></div>
         </div>
       </div>
+      <div class="mb-3">
+        <button type="submit" class="btn btn-primary">${isUpdate ? 'Update' : 'Create'}</button>
+      </div>
       <div class="piko-graph-strip" id="graph-strip">
         <div class="piko-graph-strip-header${graphStripOpen ? ' open' : ''}" id="graph-strip-header" onClick=${toggleGraphStrip}>
           <span><i class="bi bi-diagram-3"></i> Graph Preview</span>
@@ -747,7 +750,6 @@ export function Editor({ pipeline, teamCanonical, onSave, onSaveSuccess }) {
         <div class="piko-graph-strip-body" id="graph" ref=${graphRef}>
         </div>
       </div>
-      <button type="submit" class="btn btn-primary mt-2">${isUpdate ? 'Update' : 'Create'}</button>
     </form>
   `;
 }
