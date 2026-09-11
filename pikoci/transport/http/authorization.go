@@ -139,39 +139,68 @@ var (
 		GetPipelineSecretValues: workerOnly,
 	}
 
-	// workerScopedRoutes are routes that a worker JWT must be explicitly
-	// authorized for, instead of being waved through by the blanket
-	// "is_from_worker implies admin" bypass in the auth middleware. A worker
-	// reaching one of these must present a team-scoped token whose team
-	// matches the team in the request path.
+	// workerRoutes is the allowlist of routes a worker token may reach. The
+	// auth middleware never consults routeAuthorization for a worker — an
+	// is_from_worker token is waved through as an admin — so any route not
+	// listed here is refused outright, and a new route is closed to workers
+	// until someone adds it.
+	//
+	// A worker needs exactly the build lifecycle: its heartbeat, the pipeline
+	// and job it is running, the build it owns, the resource versions it gets
+	// and puts, the trigger bookkeeping, and the downstream evaluation once it
+	// finishes. Everything else — pipeline configuration, secrets, users,
+	// teams — is a human action. A worker token lives on a build agent, in the
+	// global case is printed to the server log at startup, and never rotates,
+	// so it must not be a standing credential over anything a human manages.
+	// Pipeline configs in particular hold the commands workers run: letting a
+	// worker token rewrite one turns a build-agent credential into control
+	// over what executes on every agent.
+	workerRoutes = map[RouteName]bool{
+		WorkerHeartbeat: true,
+
+		// What the build reads.
+		GetPipeline:          true,
+		GetPipelineJob:       true,
+		GetJobBuild:          true,
+		ListJobBuilds:        true,
+		ListResourceVersions: true,
+		ListTriggersAfter:    true,
+
+		// Build lifecycle.
+		CreateJobBuild:                 true,
+		CreateRetryJobBuild:            true,
+		UpdateJobBuild:                 true,
+		DeleteJobBuild:                 true,
+		StartPendingBuild:              true,
+		FindOldestPendingBuild:         true,
+		NotifySerialGroupPendingBuilds: true,
+		EvaluateDownstreamJobs:         true,
+		InsertBuildGetVersion:          true,
+		FindBuildGetVersions:           true,
+
+		// Resource checks and puts.
+		CreateResourceVersion:  true,
+		UpdatePipelineResource: true,
+
+		// Triggers.
+		CreateTrigger:            true,
+		FireTriggerNotifications: true,
+
+		// Resolved values for the build. Listed in workerScopedRoutes too, so
+		// reaching it takes a team-scoped token whose salt is still current.
+		GetPipelineSecretValues: true,
+	}
+
+	// workerScopedRoutes are the routes in workerRoutes that a worker must be
+	// explicitly authorized for, on top of being allowlisted. A worker reaching
+	// one of these must present a team-scoped token whose team matches the
+	// team in the request path, and whose salt claim still matches the team's
+	// stored salt so a regenerated (revoked) token stops working.
 	//
 	// Without this, any worker token — including an unscoped global one —
 	// could read every team's secrets.
 	workerScopedRoutes = map[RouteName]bool{
 		GetPipelineSecretValues: true,
-	}
-
-	// workerDeniedRoutes are routes no worker may reach at all, whatever its
-	// token is scoped to. They are the counterpart to workerScopedRoutes: that
-	// map narrows the blanket bypass, this one removes it.
-	//
-	// A worker only ever needs the values resolved for the build it is
-	// running, which is GetPipelineSecretValues and nothing else. Managing
-	// entries is a human action, so a worker token — which lives on a build
-	// agent, and in the global case is printed to the server log at startup
-	// and never rotates — must not be able to read, write or delete them.
-	// Scoping is not enough here: a team-scoped token would still be a
-	// standing credential over that team's whole secret store.
-	//
-	// These cannot be expressed in routeAuthorization, because the middleware
-	// never consults that table for a worker.
-	workerDeniedRoutes = map[RouteName]bool{
-		SetTeamSecret:        true,
-		ListTeamSecrets:      true,
-		DeleteTeamSecret:     true,
-		SetPipelineSecret:    true,
-		ListPipelineSecrets:  true,
-		DeletePipelineSecret: true,
 	}
 )
 

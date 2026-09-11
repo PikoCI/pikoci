@@ -207,12 +207,23 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 				return
 			}
 
-			// Some routes are closed to workers outright, so the blanket bypass
-			// below must not reach them however the token is scoped.
-			if isFromWorker && workerDeniedRoutes[crn] {
-				l.Error("worker token rejected", "route", crn.String())
-				encodeError("This endpoint is not available to workers", rw)
-				return
+			// A worker token is waved through below without consulting
+			// routeAuthorization, so it only ever reaches the allowlisted
+			// routes, and a team-scoped token stays inside its team on every
+			// one of them.
+			if isFromWorker {
+				if !workerRoutes[crn] {
+					l.Error("worker token rejected", "route", crn.String())
+					encodeError("This endpoint is not available to workers", rw)
+					return
+				}
+				tc := mux.Vars(rr)["team_canonical"]
+				wtc, _ := rr.Context().Value(WorkerTeamCanonicalKey).(string)
+				if wtc != "" && tc != "" && wtc != tc {
+					l.Error("worker token team mismatch", "route", crn.String(), "token_team", wtc, "requested_team", tc)
+					encodeError("Worker token is not scoped to this team", rw)
+					return
+				}
 			}
 
 			// Some routes expose data that the blanket worker bypass below must
@@ -221,17 +232,11 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 			// and that token's salt claim must still match the team's current
 			// DB-stored salt so a regenerated (revoked) token stops working.
 			if isFromWorker && workerScopedRoutes[crn] {
-				vars := mux.Vars(rr)
-				tc := vars["team_canonical"]
+				tc := mux.Vars(rr)["team_canonical"]
 				wtc, _ := rr.Context().Value(WorkerTeamCanonicalKey).(string)
 				if wtc == "" {
 					l.Error("unscoped worker token rejected", "route", crn.String())
 					encodeError("This endpoint requires a team-scoped worker token", rw)
-					return
-				}
-				if wtc != tc {
-					l.Error("worker token team mismatch", "route", crn.String(), "token_team", wtc, "requested_team", tc)
-					encodeError("Worker token is not scoped to this team", rw)
 					return
 				}
 				var salt string

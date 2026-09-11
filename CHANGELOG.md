@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Build list page load**: `GET /jobs/:name/builds` now omits the `steps` column for list views (returning only id, build_number, status, started_at, duration), reducing a typical 50-build response from ~16MB to ~50KB. Steps are fetched on-demand when a build tab is opened ([#652](https://github.com/PikoCI/pikoci/issues/652)).
 - **Pipeline image query**: `image.dot` now uses a lightweight query (`LatestBuildStatusByPipeline`) that selects only `id`, `build_number`, and `status`, cutting response time from 6-8s to under 1s ([#652](https://github.com/PikoCI/pikoci/issues/652)).
 
+### Security
+
+- **Worker tokens could reach every route not explicitly denied**: a JWT with `is_from_worker` skipped authorization for any route outside the small secret-management deny-list, so the global worker token — printed to the server log at startup, never expiring, never rotating — could create, update and delete pipeline configs, i.e. the commands workers run. Worker access is now an allowlist of the build-lifecycle routes a worker actually needs; everything else is refused with `This endpoint is not available to workers`, and new routes default to closed. A team-scoped worker token is also refused outside its team on every route, not only the secret-values one. If you were using a worker token as a general API credential, switch to a user JWT or an API token.
+
 ### Fixed
 
 - **Second `get` in a job never resolved**: `buildPullParams` applied the triggering resource's queued version id to every `get` in the plan, so any other resource searched its own history for an id that could never be there and failed. The queued version now applies only to the resource it belongs to; every other `get` falls through to its latest ([#680](https://github.com/PikoCI/pikoci/issues/680)).
