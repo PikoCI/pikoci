@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -558,17 +559,23 @@ func createOrUpdatePipeline(ctx context.Context, svc pipelineUpserter, tc, name,
 		}
 	}
 
-	// Any lookup error is treated as "does not exist" and falls through to
-	// Create, which surfaces a genuine failure with a clearer message. This
-	// mirrors how CreateOrUpdateUser handles the --users flag.
+	// Only a genuine not-found falls through to Create. Any other lookup
+	// error (a transient DB failure, say) is returned as-is rather than
+	// masked behind the unique-constraint error Create would then hit.
 	pCan := utils.Canonicalize(name)
-	if existing, ferr := svc.GetPipeline(ctx, tc, pCan); ferr == nil && existing != nil {
-		_, err = svc.UpdatePipeline(ctx, tc, pCan, b, vrs)
+	_, err = svc.GetPipeline(ctx, tc, pCan)
+	switch {
+	case err == nil:
+		// The flag's name is passed through so a display-name change is
+		// applied rather than silently keeping the stored one.
+		_, err = svc.UpdatePipeline(ctx, tc, pCan, b, vrs, name)
 		if err != nil {
 			return fmt.Errorf("failed to update Pipeline %q: %w", name, err)
 		}
 
 		return nil
+	case !errors.Is(err, pipeline.ErrNotFound):
+		return fmt.Errorf("failed to look up Pipeline %q: %w", name, err)
 	}
 
 	_, err = svc.CreatePipeline(ctx, tc, name, b, vrs)
