@@ -19,7 +19,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/role"
-	"github.com/pikoci/pikoci/pikoci/transport/http/assets"
 	"github.com/pikoci/pikoci/pikoci/transport/http/templates"
 	"github.com/pikoci/pikoci/pikoci/user"
 )
@@ -460,18 +459,20 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	binApi.Methods(http.MethodGet).Path("/admin/export").Name(ExportDatabase.String()).Handler(exportDatabase(db, dbSystem))
 	binApi.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/image{ext}").Name(GetPipelineImage.String()).Handler(getPipelineImage(s))
 
-	r.PathPrefix("/css/").Handler(http.FileServer(http.FS(assets.Assets)))
-	r.PathPrefix("/js/").Handler(http.FileServer(http.FS(assets.Assets)))
-	r.PathPrefix("/images/").Handler(http.FileServer(http.FS(assets.Assets)))
-	r.PathPrefix("/fonts/").Handler(http.FileServer(http.FS(assets.Assets)))
+	prefix := assetPrefix(commit)
+	mountAssets(r, prefix)
 
+	// The page is what names the current asset prefix, so it must never be
+	// served from cache without a trip to the server; see assets_route.go.
+	page := templates.PageData{AssetPrefix: prefix}
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t, ok := templates.Templates["views/layouts/index.tmpl"]
 		if !ok {
 			http.Error(w, "template not found", http.StatusInternalServerError)
 			return
 		}
-		if err := t.Execute(w, nil); err != nil {
+		w.Header().Set("Cache-Control", "no-cache")
+		if err := t.Execute(w, page); err != nil {
 			l.Error("failed to execute template", "error", err)
 		}
 	})

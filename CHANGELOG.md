@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Static asset caching**: the web UI's JS, CSS and images are now served from a per-build path (`/assets/<commit>/`) with a one-year immutable cache, and the page itself as `no-cache`. A browser picks up a new build on the next page load instead of running the previous build's modules from cache until the user empties it, which Safari in particular would do because the embedded assets carried no cache headers at all. The bare `/js/`, `/css/`, `/images/` and `/fonts/` paths still work and revalidate on every use.
 - **Build list page load**: `GET /jobs/:name/builds` now omits the `steps` column for list views (returning only id, build_number, status, started_at, duration), reducing a typical 50-build response from ~16MB to ~50KB. Steps are fetched on-demand when a build tab is opened ([#652](https://github.com/PikoCI/pikoci/issues/652)).
 - **Pipeline image query**: `image.dot` now uses a lightweight query (`LatestBuildStatusByPipeline`) that selects only `id`, `build_number`, and `status`, cutting response time from 6-8s to under 1s ([#652](https://github.com/PikoCI/pikoci/issues/652)).
 

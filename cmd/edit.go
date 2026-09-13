@@ -80,7 +80,7 @@ var editCmd = &cobra.Command{
 		jwtSecret := []byte("local-edit-secret")
 		svc := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, nil, nil, suow, jwtSecret, nil, logger)
 
-		handler := tshttp.LocalEditorHandler(svc, filePath, logger)
+		handler := tshttp.LocalEditorHandler(svc, filePath, logger, Commit)
 
 		listenAddr := fmt.Sprintf("127.0.0.1:%d", port)
 		listener, err := net.Listen("tcp", listenAddr)
