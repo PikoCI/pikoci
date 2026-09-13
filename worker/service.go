@@ -2024,9 +2024,13 @@ func (w *Worker) buildPullParams(ctx context.Context, m workitem.Body, b *build.
 			w.failBuild(ctx, m, *b, fmt.Errorf("no versions for resource %q", r.Canonical))
 			return nil, 0, nil
 		}
-		slices.Reverse(dbvers)
-		versionID = dbvers[0].ID
-		for k, v := range dbvers[0].Version {
+		// The newest version, found by id rather than by position. The list
+		// arrives newest-first since lazy loading (#393); before that it was
+		// oldest-first and this code reversed it, which after the change made
+		// every unpinned get pull the *oldest* version a resource had.
+		latest := newestVersion(dbvers)
+		versionID = latest.ID
+		for k, v := range latest.Version {
 			flattenVersionValue(params, "version_"+k, v)
 		}
 	}
@@ -2037,6 +2041,18 @@ func (w *Worker) buildPullParams(ctx context.Context, m workitem.Body, b *build.
 	}
 
 	return params, versionID, pullWarnings
+}
+
+// newestVersion is the version with the highest id, whatever order the list
+// came in.
+func newestVersion(vers []*resource.Version) *resource.Version {
+	latest := vers[0]
+	for _, v := range vers[1:] {
+		if v.ID > latest.ID {
+			latest = v
+		}
+	}
+	return latest
 }
 
 // runHooks runs a list of hooks (on_success, on_failure, on_cancel, ensure) and appends
