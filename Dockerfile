@@ -1,11 +1,16 @@
 FROM --platform=$BUILDPLATFORM golang:1.25.1 AS builder
 ARG TARGETOS TARGETARCH
+# .dockerignore keeps .git out of the context, so the git fallbacks below never
+# see a repository and the image reports "dev (unknown)". Pass the values in:
+#   --build-arg VERSION=$(git describe --tags --abbrev=0) --build-arg COMMIT=$(git rev-parse --short HEAD)
+# The commit also keys the web UI's asset cache-busting path.
+ARG VERSION COMMIT
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -ldflags "-X github.com/pikoci/pikoci/cmd.Version=$(git describe --tags --abbrev=0 2>/dev/null || echo dev) -X github.com/pikoci/pikoci/cmd.Commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
+    go build -ldflags "-X github.com/pikoci/pikoci/cmd.Version=${VERSION:-$(git describe --tags --abbrev=0 2>/dev/null || echo dev)} -X github.com/pikoci/pikoci/cmd.Commit=${COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}" \
     -o /pikoci .
 
 FROM alpine:3.21
