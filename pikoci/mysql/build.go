@@ -509,29 +509,8 @@ func (r *BuildRepository) LastBuildAtByPipeline(ctx context.Context, tc string) 
 		if err := rows.Scan(&pipelineID, &startedAtStr); err != nil {
 			return nil, fmt.Errorf("failed to scan last build timestamp: %w", err)
 		}
-		if startedAtStr.Valid && startedAtStr.String != "" {
-			s := startedAtStr.String
-			// Strip Go monotonic clock suffix (e.g. " m=+123.456")
-			if idx := strings.Index(s, " m="); idx != -1 {
-				s = strings.TrimSpace(s[:idx])
-			}
-			var t time.Time
-			var parseErr error
-			for _, layout := range []string{
-				time.RFC3339,
-				"2006-01-02 15:04:05.999999999 +0000 UTC",
-				"2006-01-02 15:04:05 -0700 MST",
-				"2006-01-02 15:04:05",
-				"2006-01-02T15:04:05Z",
-			} {
-				t, parseErr = time.Parse(layout, s)
-				if parseErr == nil {
-					break
-				}
-			}
-			if parseErr == nil {
-				result[pipelineID] = t
-			}
+		if t, ok := parseStoredTime(startedAtStr); ok {
+			result[pipelineID] = t
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -539,6 +518,33 @@ func (r *BuildRepository) LastBuildAtByPipeline(ctx context.Context, tc string) 
 	}
 
 	return result, nil
+}
+
+// parseStoredTime reads a timestamp column back as a time. The drivers store
+// time.Time values in a few different textual forms, and an aggregate such as
+// MAX(started_at) comes back as text whichever driver wrote it, so every form
+// is tried. A NULL or unparseable value reports false.
+func parseStoredTime(v sql.NullString) (time.Time, bool) {
+	if !v.Valid || v.String == "" {
+		return time.Time{}, false
+	}
+	s := v.String
+	// Strip Go monotonic clock suffix (e.g. " m=+123.456")
+	if idx := strings.Index(s, " m="); idx != -1 {
+		s = strings.TrimSpace(s[:idx])
+	}
+	for _, layout := range []string{
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999999 +0000 UTC",
+		"2006-01-02 15:04:05 -0700 MST",
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05Z",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func (r *BuildRepository) CountRunning(ctx context.Context, tc, pn, jn string) (int, error) {

@@ -47,6 +47,38 @@ type WithTeam struct {
 // Pipeline represents a complete CI/CD pipeline configuration. It contains all
 // jobs, resources, resource types, runners, secret types, services, and
 // variable declarations that define the pipeline's behavior.
+// Summary is what a list of pipelines shows: the identifying fields and the
+// time of the last build, without the raw config or the jobs and resources
+// behind it. The full Pipeline is one Find away.
+type Summary struct {
+	ID          uint32     `json:"id"`
+	Name        string     `json:"name"`
+	Canonical   string     `json:"canonical"`
+	Public      bool       `json:"public"`
+	LastBuildAt *time.Time `json:"last_build_at,omitempty"`
+}
+
+// Sort is an order for a page of pipelines.
+type Sort string
+
+const (
+	// SortName is alphabetical by name, case-insensitive.
+	SortName Sort = "name"
+	// SortCreated is newest first. Pipelines carry no creation time, so this
+	// is descending id, which is creation order.
+	SortCreated Sort = "created"
+)
+
+// ParseSort returns the Sort named by s, or SortName when s names none.
+func ParseSort(s string) Sort {
+	switch Sort(s) {
+	case SortCreated:
+		return SortCreated
+	default:
+		return SortName
+	}
+}
+
 type Pipeline struct {
 	ID            uint32                    `json:"id"`
 	Name          string                    `json:"name"`
