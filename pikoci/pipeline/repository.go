@@ -2,7 +2,13 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 )
+
+// ErrNotFound reports that no pipeline exists under the requested canonical
+// in the team. Callers that want to distinguish a missing pipeline from a
+// failed lookup match it with errors.Is.
+var ErrNotFound = errors.New("pipeline not found")
 
 //go:generate go tool mockgen -destination=../mock/pipeline_repository.go -mock_names=Repository=PipelineRepository -package mock github.com/pikoci/pikoci/pikoci/pipeline Repository
 
@@ -12,9 +18,11 @@ type Repository interface {
 	Create(ctx context.Context, tc string, pp Pipeline) (uint32, error)
 	// Update updates an existing pipeline identified by team and pipeline canonical.
 	Update(ctx context.Context, tc, pCan string, pp Pipeline) error
-	// Find retrieves a pipeline by team and pipeline canonical.
+	// Find retrieves a pipeline by team and pipeline canonical. It returns an
+	// error wrapping ErrNotFound when no such pipeline exists.
 	Find(ctx context.Context, tc, pCan string) (*Pipeline, error)
-	// FindPublic retrieves a public pipeline by team and pipeline canonical.
+	// FindPublic retrieves a public pipeline by team and pipeline canonical. It
+	// returns an error wrapping ErrNotFound when no such public pipeline exists.
 	FindPublic(ctx context.Context, tc, pCan string) (*Pipeline, error)
 	// Filter returns all pipelines belonging to the given team.
 	Filter(ctx context.Context, tc string) ([]*Pipeline, error)

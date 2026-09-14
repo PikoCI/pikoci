@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/adrg/xdg"
 	"github.com/spf13/cobra"
-	"github.com/pikoci/pikoci/pikoci"
+	"github.com/pikoci/pikoci/pikoci/pipeline"
 	"github.com/pikoci/pikoci/pikoci/role"
 	"github.com/pikoci/pikoci/pikoci/team"
 	"github.com/pikoci/pikoci/pikoci/transport/http/client"
@@ -519,7 +520,20 @@ func newClientWithConfig(url, jwt string) (*client.Client, error) {
 	return c, nil
 }
 
-func createPipeline(ctx context.Context, svc pikoci.Service, tc, name, config, vars string) error {
+// pipelineUpserter is the subset of pikoci.Service that
+// createOrUpdatePipeline needs. Narrowing it keeps the startup seeding
+// testable without standing up a full service.
+type pipelineUpserter interface {
+	GetPipeline(ctx context.Context, tc, pCan string) (*pipeline.Pipeline, error)
+	CreatePipeline(ctx context.Context, tc, pn string, pp []byte, vars map[string]interface{}) (*pipeline.Pipeline, error)
+	UpdatePipeline(ctx context.Context, tc, pCan string, pp []byte, vars map[string]interface{}, newName ...string) (*pipeline.Pipeline, error)
+}
+
+// createOrUpdatePipeline seeds the pipeline named by the --pipeline-* startup
+// flags. It updates the pipeline when one already exists under the same
+// canonical name, so the flags are idempotent and the server can be restarted
+// against a persistent database.
+func createOrUpdatePipeline(ctx context.Context, svc pipelineUpserter, tc, name, config, vars string) error {
 	f, err := os.Open(config)
 	if err != nil {
 		return fmt.Errorf("failed to open config file at %q: %w", config, err)
@@ -543,6 +557,25 @@ func createPipeline(ctx context.Context, svc pikoci.Service, tc, name, config, v
 		if err != nil {
 			return fmt.Errorf("failed to read decode vars file at %q: %w", vars, err)
 		}
+	}
+
+	// Only a genuine not-found falls through to Create. Any other lookup
+	// error (a transient DB failure, say) is returned as-is rather than
+	// masked behind the unique-constraint error Create would then hit.
+	pCan := utils.Canonicalize(name)
+	_, err = svc.GetPipeline(ctx, tc, pCan)
+	switch {
+	case err == nil:
+		// The flag's name is passed through so a display-name change is
+		// applied rather than silently keeping the stored one.
+		_, err = svc.UpdatePipeline(ctx, tc, pCan, b, vrs, name)
+		if err != nil {
+			return fmt.Errorf("failed to update Pipeline %q: %w", name, err)
+		}
+
+		return nil
+	case !errors.Is(err, pipeline.ErrNotFound):
+		return fmt.Errorf("failed to look up Pipeline %q: %w", name, err)
 	}
 
 	_, err = svc.CreatePipeline(ctx, tc, name, b, vrs)
