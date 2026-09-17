@@ -338,7 +338,7 @@ job "build-latest" {
         echo "${var.ghcr_token}" | docker login ghcr.io -u "${var.ghcr_username}" --password-stdin
 
         docker buildx create --use --name pikoci-builder 2>/dev/null || docker buildx use pikoci-builder
-        docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/pikoci/pikoci:latest --push .
+        docker buildx build --platform linux/amd64,linux/arm64 --build-arg VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo dev) --build-arg COMMIT=$(git rev-parse --short HEAD) -t ghcr.io/pikoci/pikoci:latest --push .
       EOT
     }
   }
@@ -424,7 +424,7 @@ job "build-release" {
         echo "${var.ghcr_token}" | docker login ghcr.io -u "${var.ghcr_username}" --password-stdin
 
         docker buildx create --use --name pikoci-builder 2>/dev/null || docker buildx use pikoci-builder
-        docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/pikoci/pikoci:$TAG --push .
+        docker buildx build --platform linux/amd64,linux/arm64 --build-arg VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo dev) --build-arg COMMIT=$(git rev-parse --short HEAD) -t ghcr.io/pikoci/pikoci:$TAG --push .
       EOT
     }
   }
