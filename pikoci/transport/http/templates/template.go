@@ -17,6 +17,15 @@ const (
 	extension = "/*.tmpl"
 )
 
+// PageData is what the layouts are executed with.
+type PageData struct {
+	// AssetPrefix is where this build's static files are mounted, with
+	// leading and trailing slash (e.g. "/assets/abc1234/"). Every asset URL
+	// in a layout is built from it, so a new build never resolves to a URL
+	// the browser has cached from an old one.
+	AssetPrefix string
+}
+
 var (
 	// layoutsDir is the directory containing layout template files.
 	layoutsDir = path.Join(viewsDir, "layouts")
