@@ -1045,6 +1045,24 @@ func (cl *Client) UpdatePipelineResource(ctx context.Context, tc, pn, rCan strin
 	return nil
 }
 
+// UpdateResourceCheckLogs records the output of a resource check.
+func (cl *Client) UpdateResourceCheckLogs(ctx context.Context, tc, pn, rCan, logs string) error {
+	var resp thttp.UpdateResourceCheckLogsResponse
+
+	err := cl.Request(ctx, http.MethodPut, fmt.Sprintf("%s/teams/%s/pipelines/%s/resources/%s/logs", cl.url, tc, pn, rCan), thttp.UpdateResourceCheckLogsRequest{
+		Logs: logs,
+	}, &resp)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+
+	if resp.Err != "" {
+		return fmt.Errorf("error from request: %s", resp.Err)
+	}
+
+	return nil
+}
+
 // TriggerPipelineResource triggers a manual check on the specified resource.
 func (cl *Client) TriggerPipelineResource(ctx context.Context, tc, pn, rCan string) error {
 	var resp thttp.TriggerPipelineResourceResponse

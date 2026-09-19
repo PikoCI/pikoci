@@ -206,6 +206,11 @@ type Service interface {
 	GetPipelineResource(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error)
 	// UpdatePipelineResource updates a resource's metadata within a pipeline.
 	UpdatePipelineResource(ctx context.Context, tc, pn, rCan string, r resource.Resource) error
+	// UpdateResourceCheckLogs records the output of a resource check. It is
+	// the one resource write a worker makes, and it touches nothing but the
+	// logs: the resource's type and params, which decide what a check runs,
+	// stay whatever the pipeline config says.
+	UpdateResourceCheckLogs(ctx context.Context, tc, pn, rCan, logs string) error
 	// TriggerPipelineResource enqueues a resource check and updates the resource's
 	// next check time.
 	TriggerPipelineResource(ctx context.Context, tc, pn, rCan string) error

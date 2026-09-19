@@ -1694,6 +1694,33 @@ func TestUpdatePipelineResource_Success(t *testing.T) {
 	assert.Empty(t, got.Err)
 }
 
+func TestUpdateResourceCheckLogs_Success(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	e.svc.EXPECT().UpdateResourceCheckLogs(gomock.Any(), "main", "my-pipe", "my-res", "check output").Return(nil)
+
+	resp := doRequest(t, http.MethodPut, e.server.URL+"/teams/main/pipelines/my-pipe/resources/my-res/logs", e.adminJWT(t), `{"logs":"check output"}`)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	var got UpdateResourceCheckLogsResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Empty(t, got.Err)
+}
+
+func TestUpdateResourceCheckLogs_ServiceError(t *testing.T) {
+	e := newTestEnv(t)
+	e.expectAdminAuth()
+	e.svc.EXPECT().UpdateResourceCheckLogs(gomock.Any(), "main", "my-pipe", "my-res", "").Return(fmt.Errorf("logs error"))
+
+	resp := doRequest(t, http.MethodPut, e.server.URL+"/teams/main/pipelines/my-pipe/resources/my-res/logs", e.adminJWT(t), `{}`)
+	defer resp.Body.Close()
+
+	var got UpdateResourceCheckLogsResponse
+	json.NewDecoder(resp.Body).Decode(&got)
+	assert.Equal(t, "logs error", got.Err)
+}
+
 func TestUpdatePipelineResource_BadJSON(t *testing.T) {
 	e := newTestEnv(t)
 	e.expectAdminAuth()

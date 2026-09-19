@@ -2178,7 +2178,7 @@ func (w *Worker) processResourceCheck(ctx context.Context, m workitem.Body, cwd 
 	if err != nil {
 		w.logger.Error("failed to resolve secret vars for resource check", "error", err)
 		r.Logs = err.Error()
-		if nerr := w.pikoci.UpdatePipelineResource(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, r); nerr != nil {
+		if nerr := w.pikoci.UpdateResourceCheckLogs(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, r.Logs); nerr != nil {
 			w.logger.Error("failed update resource", "resource", r.Canonical, "pipeline", m.PipelineCanonical, "error", nerr)
 		}
 		return
@@ -2209,7 +2209,7 @@ func (w *Worker) processResourceCheck(ctx context.Context, m workitem.Body, cwd 
 	out, _, err := w.runRunner(ctx, ru, cwd, rc, secretVals)
 	if err != nil {
 		r.Logs = checkWarnStr + out
-		if nerr := w.pikoci.UpdatePipelineResource(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, r); nerr != nil {
+		if nerr := w.pikoci.UpdateResourceCheckLogs(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, r.Logs); nerr != nil {
 			w.logger.Error("failed update resource", "resource", r.Canonical, "pipeline", m.PipelineCanonical, "error", nerr)
 		}
 		w.logger.Error("failed to run resource check", "error", err)
@@ -2218,7 +2218,7 @@ func (w *Worker) processResourceCheck(ctx context.Context, m workitem.Body, cwd 
 
 	if r.Logs != checkWarnStr || checkWarnStr != "" {
 		r.Logs = checkWarnStr
-		if err := w.pikoci.UpdatePipelineResource(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, r); err != nil {
+		if err := w.pikoci.UpdateResourceCheckLogs(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, r.Logs); err != nil {
 			w.logger.Error("failed update resource", "resource", r.Canonical, "pipeline", m.PipelineCanonical, "error", err)
 			return
 		}
@@ -2234,7 +2234,7 @@ func (w *Worker) processResourceCheck(ctx context.Context, m workitem.Body, cwd 
 	if err := json.Unmarshal([]byte(rawVers), &vers); err != nil {
 		w.logger.Error("failed to unmarshal versions", "raw", rawVers, "error", err)
 		r.Logs = fmt.Sprintf("failed to Unmarshal versions(%s): %v", rawVers, err)
-		if nerr := w.pikoci.UpdatePipelineResource(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, r); nerr != nil {
+		if nerr := w.pikoci.UpdateResourceCheckLogs(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, r.Logs); nerr != nil {
 			w.logger.Error("failed update resource", "resource", r.Canonical, "pipeline", m.PipelineCanonical, "error", nerr)
 		}
 		return
