@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **OAuth login with `--external-url` unset**: the server built a relative `redirect_uri` (`/auth/oauth/<provider>/callback`) that every provider rejects with `invalid redirect_uri`, while the Authentication admin page displayed an absolute URL derived from the browser. `/auth/oauth/<provider>` now fails with a message naming the fix instead of redirecting, the server logs a warning at startup, and the admin page shows the callback URL the server will actually send (from `GET /admin/auth-settings`, new `external_url` field) or a warning when it cannot.
+- **OAuth login with `--external-url` unset**: the server built a relative `redirect_uri` (`/auth/oauth/<provider>/callback`) that every provider rejects with `invalid redirect_uri`, while the Authentication admin page displayed an absolute URL derived from the browser. The server now derives the base URL from the request (`X-Forwarded-Proto`/`X-Forwarded-Host`, else the connection scheme and `Host`) when the flag is unset, so OAuth works out of the box on whatever address users are already on; `--external-url` still takes precedence and is the way to pin the callback URL when the server is reachable under several names. The server logs a warning at startup when it is unset, and the admin page shows the callback URL the server will actually send (`GET /admin/auth-settings` gains `external_url` and `external_url_configured`).
 
 ### Added
 

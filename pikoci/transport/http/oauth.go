@@ -41,24 +41,47 @@ func oauthCallbackURL(externalURL, canonical string) string {
 	return fmt.Sprintf("%s/auth/oauth/%s/callback", strings.TrimRight(externalURL, "/"), canonical)
 }
 
+// requestBaseURL is the URL the client used to reach the server, derived
+// from the request: X-Forwarded-Proto/X-Forwarded-Host when a reverse
+// proxy sets them, otherwise the connection's scheme and Host header.
+func requestBaseURL(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if v := r.Header.Get("X-Forwarded-Proto"); v != "" {
+		scheme = strings.TrimSpace(strings.Split(v, ",")[0])
+	}
+	host := r.Host
+	if v := r.Header.Get("X-Forwarded-Host"); v != "" {
+		host = strings.TrimSpace(strings.Split(v, ",")[0])
+	}
+	return scheme + "://" + host
+}
+
+// resolveExternalURL is the base URL for OAuth redirect URIs and post-login
+// redirects: --external-url when set, otherwise the URL of the request.
+// The fallback lets OAuth work out of the box on whatever hostname the
+// user is already on; the flag pins it when the server is reachable under
+// several names or the proxy does not forward the original host.
+func resolveExternalURL(configured string, r *http.Request) string {
+	if u := strings.TrimRight(strings.TrimSpace(configured), "/"); u != "" {
+		return u
+	}
+	return requestBaseURL(r)
+}
+
 // --- OAuth Start (unauthenticated, returns redirect) ---
 
-func oauthStart(s pikoci.Service, externalURL string, stateStore *pikoci.OAuthStateStore, ts []byte) http.HandlerFunc {
+func oauthStart(s pikoci.Service, configuredExternalURL string, stateStore *pikoci.OAuthStateStore, ts []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		canonical := vars["canonical"]
+		externalURL := resolveExternalURL(configuredExternalURL, r)
 
 		p, err := s.GetOAuthProvider(r.Context(), canonical)
 		if err != nil || !p.Enabled {
 			http.Error(w, "provider not found", http.StatusNotFound)
-			return
-		}
-
-		// Without an external URL the redirect_uri would be a bare path,
-		// which every provider rejects; fail here with a message that
-		// names the fix instead of bouncing the user off the provider.
-		if strings.TrimSpace(externalURL) == "" {
-			http.Error(w, "OAuth login is not configured: start the server with --external-url (EXTERNAL_URL) set to its public URL", http.StatusInternalServerError)
 			return
 		}
 
@@ -117,10 +140,13 @@ func oauthStart(s pikoci.Service, externalURL string, stateStore *pikoci.OAuthSt
 
 // --- OAuth Callback (unauthenticated, returns redirect to SPA) ---
 
-func oauthCallback(s pikoci.Service, externalURL string, stateStore *pikoci.OAuthStateStore, ts []byte) http.HandlerFunc {
+func oauthCallback(s pikoci.Service, configuredExternalURL string, stateStore *pikoci.OAuthStateStore, ts []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		canonical := vars["canonical"]
+		// Must resolve the same way as oauthStart so the redirect_uri in
+		// the token exchange matches the one sent to the provider.
+		externalURL := resolveExternalURL(configuredExternalURL, r)
 
 		code := r.URL.Query().Get("code")
 		stateParam := r.URL.Query().Get("state")
@@ -414,9 +440,12 @@ func deleteOAuthProvider(s pikoci.Service) http.HandlerFunc {
 // configuration the admin UI needs to show correct callback URLs.
 type AdminAuthSettings struct {
 	*oauthprovider.AuthSettings
-	// ExternalURL is the server's --external-url; empty means OAuth login
-	// cannot work until it is set.
+	// ExternalURL is the base the server uses for OAuth callback URLs:
+	// --external-url when set, otherwise derived from this request.
 	ExternalURL string `json:"external_url"`
+	// ExternalURLConfigured is false when ExternalURL was derived from the
+	// request rather than set with --external-url.
+	ExternalURLConfigured bool `json:"external_url_configured"`
 }
 
 type GetAdminAuthSettingsResponse struct {
@@ -435,7 +464,11 @@ func getAdminAuthSettings(s pikoci.Service, externalURL string) http.HandlerFunc
 		}
 		var data *AdminAuthSettings
 		if settings != nil {
-			data = &AdminAuthSettings{AuthSettings: settings, ExternalURL: strings.TrimRight(externalURL, "/")}
+			data = &AdminAuthSettings{
+				AuthSettings:          settings,
+				ExternalURL:           resolveExternalURL(externalURL, r),
+				ExternalURLConfigured: strings.TrimSpace(externalURL) != "",
+			}
 		}
 		encodeResponse(GetAdminAuthSettingsResponse{Data: data, Err: errs}, w)
 	}

@@ -2,8 +2,8 @@ package http
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -65,26 +65,57 @@ func TestOAuthStartUsesExternalURLForCallback(t *testing.T) {
 	assert.NotEmpty(t, loc.Query().Get("state"))
 }
 
-func TestOAuthStartRefusesWithoutExternalURL(t *testing.T) {
+func TestOAuthStartDerivesRedirectURIFromRequestWithoutExternalURL(t *testing.T) {
 	svc, server, client := newOAuthTestServer(t, "")
-	svc.EXPECT().GetOAuthProvider(gomock.Any(), "example").Return(oauth2TestProvider(), nil)
+	svc.EXPECT().GetOAuthProvider(gomock.Any(), "example").Return(oauth2TestProvider(), nil).Times(2)
 
-	resp, err := client.Get(server.URL + "/auth/oauth/example")
-	require.NoError(t, err)
-	defer resp.Body.Close()
+	t.Run("host header", func(t *testing.T) {
+		resp, err := client.Get(server.URL + "/auth/oauth/example")
+		require.NoError(t, err)
+		defer resp.Body.Close()
 
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-	body, _ := io.ReadAll(resp.Body)
-	assert.Contains(t, string(body), "--external-url")
-	assert.Empty(t, resp.Header.Get("Location"), "must not redirect to the provider with a relative redirect_uri")
+		require.Equal(t, http.StatusFound, resp.StatusCode)
+		loc, err := url.Parse(resp.Header.Get("Location"))
+		require.NoError(t, err)
+		assert.Equal(t, server.URL+"/auth/oauth/example/callback", loc.Query().Get("redirect_uri"))
+	})
+
+	t.Run("forwarded headers", func(t *testing.T) {
+		req, err := http.NewRequest(http.MethodGet, server.URL+"/auth/oauth/example", nil)
+		require.NoError(t, err)
+		req.Header.Set("X-Forwarded-Proto", "https")
+		req.Header.Set("X-Forwarded-Host", "ci.example.com, internal-lb")
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		require.Equal(t, http.StatusFound, resp.StatusCode)
+		loc, err := url.Parse(resp.Header.Get("Location"))
+		require.NoError(t, err)
+		assert.Equal(t, "https://ci.example.com/auth/oauth/example/callback", loc.Query().Get("redirect_uri"))
+	})
+}
+
+func TestResolveExternalURL(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/auth/oauth/x", nil)
+	assert.Equal(t, "https://ci.example.com", resolveExternalURL(" https://ci.example.com/ ", req), "configured URL wins and is trimmed")
+	assert.Equal(t, "http://localhost:8080", resolveExternalURL("", req))
+
+	req.TLS = &tls.ConnectionState{}
+	assert.Equal(t, "https://localhost:8080", resolveExternalURL("", req))
+
+	req.Header.Set("X-Forwarded-Proto", "http")
+	req.Header.Set("X-Forwarded-Host", "ci.example.com")
+	assert.Equal(t, "http://ci.example.com", resolveExternalURL("", req), "forwarded headers override the connection")
 }
 
 func TestGetAdminAuthSettingsIncludesExternalURL(t *testing.T) {
 	for _, tc := range []struct {
-		name, configured, want string
+		name, configured string
+		wantConfigured   bool
 	}{
-		{"set", "https://ci.example.com/", "https://ci.example.com"},
-		{"unset", "", ""},
+		{"set", "https://ci.example.com/", true},
+		{"unset", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newTestEnv(t)
@@ -104,7 +135,12 @@ func TestGetAdminAuthSettingsIncludesExternalURL(t *testing.T) {
 			require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
 			assert.Empty(t, got.Err)
 			assert.True(t, got.Data.LocalAuthEnabled)
-			assert.Equal(t, tc.want, got.Data.ExternalURL)
+			assert.Equal(t, tc.wantConfigured, got.Data.ExternalURLConfigured)
+			if tc.wantConfigured {
+				assert.Equal(t, "https://ci.example.com", got.Data.ExternalURL)
+			} else {
+				assert.Equal(t, e.server.URL, got.Data.ExternalURL, "falls back to the request's own URL")
+			}
 		})
 	}
 }

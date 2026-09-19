@@ -165,7 +165,7 @@ var serverCmd = &cobra.Command{
 
 		oauthStateStore := pikoci.NewOAuthStateStore(ctx)
 		if cfg.ExternalURL == "" {
-			logger.Warn("external-url is not set; OAuth/OIDC login will fail until --external-url (EXTERNAL_URL) is the server's public URL")
+			logger.Warn("external-url is not set; OAuth callback URLs will be derived from each request's host, set --external-url (EXTERNAL_URL) to the server's public URL to pin them")
 		}
 
 		logger.Info("initializing http handlers")
