@@ -164,6 +164,9 @@ var serverCmd = &cobra.Command{
 		logger.Info("initialized service")
 
 		oauthStateStore := pikoci.NewOAuthStateStore(ctx)
+		if cfg.ExternalURL == "" {
+			logger.Warn("external-url is not set; OAuth/OIDC login will fail until --external-url (EXTERNAL_URL) is the server's public URL")
+		}
 
 		logger.Info("initializing http handlers")
 		var handler = tshttp.Handler(svc, jwtSecret, logger.With("component", "HTTP"), db, cfg.DBSystem, Version, Commit, cfg.ExternalURL, oauthStateStore)

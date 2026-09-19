@@ -19,7 +19,7 @@ PikoCI supports two authentication methods: local username/password and OAuth/OI
 
 ### Prerequisites
 
-1. Set the `--external-url` flag on the PikoCI server to the public URL users access (e.g., `https://ci.example.com`). This is used to build OAuth callback URLs.
+1. Set the `--external-url` flag on the PikoCI server to the public URL users access (e.g., `https://ci.example.com`). This is used to build OAuth callback URLs; until it is set, the Authentication page shows a warning and OAuth logins fail with a configuration error.
 
     ```bash
     pikoci server --jwt-secret my-secret --external-url https://ci.example.com

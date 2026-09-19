@@ -34,6 +34,13 @@ func getAuthMethods(s pikoci.Service) http.HandlerFunc {
 	}
 }
 
+// oauthCallbackURL is the redirect_uri registered with a provider: the
+// server's public URL plus the callback route. The admin UI shows the same
+// value so what admins copy into the provider is what the server sends.
+func oauthCallbackURL(externalURL, canonical string) string {
+	return fmt.Sprintf("%s/auth/oauth/%s/callback", strings.TrimRight(externalURL, "/"), canonical)
+}
+
 // --- OAuth Start (unauthenticated, returns redirect) ---
 
 func oauthStart(s pikoci.Service, externalURL string, stateStore *pikoci.OAuthStateStore, ts []byte) http.HandlerFunc {
@@ -47,7 +54,15 @@ func oauthStart(s pikoci.Service, externalURL string, stateStore *pikoci.OAuthSt
 			return
 		}
 
-		callbackURL := fmt.Sprintf("%s/auth/oauth/%s/callback", strings.TrimRight(externalURL, "/"), canonical)
+		// Without an external URL the redirect_uri would be a bare path,
+		// which every provider rejects; fail here with a message that
+		// names the fix instead of bouncing the user off the provider.
+		if strings.TrimSpace(externalURL) == "" {
+			http.Error(w, "OAuth login is not configured: start the server with --external-url (EXTERNAL_URL) set to its public URL", http.StatusInternalServerError)
+			return
+		}
+
+		callbackURL := oauthCallbackURL(externalURL, canonical)
 
 		flowCfg, err := pikoci.BuildOAuth2Config(r.Context(), p, callbackURL)
 		if err != nil {
@@ -127,7 +142,7 @@ func oauthCallback(s pikoci.Service, externalURL string, stateStore *pikoci.OAut
 			return
 		}
 
-		callbackURL := fmt.Sprintf("%s/auth/oauth/%s/callback", strings.TrimRight(externalURL, "/"), canonical)
+		callbackURL := oauthCallbackURL(externalURL, canonical)
 
 		flowCfg, err := pikoci.BuildOAuth2Config(r.Context(), p, callbackURL)
 		if err != nil {
@@ -395,21 +410,34 @@ func deleteOAuthProvider(s pikoci.Service) http.HandlerFunc {
 
 // --- Admin: Auth Settings ---
 
+// AdminAuthSettings is the stored auth settings plus the server-side OAuth
+// configuration the admin UI needs to show correct callback URLs.
+type AdminAuthSettings struct {
+	*oauthprovider.AuthSettings
+	// ExternalURL is the server's --external-url; empty means OAuth login
+	// cannot work until it is set.
+	ExternalURL string `json:"external_url"`
+}
+
 type GetAdminAuthSettingsResponse struct {
-	Err  string                       `json:"error,omitempty"`
-	Data *oauthprovider.AuthSettings `json:"data,omitempty"`
+	Err  string             `json:"error,omitempty"`
+	Data *AdminAuthSettings `json:"data,omitempty"`
 }
 
 func (r GetAdminAuthSettingsResponse) Error() string { return r.Err }
 
-func getAdminAuthSettings(s pikoci.Service) http.HandlerFunc {
+func getAdminAuthSettings(s pikoci.Service, externalURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		settings, err := s.GetAuthSettings(r.Context())
 		var errs string
 		if err != nil {
 			errs = err.Error()
 		}
-		encodeResponse(GetAdminAuthSettingsResponse{Data: settings, Err: errs}, w)
+		var data *AdminAuthSettings
+		if settings != nil {
+			data = &AdminAuthSettings{AuthSettings: settings, ExternalURL: strings.TrimRight(externalURL, "/")}
+		}
+		encodeResponse(GetAdminAuthSettingsResponse{Data: data, Err: errs}, w)
 	}
 }
 

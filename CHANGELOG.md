@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **OAuth login with `--external-url` unset**: the server built a relative `redirect_uri` (`/auth/oauth/<provider>/callback`) that every provider rejects with `invalid redirect_uri`, while the Authentication admin page displayed an absolute URL derived from the browser. `/auth/oauth/<provider>` now fails with a message naming the fix instead of redirecting, the server logs a warning at startup, and the admin page shows the callback URL the server will actually send (from `GET /admin/auth-settings`, new `external_url` field) or a warning when it cannot.
+
 ### Added
 
 - **Secret store**: PikoCI can store secrets and plain configuration values itself, with no external vault or file on the worker. Secrets are encrypted at rest with an age keypair and masked in build logs; plain values are stored as-is and shown in the clear. Team- and pipeline-scoped with pipeline overriding team, managed via `pikoci client secrets` or the API, and referenced from a pipeline with `secret "pikoci" { key = "..." }`. Entries are stored as secrets by default; `--plain` opts out. Storing a name again replaces its value, so a secret can be rotated without a window in which it does not exist; switching an entry between secret and plain is refused and stays a delete followed by a create. Encryption is optional: without `PIKOCI_SECRET_KEY` the server runs as before and plain values still work ([#667](https://github.com/PikoCI/pikoci/issues/667)).

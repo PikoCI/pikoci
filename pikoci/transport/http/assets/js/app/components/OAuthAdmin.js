@@ -63,6 +63,15 @@ export function OAuthAdmin() {
       <h1 class="h4 fw-bold mb-0">Authentication Settings</h1>
     </div>
 
+    ${settings && !settings.external_url ? html`
+      <div class="alert alert-warning" role="alert">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        <strong>OAuth login is disabled:</strong> the server does not know its public URL, so it cannot
+        build callback URLs. Start it with <code>--external-url ${window.location.origin}</code>
+        (or <code>EXTERNAL_URL=${window.location.origin}</code>) and restart.
+      </div>
+    ` : null}
+
     ${settings ? html`
       <div class="card mb-4">
         <div class="card-body">
@@ -85,7 +94,7 @@ export function OAuthAdmin() {
       </button>
     </div>
 
-    ${showForm ? html`<${ProviderForm} provider=${editProvider} onDone=${onFormDone} onCancel=${() => { setShowForm(false); setEditProvider(null); }} />` : null}
+    ${showForm ? html`<${ProviderForm} provider=${editProvider} externalUrl=${settings ? settings.external_url : null} onDone=${onFormDone} onCancel=${() => { setShowForm(false); setEditProvider(null); }} />` : null}
 
     ${providers.length > 0 ? html`
       <div class="table-responsive">
@@ -181,7 +190,7 @@ const PROVIDER_PRESETS = {
   },
 };
 
-function ProviderForm({ provider, onDone, onCancel }) {
+function ProviderForm({ provider, externalUrl, onDone, onCancel }) {
   const isEdit = !!provider;
   const [name, setName] = useState(provider?.name || '');
   const [canonical, setCanonical] = useState(provider?.canonical || '');
@@ -281,18 +290,26 @@ function ProviderForm({ provider, onDone, onCancel }) {
           ${canonical ? html`
             <div class="mb-3">
               <label class="form-label">Callback URL</label>
-              <div class="input-group">
-                <input type="text" class="form-control font-monospace" readonly disabled
-                  value=${window.location.origin + '/auth/oauth/' + canonical + '/callback'} />
-                <button class="btn btn-outline-secondary" type="button" onClick=${() => {
-                  navigator.clipboard.writeText(window.location.origin + '/auth/oauth/' + canonical + '/callback')
-                    .then(() => showToast('Copied to clipboard', 'success'))
-                    .catch(() => {});
-                }}>
-                  <i class="bi bi-clipboard"></i>
-                </button>
-              </div>
-              <div class="form-text">Set this as the redirect/callback URI in your provider's settings.</div>
+              ${externalUrl ? html`
+                <div class="input-group">
+                  <input type="text" class="form-control font-monospace" readonly disabled
+                    value=${externalUrl + '/auth/oauth/' + canonical + '/callback'} />
+                  <button class="btn btn-outline-secondary" type="button" onClick=${() => {
+                    navigator.clipboard.writeText(externalUrl + '/auth/oauth/' + canonical + '/callback')
+                      .then(() => showToast('Copied to clipboard', 'success'))
+                      .catch(() => {});
+                  }}>
+                    <i class="bi bi-clipboard"></i>
+                  </button>
+                </div>
+                <div class="form-text">Set this as the redirect/callback URI in your provider's settings.</div>
+              ` : html`
+                <div class="form-text text-warning">
+                  <i class="bi bi-exclamation-triangle me-1"></i>
+                  Unknown until the server is started with <code>--external-url</code>; it would be
+                  <code>${window.location.origin + '/auth/oauth/' + canonical + '/callback'}</code> if that is set to <code>${window.location.origin}</code>.
+                </div>
+              `}
             </div>
           ` : null}
           <div class="mb-3">
