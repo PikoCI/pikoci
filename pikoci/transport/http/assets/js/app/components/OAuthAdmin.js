@@ -63,6 +63,17 @@ export function OAuthAdmin() {
       <h1 class="h4 fw-bold mb-0">Authentication Settings</h1>
     </div>
 
+    ${settings && !settings.external_url_configured ? html`
+      <div class="alert alert-info" role="alert">
+        <i class="bi bi-info-circle me-1"></i>
+        <strong><code>--external-url</code> is not set:</strong> OAuth callback URLs are derived from the
+        address each login request arrives on (currently <code>${settings.external_url}</code>). That works
+        as long as everyone reaches the server the same way; if it is reachable under more than one
+        hostname or sits behind a proxy that does not forward the original host, start it with
+        <code>--external-url ${window.location.origin}</code> (or <code>EXTERNAL_URL=${window.location.origin}</code>).
+      </div>
+    ` : null}
+
     ${settings ? html`
       <div class="card mb-4">
         <div class="card-body">
@@ -85,7 +96,7 @@ export function OAuthAdmin() {
       </button>
     </div>
 
-    ${showForm ? html`<${ProviderForm} provider=${editProvider} onDone=${onFormDone} onCancel=${() => { setShowForm(false); setEditProvider(null); }} />` : null}
+    ${showForm ? html`<${ProviderForm} provider=${editProvider} externalUrl=${settings?.external_url || window.location.origin} onDone=${onFormDone} onCancel=${() => { setShowForm(false); setEditProvider(null); }} />` : null}
 
     ${providers.length > 0 ? html`
       <div class="table-responsive">
@@ -181,7 +192,7 @@ const PROVIDER_PRESETS = {
   },
 };
 
-function ProviderForm({ provider, onDone, onCancel }) {
+function ProviderForm({ provider, externalUrl, onDone, onCancel }) {
   const isEdit = !!provider;
   const [name, setName] = useState(provider?.name || '');
   const [canonical, setCanonical] = useState(provider?.canonical || '');
@@ -283,9 +294,9 @@ function ProviderForm({ provider, onDone, onCancel }) {
               <label class="form-label">Callback URL</label>
               <div class="input-group">
                 <input type="text" class="form-control font-monospace" readonly disabled
-                  value=${window.location.origin + '/auth/oauth/' + canonical + '/callback'} />
+                  value=${externalUrl + '/auth/oauth/' + canonical + '/callback'} />
                 <button class="btn btn-outline-secondary" type="button" onClick=${() => {
-                  navigator.clipboard.writeText(window.location.origin + '/auth/oauth/' + canonical + '/callback')
+                  navigator.clipboard.writeText(externalUrl + '/auth/oauth/' + canonical + '/callback')
                     .then(() => showToast('Copied to clipboard', 'success'))
                     .catch(() => {});
                 }}>

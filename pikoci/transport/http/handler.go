@@ -419,7 +419,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodPost).Path("/admin/oauth-providers").Name(CreateOAuthProvider.String()).Handler(createOAuthProvider(s))
 	api.Methods(http.MethodPut).Path("/admin/oauth-providers/{canonical}").Name(UpdateOAuthProvider.String()).Handler(updateOAuthProvider(s))
 	api.Methods(http.MethodDelete).Path("/admin/oauth-providers/{canonical}").Name(DeleteOAuthProvider.String()).Handler(deleteOAuthProvider(s))
-	api.Methods(http.MethodGet).Path("/admin/auth-settings").Name(GetAdminAuthSettings.String()).Handler(getAdminAuthSettings(s))
+	api.Methods(http.MethodGet).Path("/admin/auth-settings").Name(GetAdminAuthSettings.String()).Handler(getAdminAuthSettings(s, externalURL))
 	api.Methods(http.MethodPut).Path("/admin/auth-settings").Name(UpdateAdminAuthSettings.String()).Handler(updateAdminAuthSettings(s))
 
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/secrets").Name(SetTeamSecret.String()).Handler(setTeamSecret(s))
