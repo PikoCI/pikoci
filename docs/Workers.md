@@ -35,7 +35,7 @@ The embedded worker (when `--run-worker=true`) calls the service directly in-pro
 - Workers must be able to reach the server URL.
 - Workers need a worker token for authentication. Generate one with `pikoci worker-token --jwt-secret <secret>` or copy it from the server startup logs.
 
-A worker token only reaches the endpoints a worker needs to run builds: heartbeat, reading the pipeline and job it is working on, creating and updating its builds, recording resource versions, and trigger bookkeeping. It cannot create, update or delete pipelines, manage secrets, users or teams, or trigger jobs. It is not a substitute for a user login or an [API token](API-Tokens.md).
+A worker token only reaches the endpoints a worker needs to run builds: heartbeat, reading the pipeline and job it is working on, creating and updating builds (a resource check that finds a new version queues builds for the jobs that get it; a paused job is refused), recording resource versions and check output, and trigger bookkeeping. It cannot create, update or delete pipelines or resources, manage secrets, users or teams, or use the manual job trigger with its inputs. It is not a substitute for a user login or an [API token](API-Tokens.md).
 
 ## Server setup
 

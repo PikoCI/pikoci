@@ -70,6 +70,7 @@ var (
 		DeletePipeline:         requireRole(role.Maintain),
 		CreatePipelineImage:    requireRole(role.Maintain),
 		UpdatePipelineResource: requireRole(role.Maintain),
+		UpdateResourceCheckLogs: requireRole(role.Maintain),
 		CreateResourceVersion:  requireRole(role.Maintain),
 		RegenerateWebhookToken: requireRole(role.Maintain),
 		CreateTrigger:          requireRole(role.Maintain),
@@ -178,9 +179,11 @@ var (
 		InsertBuildGetVersion:          true,
 		FindBuildGetVersions:           true,
 
-		// Resource checks and puts.
-		CreateResourceVersion:  true,
-		UpdatePipelineResource: true,
+		// Resource checks and puts. The check's output goes through its own
+		// route: UpdatePipelineResource rewrites the whole resource, type and
+		// params included, and those decide what a check runs.
+		CreateResourceVersion:   true,
+		UpdateResourceCheckLogs: true,
 
 		// Triggers.
 		CreateTrigger:            true,

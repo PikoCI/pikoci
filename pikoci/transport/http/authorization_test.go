@@ -4,11 +4,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"io"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -1185,6 +1190,7 @@ func TestWorkerTokenAllowlist(t *testing.T) {
 		{"get pipeline", http.MethodGet, "/teams/main/pipelines/p", true},
 		{"start pending build", http.MethodPost, "/teams/main/pipelines/p/jobs/j/builds/start-pending", true},
 		{"list resource versions", http.MethodGet, "/teams/main/pipelines/p/resources/r/versions", true},
+		{"record resource check logs", http.MethodPut, "/teams/main/pipelines/p/resources/r/logs", true},
 
 		// The bug: pipeline writes were reachable with a worker token.
 		{"create pipeline", http.MethodPost, "/teams/main/pipelines", false},
@@ -1194,6 +1200,9 @@ func TestWorkerTokenAllowlist(t *testing.T) {
 		// Other human-only routes that the old deny-list never covered.
 		{"list pipelines", http.MethodGet, "/teams/main/pipelines", false},
 		{"trigger job", http.MethodPost, "/teams/main/pipelines/p/jobs/j/trigger", false},
+		// Rewrites the whole resource, type and params included, i.e. what a
+		// check runs; the worker only needs to record the check's output.
+		{"update resource", http.MethodPut, "/teams/main/pipelines/p/resources/r", false},
 		{"generate team worker token", http.MethodPost, "/teams/main/worker-token", false},
 		{"list users", http.MethodGet, "/users", false},
 	}
@@ -1222,6 +1231,8 @@ func TestWorkerTokenAllowlist(t *testing.T) {
 				svc.EXPECT().GetPipeline(gomock.Any(), gomock.Any(), gomock.Any()).Return(&pipeline.Pipeline{}, nil).AnyTimes()
 				svc.EXPECT().StartPendingBuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 				svc.EXPECT().ListResourceVersions(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, false, nil).AnyTimes()
+				svc.EXPECT().UpdateResourceCheckLogs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				svc.EXPECT().UpdatePipelineResource(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 				svc.EXPECT().CreatePipeline(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&pipeline.Pipeline{}, nil).AnyTimes()
 				svc.EXPECT().UpdatePipeline(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&pipeline.Pipeline{}, nil).AnyTimes()
 				svc.EXPECT().DeletePipeline(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
@@ -1330,5 +1341,66 @@ func TestWorkerRoutesConsistent(t *testing.T) {
 	for rn := range workerRoutes {
 		_, ok := routeAuthorization[rn]
 		assert.True(t, ok, "workerRoutes entry %s has no routeAuthorization entry", rn)
+	}
+}
+
+// workerServiceCalls parses the worker package and returns the name of every
+// pikoci.Service method it calls, so the allowlist can be checked against
+// what the worker actually does rather than against a hand-kept list.
+func workerServiceCalls(t *testing.T) map[string]bool {
+	t.Helper()
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, filepath.Join("..", "..", "..", "worker"), func(fi os.FileInfo) bool {
+		return !strings.HasSuffix(fi.Name(), "_test.go")
+	}, 0)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs, "worker package not found")
+
+	calls := map[string]bool{}
+	for _, pkg := range pkgs {
+		for _, f := range pkg.Files {
+			ast.Inspect(f, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				// w.pikoci.Method(...): the receiver is the Service field.
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				recv, ok := sel.X.(*ast.SelectorExpr)
+				if !ok || recv.Sel.Name != "pikoci" {
+					return true
+				}
+				calls[sel.Sel.Name] = true
+				return true
+			})
+		}
+	}
+	require.NotEmpty(t, calls, "no w.pikoci.* calls found in worker/")
+	return calls
+}
+
+// The allowlist must cover every Service call the worker makes. Without this,
+// dropping a route the worker needs keeps the unit tests green and only the
+// integration suite notices, after a build fails on a live worker.
+func TestWorkerRoutesCoverWorkerCalls(t *testing.T) {
+	// Service methods whose route is named differently.
+	aliases := map[string]RouteName{
+		"ResolvePipelineValues": GetPipelineSecretValues,
+	}
+	byName := map[string]RouteName{}
+	for _, rn := range RouteNameValues() {
+		byName[strings.ReplaceAll(rn.String(), "_", "")] = rn
+	}
+
+	for method := range workerServiceCalls(t) {
+		rn, ok := aliases[method]
+		if !ok {
+			rn, ok = byName[strings.ToLower(method)]
+		}
+		require.True(t, ok, "worker calls Service.%s but no route is named after it", method)
+		assert.True(t, workerRoutes[rn], "worker calls Service.%s but %s is not in workerRoutes", method, rn)
 	}
 }

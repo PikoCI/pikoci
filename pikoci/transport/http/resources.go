@@ -189,6 +189,37 @@ func getPipelineResource(s pikoci.Service) http.HandlerFunc {
 	}
 }
 
+type UpdateResourceCheckLogsRequest struct {
+	Logs string `json:"logs"`
+}
+type UpdateResourceCheckLogsResponse struct {
+	Err string `json:"error,omitempty"`
+}
+
+func (r UpdateResourceCheckLogsResponse) Error() string { return r.Err }
+
+// updateResourceCheckLogs is the worker's one resource write: the output of a
+// check. It cannot change the resource itself, unlike updatePipelineResource.
+func updateResourceCheckLogs(s pikoci.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var (
+			req UpdateResourceCheckLogsRequest
+			ctx = r.Context()
+		)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			encodeResponse(UpdateResourceCheckLogsResponse{Err: err.Error()}, w)
+			return
+		}
+		vars := mux.Vars(r)
+		err := s.UpdateResourceCheckLogs(ctx, vars["team_canonical"], vars["pipeline_canonical"], vars["resource_canonical"], req.Logs)
+		var errs string
+		if err != nil {
+			errs = err.Error()
+		}
+		encodeResponse(UpdateResourceCheckLogsResponse{Err: errs}, w)
+	}
+}
+
 type UpdatePipelineResourceRequest struct {
 	TeamCanonical     string            `json:"team_canonical"`
 	PipelineCanonical string            `json:"pipeline_canonical"`

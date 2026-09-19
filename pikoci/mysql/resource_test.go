@@ -120,3 +120,33 @@ func TestFindByWebhookToken_NotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
+
+// UpdateLogs writes the check output and nothing else: the resource's type
+// and params, which decide what a check runs, are what the pipeline said.
+func TestUpdateLogs(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'lg-pipe', 'lg-pipe')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO resources (pipeline_id, name, type, canonical, params, logs, webhook_token, tags, cache)
+		 VALUES (?, 'repo', 'git', 'git.repo', '{"params":{"uri":"git@example.com:app.git"}}', 'old', 'git.repo_tok', '[]', 0)`, ppID)
+	require.NoError(t, err)
+
+	rr := mysql.NewResourceRepository(db, mysql.Mem)
+
+	require.NoError(t, rr.UpdateLogs(ctx, "main", "lg-pipe", "git.repo", "check failed: boom"))
+
+	r, err := rr.Find(ctx, "main", "lg-pipe", "git.repo")
+	require.NoError(t, err)
+	assert.Equal(t, "check failed: boom", r.Logs)
+	assert.Equal(t, "git", r.Type)
+	assert.Equal(t, "git@example.com:app.git", r.GetParams()["uri"])
+
+	err = rr.UpdateLogs(ctx, "main", "lg-pipe", "git.missing", "x")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}

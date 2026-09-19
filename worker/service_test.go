@@ -896,7 +896,7 @@ printf "[]"
 			}},
 		}, false, nil).AnyTimes()
 
-	svc.EXPECT().UpdatePipelineResource(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "custom.my-res", gomock.Any()).
+	svc.EXPECT().UpdateResourceCheckLogs(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "custom.my-res", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	// If flattening is broken, the check script will exit 1 and the test
@@ -2959,11 +2959,11 @@ func TestProcessResourceCheck_SecretResolutionError_UpdatesResourceLogs(t *testi
 	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).
 		Return([]*resource.Version{}, false, nil)
 
-	// Expect the resource to be updated with error logs
-	svc.EXPECT().UpdatePipelineResource(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.repo", gomock.Any()).
-		DoAndReturn(func(_ context.Context, _, _, _ string, r resource.Resource) error {
-			assert.NotEmpty(t, r.Logs, "resource logs should contain the error")
-			assert.Contains(t, r.Logs, "failed to resolve secrets")
+	// Expect the resource's logs to be updated with the error
+	svc.EXPECT().UpdateResourceCheckLogs(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.repo", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, logs string) error {
+			assert.NotEmpty(t, logs, "resource logs should contain the error")
+			assert.Contains(t, logs, "failed to resolve secrets")
 			return nil
 		})
 
@@ -8011,7 +8011,7 @@ func TestProcessMessage_ResourceCheckDispatch(t *testing.T) {
 	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", (*uint32)(nil), (*uint32)(nil), uint32(0)).
 		Return([]*resource.Version{}, false, nil).AnyTimes()
 
-	svc.EXPECT().UpdatePipelineResource(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", gomock.Any()).
+	svc.EXPECT().UpdateResourceCheckLogs(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	w.processMessage(ctx, m, cwd)

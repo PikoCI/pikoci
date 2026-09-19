@@ -13,6 +13,9 @@ type Repository interface {
 	Create(ctx context.Context, tc, pn string, r Resource) (uint32, error)
 	// Update updates an existing resource identified by team, pipeline, and resource canonical.
 	Update(ctx context.Context, tc, pn, rCan string, r Resource) error
+	// UpdateLogs replaces only the resource's check logs, leaving its
+	// configuration untouched.
+	UpdateLogs(ctx context.Context, tc, pn, rCan, logs string) error
 	// Find retrieves a resource by team, pipeline, and resource canonical.
 	Find(ctx context.Context, tc, pn, rCan string) (*Resource, error)
 	// FindByWebhookToken retrieves a resource by its webhook token, also returning the team and pipeline canonicals.
