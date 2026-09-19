@@ -26,6 +26,11 @@ type Repository interface {
 	FindPublic(ctx context.Context, tc, pCan string) (*Pipeline, error)
 	// Filter returns all pipelines belonging to the given team.
 	Filter(ctx context.Context, tc string) ([]*Pipeline, error)
+	// FilterSummary returns one page of the team's pipelines as summaries,
+	// and the number of pipelines that match q whatever the page. q is a
+	// case-insensitive substring of the name; empty matches every pipeline.
+	// A limit of 0 means every match, and offset is then ignored.
+	FilterSummary(ctx context.Context, tc, q string, sort Sort, limit, offset uint32) ([]*Summary, uint32, error)
 	// FilterAll returns all pipelines across all teams, each paired with its team.
 	FilterAll(ctx context.Context) ([]*WithTeam, error)
 	// SetPublic updates the public visibility flag for a pipeline.

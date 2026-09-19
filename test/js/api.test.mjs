@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ApiError, api } from '../../pikoci/transport/http/assets/js/app/api.js';
+import { ApiError, api, fetchPipelinesPage } from '../../pikoci/transport/http/assets/js/app/api.js';
 import { session, apiNotice } from '../../pikoci/transport/http/assets/js/app/state.js';
 
 // Helper to create a mock Response
@@ -254,6 +254,27 @@ test('deleteSecret: escapes the name in the path', async () => {
     await deleteSecret('main', 'web', 'A B');
     assert.equal(capturedUrl, '/teams/main/pipelines/web/secrets/A%20B');
     assert.equal(capturedOpts.method, 'DELETE');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+// --- fetchPipelinesPage ---
+
+test('fetchPipelinesPage: always sends limit, and only a non-empty q', async () => {
+  const original = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = (url) => {
+    urls.push(url);
+    return Promise.resolve(mockResponse(200, { data: [], meta: { total: 0 } }));
+  };
+  try {
+    const resp = await fetchPipelinesPage('main', { limit: 24 });
+    assert.deepEqual(resp, { data: [], meta: { total: 0 } }, 'the whole response, meta included');
+    assert.equal(urls[0], '/teams/main/pipelines?limit=24&offset=0&sort=name');
+
+    await fetchPipelinesPage('main', { limit: 24, offset: 48, q: 'a b&c', sort: 'created' });
+    assert.equal(urls[1], '/teams/main/pipelines?limit=24&offset=48&sort=created&q=a+b%26c');
   } finally {
     globalThis.fetch = original;
   }

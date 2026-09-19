@@ -109,6 +109,13 @@ export const removeTeamMember = (tc, username) => api('/teams/' + tc + '/members
 
 // --- Pipelines ---
 export const fetchPipelines = (tc) => api('/teams/' + tc + '/pipelines').then(r => r.data);
+// One page of summaries with a total; the grid's list. Passing limit is what
+// selects the paged shape, so it is always set.
+export const fetchPipelinesPage = (tc, { limit, offset = 0, q = '', sort = 'name' }) => {
+  const params = new URLSearchParams({ limit, offset, sort });
+  if (q) params.set('q', q);
+  return api('/teams/' + tc + '/pipelines?' + params.toString());
+};
 export const fetchPipeline = (tc, pn) => api('/teams/' + tc + '/pipelines/' + pn).then(r => r.data);
 export const createPipeline = (tc, data) => api('/teams/' + tc + '/pipelines', { method: 'POST', body: JSON.stringify(data) });
 export const updatePipeline = (tc, pn, data) => api('/teams/' + tc + '/pipelines/' + pn, { method: 'PUT', body: JSON.stringify(data) });

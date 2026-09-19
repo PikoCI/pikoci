@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cycloidio/sqlr"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
@@ -175,6 +176,95 @@ func (r *PipelineRepository) Filter(ctx context.Context, tc string) ([]*pipeline
 	}
 
 	return pps, nil
+}
+
+// FilterSummary is the list query: the few columns a list shows, one row per
+// pipeline, so LIMIT counts pipelines. pipelineQuery cannot be paged, because
+// its joins fan out into one row per job × resource × ... and a LIMIT there
+// would cut through the middle of a pipeline.
+//
+// The last build time is a correlated subquery rather than a join with GROUP
+// BY, so it runs for the rows on the page and not for every pipeline in the
+// team.
+func (r *PipelineRepository) FilterSummary(ctx context.Context, tc, q string, sort pipeline.Sort, limit, offset uint32) ([]*pipeline.Summary, uint32, error) {
+	where := `WHERE t.canonical = ?`
+	args := []interface{}{tc}
+	if q != "" {
+		// LOWER on both sides: LIKE is case-insensitive on sqlite and (by
+		// collation) on mysql, but not on postgres. The escape character is
+		// spelled out because sqlite has no default one, and it is not the
+		// backslash because mysql reads '\\' as one character where sqlite
+		// and postgres read two.
+		where += ` AND LOWER(p.name) LIKE ? ESCAPE '!'`
+		args = append(args, "%"+escapeLike(strings.ToLower(q))+"%")
+	}
+
+	var total uint32
+	err := r.querier.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM pipelines AS p
+		JOIN teams AS t ON p.team_id = t.id
+		`+where, args...).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count Pipelines: %w", err)
+	}
+
+	order := ` ORDER BY LOWER(p.name) ASC, p.id ASC`
+	if sort == pipeline.SortCreated {
+		order = ` ORDER BY p.id DESC`
+	}
+	page := ``
+	if limit > 0 {
+		page = fmt.Sprintf(` LIMIT %d OFFSET %d`, limit, offset)
+	}
+
+	rows, err := r.querier.QueryContext(ctx, `
+		SELECT
+			p.id, p.name, p.canonical, p.public,
+			(
+				SELECT MAX(b.started_at)
+				FROM builds AS b
+				JOIN jobs AS j ON b.job_id = j.id
+				WHERE j.pipeline_id = p.id
+			) AS last_build_at
+		FROM pipelines AS p
+		JOIN teams AS t ON p.team_id = t.id
+		`+where+order+page, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query Pipeline summaries: %w", err)
+	}
+	defer rows.Close()
+
+	sums := []*pipeline.Summary{}
+	for rows.Next() {
+		var (
+			dbp         dbPipeline
+			lastBuildAt sql.NullString
+		)
+		if err := rows.Scan(&dbp.ID, &dbp.Name, &dbp.Canonical, &dbp.Public, &lastBuildAt); err != nil {
+			return nil, 0, fmt.Errorf("failed to scan Pipeline summary: %w", err)
+		}
+		sum := &pipeline.Summary{
+			ID:        uint32(dbp.ID.Int64),
+			Name:      dbp.Name.String,
+			Canonical: dbp.Canonical.String,
+			Public:    dbp.Public.Bool,
+		}
+		if t, ok := parseStoredTime(lastBuildAt); ok {
+			sum.LastBuildAt = &t
+		}
+		sums = append(sums, sum)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to read Pipeline summaries: %w", err)
+	}
+
+	return sums, total, nil
+}
+
+// escapeLike makes s match literally inside a LIKE ... ESCAPE '!' pattern.
+func escapeLike(s string) string {
+	return strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `!_`).Replace(s)
 }
 
 func (r *PipelineRepository) FilterAll(ctx context.Context) ([]*pipeline.WithTeam, error) {
