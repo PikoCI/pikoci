@@ -1300,7 +1300,12 @@ job "noop" {
 			t.Run("Next Page", func(t *testing.T) {
 				next, err := wd.FindElement(selenium.ByCSSSelector, `#pipelines-pager a[aria-label="Next"]`)
 				require.NoError(t, err)
-				require.NoError(t, next.Click())
+				// The pager is below 24 cards whose graphs are still
+				// rendering, so the layout shifts under a WebDriver click
+				// and the hit test lands on a card instead. Click in the
+				// page, which does not care what is on top.
+				_, err = wd.ExecuteScript("arguments[0].click()", []interface{}{next})
+				require.NoError(t, err)
 
 				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#pipelines-count", "25\u201326 of 26"), 5*time.Second)
 				assert.Equal(t, []string{"page-24", "page-25"}, cardNames())
@@ -1326,8 +1331,8 @@ job "noop" {
 				require.NoError(t, err)
 				require.NoError(t, search.SendKeys("page-1"))
 
-				// page-1 and page-10 through page-19.
-				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#pipelines-count", "1\u201311 of 11"), 5*time.Second)
+				// page-10 through page-19; page-01 does not contain "page-1".
+				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#pipelines-count", "1\u201310 of 10"), 5*time.Second)
 				_, err = wd.FindElement(selenium.ByCSSSelector, "#pipelines-pager")
 				assert.Error(t, err, "one page needs no pager")
 
