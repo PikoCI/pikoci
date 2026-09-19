@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1349,34 +1348,35 @@ func TestWorkerRoutesConsistent(t *testing.T) {
 // what the worker actually does rather than against a hand-kept list.
 func workerServiceCalls(t *testing.T) map[string]bool {
 	t.Helper()
-	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, filepath.Join("..", "..", "..", "worker"), func(fi os.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, 0)
+	dir := filepath.Join("..", "..", "..", "worker")
+	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 	require.NoError(t, err)
-	require.NotEmpty(t, pkgs, "worker package not found")
 
 	calls := map[string]bool{}
-	for _, pkg := range pkgs {
-		for _, f := range pkg.Files {
-			ast.Inspect(f, func(n ast.Node) bool {
-				call, ok := n.(*ast.CallExpr)
-				if !ok {
-					return true
-				}
-				// w.pikoci.Method(...): the receiver is the Service field.
-				sel, ok := call.Fun.(*ast.SelectorExpr)
-				if !ok {
-					return true
-				}
-				recv, ok := sel.X.(*ast.SelectorExpr)
-				if !ok || recv.Sel.Name != "pikoci" {
-					return true
-				}
-				calls[sel.Sel.Name] = true
-				return true
-			})
+	fset := token.NewFileSet()
+	for _, path := range files {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
 		}
+		f, err := parser.ParseFile(fset, path, nil, 0)
+		require.NoError(t, err)
+		ast.Inspect(f, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			// w.pikoci.Method(...): the receiver is the Service field.
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			recv, ok := sel.X.(*ast.SelectorExpr)
+			if !ok || recv.Sel.Name != "pikoci" {
+				return true
+			}
+			calls[sel.Sel.Name] = true
+			return true
+		})
 	}
 	require.NotEmpty(t, calls, "no w.pikoci.* calls found in worker/")
 	return calls
