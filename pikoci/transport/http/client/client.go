@@ -569,37 +569,6 @@ func (cl *Client) ListPipelines(ctx context.Context, tc string) ([]*pipeline.Pip
 	return resp.Pipelines, nil
 }
 
-// ListPipelinesPage fetches one page of pipeline summaries. Unlike the build
-// lists it does not force limit=0: the caller asked for a page.
-func (cl *Client) ListPipelinesPage(ctx context.Context, tc, q string, sort pipeline.Sort, limit, offset uint32) ([]*pipeline.Summary, uint32, error) {
-	var resp thttp.ListPipelinesPageResponse
-
-	params := url.Values{}
-	params.Set("limit", fmt.Sprintf("%d", limit))
-	params.Set("offset", fmt.Sprintf("%d", offset))
-	if q != "" {
-		params.Set("q", q)
-	}
-	if sort != "" {
-		params.Set("sort", string(sort))
-	}
-
-	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines?%s", cl.url, tc, params.Encode()), nil, &resp)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to make request: %w", err)
-	}
-
-	if resp.Err != "" {
-		return nil, 0, fmt.Errorf("error from request: %s", resp.Err)
-	}
-
-	var total uint32
-	if resp.Meta != nil {
-		total = resp.Meta.Total
-	}
-	return resp.Pipelines, total, nil
-}
-
 // DeletePipeline deletes a pipeline by team canonical and pipeline name.
 func (cl *Client) DeletePipeline(ctx context.Context, tc, pn string) error {
 	var resp thttp.DeletePipelineResponse
@@ -1442,6 +1411,12 @@ func (cl *Client) GetTeamWorkerToken(ctx context.Context, tc string) (string, er
 // VerifyTeamWorkerTokenSalt is not implemented on the client (server-side only).
 func (cl *Client) VerifyTeamWorkerTokenSalt(ctx context.Context, tc, salt string) (bool, error) {
 	return false, fmt.Errorf("VerifyTeamWorkerTokenSalt is not available on the client")
+}
+
+// ListPipelinesPage is not implemented on the client: the paged summaries
+// are what the web UI's grid asks for, and the CLI lists every pipeline.
+func (cl *Client) ListPipelinesPage(ctx context.Context, tc, q string, sort pipeline.Sort, limit, offset uint32) ([]*pipeline.Summary, uint32, error) {
+	return nil, 0, fmt.Errorf("ListPipelinesPage is not available on the client")
 }
 
 // OAuth stubs — the HTTP client is only used for worker and CLI operations,

@@ -144,8 +144,16 @@ type ListPipelinesPageResponse struct {
 
 func (r ListPipelinesPageResponse) Error() string { return r.Err }
 
-// maxPipelineQueryLen bounds the search term; longer is a mistake, not a query.
-const maxPipelineQueryLen = 100
+const (
+	// defaultPipelinePageSize is the page when limit is present but not a
+	// usable number: the grid's page, not "everything".
+	defaultPipelinePageSize = 24
+	// maxPipelinePageSize caps what one request can ask for.
+	maxPipelinePageSize = 200
+	// maxPipelineQueryLen bounds the search term, in characters; longer is
+	// a mistake, not a query.
+	maxPipelineQueryLen = 100
+)
 
 // listPipelines answers two shapes on one route. Without a limit parameter it
 // is the original: every pipeline in the team as a full object, which the CLI
@@ -171,11 +179,19 @@ func listPipelines(s pikoci.Service) http.HandlerFunc {
 			return
 		}
 
-		limit := parseUint32Param(params.Get("limit"), 0)
+		limit := parseUint32Param(params.Get("limit"), defaultPipelinePageSize)
+		if limit == 0 {
+			limit = defaultPipelinePageSize
+		}
+		if limit > maxPipelinePageSize {
+			limit = maxPipelinePageSize
+		}
 		offset := parseUint32Param(params.Get("offset"), 0)
 		q := strings.TrimSpace(params.Get("q"))
-		if len(q) > maxPipelineQueryLen {
-			q = q[:maxPipelineQueryLen]
+		// Cut on characters, not bytes: a byte cut through a multi-byte
+		// character is invalid UTF-8 that the database rejects.
+		if r := []rune(q); len(r) > maxPipelineQueryLen {
+			q = string(r[:maxPipelineQueryLen])
 		}
 		sort := pipeline.ParseSort(params.Get("sort"))
 
@@ -190,7 +206,7 @@ func listPipelines(s pikoci.Service) http.HandlerFunc {
 				Total:   total,
 				Limit:   limit,
 				Offset:  offset,
-				HasMore: limit > 0 && offset+uint32(len(sums)) < total,
+				HasMore: offset+uint32(len(sums)) < total,
 			}
 		}
 		encodeResponse(ListPipelinesPageResponse{Pipelines: sums, Meta: meta, Err: errs}, w)

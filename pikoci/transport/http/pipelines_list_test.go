@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/pikoci/pikoci/pikoci/mock"
@@ -111,29 +113,42 @@ func TestListPipelines_PagedLastPage(t *testing.T) {
 }
 
 // Bad numbers and unknown sorts fall back rather than fail, like the build
-// list's parameters do; limit=0 is a page of everything.
+// list's parameters do. A limit that is not a number, or zero, is the default
+// page rather than "everything", and one past the cap is the cap: a huge
+// limit must never reach the repository.
 func TestListPipelines_PagedLenientParams(t *testing.T) {
-	s, server, token := listPipelinesServer(t)
+	for _, tc := range []struct {
+		name, params string
+		limit        uint32
+	}{
+		{"not a number", "?limit=lots&offset=-3&sort=sideways", defaultPipelinePageSize},
+		{"zero", "?limit=0", defaultPipelinePageSize},
+		{"past the cap", "?limit=4294967295", maxPipelinePageSize},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, server, token := listPipelinesServer(t)
 
-	s.EXPECT().ListPipelinesPage(gomock.Any(), "main", "", pipeline.SortName, uint32(0), uint32(0)).
-		Return([]*pipeline.Summary{}, uint32(0), nil)
+			s.EXPECT().ListPipelinesPage(gomock.Any(), "main", "", pipeline.SortName, tc.limit, uint32(0)).
+				Return([]*pipeline.Summary{}, uint32(0), nil)
 
-	body := getPipelines(t, server, token, "?limit=lots&offset=-3&sort=sideways")
+			body := getPipelines(t, server, token, tc.params)
 
-	var meta PipelinePageMeta
-	require.NoError(t, json.Unmarshal(body["meta"], &meta))
-	assert.Equal(t, PipelinePageMeta{}, meta)
+			var meta PipelinePageMeta
+			require.NoError(t, json.Unmarshal(body["meta"], &meta))
+			assert.Equal(t, PipelinePageMeta{Limit: tc.limit}, meta)
+		})
+	}
 }
 
 func TestListPipelines_PagedTruncatesLongQuery(t *testing.T) {
-	s, server, token := listPipelinesServer(t)
+	// Multi-byte characters: the cut has to land between characters, not
+	// inside one, or the query is invalid UTF-8.
+	long := strings.Repeat("\u00e9", 300)
+	want := strings.Repeat("\u00e9", maxPipelineQueryLen)
 
-	long := make([]byte, 300)
-	for i := range long {
-		long[i] = 'a'
-	}
-	s.EXPECT().ListPipelinesPage(gomock.Any(), "main", string(long[:maxPipelineQueryLen]), pipeline.SortName, uint32(10), uint32(0)).
+	s, server, token := listPipelinesServer(t)
+	s.EXPECT().ListPipelinesPage(gomock.Any(), "main", want, pipeline.SortName, uint32(10), uint32(0)).
 		Return(nil, uint32(0), nil)
 
-	getPipelines(t, server, token, "?limit=10&q="+string(long))
+	getPipelines(t, server, token, "?limit=10&q="+url.QueryEscape(long))
 }

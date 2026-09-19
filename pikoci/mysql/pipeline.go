@@ -235,7 +235,7 @@ func (r *PipelineRepository) FilterSummary(ctx context.Context, tc, q string, so
 	}
 	defer rows.Close()
 
-	sums := make([]*pipeline.Summary, 0, limit)
+	sums := []*pipeline.Summary{}
 	for rows.Next() {
 		var (
 			dbp         dbPipeline

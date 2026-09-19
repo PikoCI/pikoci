@@ -44,9 +44,6 @@ type WithTeam struct {
 	Team team.Team
 }
 
-// Pipeline represents a complete CI/CD pipeline configuration. It contains all
-// jobs, resources, resource types, runners, secret types, services, and
-// variable declarations that define the pipeline's behavior.
 // Summary is what a list of pipelines shows: the identifying fields and the
 // time of the last build, without the raw config or the jobs and resources
 // behind it. The full Pipeline is one Find away.
@@ -79,6 +76,9 @@ func ParseSort(s string) Sort {
 	}
 }
 
+// Pipeline represents a complete CI/CD pipeline configuration. It contains all
+// jobs, resources, resource types, runners, secret types, services, and
+// variable declarations that define the pipeline's behavior.
 type Pipeline struct {
 	ID            uint32                    `json:"id"`
 	Name          string                    `json:"name"`

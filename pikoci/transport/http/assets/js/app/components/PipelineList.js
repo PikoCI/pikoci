@@ -24,7 +24,7 @@ function readListState() {
   return {
     page: page > 0 ? page : 1,
     q: p.get('q') || '',
-    sort: SORTS[p.get('sort')] ? p.get('sort') : 'name',
+    sort: Object.hasOwn(SORTS, p.get('sort')) ? p.get('sort') : 'name',
   };
 }
 
@@ -39,8 +39,16 @@ function writeListState({ page, q, sort }) {
 
 /**
  * PipelineList — pipeline card grid page, one page of PAGE_SIZE at a time.
+ *
+ * Keyed on the team: the router re-renders the same component with a new tc
+ * rather than remounting it, and team B would otherwise open on team A's
+ * page and search. A remount starts from the new team's own URL.
  */
 export function PipelineList({ tc }) {
+  return html`<${PipelineListPage} key=${tc} tc=${tc} />`;
+}
+
+function PipelineListPage({ tc }) {
   const [pipelines, setPipelines] = useState([]);
   const [meta, setMeta] = useState(null);
   const [team, setTeam] = useState(null);
@@ -62,8 +70,16 @@ export function PipelineList({ tc }) {
     fetchPipelinesPage(tc, { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, q, sort })
       .then(resp => {
         if (stale) return;
-        setPipelines(resp.data || []);
-        setMeta(resp.meta || null);
+        const data = resp.data || [];
+        const m = resp.meta || null;
+        // The page no longer exists: the count shrank under us (a delete,
+        // or a stale link). Land on the last page that does.
+        if (m && page > 1 && data.length === 0 && m.total > 0) {
+          setListState(s => ({ ...s, page: Math.ceil(m.total / PAGE_SIZE) }));
+          return;
+        }
+        setPipelines(data);
+        setMeta(m);
       })
       .catch(() => {});
     return () => { stale = true; };
@@ -139,7 +155,7 @@ export function PipelineList({ tc }) {
  * Pager — previous / numbered / next. Shows the first and last page, the
  * current one and its neighbours, with an ellipsis over each gap.
  */
-function Pager({ page, pageCount, onPage }) {
+export function Pager({ page, pageCount, onPage }) {
   const items = [];
   let last = 0;
   for (let n = 1; n <= pageCount; n++) {

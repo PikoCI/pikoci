@@ -10,6 +10,7 @@ import {
   EntryRow, EditEntryRow, NewEntryRow, mergeEntries,
   loadEntries, saveEntry, removeEntry,
 } from '../../pikoci/transport/http/assets/js/app/components/Secrets.js';
+import { Pager } from '../../pikoci/transport/http/assets/js/app/components/PipelineList.js';
 
 // ---------------------------------------------------------------------------
 // Login
@@ -469,4 +470,42 @@ test('removeEntry: deletes the name, escaped, from the right scope', async () =>
     await removeEntry('main', 'web', 'A B');
     assert.equal(seen[0].opts.method, 'DELETE');
   });
+});
+
+// ---------------------------------------------------------------------------
+// Pager
+// ---------------------------------------------------------------------------
+
+// The page links a Pager renders, in order: numbers, and '…' for a gap.
+function pagerItems(output) {
+  return [...output.matchAll(/<li class="page-item[^"]*">(?:<a[^>]*>|<span[^>]*>)([^<]*)<\/(?:a|span)><\/li>/g)]
+    .map(m => m[1])
+    .filter(t => t !== '\u2039' && t !== '\u203a');
+}
+
+test('Pager shows every page when there are few', () => {
+  const output = render(html`<${Pager} page=${2} pageCount=${3} onPage=${() => {}} />`);
+  assert.deepEqual(pagerItems(output), ['1', '2', '3']);
+  assert.ok(output.includes('page-item active"><a class="page-link" href="#">2<'), 'current page is active');
+  assert.ok(output.includes('id="pipelines-pager"'));
+});
+
+test('Pager elides the pages far from the current one', () => {
+  const output = render(html`<${Pager} page=${5} pageCount=${10} onPage=${() => {}} />`);
+  assert.deepEqual(pagerItems(output), ['1', '\u2026', '4', '5', '6', '\u2026', '10']);
+});
+
+test('Pager keeps first and last without an ellipsis when adjacent', () => {
+  const output = render(html`<${Pager} page=${2} pageCount=${10} onPage=${() => {}} />`);
+  assert.deepEqual(pagerItems(output), ['1', '2', '3', '\u2026', '10']);
+});
+
+test('Pager disables previous on the first page and next on the last', () => {
+  const first = render(html`<${Pager} page=${1} pageCount=${4} onPage=${() => {}} />`);
+  assert.match(first, /page-item disabled"><a class="page-link" href="#" aria-label="Previous"/);
+  assert.doesNotMatch(first, /page-item disabled"><a class="page-link" href="#" aria-label="Next"/);
+
+  const last = render(html`<${Pager} page=${4} pageCount=${4} onPage=${() => {}} />`);
+  assert.doesNotMatch(last, /page-item disabled"><a class="page-link" href="#" aria-label="Previous"/);
+  assert.match(last, /page-item disabled"><a class="page-link" href="#" aria-label="Next"/);
 });
