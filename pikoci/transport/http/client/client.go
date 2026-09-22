@@ -1431,6 +1431,12 @@ func (cl *Client) VerifyTeamWorkerTokenSalt(ctx context.Context, tc, salt string
 	return false, fmt.Errorf("VerifyTeamWorkerTokenSalt is not available on the client")
 }
 
+// ListPipelinesPage is not implemented on the client: the paged summaries
+// are what the web UI's grid asks for, and the CLI lists every pipeline.
+func (cl *Client) ListPipelinesPage(ctx context.Context, tc, q string, sort pipeline.Sort, limit, offset uint32) ([]*pipeline.Summary, uint32, error) {
+	return nil, 0, fmt.Errorf("ListPipelinesPage is not available on the client")
+}
+
 // OAuth stubs — the HTTP client is only used for worker and CLI operations,
 // not for OAuth flows.
 

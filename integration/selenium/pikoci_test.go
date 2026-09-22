@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/png"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tebeka/selenium"
 	thttp "github.com/pikoci/pikoci/pikoci/transport/http"
@@ -1237,6 +1239,106 @@ job "gen" {
 			err = wd.Get(pikoURL + "/teams/main/pipelines")
 			require.NoError(t, err)
 			waitFor(t, wd, eqText(selenium.ByCSSSelector, "#breadcrumb", "Teams\nMain\nPipelines"), 5*time.Second)
+		})
+		t.Run("Pipelines List Search Sort Pager", func(t *testing.T) {
+			// The grid pages 24 at a time, so a second page needs more
+			// pipelines than the suite creates by hand. Seed them through the
+			// service and remove them after, so the tests that follow still
+			// find cron as the only card.
+			const seeded = 25
+			config := []byte(`
+resource "cron" "tick" {
+  check_interval = "@every 24h"
+}
+
+job "noop" {
+  get "cron" "tick" {}
+  task "run" {
+    run "exec" {
+      path = "/bin/sh"
+      args = ["-ec", "true"]
+    }
+  }
+}
+`)
+			names := make([]string, 0, seeded)
+			for i := 1; i <= seeded; i++ {
+				n := fmt.Sprintf("page-%02d", i)
+				_, err := svc.CreatePipeline(context.Background(), "main", n, config, nil)
+				require.NoError(t, err)
+				names = append(names, n)
+			}
+			defer func() {
+				for _, n := range names {
+					_ = svc.DeletePipeline(context.Background(), "main", n)
+				}
+				require.NoError(t, wd.Get(pikoURL+"/teams/main/pipelines"))
+				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#pipelines-count", "1\u20131 of 1"), 5*time.Second)
+			}()
+
+			cardNames := func() []string {
+				els, err := wd.FindElements(selenium.ByCSSSelector, "#pipelines .card-header span")
+				require.NoError(t, err)
+				out := make([]string, 0, len(els))
+				for _, el := range els {
+					txt, err := el.Text()
+					require.NoError(t, err)
+					out = append(out, txt)
+				}
+				return out
+			}
+
+			t.Run("First Page", func(t *testing.T) {
+				require.NoError(t, wd.Get(pikoURL+"/teams/main/pipelines"))
+				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#pipelines-count", "1\u201324 of 26"), 5*time.Second)
+				cards := cardNames()
+				require.Len(t, cards, 24)
+				assert.Equal(t, "cron", cards[0], "sorted by name, cron comes before page-*")
+				assert.Equal(t, "page-23", cards[23])
+				waitFor(t, wd, hasElement("#pipelines-pager"), 5*time.Second)
+			})
+			t.Run("Next Page", func(t *testing.T) {
+				next, err := wd.FindElement(selenium.ByCSSSelector, `#pipelines-pager a[aria-label="Next"]`)
+				require.NoError(t, err)
+				// The pager is below 24 cards whose graphs are still
+				// rendering, so the layout shifts under a WebDriver click
+				// and the hit test lands on a card instead. Click in the
+				// page, which does not care what is on top.
+				_, err = wd.ExecuteScript("arguments[0].click()", []interface{}{next})
+				require.NoError(t, err)
+
+				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#pipelines-count", "25\u201326 of 26"), 5*time.Second)
+				assert.Equal(t, []string{"page-24", "page-25"}, cardNames())
+
+				u, err := wd.CurrentURL()
+				require.NoError(t, err)
+				assert.Contains(t, u, "page=2", "the page is in the URL so a reload lands here")
+			})
+			t.Run("Sort Newest", func(t *testing.T) {
+				opt, err := wd.FindElement(selenium.ByCSSSelector, `#pipelines-sort option[value="created"]`)
+				require.NoError(t, err)
+				require.NoError(t, opt.Click())
+
+				// Changing the sort goes back to the first page.
+				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#pipelines-count", "1\u201324 of 26"), 5*time.Second)
+				cards := cardNames()
+				require.Len(t, cards, 24)
+				assert.Equal(t, "page-25", cards[0], "newest first")
+				assert.Equal(t, "page-02", cards[23])
+			})
+			t.Run("Search", func(t *testing.T) {
+				search, err := wd.FindElement(selenium.ByCSSSelector, "#pipelines-search")
+				require.NoError(t, err)
+				require.NoError(t, search.SendKeys("page-1"))
+
+				// page-10 through page-19; page-01 does not contain "page-1".
+				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#pipelines-count", "1\u201310 of 10"), 5*time.Second)
+				_, err = wd.FindElement(selenium.ByCSSSelector, "#pipelines-pager")
+				assert.Error(t, err, "one page needs no pager")
+
+				require.NoError(t, search.SendKeys("zzz"))
+				waitFor(t, wd, eqText(selenium.ByCSSSelector, "#pipelines-count", "No pipelines match"), 5*time.Second)
+			})
 		})
 		t.Run("Secrets", func(t *testing.T) {
 			// Always restore browser state for subsequent tests
