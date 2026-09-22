@@ -28,7 +28,7 @@ pikoci server [flags]
 | `--concurrency` | | `1` | no | Number of worker goroutines |
 | `--drain-timeout` | | `10m` | no | Max time to wait for in-flight jobs during graceful shutdown (`SIGQUIT`) |
 | `--log-level` | | `info` | no | Log level: `debug`, `info`, `warn`, `error` |
-| `--external-url` | | | no | Public URL for OAuth callbacks (e.g., `https://ci.example.com`). Required for OAuth/OIDC. |
+| `--external-url` | | | no | Public URL users reach the server at (e.g., `https://ci.example.com`). It is the base of the `/auth/oauth/<provider>/callback` redirect URI. When unset, the URL is derived from each request (`X-Forwarded-Proto`/`X-Forwarded-Host`, else scheme and `Host`); set it when the server is reachable under several hostnames or the proxy does not forward the original host. |
 | `--session-lifetime` | | `0` | no | Maximum session duration before re-login is required. Supports Go duration syntax plus days/weeks/months (e.g. `24h`, `7d`, `30d`). `0` means sessions never expire. |
 | `--config` | `-c` | | no | Path to a config file |
 | `--team-canonical` | | `main` | no | Team to use for `--pipeline-*` flags |
