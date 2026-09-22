@@ -19,7 +19,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/role"
-	"github.com/pikoci/pikoci/pikoci/transport/http/assets"
 	"github.com/pikoci/pikoci/pikoci/transport/http/templates"
 	"github.com/pikoci/pikoci/pikoci/user"
 )
@@ -207,12 +206,23 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 				return
 			}
 
-			// Some routes are closed to workers outright, so the blanket bypass
-			// below must not reach them however the token is scoped.
-			if isFromWorker && workerDeniedRoutes[crn] {
-				l.Error("worker token rejected", "route", crn.String())
-				encodeError("This endpoint is not available to workers", rw)
-				return
+			// A worker token is waved through below without consulting
+			// routeAuthorization, so it only ever reaches the allowlisted
+			// routes, and a team-scoped token stays inside its team on every
+			// one of them.
+			if isFromWorker {
+				if !workerRoutes[crn] {
+					l.Error("worker token rejected", "route", crn.String())
+					encodeError("This endpoint is not available to workers", rw)
+					return
+				}
+				tc := mux.Vars(rr)["team_canonical"]
+				wtc, _ := rr.Context().Value(WorkerTeamCanonicalKey).(string)
+				if wtc != "" && tc != "" && wtc != tc {
+					l.Error("worker token team mismatch", "route", crn.String(), "token_team", wtc, "requested_team", tc)
+					encodeError("Worker token is not scoped to this team", rw)
+					return
+				}
 			}
 
 			// Some routes expose data that the blanket worker bypass below must
@@ -221,17 +231,11 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 			// and that token's salt claim must still match the team's current
 			// DB-stored salt so a regenerated (revoked) token stops working.
 			if isFromWorker && workerScopedRoutes[crn] {
-				vars := mux.Vars(rr)
-				tc := vars["team_canonical"]
+				tc := mux.Vars(rr)["team_canonical"]
 				wtc, _ := rr.Context().Value(WorkerTeamCanonicalKey).(string)
 				if wtc == "" {
 					l.Error("unscoped worker token rejected", "route", crn.String())
 					encodeError("This endpoint requires a team-scoped worker token", rw)
-					return
-				}
-				if wtc != tc {
-					l.Error("worker token team mismatch", "route", crn.String(), "token_team", wtc, "requested_team", tc)
-					encodeError("Worker token is not scoped to this team", rw)
 					return
 				}
 				var salt string
@@ -402,6 +406,7 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/versions").Name(ListResourceVersions.String()).Handler(listResourceVersions(s))
 	api.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}").Name(GetPipelineResource.String()).Handler(getPipelineResource(s))
 	api.Methods(http.MethodPut).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}").Name(UpdatePipelineResource.String()).Handler(updatePipelineResource(s))
+	api.Methods(http.MethodPut).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/logs").Name(UpdateResourceCheckLogs.String()).Handler(updateResourceCheckLogs(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/trigger").Name(TriggerPipelineResource.String()).Handler(triggerPipelineResource(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/pin").Name(PinResourceVersion.String()).Handler(pinResourceVersion(s))
 	api.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/resources/{resource_canonical}/unpin").Name(UnpinResourceVersion.String()).Handler(unpinResourceVersion(s))
@@ -460,18 +465,20 @@ func Handler(s pikoci.Service, ts []byte, l *slog.Logger, db *sql.DB, dbSystem, 
 	binApi.Methods(http.MethodGet).Path("/admin/export").Name(ExportDatabase.String()).Handler(exportDatabase(db, dbSystem))
 	binApi.Methods(http.MethodGet).Path("/teams/{team_canonical}/pipelines/{pipeline_canonical}/image{ext}").Name(GetPipelineImage.String()).Handler(getPipelineImage(s))
 
-	r.PathPrefix("/css/").Handler(http.FileServer(http.FS(assets.Assets)))
-	r.PathPrefix("/js/").Handler(http.FileServer(http.FS(assets.Assets)))
-	r.PathPrefix("/images/").Handler(http.FileServer(http.FS(assets.Assets)))
-	r.PathPrefix("/fonts/").Handler(http.FileServer(http.FS(assets.Assets)))
+	prefix := assetPrefix(commit)
+	mountAssets(r, prefix)
 
+	// The page is what names the current asset prefix, so it must never be
+	// served from cache without a trip to the server; see assets_route.go.
+	page := templates.PageData{AssetPrefix: prefix}
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t, ok := templates.Templates["views/layouts/index.tmpl"]
 		if !ok {
 			http.Error(w, "template not found", http.StatusInternalServerError)
 			return
 		}
-		if err := t.Execute(w, nil); err != nil {
+		w.Header().Set("Cache-Control", "no-cache")
+		if err := t.Execute(w, page); err != nil {
 			l.Error("failed to execute template", "error", err)
 		}
 	})

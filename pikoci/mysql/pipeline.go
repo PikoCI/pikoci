@@ -110,7 +110,7 @@ func (r *PipelineRepository) Find(ctx context.Context, tc, pCan string) (*pipeli
 	}
 
 	if len(pps) == 0 {
-		return nil, fmt.Errorf("not found")
+		return nil, pipeline.ErrNotFound
 	}
 
 	return pps[0], nil
@@ -130,7 +130,7 @@ func (r *PipelineRepository) FindPublic(ctx context.Context, tc, pCan string) (*
 	}
 
 	if len(pps) == 0 {
-		return nil, fmt.Errorf("not found")
+		return nil, pipeline.ErrNotFound
 	}
 
 	return pps[0], nil

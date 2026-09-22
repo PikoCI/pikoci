@@ -1,23 +1,28 @@
 package http
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"text/template"
 
 	"github.com/gorilla/mux"
 	"github.com/pikoci/pikoci/pikoci"
-	"github.com/pikoci/pikoci/pikoci/transport/http/assets"
+	"github.com/pikoci/pikoci/pikoci/transport/http/templates"
 )
 
 // LocalEditorHandler creates an HTTP handler for the local pipeline editor.
 // It serves the editor UI pre-loaded with the HCL file at filePath,
 // provides graph preview via the existing createPipelineImage handler,
 // and writes changes back to disk on save.
-func LocalEditorHandler(s pikoci.Service, filePath string, l *slog.Logger) http.Handler {
+//
+// commit keys the versioned asset prefix, the same as the server; see
+// assets_route.go.
+func LocalEditorHandler(s pikoci.Service, filePath string, l *slog.Logger, commit string) http.Handler {
 	r := mux.NewRouter()
 
 	// API: load initial config
@@ -62,21 +67,25 @@ func LocalEditorHandler(s pikoci.Service, filePath string, l *slog.Logger) http.
 	r.Methods(http.MethodPost).Path("/teams/{team_canonical}/pipelines/image{ext}").Handler(createPipelineImage(s))
 
 	// Static assets
-	r.PathPrefix("/css/").Handler(http.FileServer(http.FS(assets.Assets)))
-	r.PathPrefix("/js/").Handler(http.FileServer(http.FS(assets.Assets)))
-	r.PathPrefix("/images/").Handler(http.FileServer(http.FS(assets.Assets)))
-	r.PathPrefix("/fonts/").Handler(http.FileServer(http.FS(assets.Assets)))
+	prefix := assetPrefix(commit)
+	mountAssets(r, prefix)
 
-	// Root: serve local editor HTML
+	// Root: serve local editor HTML. Rendered once; only the asset prefix
+	// varies, and it is fixed for the life of the process.
+	var page bytes.Buffer
+	if err := localEditorTemplate.Execute(&page, templates.PageData{AssetPrefix: prefix}); err != nil {
+		l.Error("failed to render local editor page", "error", err)
+	}
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(localEditorHTML))
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Write(page.Bytes())
 	})
 
 	return r
 }
 
-const localEditorHTML = `<!DOCTYPE html>
+var localEditorTemplate = template.Must(template.New("local").Parse(`<!DOCTYPE html>
 <html lang="en">
   <head>
     <title>PikoCI - Local Editor</title>
@@ -84,10 +93,10 @@ const localEditorHTML = `<!DOCTYPE html>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link href="/css/bootstrap.min.css" rel="stylesheet" />
-    <link href="/css/pikoci.css" rel="stylesheet" />
-    <link href="/css/bootstrap-icons.min.css" rel="stylesheet" />
-    <link href="/images/favicon.svg" rel="icon" type="image/svg+xml"/>
+    <link href="{{.AssetPrefix}}css/bootstrap.min.css" rel="stylesheet" />
+    <link href="{{.AssetPrefix}}css/pikoci.css" rel="stylesheet" />
+    <link href="{{.AssetPrefix}}css/bootstrap-icons.min.css" rel="stylesheet" />
+    <link href="{{.AssetPrefix}}images/favicon.svg" rel="icon" type="image/svg+xml"/>
   </head>
   <body>
     <script>
@@ -101,22 +110,22 @@ const localEditorHTML = `<!DOCTYPE html>
     <script type="importmap">
     {
       "imports": {
-        "preact": "/js/vendor/preact.module.js",
-        "preact/": "/js/vendor/preact/",
-        "preact/hooks": "/js/vendor/preact/hooks.module.js",
-        "htm": "/js/vendor/htm.module.js",
-        "htm/preact": "/js/vendor/htm-preact.module.js",
-        "preact-router": "/js/vendor/preact-router.module.js",
-        "preact-router/match": "/js/vendor/preact-router-match.module.js",
-        "@preact/signals": "/js/vendor/signals.module.js",
-        "@preact/signals-core": "/js/vendor/signals-core.module.js"
+        "preact": "{{.AssetPrefix}}js/vendor/preact.module.js",
+        "preact/": "{{.AssetPrefix}}js/vendor/preact/",
+        "preact/hooks": "{{.AssetPrefix}}js/vendor/preact/hooks.module.js",
+        "htm": "{{.AssetPrefix}}js/vendor/htm.module.js",
+        "htm/preact": "{{.AssetPrefix}}js/vendor/htm-preact.module.js",
+        "preact-router": "{{.AssetPrefix}}js/vendor/preact-router.module.js",
+        "preact-router/match": "{{.AssetPrefix}}js/vendor/preact-router-match.module.js",
+        "@preact/signals": "{{.AssetPrefix}}js/vendor/signals.module.js",
+        "@preact/signals-core": "{{.AssetPrefix}}js/vendor/signals-core.module.js"
       }
     }
     </script>
 
-    <script type="text/javascript" src="/js/bootstrap.bundle.min.js"></script>
-    <script type="text/javascript" src="/js/viz-global.js"></script>
-    <script type="text/javascript" src="/js/codemirror-hcl.min.js"></script>
-    <script type="module" src="/js/app/local-app.js"></script>
+    <script type="text/javascript" src="{{.AssetPrefix}}js/bootstrap.bundle.min.js"></script>
+    <script type="text/javascript" src="{{.AssetPrefix}}js/viz-global.js"></script>
+    <script type="text/javascript" src="{{.AssetPrefix}}js/codemirror-hcl.min.js"></script>
+    <script type="module" src="{{.AssetPrefix}}js/app/local-app.js"></script>
   </body>
-</html>`
+</html>`))

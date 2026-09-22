@@ -6,60 +6,60 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link href="/css/bootstrap.min.css" rel="stylesheet" />
-    <link href="/css/pikoci.css" rel="stylesheet" />
-    <link href="/css/bootstrap-icons.min.css" rel="stylesheet" />
-    <link href="/images/favicon.svg" rel="icon" type="image/svg+xml"/>
+    <link href="{{.AssetPrefix}}css/bootstrap.min.css" rel="stylesheet" />
+    <link href="{{.AssetPrefix}}css/pikoci.css" rel="stylesheet" />
+    <link href="{{.AssetPrefix}}css/bootstrap-icons.min.css" rel="stylesheet" />
+    <link href="{{.AssetPrefix}}images/favicon.svg" rel="icon" type="image/svg+xml"/>
 
     <script type="importmap">
     {
       "imports": {
-        "preact": "/js/vendor/preact.module.js",
-        "preact/": "/js/vendor/preact/",
-        "preact/hooks": "/js/vendor/preact/hooks.module.js",
-        "htm": "/js/vendor/htm.module.js",
-        "htm/preact": "/js/vendor/htm-preact.module.js",
-        "preact-router": "/js/vendor/preact-router.module.js",
-        "preact-router/match": "/js/vendor/preact-router-match.module.js",
-        "@preact/signals": "/js/vendor/signals.module.js",
-        "@preact/signals-core": "/js/vendor/signals-core.module.js"
+        "preact": "{{.AssetPrefix}}js/vendor/preact.module.js",
+        "preact/": "{{.AssetPrefix}}js/vendor/preact/",
+        "preact/hooks": "{{.AssetPrefix}}js/vendor/preact/hooks.module.js",
+        "htm": "{{.AssetPrefix}}js/vendor/htm.module.js",
+        "htm/preact": "{{.AssetPrefix}}js/vendor/htm-preact.module.js",
+        "preact-router": "{{.AssetPrefix}}js/vendor/preact-router.module.js",
+        "preact-router/match": "{{.AssetPrefix}}js/vendor/preact-router-match.module.js",
+        "@preact/signals": "{{.AssetPrefix}}js/vendor/signals.module.js",
+        "@preact/signals-core": "{{.AssetPrefix}}js/vendor/signals-core.module.js"
       }
     }
     </script>
 
     <!-- Modulepreload hints: collapse 4 discovery rounds into 1 parallel fetch -->
     <!-- Vendor modules -->
-    <link rel="modulepreload" href="/js/vendor/preact.module.js" />
-    <link rel="modulepreload" href="/js/vendor/preact/hooks.module.js" />
-    <link rel="modulepreload" href="/js/vendor/htm.module.js" />
-    <link rel="modulepreload" href="/js/vendor/htm-preact.module.js" />
-    <link rel="modulepreload" href="/js/vendor/preact-router.module.js" />
-    <link rel="modulepreload" href="/js/vendor/preact-router-match.module.js" />
-    <link rel="modulepreload" href="/js/vendor/signals.module.js" />
-    <link rel="modulepreload" href="/js/vendor/signals-core.module.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/vendor/preact.module.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/vendor/preact/hooks.module.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/vendor/htm.module.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/vendor/htm-preact.module.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/vendor/preact-router.module.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/vendor/preact-router-match.module.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/vendor/signals.module.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/vendor/signals-core.module.js" />
     <!-- Core app modules -->
-    <link rel="modulepreload" href="/js/app/state.js" />
-    <link rel="modulepreload" href="/js/app/api.js" />
-    <link rel="modulepreload" href="/js/app/hooks.js" />
-    <link rel="modulepreload" href="/js/app/toast.js" />
-    <link rel="modulepreload" href="/js/app/utils.js" />
-    <link rel="modulepreload" href="/js/app/graph-zoom.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/state.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/api.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/hooks.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/toast.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/utils.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/graph-zoom.js" />
     <!-- Component modules -->
-    <link rel="modulepreload" href="/js/app/components/Layout.js" />
-    <link rel="modulepreload" href="/js/app/components/Login.js" />
-    <link rel="modulepreload" href="/js/app/components/Teams.js" />
-    <link rel="modulepreload" href="/js/app/components/PipelineList.js" />
-    <link rel="modulepreload" href="/js/app/components/PipelineShow.js" />
-    <link rel="modulepreload" href="/js/app/components/PipelineGraph.js" />
-    <link rel="modulepreload" href="/js/app/components/PipelineListView.js" />
-    <link rel="modulepreload" href="/js/app/components/Editor.js" />
-    <link rel="modulepreload" href="/js/app/components/Jobs.js" />
-    <link rel="modulepreload" href="/js/app/components/Resources.js" />
-    <link rel="modulepreload" href="/js/app/components/Workers.js" />
-    <link rel="modulepreload" href="/js/app/components/Users.js" />
-    <link rel="modulepreload" href="/js/app/components/OAuthCallback.js" />
-    <link rel="modulepreload" href="/js/app/components/OAuthCompleteProfile.js" />
-    <link rel="modulepreload" href="/js/app/components/OAuthAdmin.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/Layout.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/Login.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/Teams.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/PipelineList.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/PipelineShow.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/PipelineGraph.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/PipelineListView.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/Editor.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/Jobs.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/Resources.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/Workers.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/Users.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/OAuthCallback.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/OAuthCompleteProfile.js" />
+    <link rel="modulepreload" href="{{.AssetPrefix}}js/app/components/OAuthAdmin.js" />
   </head>
   <body>
     <script>
@@ -70,9 +70,9 @@
 
     <div id="app"></div>
 
-    <script type="text/javascript" src="/js/bootstrap.bundle.min.js"></script>
-    <script type="text/javascript" src="/js/viz-global.js"></script>
-    <script type="text/javascript" src="/js/codemirror-hcl.min.js"></script>
-    <script type="module" src="/js/app/app.js"></script>
+    <script type="text/javascript" src="{{.AssetPrefix}}js/bootstrap.bundle.min.js"></script>
+    <script type="text/javascript" src="{{.AssetPrefix}}js/viz-global.js"></script>
+    <script type="text/javascript" src="{{.AssetPrefix}}js/codemirror-hcl.min.js"></script>
+    <script type="module" src="{{.AssetPrefix}}js/app/app.js"></script>
   </body>
 </html>

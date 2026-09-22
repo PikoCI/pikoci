@@ -273,24 +273,15 @@ var serverCmd = &cobra.Command{
 			logger.Info("Worker token for standalone workers", "token", wt)
 		}
 
-		var workers []*worker.Worker
-		var wg *sync.WaitGroup
-		if cfg.RunWorker {
-			logger.Info("Starting Worker ...")
-			var werr error
-			embeddedName := "embedded-" + randomstring.HumanFriendlyEnglishString(8)
-			workers, wg, werr = runWorker(ctx, svc, cfg.Concurrency, cfg.LogLevel, embeddedName, nil, false)
-			if werr != nil {
-				return fmt.Errorf("worker failed to start: %w", werr)
-			}
-		}
-
+		// Seed the --pipeline-* and --users flags before the embedded worker
+		// starts, so it cannot claim jobs while the pipeline is still being
+		// reconciled.
 		pipelineName := serverViper.GetString("pipeline-name")
 		if pipelineName != "" {
 			pipelineConfig := serverViper.GetString("pipeline-config")
 			pipelineVars := serverViper.GetString("vars")
 			teamCanonical := serverViper.GetString("team-canonical")
-			err = createPipeline(ctx, svc, teamCanonical, pipelineName, pipelineConfig, pipelineVars)
+			err = createOrUpdatePipeline(ctx, svc, teamCanonical, pipelineName, pipelineConfig, pipelineVars)
 			if err != nil {
 				return err
 			}
@@ -306,6 +297,18 @@ var serverCmd = &cobra.Command{
 				if err != nil {
 					return fmt.Errorf("failed to create user %q: %w", us[0], err)
 				}
+			}
+		}
+
+		var workers []*worker.Worker
+		var wg *sync.WaitGroup
+		if cfg.RunWorker {
+			logger.Info("Starting Worker ...")
+			var werr error
+			embeddedName := "embedded-" + randomstring.HumanFriendlyEnglishString(8)
+			workers, wg, werr = runWorker(ctx, svc, cfg.Concurrency, cfg.LogLevel, embeddedName, nil, false)
+			if werr != nil {
+				return fmt.Errorf("worker failed to start: %w", werr)
 			}
 		}
 

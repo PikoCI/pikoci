@@ -896,7 +896,7 @@ printf "[]"
 			}},
 		}, false, nil).AnyTimes()
 
-	svc.EXPECT().UpdatePipelineResource(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "custom.my-res", gomock.Any()).
+	svc.EXPECT().UpdateResourceCheckLogs(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "custom.my-res", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	// If flattening is broken, the check script will exit 1 and the test
@@ -1750,6 +1750,41 @@ func TestBuildPullParams_OtherResourceInJob_UsesLatest(t *testing.T) {
 	require.NotNil(t, params, "the build must not fail because version 5 belongs to another resource")
 	assert.Equal(t, "newest", params["version_ref"])
 	assert.Equal(t, uint32(7), vid)
+}
+
+// The service lists versions newest-first (lazy loading, #393). The tests
+// above hand the mock an oldest-first list, which is how the worker kept
+// reversing it and pulling the oldest version of every unpinned resource
+// without a test going red. This one lists them the way the service does.
+func TestBuildPullParams_NewestFirstList_UsesLatest(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           10,
+		ResourceCanonical: "git.app",
+		VersionID:         5,
+	}
+	b := build.Build{ID: 74, BuildNumber: "74"}
+	rt := restype.ResourceType{Pull: &utils.RunnerCommand{Params: map[string]string{}}}
+	r := resource.Resource{Canonical: "git.lib"}
+	g := job.GetStep{}
+
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.lib", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+		Return([]*resource.Version{
+			{ID: 9, Version: map[string]interface{}{"ref": "newest"}},
+			{ID: 8, Version: map[string]interface{}{"ref": "middle"}},
+			{ID: 7, Version: map[string]interface{}{"ref": "oldest"}},
+		}, false, nil).AnyTimes()
+
+	params, vid, _ := w.buildPullParams(ctx, m, &b, rt, r, g, 0)
+	require.NotNil(t, params)
+	assert.Equal(t, "newest", params["version_ref"])
+	assert.Equal(t, uint32(9), vid)
 }
 
 func TestBuildPullParams_NoVersionID_UsesLatest(t *testing.T) {
@@ -2959,11 +2994,11 @@ func TestProcessResourceCheck_SecretResolutionError_UpdatesResourceLogs(t *testi
 	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).
 		Return([]*resource.Version{}, false, nil)
 
-	// Expect the resource to be updated with error logs
-	svc.EXPECT().UpdatePipelineResource(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.repo", gomock.Any()).
-		DoAndReturn(func(_ context.Context, _, _, _ string, r resource.Resource) error {
-			assert.NotEmpty(t, r.Logs, "resource logs should contain the error")
-			assert.Contains(t, r.Logs, "failed to resolve secrets")
+	// Expect the resource's logs to be updated with the error
+	svc.EXPECT().UpdateResourceCheckLogs(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.repo", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, logs string) error {
+			assert.NotEmpty(t, logs, "resource logs should contain the error")
+			assert.Contains(t, logs, "failed to resolve secrets")
 			return nil
 		})
 
@@ -8011,7 +8046,7 @@ func TestProcessMessage_ResourceCheckDispatch(t *testing.T) {
 	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", (*uint32)(nil), (*uint32)(nil), uint32(0)).
 		Return([]*resource.Version{}, false, nil).AnyTimes()
 
-	svc.EXPECT().UpdatePipelineResource(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", gomock.Any()).
+	svc.EXPECT().UpdateResourceCheckLogs(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "cron.my-cron", gomock.Any()).
 		Return(nil).AnyTimes()
 
 	w.processMessage(ctx, m, cwd)

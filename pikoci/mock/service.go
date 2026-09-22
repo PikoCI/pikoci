@@ -1539,6 +1539,20 @@ func (mr *ServiceMockRecorder) UpdateProfile(ctx, un, fullName, newUsername any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProfile", reflect.TypeOf((*Service)(nil).UpdateProfile), ctx, un, fullName, newUsername)
 }
 
+// UpdateResourceCheckLogs mocks base method.
+func (m *Service) UpdateResourceCheckLogs(ctx context.Context, tc, pn, rCan, logs string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateResourceCheckLogs", ctx, tc, pn, rCan, logs)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateResourceCheckLogs indicates an expected call of UpdateResourceCheckLogs.
+func (mr *ServiceMockRecorder) UpdateResourceCheckLogs(ctx, tc, pn, rCan, logs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateResourceCheckLogs", reflect.TypeOf((*Service)(nil).UpdateResourceCheckLogs), ctx, tc, pn, rCan, logs)
+}
+
 // UpdateTeam mocks base method.
 func (m *Service) UpdateTeam(ctx context.Context, tc string, t team.Team) (*team.WithMembers, error) {
 	m.ctrl.T.Helper()

@@ -169,6 +169,24 @@ func (q *PikoCI) UpdatePipelineResource(ctx context.Context, tc, pc, rCan string
 	return nil
 }
 
+// UpdateResourceCheckLogs records the output of a resource check without
+// touching the resource's configuration.
+func (q *PikoCI) UpdateResourceCheckLogs(ctx context.Context, tc, pc, rCan, logs string) error {
+	if !utils.ValidateCanonical(tc) {
+		return fmt.Errorf("invalid Team Canonical format %q", tc)
+	} else if !utils.ValidateCanonical(pc) {
+		return fmt.Errorf("invalid Pipeline Canonical format %q", pc)
+	} else if !utils.ValidateResourceCanonical(rCan) {
+		return fmt.Errorf("invalid Resource Canonical format %q", rCan)
+	}
+
+	if err := q.Resources.UpdateLogs(ctx, tc, pc, rCan, logs); err != nil {
+		return fmt.Errorf("failed to update Resource logs: %w", err)
+	}
+
+	return nil
+}
+
 // PinResourceVersion pins a resource to a specific version, preventing the
 // scheduler from using newer versions. It also cancels any pending builds
 // for downstream jobs that reference this resource with a different version,

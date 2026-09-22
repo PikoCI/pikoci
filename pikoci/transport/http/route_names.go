@@ -103,6 +103,9 @@ const (
 	GetPipelineResource
 	// UpdatePipelineResource is the route for updating a pipeline resource.
 	UpdatePipelineResource
+	// UpdateResourceCheckLogs is the route a worker uses to record the
+	// output of a resource check.
+	UpdateResourceCheckLogs
 	// TriggerPipelineResource is the route for triggering a resource check.
 	TriggerPipelineResource
 	// CreateResourceVersion is the route for creating a new resource version.
