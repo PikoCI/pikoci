@@ -250,3 +250,17 @@ func (mr *ResourceRepositoryMockRecorder) Update(ctx, tc, pn, rCan, r any) *gomo
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*ResourceRepository)(nil).Update), ctx, tc, pn, rCan, r)
 }
+
+// UpdateLogs mocks base method.
+func (m *ResourceRepository) UpdateLogs(ctx context.Context, tc, pn, rCan, logs string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateLogs", ctx, tc, pn, rCan, logs)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateLogs indicates an expected call of UpdateLogs.
+func (mr *ResourceRepositoryMockRecorder) UpdateLogs(ctx, tc, pn, rCan, logs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLogs", reflect.TypeOf((*ResourceRepository)(nil).UpdateLogs), ctx, tc, pn, rCan, logs)
+}

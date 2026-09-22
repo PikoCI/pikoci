@@ -167,6 +167,33 @@ func (r *ResourceRepository) Update(ctx context.Context, tc, pn, rCan string, rs
 	return nil
 }
 
+func (r *ResourceRepository) UpdateLogs(ctx context.Context, tc, pn, rCan, logs string) error {
+	res, err := r.querier.ExecContext(ctx, `
+		UPDATE resources AS r
+		SET logs = ?
+		FROM (
+			SELECT r.id
+			FROM resources AS r
+			JOIN pipelines AS p
+				ON r.pipeline_id = p.id
+			JOIN teams AS t
+				ON p.team_id = t.id
+			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
+		) AS rr
+		WHERE rr.id = r.id
+	`, logs, tc, pn, rCan)
+	if err != nil {
+		return fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	err = isEntityFound(res)
+	if err != nil {
+		return fmt.Errorf("failed to update resource logs: %w", err)
+	}
+
+	return nil
+}
+
 func (r *ResourceRepository) Find(ctx context.Context, tc, pn, rCan string) (*resource.Resource, error) {
 	row := r.querier.QueryRowContext(ctx, `
 		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.tags, r.cache, r.pinned_version_id

@@ -58,6 +58,20 @@ func TestCreateJobBuild_AppliesInputDefaults(t *testing.T) {
 	assert.Equal(t, "0", created.InputValues["count"])
 }
 
+// A paused job takes no new builds from anywhere: the manual trigger and the
+// resource-check paths skip paused jobs themselves, and the direct route,
+// which a worker token can reach, is refused here.
+func TestCreateJobBuild_PausedJobRefused(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job", Paused: true}, nil)
+
+	_, err := s.S.CreateJobBuild(ctx, "main", "my-pipeline", "my-job", build.Build{})
+	require.ErrorIs(t, err, pikoci.ErrJobPaused)
+}
+
 func TestCreateJobBuild_InvalidCanonical(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)

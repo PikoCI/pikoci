@@ -45,8 +45,15 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 
 	b.Status = build.Pending
 
-	// Check if the job has an approval gate — if so, set WaitingForApproval
 	j, jErr := q.Jobs.Find(ctx, tc, pc, jn)
+	// Every internal caller skips paused jobs before getting here, and
+	// StartPendingBuild refuses them again; this closes the direct route,
+	// which a worker token can reach, so pausing a job means no new builds
+	// from anywhere.
+	if jErr == nil && j.Paused {
+		return nil, ErrJobPaused
+	}
+	// Check if the job has an approval gate — if so, set WaitingForApproval
 	if jErr == nil && j.ApproveLabel != "" {
 		b.Status = build.WaitingForApproval
 	}
