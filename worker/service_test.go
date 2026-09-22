@@ -1752,6 +1752,41 @@ func TestBuildPullParams_OtherResourceInJob_UsesLatest(t *testing.T) {
 	assert.Equal(t, uint32(7), vid)
 }
 
+// The service lists versions newest-first (lazy loading, #393). The tests
+// above hand the mock an oldest-first list, which is how the worker kept
+// reversing it and pulling the oldest version of every unpinned resource
+// without a test going red. This one lists them the way the service does.
+func TestBuildPullParams_NewestFirstList_UsesLatest(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	w, svc := newTestWorker(ctrl)
+
+	ctx := context.Background()
+	m := workitem.Body{
+		TeamCanonical:     "main",
+		PipelineCanonical: "test-pipeline",
+		JobName:           "test-job",
+		BuildID:           10,
+		ResourceCanonical: "git.app",
+		VersionID:         5,
+	}
+	b := build.Build{ID: 74, BuildNumber: "74"}
+	rt := restype.ResourceType{Pull: &utils.RunnerCommand{Params: map[string]string{}}}
+	r := resource.Resource{Canonical: "git.lib"}
+	g := job.GetStep{}
+
+	svc.EXPECT().ListResourceVersions(gomock.Any(), m.TeamCanonical, m.PipelineCanonical, "git.lib", (*uint32)(nil), (*uint32)(nil), uint32(0)).
+		Return([]*resource.Version{
+			{ID: 9, Version: map[string]interface{}{"ref": "newest"}},
+			{ID: 8, Version: map[string]interface{}{"ref": "middle"}},
+			{ID: 7, Version: map[string]interface{}{"ref": "oldest"}},
+		}, false, nil).AnyTimes()
+
+	params, vid, _ := w.buildPullParams(ctx, m, &b, rt, r, g, 0)
+	require.NotNil(t, params)
+	assert.Equal(t, "newest", params["version_ref"])
+	assert.Equal(t, uint32(9), vid)
+}
+
 func TestBuildPullParams_NoVersionID_UsesLatest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	w, svc := newTestWorker(ctrl)
