@@ -203,20 +203,6 @@ more than reconciliation latency.
 builds are unaffected, but renaming or removing `set-pipeline` itself in the same
 commit means editing the thing that is mid-apply. Keep the job's name stable.
 
-**`--pipeline-config` is not a bootstrap mechanism — it takes the server down on
-restart.** The startup flags call `CreatePipeline`, not an upsert, and
-`pipelines` has a unique index on `(canonical, team_id)`. Against a persistent
-database, a second boot with the same flags fails and the process exits:
-
-```
-failed to create Pipeline "boot-test": ... UNIQUE constraint failed:
-pipelines.canonical, pipelines.team_id (2067)
-```
-
-`docs/Scaling.md` claims these flags "create or update the pipeline at startup";
-they do not. Bootstrap once by hand, as above, and let the job own the pipeline
-afterwards.
-
 **One pipeline per apply.** There is no multi-pipeline manifest and nothing
 prunes a pipeline whose file you deleted. Managing N pipelines from one repo
 means N applies, each named explicitly.
