@@ -26,8 +26,8 @@ PikoGraphZoom.prototype = {
     var div = document.createElement('div');
     div.className = 'piko-graph-controls';
     div.innerHTML =
-      '<button type="button" title="Zoom in" data-action="zoomIn">+</button>' +
-      '<button type="button" title="Zoom out" data-action="zoomOut">&minus;</button>' +
+      '<button type="button" title="Zoom in (Ctrl+scroll)" data-action="zoomIn">+</button>' +
+      '<button type="button" title="Zoom out (Ctrl+scroll)" data-action="zoomOut">&minus;</button>' +
       '<button type="button" title="Reset" data-action="reset">&#x21BA;</button>' +
       '<button type="button" title="Fullscreen" data-action="fullscreen">&#x26F6;</button>';
     this.container.appendChild(div);
@@ -174,8 +174,12 @@ PikoGraphZoom.prototype = {
     this._applyViewBox();
   },
 
+  // A plain wheel scrolls the page; zooming needs Ctrl/Cmd (trackpad pinch
+  // arrives as a wheel event with ctrlKey set, so it keeps working). In the
+  // fullscreen overlay there is nothing to scroll, so the wheel zooms as-is.
   _onWheel: function(e) {
     if (!this.svg) return;
+    if (!this._fsOverlay && !e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     var factor = e.deltaY < 0 ? this.ZOOM_FACTOR : 1 / this.ZOOM_FACTOR;
     this.zoomAtPoint(e.clientX, e.clientY, factor);
