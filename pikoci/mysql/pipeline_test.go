@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -516,4 +517,119 @@ func TestJobUpdate_PreservesPausedState(t *testing.T) {
 	j, err = jr.Find(ctx, "main", "pause-test", "my-job")
 	require.NoError(t, err)
 	assert.True(t, j.Paused, "job should remain paused after Update()")
+}
+
+func TestPipelineFilterSummary(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+	pr := mysql.NewPipelineRepository(db)
+
+	// Inserted out of alphabetical order so ORDER BY has something to do; ids
+	// are insertion order, which is what SortCreated reads back.
+	names := []string{"pfs-Zeta", "pfs-alpha", "pfs-Beta", "pfs-gamma_ray", "pfs-beta-2"}
+	ids := make(map[string]int64)
+	for _, n := range names {
+		res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical, public) VALUES (1, ?, ?, ?)`, n, n, n == "pfs-Beta")
+		require.NoError(t, err)
+		ids[n], _ = res.LastInsertId()
+	}
+	// A pipeline in another team must never show up. Names are prefixed
+	// because the in-memory test database is shared by every test in the
+	// package.
+	_, err := db.ExecContext(ctx, `INSERT INTO teams (name, canonical) VALUES ('pfs-other', 'pfs-other')`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES ((SELECT id FROM teams WHERE canonical = 'pfs-other'), 'pfs-alpha-other', 'pfs-alpha-other')`)
+	require.NoError(t, err)
+
+	// Two builds on Beta; the later one is its last build time.
+	res, err := db.ExecContext(ctx, `INSERT INTO jobs (pipeline_id, name) VALUES (?, 'build')`, ids["pfs-Beta"])
+	require.NoError(t, err)
+	jobID, _ := res.LastInsertId()
+	t1 := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 1, 2, 10, 0, 0, 0, time.UTC)
+	_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, started_at, build_number) VALUES (?, 'succeeded', ?, '1')`, jobID, t1)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO builds (job_id, status, started_at, build_number) VALUES (?, 'failed', ?, '2')`, jobID, t2)
+	require.NoError(t, err)
+
+	namesOf := func(sums []*pipeline.Summary) []string {
+		out := make([]string, len(sums))
+		for i, s := range sums {
+			out[i] = s.Name
+		}
+		return out
+	}
+
+	t.Run("everything, by name, case-insensitive", func(t *testing.T) {
+		sums, total, err := pr.FilterSummary(ctx, "main", "pfs-", pipeline.SortName, 0, 0)
+		require.NoError(t, err)
+		assert.Equal(t, uint32(5), total)
+		assert.Equal(t, []string{"pfs-alpha", "pfs-Beta", "pfs-beta-2", "pfs-gamma_ray", "pfs-Zeta"}, namesOf(sums))
+	})
+
+	t.Run("summary fields", func(t *testing.T) {
+		sums, _, err := pr.FilterSummary(ctx, "main", "pfs-beta", pipeline.SortName, 0, 0)
+		require.NoError(t, err)
+		require.Len(t, sums, 2)
+		beta := sums[0]
+		assert.Equal(t, uint32(ids["pfs-Beta"]), beta.ID)
+		assert.Equal(t, "pfs-Beta", beta.Canonical)
+		assert.True(t, beta.Public)
+		require.NotNil(t, beta.LastBuildAt)
+		assert.True(t, beta.LastBuildAt.Equal(t2), "last build is the later of the two: %v", beta.LastBuildAt)
+		assert.False(t, sums[1].Public)
+		assert.Nil(t, sums[1].LastBuildAt, "no builds, no last build time")
+	})
+
+	t.Run("pages", func(t *testing.T) {
+		sums, total, err := pr.FilterSummary(ctx, "main", "pfs-", pipeline.SortName, 2, 0)
+		require.NoError(t, err)
+		assert.Equal(t, uint32(5), total, "total counts every match, not the page")
+		assert.Equal(t, []string{"pfs-alpha", "pfs-Beta"}, namesOf(sums))
+
+		sums, _, err = pr.FilterSummary(ctx, "main", "pfs-", pipeline.SortName, 2, 4)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"pfs-Zeta"}, namesOf(sums), "last page is short")
+
+		sums, total, err = pr.FilterSummary(ctx, "main", "pfs-", pipeline.SortName, 2, 40)
+		require.NoError(t, err)
+		assert.Empty(t, sums, "past the end is empty, not an error")
+		assert.Equal(t, uint32(5), total)
+	})
+
+	t.Run("newest first", func(t *testing.T) {
+		sums, _, err := pr.FilterSummary(ctx, "main", "pfs-", pipeline.SortCreated, 3, 0)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"pfs-beta-2", "pfs-gamma_ray", "pfs-Beta"}, namesOf(sums))
+	})
+
+	t.Run("search is a case-insensitive substring of the name", func(t *testing.T) {
+		sums, total, err := pr.FilterSummary(ctx, "main", "pfs-bETA", pipeline.SortName, 0, 0)
+		require.NoError(t, err)
+		assert.Equal(t, uint32(2), total)
+		assert.Equal(t, []string{"pfs-Beta", "pfs-beta-2"}, namesOf(sums))
+	})
+
+	t.Run("search wildcards are literal", func(t *testing.T) {
+		sums, _, err := pr.FilterSummary(ctx, "main", "pfs-gamma_r", pipeline.SortName, 0, 0)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"pfs-gamma_ray"}, namesOf(sums))
+		sums, _, err = pr.FilterSummary(ctx, "main", "pfs-gammaXr", pipeline.SortName, 0, 0)
+		require.NoError(t, err)
+		assert.Empty(t, sums, "X is not _")
+		sums, _, err = pr.FilterSummary(ctx, "main", "pfs-gamma_a", pipeline.SortName, 0, 0)
+		require.NoError(t, err)
+		assert.Empty(t, sums, "_ must not match any character")
+
+		sums, _, err = pr.FilterSummary(ctx, "main", "pfs-%", pipeline.SortName, 0, 0)
+		require.NoError(t, err)
+		assert.Empty(t, sums, "% must not match everything")
+	})
+
+	t.Run("no match", func(t *testing.T) {
+		sums, total, err := pr.FilterSummary(ctx, "main", "pfs-nothing-here", pipeline.SortName, 10, 0)
+		require.NoError(t, err)
+		assert.Empty(t, sums)
+		assert.Equal(t, uint32(0), total)
+	})
 }

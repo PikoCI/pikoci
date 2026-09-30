@@ -125,6 +125,40 @@ type ListPipelinesResponse struct {
 
 func (r ListPipelinesResponse) Error() string { return r.Err }
 
+// PipelinePageMeta describes the page a ListPipelinesPageResponse holds.
+// Offset-based rather than the cursor PageMeta the build lists use: pipelines
+// are a catalogue sorted by name, where "page 3 of 6" and a total are what a
+// list wants, not "newer than id X".
+type PipelinePageMeta struct {
+	Total   uint32 `json:"total"`
+	Limit   uint32 `json:"limit"`
+	Offset  uint32 `json:"offset"`
+	HasMore bool   `json:"has_more"`
+}
+
+type ListPipelinesPageResponse struct {
+	Pipelines []*pipeline.Summary `json:"data,omitempty"`
+	Meta      *PipelinePageMeta   `json:"meta,omitempty"`
+	Err       string              `json:"error,omitempty"`
+}
+
+func (r ListPipelinesPageResponse) Error() string { return r.Err }
+
+const (
+	// defaultPipelinePageSize is the page when limit is present but not a
+	// usable number: the grid's page, not "everything".
+	defaultPipelinePageSize = 24
+	// maxPipelinePageSize caps what one request can ask for.
+	maxPipelinePageSize = 200
+	// maxPipelineQueryLen bounds the search term, in characters; longer is
+	// a mistake, not a query.
+	maxPipelineQueryLen = 100
+)
+
+// listPipelines answers two shapes on one route. Without a limit parameter it
+// is the original: every pipeline in the team as a full object, which the CLI
+// and the audit-log filter depend on. With one it is a page of summaries with
+// a total, which is what the pipelines grid asks for.
 func listPipelines(s pikoci.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (
@@ -133,13 +167,64 @@ func listPipelines(s pikoci.Service) http.HandlerFunc {
 		)
 		vars := mux.Vars(r)
 		req.TeamCanonical = vars["team_canonical"]
-		pps, err := s.ListPipelines(ctx, req.TeamCanonical)
+
+		params := r.URL.Query()
+		if _, paged := params["limit"]; !paged {
+			pps, err := s.ListPipelines(ctx, req.TeamCanonical)
+			var errs string
+			if err != nil {
+				errs = err.Error()
+			}
+			encodeResponse(ListPipelinesResponse{Pipelines: pps, Err: errs}, w)
+			return
+		}
+
+		limit := parseUint32Param(params.Get("limit"), defaultPipelinePageSize)
+		if limit == 0 {
+			limit = defaultPipelinePageSize
+		}
+		if limit > maxPipelinePageSize {
+			limit = maxPipelinePageSize
+		}
+		offset := parseUint32Param(params.Get("offset"), 0)
+		q := strings.TrimSpace(params.Get("q"))
+		// Cut on characters, not bytes: a byte cut through a multi-byte
+		// character is invalid UTF-8 that the database rejects.
+		if r := []rune(q); len(r) > maxPipelineQueryLen {
+			q = string(r[:maxPipelineQueryLen])
+		}
+		sort := pipeline.ParseSort(params.Get("sort"))
+
+		sums, total, err := s.ListPipelinesPage(ctx, req.TeamCanonical, q, sort, limit, offset)
 		var errs string
 		if err != nil {
 			errs = err.Error()
 		}
-		encodeResponse(ListPipelinesResponse{Pipelines: pps, Err: errs}, w)
+		var meta *PipelinePageMeta
+		if err == nil {
+			meta = &PipelinePageMeta{
+				Total:   total,
+				Limit:   limit,
+				Offset:  offset,
+				HasMore: offset+uint32(len(sums)) < total,
+			}
+		}
+		encodeResponse(ListPipelinesPageResponse{Pipelines: sums, Meta: meta, Err: errs}, w)
 	}
+}
+
+// parseUint32Param reads a query parameter as an unsigned number, falling back
+// to def when it is absent or not one — the same leniency as
+// parsePaginationParams.
+func parseUint32Param(v string, def uint32) uint32 {
+	if v == "" {
+		return def
+	}
+	n, err := strconv.ParseUint(v, 10, 32)
+	if err != nil {
+		return def
+	}
+	return uint32(n)
 }
 
 type GetPipelineRequest struct {

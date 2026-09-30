@@ -95,6 +95,9 @@ type Service interface {
 	// ListPipelines returns all pipelines for the given team, enriched with last
 	// build timestamps.
 	ListPipelines(ctx context.Context, tc string) ([]*pipeline.Pipeline, error)
+	// ListPipelinesPage returns one page of the team's pipelines as summaries
+	// and the number of pipelines matching q. See pipeline.Repository.FilterSummary.
+	ListPipelinesPage(ctx context.Context, tc, q string, sort pipeline.Sort, limit, offset uint32) ([]*pipeline.Summary, uint32, error)
 
 	// SetPipelinePublic toggles the public visibility of a pipeline.
 	SetPipelinePublic(ctx context.Context, tc, pn string, public bool) error

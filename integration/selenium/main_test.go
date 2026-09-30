@@ -28,6 +28,10 @@ import (
 
 var pikoURL string
 
+// svc is the service behind the server under test, for tests that need more
+// fixtures than the UI can reasonably create one by one.
+var svc pikoci.Service
+
 func TestMain(m *testing.M) {
 	os.Exit(runTests(m))
 }
@@ -72,10 +76,11 @@ func runTests(m *testing.M) int {
 	wn := notifier.New()
 	alr := mysql.NewAuditLogRepository(db)
 	opr := mysql.NewOAuthProviderRepository(db)
-	var svc = pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, alr, opr, suow, jwtSecret, wn, logger)
+	pk := pikoci.New(ctx, ur, tr, ppr, jr, rr, rt, br, rur, str, tgr, nil, nil, alr, opr, suow, jwtSecret, wn, logger)
 	// The secret store is opt-in, so the UI tests need it wired up explicitly.
-	svc.EnableSecretStore(mysql.NewSecretRepository(db), "integration-master-key")
-	svc.StartScheduler(ctx)
+	pk.EnableSecretStore(mysql.NewSecretRepository(db), "integration-master-key")
+	pk.StartScheduler(ctx)
+	svc = pk
 
 	oauthStateStore := pikoci.NewOAuthStateStore(ctx)
 

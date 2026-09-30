@@ -969,6 +969,22 @@ func (mr *ServiceMockRecorder) ListPipelines(ctx, tc any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPipelines", reflect.TypeOf((*Service)(nil).ListPipelines), ctx, tc)
 }
 
+// ListPipelinesPage mocks base method.
+func (m *Service) ListPipelinesPage(ctx context.Context, tc, q string, sort pipeline.Sort, limit, offset uint32) ([]*pipeline.Summary, uint32, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPipelinesPage", ctx, tc, q, sort, limit, offset)
+	ret0, _ := ret[0].([]*pipeline.Summary)
+	ret1, _ := ret[1].(uint32)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ListPipelinesPage indicates an expected call of ListPipelinesPage.
+func (mr *ServiceMockRecorder) ListPipelinesPage(ctx, tc, q, sort, limit, offset any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPipelinesPage", reflect.TypeOf((*Service)(nil).ListPipelinesPage), ctx, tc, q, sort, limit, offset)
+}
+
 // ListPublicJobBuilds mocks base method.
 func (m *Service) ListPublicJobBuilds(ctx context.Context, tc, pn, jn string, before, after *uint32, limit uint32, statuses []build.Status) ([]*build.Build, bool, error) {
 	m.ctrl.T.Helper()

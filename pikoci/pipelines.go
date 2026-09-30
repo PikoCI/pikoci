@@ -476,6 +476,21 @@ func (q *PikoCI) ListPipelines(ctx context.Context, tc string) ([]*pipeline.Pipe
 	return pps, nil
 }
 
+// ListPipelinesPage returns one page of the team's pipelines as summaries and
+// the number of pipelines matching q.
+func (q *PikoCI) ListPipelinesPage(ctx context.Context, tc, query string, sort pipeline.Sort, limit, offset uint32) ([]*pipeline.Summary, uint32, error) {
+	if !utils.ValidateCanonical(tc) {
+		return nil, 0, fmt.Errorf("invalid Team Canonical format %q", tc)
+	}
+
+	sums, total, err := q.Pipelines.FilterSummary(ctx, tc, query, sort, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to filter Pipeline summaries: %w", err)
+	}
+
+	return sums, total, nil
+}
+
 // GetPipeline retrieves a pipeline by team canonical and pipeline canonical.
 func (q *PikoCI) GetPipeline(ctx context.Context, tc, pCan string) (*pipeline.Pipeline, error) {
 	if !utils.ValidateCanonical(tc) {

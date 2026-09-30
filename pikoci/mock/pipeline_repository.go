@@ -100,6 +100,22 @@ func (mr *PipelineRepositoryMockRecorder) FilterAll(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilterAll", reflect.TypeOf((*PipelineRepository)(nil).FilterAll), ctx)
 }
 
+// FilterSummary mocks base method.
+func (m *PipelineRepository) FilterSummary(ctx context.Context, tc, q string, sort pipeline.Sort, limit, offset uint32) ([]*pipeline.Summary, uint32, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FilterSummary", ctx, tc, q, sort, limit, offset)
+	ret0, _ := ret[0].([]*pipeline.Summary)
+	ret1, _ := ret[1].(uint32)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// FilterSummary indicates an expected call of FilterSummary.
+func (mr *PipelineRepositoryMockRecorder) FilterSummary(ctx, tc, q, sort, limit, offset any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilterSummary", reflect.TypeOf((*PipelineRepository)(nil).FilterSummary), ctx, tc, q, sort, limit, offset)
+}
+
 // Find mocks base method.
 func (m *PipelineRepository) Find(ctx context.Context, tc, pCan string) (*pipeline.Pipeline, error) {
 	m.ctrl.T.Helper()
