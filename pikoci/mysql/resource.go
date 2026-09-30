@@ -276,6 +276,15 @@ func (r *ResourceRepository) Filter(ctx context.Context, tc, pn string) ([]*reso
 	return resources, nil
 }
 
+// FilterDueResources returns every resource whose check is due, the one that
+// has waited longest first.
+//
+// The order is what keeps checks fair. NextWork hands a worker the first
+// claimable resource in this list, and each claim reschedules that resource a
+// check interval later. Without an ORDER BY the database returns rows in id
+// order, so once more resources fall due each interval than the workers can
+// check, the oldest resources are rechecked forever and the newest are never
+// reached: their next_check stays in the past and they never build.
 func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resource.ResourceWithPipeline, error) {
 	q := `
 		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.tags, r.cache, r.pinned_version_id,
@@ -286,6 +295,7 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 		JOIN teams AS t
 			ON p.team_id = t.id
 		WHERE r.next_check IS NOT NULL AND r.next_check <= ?
+		ORDER BY r.next_check ASC, r.id ASC
 	`
 	if r.system == PostgreSQL || r.system == MySQL {
 		q += " FOR UPDATE SKIP LOCKED"

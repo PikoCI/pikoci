@@ -3,6 +3,7 @@ package mysql_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/stretchr/testify/assert"
@@ -149,4 +150,43 @@ func TestUpdateLogs(t *testing.T) {
 	err = rr.UpdateLogs(ctx, "main", "lg-pipe", "git.missing", "x")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestFilterDueResources_LongestWaitingFirst(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'due-pipe', 'due-pipe')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	// Inserted in id order, but the newest resource has waited longest -- the
+	// shape a busy server reaches when a pipeline is added after many others.
+	now := time.Now()
+	for _, r := range []struct {
+		name      string
+		nextCheck time.Time
+	}{
+		{"old", now.Add(-1 * time.Minute)},
+		{"mid", now.Add(-10 * time.Minute)},
+		{"newest", now.Add(-30 * time.Minute)},
+		{"future", now.Add(10 * time.Minute)}, // not due yet
+	} {
+		_, err := db.ExecContext(ctx,
+			`INSERT INTO resources (pipeline_id, name, type, canonical, tags, cache, next_check) VALUES (?, ?, 'git', ?, '', 0, ?)`,
+			ppID, r.name, "git."+r.name, r.nextCheck)
+		require.NoError(t, err)
+	}
+
+	rr := mysql.NewResourceRepository(db, mysql.Mem)
+	due, err := rr.FilterDueResources(ctx)
+	require.NoError(t, err)
+
+	var got []string
+	for _, r := range due {
+		got = append(got, r.Canonical)
+	}
+	// Oldest next_check first, so NextWork cannot starve the resources at the
+	// end of the table when more fall due than the workers can check.
+	assert.Equal(t, []string{"git.newest", "git.mid", "git.old"}, got)
 }
