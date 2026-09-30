@@ -34,12 +34,50 @@ func getAuthMethods(s pikoci.Service) http.HandlerFunc {
 	}
 }
 
+// oauthCallbackURL is the redirect_uri registered with a provider: the
+// server's public URL plus the callback route. The admin UI shows the same
+// value so what admins copy into the provider is what the server sends.
+func oauthCallbackURL(externalURL, canonical string) string {
+	return fmt.Sprintf("%s/auth/oauth/%s/callback", strings.TrimRight(externalURL, "/"), canonical)
+}
+
+// requestBaseURL is the URL the client used to reach the server, derived
+// from the request: X-Forwarded-Proto/X-Forwarded-Host when a reverse
+// proxy sets them, otherwise the connection's scheme and Host header.
+func requestBaseURL(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if v := r.Header.Get("X-Forwarded-Proto"); v != "" {
+		scheme = strings.TrimSpace(strings.Split(v, ",")[0])
+	}
+	host := r.Host
+	if v := r.Header.Get("X-Forwarded-Host"); v != "" {
+		host = strings.TrimSpace(strings.Split(v, ",")[0])
+	}
+	return scheme + "://" + host
+}
+
+// resolveExternalURL is the base URL for OAuth redirect URIs and post-login
+// redirects: --external-url when set, otherwise the URL of the request.
+// The fallback lets OAuth work out of the box on whatever hostname the
+// user is already on; the flag pins it when the server is reachable under
+// several names or the proxy does not forward the original host.
+func resolveExternalURL(configured string, r *http.Request) string {
+	if u := strings.TrimRight(strings.TrimSpace(configured), "/"); u != "" {
+		return u
+	}
+	return requestBaseURL(r)
+}
+
 // --- OAuth Start (unauthenticated, returns redirect) ---
 
-func oauthStart(s pikoci.Service, externalURL string, stateStore *pikoci.OAuthStateStore, ts []byte) http.HandlerFunc {
+func oauthStart(s pikoci.Service, configuredExternalURL string, stateStore *pikoci.OAuthStateStore, ts []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		canonical := vars["canonical"]
+		externalURL := resolveExternalURL(configuredExternalURL, r)
 
 		p, err := s.GetOAuthProvider(r.Context(), canonical)
 		if err != nil || !p.Enabled {
@@ -47,7 +85,7 @@ func oauthStart(s pikoci.Service, externalURL string, stateStore *pikoci.OAuthSt
 			return
 		}
 
-		callbackURL := fmt.Sprintf("%s/auth/oauth/%s/callback", strings.TrimRight(externalURL, "/"), canonical)
+		callbackURL := oauthCallbackURL(externalURL, canonical)
 
 		flowCfg, err := pikoci.BuildOAuth2Config(r.Context(), p, callbackURL)
 		if err != nil {
@@ -102,10 +140,13 @@ func oauthStart(s pikoci.Service, externalURL string, stateStore *pikoci.OAuthSt
 
 // --- OAuth Callback (unauthenticated, returns redirect to SPA) ---
 
-func oauthCallback(s pikoci.Service, externalURL string, stateStore *pikoci.OAuthStateStore, ts []byte) http.HandlerFunc {
+func oauthCallback(s pikoci.Service, configuredExternalURL string, stateStore *pikoci.OAuthStateStore, ts []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		canonical := vars["canonical"]
+		// Must resolve the same way as oauthStart so the redirect_uri in
+		// the token exchange matches the one sent to the provider.
+		externalURL := resolveExternalURL(configuredExternalURL, r)
 
 		code := r.URL.Query().Get("code")
 		stateParam := r.URL.Query().Get("state")
@@ -127,7 +168,7 @@ func oauthCallback(s pikoci.Service, externalURL string, stateStore *pikoci.OAut
 			return
 		}
 
-		callbackURL := fmt.Sprintf("%s/auth/oauth/%s/callback", strings.TrimRight(externalURL, "/"), canonical)
+		callbackURL := oauthCallbackURL(externalURL, canonical)
 
 		flowCfg, err := pikoci.BuildOAuth2Config(r.Context(), p, callbackURL)
 		if err != nil {
@@ -395,21 +436,41 @@ func deleteOAuthProvider(s pikoci.Service) http.HandlerFunc {
 
 // --- Admin: Auth Settings ---
 
+// AdminAuthSettings is the stored auth settings plus the server-side OAuth
+// configuration the admin UI needs to show correct callback URLs.
+type AdminAuthSettings struct {
+	*oauthprovider.AuthSettings
+	// ExternalURL is the base the server uses for OAuth callback URLs:
+	// --external-url when set, otherwise derived from this request.
+	ExternalURL string `json:"external_url"`
+	// ExternalURLConfigured is false when ExternalURL was derived from the
+	// request rather than set with --external-url.
+	ExternalURLConfigured bool `json:"external_url_configured"`
+}
+
 type GetAdminAuthSettingsResponse struct {
-	Err  string                       `json:"error,omitempty"`
-	Data *oauthprovider.AuthSettings `json:"data,omitempty"`
+	Err  string             `json:"error,omitempty"`
+	Data *AdminAuthSettings `json:"data,omitempty"`
 }
 
 func (r GetAdminAuthSettingsResponse) Error() string { return r.Err }
 
-func getAdminAuthSettings(s pikoci.Service) http.HandlerFunc {
+func getAdminAuthSettings(s pikoci.Service, externalURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		settings, err := s.GetAuthSettings(r.Context())
 		var errs string
 		if err != nil {
 			errs = err.Error()
 		}
-		encodeResponse(GetAdminAuthSettingsResponse{Data: settings, Err: errs}, w)
+		var data *AdminAuthSettings
+		if settings != nil {
+			data = &AdminAuthSettings{
+				AuthSettings:          settings,
+				ExternalURL:           resolveExternalURL(externalURL, r),
+				ExternalURLConfigured: strings.TrimSpace(externalURL) != "",
+			}
+		}
+		encodeResponse(GetAdminAuthSettingsResponse{Data: data, Err: errs}, w)
 	}
 }
 

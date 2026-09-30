@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **OAuth login with `--external-url` unset**: the server built a relative `redirect_uri` (`/auth/oauth/<provider>/callback`) that every provider rejects with `invalid redirect_uri`, while the Authentication admin page displayed an absolute URL derived from the browser. The server now derives the base URL from the request (`X-Forwarded-Proto`/`X-Forwarded-Host`, else the connection scheme and `Host`) when the flag is unset, so OAuth works out of the box on whatever address users are already on; `--external-url` still takes precedence and is the way to pin the callback URL when the server is reachable under several names. The server logs a warning at startup when it is unset, and the admin page shows the callback URL the server will actually send (`GET /admin/auth-settings` gains `external_url` and `external_url_configured`).
+
 ### Added
 
 - **Pipelines list pagination**: the pipelines grid loads 24 at a time, sorted by name or newest first, with a search box, a pager and "1–24 of 137". `GET /teams/:team/pipelines?limit=24&offset=0&q=name&sort=name|created` returns summaries (id, name, canonical, public, last_build_at) with `meta.total` (`limit` is capped at 200; a value that is not a number falls back to 24); without `limit` the route is unchanged and still returns every pipeline as a full object, so the CLI and the audit-log filter are unaffected. Live status polling is now bounded to the cards on screen instead of one `image.dot` request per pipeline in the team ([#696](https://github.com/PikoCI/pikoci/issues/696)).
