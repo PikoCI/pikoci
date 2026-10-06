@@ -95,6 +95,21 @@ runner_type "docker" {
 
 This replaces the built-in `docker` runner entirely for this pipeline.
 
+> **Warning:** Overriding `exec` is not the same as overriding `docker` or `shell`. Every built-in resource type (`git`, `cron`, `fs`, `artifact`) runs its `check`/`pull`/`push` commands through `exec` by default, and type-level runner overrides (below) still resolve `exec` through this same pipeline-wide lookup. Redefining `exec` therefore replaces it everywhere, including inside those built-ins — for example `git` can no longer check, pull, or push once `exec` is overridden, not just your own task/notify steps.
+>
+> If you're redefining `exec` deliberately (for example, to ban raw host execution), make the replacement fail loudly instead of silently doing nothing:
+>
+> ```hcl
+> runner_type "exec" {
+>   run {
+>     path = "/bin/sh"
+>     args = ["-ec", "exit 2"]
+>   }
+> }
+> ```
+>
+> An empty command (`path = ""`, `args = []`) is **not** equivalent. PikoCI treats an empty resolved path as "nothing to run" and returns success with no output — so every step and resource check using `exec` would silently no-op and show as succeeded, instead of failing where it was actually used.
+
 ## Type-level runner overrides
 
 By default, a type's commands run using the runner specified in their command blocks (e.g. `check "exec" { ... }`). You can override this for all commands of a type by adding a `runner` block to the type definition.
