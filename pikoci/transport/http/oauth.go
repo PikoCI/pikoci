@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -42,33 +43,63 @@ func oauthCallbackURL(externalURL, canonical string) string {
 }
 
 // requestBaseURL is the URL the client used to reach the server, derived
-// from the request: X-Forwarded-Proto/X-Forwarded-Host when a reverse
-// proxy sets them, otherwise the connection's scheme and Host header.
+// from the request: X-Forwarded-Proto/X-Forwarded-Host/X-Forwarded-Port when
+// a reverse proxy sets them, otherwise the connection's scheme and Host header.
 func requestBaseURL(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	if v := r.Header.Get("X-Forwarded-Proto"); v != "" {
-		scheme = strings.TrimSpace(strings.Split(v, ",")[0])
+	if v := firstHeaderValue(r, "X-Forwarded-Proto"); v != "" {
+		scheme = v
 	}
 	host := r.Host
-	if v := r.Header.Get("X-Forwarded-Host"); v != "" {
-		host = strings.TrimSpace(strings.Split(v, ",")[0])
+	if v := firstHeaderValue(r, "X-Forwarded-Host"); v != "" {
+		host = v
+	}
+	// nginx's common "X-Forwarded-Host $host" (and "Host $host") drops the
+	// port, so on a non-default port it only survives in X-Forwarded-Port.
+	if port := firstHeaderValue(r, "X-Forwarded-Port"); port != "" && !hostHasPort(host) && !isDefaultPort(scheme, port) {
+		host = net.JoinHostPort(strings.Trim(host, "[]"), port)
 	}
 	return scheme + "://" + host
 }
 
+// firstHeaderValue returns the first entry of a possibly comma-separated
+// header, which is the one set by the proxy closest to the client.
+func firstHeaderValue(r *http.Request, name string) string {
+	return strings.TrimSpace(strings.Split(r.Header.Get(name), ",")[0])
+}
+
+func hostHasPort(host string) bool {
+	_, _, err := net.SplitHostPort(host)
+	return err == nil
+}
+
+func isDefaultPort(scheme, port string) bool {
+	return (scheme == "http" && port == "80") || (scheme == "https" && port == "443")
+}
+
+// NormalizeExternalURL trims whitespace and trailing slashes from the
+// --external-url value and reports whether anything is left, i.e. whether
+// the flag is effectively set. Every "is it set?" check goes through here so
+// they cannot disagree.
+func NormalizeExternalURL(configured string) (string, bool) {
+	u := strings.TrimRight(strings.TrimSpace(configured), "/")
+	return u, u != ""
+}
+
 // resolveExternalURL is the base URL for OAuth redirect URIs and post-login
-// redirects: --external-url when set, otherwise the URL of the request.
-// The fallback lets OAuth work out of the box on whatever hostname the
-// user is already on; the flag pins it when the server is reachable under
-// several names or the proxy does not forward the original host.
-func resolveExternalURL(configured string, r *http.Request) string {
-	if u := strings.TrimRight(strings.TrimSpace(configured), "/"); u != "" {
-		return u
+// redirects: --external-url when set, otherwise the URL of the request. The
+// bool reports which one it is. The fallback lets OAuth work out of the box
+// on whatever hostname the user is already on; the flag pins it when the
+// server is reachable under several names or the proxy does not forward the
+// original host.
+func resolveExternalURL(configured string, r *http.Request) (string, bool) {
+	if u, ok := NormalizeExternalURL(configured); ok {
+		return u, true
 	}
-	return requestBaseURL(r)
+	return requestBaseURL(r), false
 }
 
 // --- OAuth Start (unauthenticated, returns redirect) ---
@@ -77,7 +108,7 @@ func oauthStart(s pikoci.Service, configuredExternalURL string, stateStore *piko
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		canonical := vars["canonical"]
-		externalURL := resolveExternalURL(configuredExternalURL, r)
+		externalURL, _ := resolveExternalURL(configuredExternalURL, r)
 
 		p, err := s.GetOAuthProvider(r.Context(), canonical)
 		if err != nil || !p.Enabled {
@@ -146,7 +177,7 @@ func oauthCallback(s pikoci.Service, configuredExternalURL string, stateStore *p
 		canonical := vars["canonical"]
 		// Must resolve the same way as oauthStart so the redirect_uri in
 		// the token exchange matches the one sent to the provider.
-		externalURL := resolveExternalURL(configuredExternalURL, r)
+		externalURL, _ := resolveExternalURL(configuredExternalURL, r)
 
 		code := r.URL.Query().Get("code")
 		stateParam := r.URL.Query().Get("state")
@@ -464,10 +495,11 @@ func getAdminAuthSettings(s pikoci.Service, externalURL string) http.HandlerFunc
 		}
 		var data *AdminAuthSettings
 		if settings != nil {
+			u, configured := resolveExternalURL(externalURL, r)
 			data = &AdminAuthSettings{
 				AuthSettings:          settings,
-				ExternalURL:           resolveExternalURL(externalURL, r),
-				ExternalURLConfigured: strings.TrimSpace(externalURL) != "",
+				ExternalURL:           u,
+				ExternalURLConfigured: configured,
 			}
 		}
 		encodeResponse(GetAdminAuthSettingsResponse{Data: data, Err: errs}, w)

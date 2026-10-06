@@ -98,15 +98,61 @@ func TestOAuthStartDerivesRedirectURIFromRequestWithoutExternalURL(t *testing.T)
 
 func TestResolveExternalURL(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/auth/oauth/x", nil)
-	assert.Equal(t, "https://ci.example.com", resolveExternalURL(" https://ci.example.com/ ", req), "configured URL wins and is trimmed")
-	assert.Equal(t, "http://localhost:8080", resolveExternalURL("", req))
+	u, configured := resolveExternalURL(" https://ci.example.com/ ", req)
+	assert.Equal(t, "https://ci.example.com", u, "configured URL wins and is trimmed")
+	assert.True(t, configured)
+
+	for _, v := range []string{"", "  ", "/"} {
+		u, configured = resolveExternalURL(v, req)
+		assert.Equal(t, "http://localhost:8080", u, "%q counts as unset", v)
+		assert.False(t, configured, "%q counts as unset", v)
+	}
 
 	req.TLS = &tls.ConnectionState{}
-	assert.Equal(t, "https://localhost:8080", resolveExternalURL("", req))
+	u, _ = resolveExternalURL("", req)
+	assert.Equal(t, "https://localhost:8080", u)
 
 	req.Header.Set("X-Forwarded-Proto", "http")
 	req.Header.Set("X-Forwarded-Host", "ci.example.com")
-	assert.Equal(t, "http://ci.example.com", resolveExternalURL("", req), "forwarded headers override the connection")
+	u, _ = resolveExternalURL("", req)
+	assert.Equal(t, "http://ci.example.com", u, "forwarded headers override the connection")
+}
+
+func TestRequestBaseURLForwardedPort(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		host    string
+		headers map[string]string
+		want    string
+	}{
+		{"port restored when the proxy strips it", "ci.example.com",
+			map[string]string{"X-Forwarded-Proto": "https", "X-Forwarded-Host": "ci.example.com", "X-Forwarded-Port": "8443"},
+			"https://ci.example.com:8443"},
+		{"port restored onto a stripped Host header", "ci.example.com",
+			map[string]string{"X-Forwarded-Port": "8080"},
+			"http://ci.example.com:8080"},
+		{"default https port omitted", "ci.example.com",
+			map[string]string{"X-Forwarded-Proto": "https", "X-Forwarded-Port": "443"},
+			"https://ci.example.com"},
+		{"default http port omitted", "ci.example.com",
+			map[string]string{"X-Forwarded-Port": "80"},
+			"http://ci.example.com"},
+		{"port already in the host wins", "ci.example.com",
+			map[string]string{"X-Forwarded-Host": "ci.example.com:9000", "X-Forwarded-Port": "8443"},
+			"http://ci.example.com:9000"},
+		{"IPv6 host", "[::1]",
+			map[string]string{"X-Forwarded-Port": "8080"},
+			"http://[::1]:8080"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/auth/oauth/x", nil)
+			req.Host = tc.host
+			for k, v := range tc.headers {
+				req.Header.Set(k, v)
+			}
+			assert.Equal(t, tc.want, requestBaseURL(req))
+		})
+	}
 }
 
 func TestGetAdminAuthSettingsIncludesExternalURL(t *testing.T) {
