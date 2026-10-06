@@ -194,8 +194,7 @@ func TestTriggerPipelineResource(t *testing.T) {
 		ID: 1, Canonical: "git.repo",
 	}, nil)
 
-	// UpdatePipelineResource is called to set LastCheck
-	s.Resources.EXPECT().Update(ctx, "main", "my-pipeline", "git.repo", gomock.Any()).Return(nil)
+	s.Resources.EXPECT().RequestCheck(ctx, "main", "my-pipeline", "git.repo", gomock.Any()).Return(nil)
 
 	err := s.S.TriggerPipelineResource(ctx, "main", "my-pipeline", "git.repo")
 	require.NoError(t, err)
@@ -372,11 +371,11 @@ func TestWebhookTrigger(t *testing.T) {
 	s.Resources.EXPECT().FindByWebhookToken(ctx, "my-token").Return(&resource.Resource{
 		ID: 1, Canonical: "git.repo",
 	}, "main", "my-pipeline", nil)
-	// TriggerPipelineResource chain: Find, Notify, Update
+	// TriggerPipelineResource chain: Find, RequestCheck, Notify
 	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").Return(&resource.Resource{
 		ID: 1, Canonical: "git.repo",
 	}, nil)
-	s.Resources.EXPECT().Update(ctx, "main", "my-pipeline", "git.repo", gomock.Any()).Return(nil)
+	s.Resources.EXPECT().RequestCheck(ctx, "main", "my-pipeline", "git.repo", gomock.Any()).Return(nil)
 
 	err := s.S.WebhookTrigger(ctx, "my-token")
 	require.NoError(t, err)
@@ -490,6 +489,21 @@ func TestTriggerPipelineResource_InvalidCanonical(t *testing.T) {
 
 	err = s.S.TriggerPipelineResource(ctx, "main", "my-pipeline", "INVALID")
 	require.Error(t, err)
+}
+
+func TestTriggerPipelineResource_RequestCheckFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().Find(ctx, "main", "my-pipeline", "git.repo").Return(&resource.Resource{
+		ID: 1, Canonical: "git.repo",
+	}, nil)
+	s.Resources.EXPECT().RequestCheck(ctx, "main", "my-pipeline", "git.repo", gomock.Any()).Return(assert.AnError)
+
+	err := s.S.TriggerPipelineResource(ctx, "main", "my-pipeline", "git.repo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to request Resource check")
 }
 
 func TestTriggerPipelineResource_ResourceNotFound(t *testing.T) {

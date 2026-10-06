@@ -3,6 +3,7 @@ package mysql_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/stretchr/testify/assert"
@@ -147,6 +148,107 @@ func TestUpdateLogs(t *testing.T) {
 	assert.Equal(t, "git@example.com:app.git", r.GetParams()["uri"])
 
 	err = rr.UpdateLogs(ctx, "main", "lg-pipe", "git.missing", "x")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestFilterDueResources_LongestWaitingFirst(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'due-pipe', 'due-pipe')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	// Inserted in id order, but the newest resource has waited longest -- the
+	// shape a busy server reaches when a pipeline is added after many others.
+	now := time.Now()
+	for _, r := range []struct {
+		name      string
+		nextCheck time.Time
+	}{
+		{"old", now.Add(-1 * time.Minute)},
+		{"mid", now.Add(-10 * time.Minute)},
+		{"newest", now.Add(-30 * time.Minute)},
+		{"future", now.Add(10 * time.Minute)}, // not due yet
+	} {
+		_, err := db.ExecContext(ctx,
+			`INSERT INTO resources (pipeline_id, name, type, canonical, tags, cache, next_check) VALUES (?, ?, 'git', ?, '', 0, ?)`,
+			ppID, r.name, "git."+r.name, r.nextCheck)
+		require.NoError(t, err)
+	}
+
+	rr := mysql.NewResourceRepository(db, mysql.Mem)
+	due, err := rr.FilterDueResources(ctx)
+	require.NoError(t, err)
+
+	var got []string
+	for _, r := range due {
+		// The in-memory database is shared across tests; ignore other pipelines.
+		if r.PipelineCanonical == "due-pipe" {
+			got = append(got, r.Canonical)
+		}
+	}
+	// Oldest next_check first, so NextWork cannot starve the resources at the
+	// end of the table when more fall due than the workers can check.
+	assert.Equal(t, []string{"git.newest", "git.mid", "git.old"}, got)
+}
+
+func TestFilterDueResources_RequestedChecksFirst(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'req-pipe', 'req-pipe')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+
+	now := time.Now()
+	for _, r := range []struct {
+		name      string
+		nextCheck time.Time
+	}{
+		{"backlog-a", now.Add(-30 * time.Minute)},
+		{"backlog-b", now.Add(-10 * time.Minute)},
+		{"hooked", now.Add(10 * time.Minute)}, // not due until a webhook asks
+	} {
+		_, err := db.ExecContext(ctx,
+			`INSERT INTO resources (pipeline_id, name, type, canonical, tags, cache, next_check) VALUES (?, ?, 'git', ?, '', 0, ?)`,
+			ppID, r.name, "git."+r.name, r.nextCheck)
+		require.NoError(t, err)
+	}
+
+	rr := mysql.NewResourceRepository(db, mysql.Mem)
+	require.NoError(t, rr.RequestCheck(ctx, "main", "req-pipe", "git.hooked", now))
+
+	canonicals := func() []string {
+		due, err := rr.FilterDueResources(ctx)
+		require.NoError(t, err)
+		var got []string
+		for _, r := range due {
+			// The in-memory database is shared across tests; ignore other pipelines.
+			if r.PipelineCanonical == "req-pipe" {
+				got = append(got, r.Canonical)
+			}
+		}
+		return got
+	}
+
+	// The requested check jumps the overdue backlog even though its next_check
+	// is the newest of the due resources.
+	assert.Equal(t, []string{"git.hooked", "git.backlog-a", "git.backlog-b"}, canonicals())
+
+	// Claiming clears the request, so the resource falls back to its schedule.
+	claimed, err := rr.ClaimResourceCheck(ctx, "main", "req-pipe", "git.hooked", now, now, now.Add(-time.Second))
+	require.NoError(t, err)
+	require.True(t, claimed)
+	assert.Equal(t, []string{"git.backlog-a", "git.backlog-b", "git.hooked"}, canonicals())
+}
+
+func TestRequestCheck_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	rr := mysql.NewResourceRepository(db, mysql.Mem)
+
+	err := rr.RequestCheck(context.Background(), "main", "nope", "git.nope", time.Now())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
