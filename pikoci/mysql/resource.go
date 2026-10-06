@@ -276,8 +276,8 @@ func (r *ResourceRepository) Filter(ctx context.Context, tc, pn string) ([]*reso
 	return resources, nil
 }
 
-// FilterDueResources returns every resource whose check is due, the one that
-// has waited longest first.
+// FilterDueResources returns every resource whose check is due: requested
+// checks first, then the one that has waited longest.
 //
 // The order is what keeps checks fair. NextWork hands a worker the first
 // claimable resource in this list, and each claim reschedules that resource a
@@ -285,6 +285,10 @@ func (r *ResourceRepository) Filter(ctx context.Context, tc, pn string) ([]*reso
 // order, so once more resources fall due each interval than the workers can
 // check, the oldest resources are rechecked forever and the newest are never
 // reached: their next_check stays in the past and they never build.
+//
+// Requested checks (webhooks, the trigger endpoint) set next_check to now, which
+// would put them behind the whole overdue backlog on exactly the server where
+// that backlog exists. check_requested lets them jump it.
 func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resource.ResourceWithPipeline, error) {
 	q := `
 		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.tags, r.cache, r.pinned_version_id,
@@ -295,7 +299,7 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 		JOIN teams AS t
 			ON p.team_id = t.id
 		WHERE r.next_check IS NOT NULL AND r.next_check <= ?
-		ORDER BY r.next_check ASC, r.id ASC
+		ORDER BY r.check_requested DESC, r.next_check ASC, r.id ASC
 	`
 	if r.system == PostgreSQL || r.system == MySQL {
 		q += " FOR UPDATE SKIP LOCKED"
@@ -352,7 +356,7 @@ func (r *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCa
 	// timestamps as strings with second precision).
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE resources AS r
-		SET last_check = ?, next_check = ?
+		SET last_check = ?, next_check = ?, check_requested = FALSE
 		FROM (
 			SELECT r.id
 			FROM resources AS r
@@ -368,6 +372,33 @@ func (r *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCa
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil
+}
+
+func (r *ResourceRepository) RequestCheck(ctx context.Context, tc, pn, rCan string, at time.Time) error {
+	res, err := r.querier.ExecContext(ctx, `
+		UPDATE resources AS r
+		SET next_check = ?, check_requested = TRUE
+		FROM (
+			SELECT r.id
+			FROM resources AS r
+			JOIN pipelines AS p
+				ON r.pipeline_id = p.id
+			JOIN teams AS t
+				ON p.team_id = t.id
+			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
+		) AS rr
+		WHERE rr.id = r.id
+	`, at, tc, pn, rCan)
+	if err != nil {
+		return fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	err = isEntityFound(res)
+	if err != nil {
+		return fmt.Errorf("failed to request resource check: %w", err)
+	}
+
+	return nil
 }
 
 func (r *ResourceRepository) CreateVersion(ctx context.Context, tc, pn, rCan string, rv resource.Version) (uint32, error) {

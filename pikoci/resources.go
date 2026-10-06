@@ -310,15 +310,15 @@ func (q *PikoCI) TriggerPipelineResource(ctx context.Context, tc, pc, rCan strin
 		return fmt.Errorf("invalid Resource Canonical format %q", rCan)
 	}
 
-	r, err := q.Resources.Find(ctx, tc, pc, rCan)
-	if err != nil {
+	if _, err := q.Resources.Find(ctx, tc, pc, rCan); err != nil {
 		return fmt.Errorf("failed to find Resource: %w", err)
 	}
 
-	// Set NextCheck to now so FilterDueResources returns it immediately.
+	// Make the resource due now and ahead of any overdue scheduled checks.
 	// NextWork will update LastCheck and NextCheck when it claims the check.
-	r.NextCheck = time.Now()
-	_ = q.UpdatePipelineResource(ctx, tc, pc, r.Canonical, *r)
+	if err := q.Resources.RequestCheck(ctx, tc, pc, rCan, time.Now()); err != nil {
+		return fmt.Errorf("failed to request Resource check: %w", err)
+	}
 
 	q.Notifier.Notify()
 

@@ -28,6 +28,10 @@ type Repository interface {
 	// returning true if this caller won the claim. Uses optimistic locking on next_check
 	// to prevent two workers from processing the same check.
 	ClaimResourceCheck(ctx context.Context, tc, pn, rCan string, prevNextCheck time.Time, newLastCheck, newNextCheck time.Time) (bool, error)
+	// RequestCheck makes a resource due at the given time and marks the check
+	// as requested, so FilterDueResources returns it ahead of scheduled checks.
+	// The mark is cleared when the check is claimed.
+	RequestCheck(ctx context.Context, tc, pn, rCan string, at time.Time) error
 	// PinVersion pins a resource to a specific version, preventing the scheduler from using newer versions.
 	PinVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error
 	// UnpinVersion removes the version pin from a resource, allowing the scheduler to use newer versions.

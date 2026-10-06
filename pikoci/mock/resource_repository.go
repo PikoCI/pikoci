@@ -223,6 +223,20 @@ func (mr *ResourceRepositoryMockRecorder) PinVersion(ctx, tc, pn, rCan, versionI
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PinVersion", reflect.TypeOf((*ResourceRepository)(nil).PinVersion), ctx, tc, pn, rCan, versionID)
 }
 
+// RequestCheck mocks base method.
+func (m *ResourceRepository) RequestCheck(ctx context.Context, tc, pn, rCan string, at time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RequestCheck", ctx, tc, pn, rCan, at)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RequestCheck indicates an expected call of RequestCheck.
+func (mr *ResourceRepositoryMockRecorder) RequestCheck(ctx, tc, pn, rCan, at any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestCheck", reflect.TypeOf((*ResourceRepository)(nil).RequestCheck), ctx, tc, pn, rCan, at)
+}
+
 // UnpinVersion mocks base method.
 func (m *ResourceRepository) UnpinVersion(ctx context.Context, tc, pn, rCan string) error {
 	m.ctrl.T.Helper()
