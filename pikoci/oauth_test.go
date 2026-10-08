@@ -877,10 +877,11 @@ func TestOAuthStateStore(t *testing.T) {
 	store := pikoci.NewOAuthStateStore(ctx)
 
 	// Set and Get
-	store.Set("state1", &pikoci.OAuthState{Nonce: "nonce1", CreatedAt: time.Now()})
+	store.Set("state1", &pikoci.OAuthState{Nonce: "nonce1", ExternalURL: "https://ci.example.com", CreatedAt: time.Now()})
 	got, ok := store.Get("state1")
 	require.True(t, ok)
 	assert.Equal(t, "nonce1", got.Nonce)
+	assert.Equal(t, "https://ci.example.com", got.ExternalURL)
 
 	// Consumed on read
 	_, ok = store.Get("state1")

@@ -24,10 +24,11 @@ import (
 
 // OAuthState stores the CSRF state for an OAuth flow.
 type OAuthState struct {
-	Nonce     string
-	UserID    uint32 // non-zero for account linking
-	Link      bool
-	CreatedAt time.Time
+	Nonce       string
+	UserID      uint32 // non-zero for account linking
+	Link        bool
+	ExternalURL string // base URL resolved when the flow started; the callback reuses it
+	CreatedAt   time.Time
 }
 
 // OAuthStateStore manages in-memory OAuth CSRF state with expiration.

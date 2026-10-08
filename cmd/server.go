@@ -164,8 +164,10 @@ var serverCmd = &cobra.Command{
 		logger.Info("initialized service")
 
 		oauthStateStore := pikoci.NewOAuthStateStore(ctx)
-		if _, ok := tshttp.NormalizeExternalURL(cfg.ExternalURL); !ok {
+		if normalizedExternalURL, ok := tshttp.NormalizeExternalURL(cfg.ExternalURL); !ok {
 			logger.Warn("external-url is not set; OAuth callback URLs will be derived from each request's host, set --external-url (EXTERNAL_URL) to the server's public URL to pin them")
+		} else if err := tshttp.ValidateExternalURL(normalizedExternalURL); err != nil {
+			return fmt.Errorf("invalid --external-url %q: %w", cfg.ExternalURL, err)
 		}
 
 		logger.Info("initializing http handlers")
