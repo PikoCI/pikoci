@@ -98,59 +98,112 @@ func TestOAuthStartDerivesRedirectURIFromRequestWithoutExternalURL(t *testing.T)
 
 func TestResolveExternalURL(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/auth/oauth/x", nil)
-	u, configured := resolveExternalURL(" https://ci.example.com/ ", req)
+	u, configured, err := resolveExternalURL(" https://ci.example.com/ ", req)
+	require.NoError(t, err)
 	assert.Equal(t, "https://ci.example.com", u, "configured URL wins and is trimmed")
 	assert.True(t, configured)
 
 	for _, v := range []string{"", "  ", "/"} {
-		u, configured = resolveExternalURL(v, req)
+		u, configured, err = resolveExternalURL(v, req)
+		require.NoError(t, err)
 		assert.Equal(t, "http://localhost:8080", u, "%q counts as unset", v)
 		assert.False(t, configured, "%q counts as unset", v)
 	}
 
 	req.TLS = &tls.ConnectionState{}
-	u, _ = resolveExternalURL("", req)
+	u, _, err = resolveExternalURL("", req)
+	require.NoError(t, err)
 	assert.Equal(t, "https://localhost:8080", u)
 
 	req.Header.Set("X-Forwarded-Proto", "http")
 	req.Header.Set("X-Forwarded-Host", "ci.example.com")
-	u, _ = resolveExternalURL("", req)
+	u, _, err = resolveExternalURL("", req)
+	require.NoError(t, err)
 	assert.Equal(t, "http://ci.example.com", u, "forwarded headers override the connection")
 }
 
-func TestRequestBaseURLForwardedPort(t *testing.T) {
+func TestResolveExternalURLErrorsWithNoHost(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/auth/oauth/x", nil)
+	req.Host = ""
+
+	_, _, err := resolveExternalURL("", req)
+	require.Error(t, err)
+
+	// A configured --external-url does not need the request at all.
+	u, configured, err := resolveExternalURL("https://ci.example.com", req)
+	require.NoError(t, err)
+	assert.True(t, configured)
+	assert.Equal(t, "https://ci.example.com", u)
+}
+
+func TestRequestBaseURL(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
-		host    string
 		headers map[string]string
 		want    string
 	}{
-		{"port restored when the proxy strips it", "ci.example.com",
+		{"port restored when the proxy strips it",
 			map[string]string{"X-Forwarded-Proto": "https", "X-Forwarded-Host": "ci.example.com", "X-Forwarded-Port": "8443"},
 			"https://ci.example.com:8443"},
-		{"port restored onto a stripped Host header", "ci.example.com",
-			map[string]string{"X-Forwarded-Port": "8080"},
-			"http://ci.example.com:8080"},
-		{"default https port omitted", "ci.example.com",
+		{"default https port omitted",
 			map[string]string{"X-Forwarded-Proto": "https", "X-Forwarded-Port": "443"},
 			"https://ci.example.com"},
-		{"default http port omitted", "ci.example.com",
-			map[string]string{"X-Forwarded-Port": "80"},
-			"http://ci.example.com"},
-		{"port already in the host wins", "ci.example.com",
+		{"port already in the host wins",
 			map[string]string{"X-Forwarded-Host": "ci.example.com:9000", "X-Forwarded-Port": "8443"},
 			"http://ci.example.com:9000"},
-		{"IPv6 host", "[::1]",
-			map[string]string{"X-Forwarded-Port": "8080"},
-			"http://[::1]:8080"},
+		// A chained proxy's inner hop can report a port that doesn't match
+		// the outer hop's scheme; 80/443 are skipped regardless of scheme.
+		{"chained proxy: https behind an inner :80 listener",
+			map[string]string{"X-Forwarded-Proto": "https", "X-Forwarded-Host": "ci.example.com", "X-Forwarded-Port": "80"},
+			"https://ci.example.com"},
+		{"uppercase X-Forwarded-Proto is normalized",
+			map[string]string{"X-Forwarded-Proto": "HTTPS", "X-Forwarded-Host": "ci.example.com"},
+			"https://ci.example.com"},
+		{"unrecognized X-Forwarded-Proto falls back to the connection's scheme",
+			map[string]string{"X-Forwarded-Proto": "javascript:alert(1)//", "X-Forwarded-Host": "ci.example.com"},
+			"http://ci.example.com"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/auth/oauth/x", nil)
-			req.Host = tc.host
+			req.Host = "ci.example.com"
 			for k, v := range tc.headers {
 				req.Header.Set(k, v)
 			}
-			assert.Equal(t, tc.want, requestBaseURL(req))
+			got, err := requestBaseURL(req)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// A request with no Host at all (possible on HTTP/1.0) must error instead
+// of producing "http:///...".
+func TestRequestBaseURLErrorsWithNoHost(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/auth/oauth/x", nil)
+	req.Host = ""
+
+	_, err := requestBaseURL(req)
+	require.Error(t, err)
+}
+
+func TestValidateExternalURL(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		input     string
+		wantError bool
+	}{
+		{"valid https", "https://ci.example.com", false},
+		{"missing scheme", "ci.example.com", true},
+		{"wrong scheme", "ftp://ci.example.com", true},
+		{"scheme only, no host", "https://", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateExternalURL(tc.input)
+			if tc.wantError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }

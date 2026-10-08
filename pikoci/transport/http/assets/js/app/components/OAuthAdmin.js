@@ -70,7 +70,7 @@ export function OAuthAdmin() {
         address each login request arrives on (currently <code>${settings.external_url}</code>). That works
         as long as everyone reaches the server the same way; if it is reachable under more than one
         hostname or sits behind a proxy that does not forward the original host, start it with
-        <code>--external-url ${window.location.origin}</code> (or <code>EXTERNAL_URL=${window.location.origin}</code>).
+        <code>--external-url ${settings.external_url}</code> (or <code>EXTERNAL_URL=${settings.external_url}</code>).
       </div>
     ` : null}
 
