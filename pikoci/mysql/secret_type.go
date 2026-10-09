@@ -95,15 +95,14 @@ func (r *SecretTypeRepository) Update(ctx context.Context, tc, pn, stn string, s
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE secret_types
 		SET name = ?, source = ?, get = ?, params = ?, config = ?, runner = ?
-		WHERE id = (
-			SELECT st.id
-			FROM (SELECT * FROM secret_types) AS st
-			JOIN pipelines AS p
-				ON st.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND st.name = ?
+			WHERE t.canonical = ? AND p.canonical = ?
 		)
+			AND name = ?
 	`, dbst.Name, dbst.Source, dbst.Get, dbst.Params, dbst.Config, dbst.Runner, tc, pn, stn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)

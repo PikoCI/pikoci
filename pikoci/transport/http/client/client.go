@@ -978,7 +978,14 @@ func (cl *Client) CreateResourceVersion(ctx context.Context, tc, pn, rCan string
 func (cl *Client) ListResourceVersions(ctx context.Context, tc, pn, rCan string, before *uint32, after *uint32, limit uint32) ([]*resource.Version, bool, error) {
 	var resp thttp.ListResourceVersionsResponse
 
-	err := cl.Request(ctx, http.MethodGet, fmt.Sprintf("%s/teams/%s/pipelines/%s/resources/%s/versions?limit=0", cl.url, tc, pn, rCan), nil, &resp)
+	u := fmt.Sprintf("%s/teams/%s/pipelines/%s/resources/%s/versions?limit=%d", cl.url, tc, pn, rCan, limit)
+	if before != nil {
+		u += fmt.Sprintf("&before=%d", *before)
+	}
+	if after != nil {
+		u += fmt.Sprintf("&after=%d", *after)
+	}
+	err := cl.Request(ctx, http.MethodGet, u, nil, &resp)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to make request: %w", err)
 	}

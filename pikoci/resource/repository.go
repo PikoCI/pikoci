@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -26,12 +27,21 @@ type Repository interface {
 	FilterDueResources(ctx context.Context) ([]*ResourceWithPipeline, error)
 	// ClaimResourceCheck atomically updates a due resource's LastCheck and NextCheck,
 	// returning true if this caller won the claim. Uses optimistic locking on next_check
-	// to prevent two workers from processing the same check.
-	ClaimResourceCheck(ctx context.Context, tc, pn, rCan string, prevNextCheck time.Time, newLastCheck, newNextCheck time.Time) (bool, error)
+	// to prevent two workers from processing the same check. The claim only
+	// succeeds while the resource's retrigger version still equals
+	// retriggerVersionID (as read by FilterDueResources), and clears it, so a
+	// re-trigger request is handed to exactly one worker.
+	ClaimResourceCheck(ctx context.Context, tc, pn, rCan string, prevNextCheck time.Time, newLastCheck, newNextCheck time.Time, retriggerVersionID uint32) (bool, error)
 	// RequestCheck makes a resource due at the given time and marks the check
 	// as requested, so FilterDueResources returns it ahead of scheduled checks.
 	// The mark is cleared when the check is claimed.
 	RequestCheck(ctx context.Context, tc, pn, rCan string, at time.Time) error
+	// RequestRetrigger is RequestCheck for a manual re-trigger of versionID:
+	// the worker that claims the check runs the on_trigger hooks and creates
+	// the builds for that version, then runs the check. It returns
+	// ErrRetriggerPending while a different version is still waiting for a
+	// worker; asking again for the same version is a no-op.
+	RequestRetrigger(ctx context.Context, tc, pn, rCan string, versionID uint32, at time.Time) error
 	// PinVersion pins a resource to a specific version, preventing the scheduler from using newer versions.
 	PinVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error
 	// UnpinVersion removes the version pin from a resource, allowing the scheduler to use newer versions.
@@ -52,8 +62,14 @@ type Repository interface {
 }
 
 // ResourceWithPipeline embeds a Resource along with its owning team and pipeline canonicals.
+// ErrRetriggerPending is returned by RequestRetrigger while another version
+// of the resource is still waiting to be re-triggered by a worker.
+var ErrRetriggerPending = errors.New("another version of this resource is already waiting to be re-triggered, try again once it has started")
+
 type ResourceWithPipeline struct {
 	Resource
 	TeamCanonical     string
 	PipelineCanonical string
+	// RetriggerVersionID is the version a manual re-trigger asked for, or 0.
+	RetriggerVersionID uint32
 }

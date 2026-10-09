@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -734,6 +735,36 @@ func TestListResourceVersions(t *testing.T) {
 	assert.Len(t, versions, 1)
 }
 
+func TestListResourceVersions_PassesPagination(t *testing.T) {
+	// The worker's manual re-trigger looks a version up with before/limit;
+	// a client that drops them hands it the newest version instead.
+	var got url.Values
+	r := mux.NewRouter()
+	r.HandleFunc("/teams/{tc}/pipelines/{pn}/resources/{rCan}/versions", func(w http.ResponseWriter, req *http.Request) {
+		got = req.URL.Query()
+		jsonHandler(w, thttp.ListResourceVersionsResponse{})
+	}).Methods("GET")
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c, err := client.New(ts.URL, "jwt")
+	require.NoError(t, err)
+
+	before := uint32(41)
+	_, _, err = c.ListResourceVersions(context.Background(), "team", "pipe", "res1", &before, nil, 1)
+	require.NoError(t, err)
+	assert.Equal(t, "41", got.Get("before"))
+	assert.Equal(t, "1", got.Get("limit"))
+	assert.Empty(t, got.Get("after"))
+
+	after := uint32(7)
+	_, _, err = c.ListResourceVersions(context.Background(), "team", "pipe", "res1", nil, &after, 0)
+	require.NoError(t, err)
+	assert.Equal(t, "7", got.Get("after"))
+	assert.Equal(t, "0", got.Get("limit"), "limit 0 still means all versions")
+	assert.Empty(t, got.Get("before"))
+}
+
 func TestGetPipelineResource(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/teams/{tc}/pipelines/{pn}/resources/{rCan}", func(w http.ResponseWriter, req *http.Request) {
@@ -1189,26 +1220,6 @@ func TestTriggerResourceVersion(t *testing.T) {
 
 	err = c.TriggerResourceVersion(context.Background(), "team", "pipe", "res1", 42)
 	require.NoError(t, err)
-}
-
-func TestFireTriggerNotifications(t *testing.T) {
-	r := mux.NewRouter()
-	r.HandleFunc("/teams/{tc}/pipelines/{pc}/trigger-notifications", func(w http.ResponseWriter, req *http.Request) {
-		assert.Equal(t, "team", mux.Vars(req)["tc"])
-		assert.Equal(t, "pipe", mux.Vars(req)["pc"])
-		var got thttp.FireTriggerNotificationsRequest
-		json.NewDecoder(req.Body).Decode(&got)
-		assert.Equal(t, "git.repo", got.TriggeringResourceCanonical)
-		jsonHandler(w, thttp.FireTriggerNotificationsResponse{})
-	}).Methods("POST")
-	ts := httptest.NewServer(r)
-	defer ts.Close()
-
-	c, err := client.New(ts.URL, "jwt")
-	require.NoError(t, err)
-
-	// FireTriggerNotifications is fire-and-forget: no return value to assert.
-	c.FireTriggerNotifications(context.Background(), "team", "pipe", "git.repo", map[string]interface{}{"ref": "abc"})
 }
 
 func TestWebhookTrigger(t *testing.T) {

@@ -522,7 +522,9 @@ To include multiline content (like a changelog), write it to `$PIKOCI_OUTPUT` wi
 
 ## on_trigger
 
-The `on_trigger` hook fires **before any builds are created** when a resource version is detected. It fires for every job transitively reachable from the triggering resource (direct trigger jobs and downstream jobs linked via `passed` constraints).
+The `on_trigger` hook fires **before any builds are created** when a resource version is detected, or when a version is re-triggered manually from the UI. It fires for every job transitively reachable from the triggering resource (direct trigger jobs and downstream jobs linked via `passed` constraints).
+
+The hooks run on the worker that found the version (or that picked up the manual re-trigger), so secret-backed params such as a `github-check` private key are resolved and masked exactly as in a build. Hooks of different jobs run in parallel, each with its own `$WORKDIR`, and hooks of paused jobs are skipped. A hook that fails is logged by that worker and does not stop the builds from being created.
 
 Use `on_trigger` to report a `queued` status to external systems immediately when a commit is detected:
 
@@ -551,7 +553,7 @@ job "test" {
 
 ### on_trigger environment variables
 
-`on_trigger` runs outside of any build context. There is no `$BUILD_NUMBER`, no `$WORKDIR`, and no get/task step outputs. The following variables are available:
+`on_trigger` runs outside of any build context. `$BUILD_NUMBER` is set but empty (scripts can detect the context with `test -z "$BUILD_NUMBER"`), `$WORKDIR` is an empty scratch directory removed afterwards, and there are no get/task step outputs. The following variables are available:
 
 | Variable | Description |
 |----------|-------------|
@@ -561,16 +563,17 @@ job "test" {
 | `$param_*` | Notification-level parameters (from `notification` block's `params`) |
 | `$notify_*` | Step-level parameters (from `notify` step attributes) |
 | `$version_<key>` | Version metadata from the triggering resource (e.g. `$version_ref` for a git commit SHA) |
+| `$NOTIFY_MESSAGE` | The notify step's or notification's `message`, expanded |
 
 ### Guidance for notification type authors
 
-If your notification type script needs a commit SHA (e.g. for `github-check`'s `head_sha`), use `$version_ref` rather than `git rev-parse HEAD`. There is no working directory in `on_trigger` context:
+If your notification type script needs a commit SHA (e.g. for `github-check`'s `head_sha`), use `$version_ref` rather than `git rev-parse HEAD`. Nothing is checked out in `on_trigger` context:
 
 ```sh
 # in_progress (inside a build): HEAD is checked out in $WORKDIR
 HEAD_SHA=$(git -C "$WORKDIR" rev-parse HEAD)
 
-# on_trigger (no WORKDIR): use the version metadata directly
+# on_trigger (nothing checked out): use the version metadata directly
 HEAD_SHA="${notify_head_sha:-$version_ref}"
 ```
 

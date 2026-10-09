@@ -363,20 +363,18 @@ func (r *BuildRepository) FilterSummary(ctx context.Context, tc, pn, jn string, 
 func (r *BuildRepository) Update(ctx context.Context, tc, pn, jn string, buildNumber string, b build.Build) error {
 	dbb := newDBBuild(b)
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE builds AS b
+		UPDATE builds
 		SET steps = ?, job = ?, status = ?, error = ?, started_at = ?, duration = ?, version_id = ?, resource_canonical = ?, input_values = ?
-		FROM (
-			SELECT b.id
-			FROM builds AS b
-			JOIN jobs AS j
-				ON b.job_id = j.id
+		WHERE job_id = (
+			SELECT j.id
+			FROM jobs AS j
 			JOIN pipelines AS p
 				ON j.pipeline_id = p.id
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ? AND b.build_number = ?
-		) AS bb
-		WHERE bb.id = b.id
+			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
+		)
+			AND build_number = ?
 	`, dbb.Steps, dbb.Job, dbb.Status, dbb.Error, dbb.StartedAt, dbb.Duration, dbb.VersionID, dbb.ResourceCanonical, dbb.InputValues, tc, pn, jn, buildNumber)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)

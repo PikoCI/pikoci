@@ -97,14 +97,7 @@ func New(host string, port int, user, password string, ops Options) (*sql.DB, er
 		db, err = sql.Open("postgres", dsn)
 	case MySQL:
 		// MySQL/MariaDB. Foreign keys are enforced by default with InnoDB.
-		// clientFoundRows: UPDATE returns rows matched instead of rows changed (needed for isEntityFound).
-		// parseTime: scan DATE/DATETIME into time.Time.
-		// multiStatements: allow multiple SQL statements in one Exec (needed for migrations).
-		dsn := fmt.Sprintf(
-			"%s:%s@tcp(%s:%d)/%s?clientFoundRows=%t&parseTime=%t&multiStatements=%t",
-			user, password, host, port, ops.DBName, ops.ClientFoundRows, ops.ParseTime, ops.MultiStatements,
-		)
-		db, err = sql.Open("mysql", dsn)
+		db, err = sql.Open("mysql", mysqlDSN(host, port, user, password, ops.DBName, ops))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to the database: %w", err)
@@ -117,12 +110,7 @@ func New(host string, port int, user, password string, ops Options) (*sql.DB, er
 			// and we create the DB and then "retry"
 			var sqlerr *mysql.MySQLError
 			if errors.As(err, &sqlerr) && sqlerr.Number == mysqlerr.ER_BAD_DB_ERROR {
-				ndns := fmt.Sprintf(
-					"%s:%s@tcp(%s:%d)/%s?clientFoundRows=%t&parseTime=%t&multiStatements=%t",
-					user, password, host, port, "", ops.ClientFoundRows, ops.ParseTime, ops.MultiStatements,
-				)
-
-				ndb, err := sql.Open("mysql", ndns)
+				ndb, err := sql.Open("mysql", mysqlDSN(host, port, user, password, "", ops))
 				if err != nil {
 					return nil, fmt.Errorf("could not connect to the MySQL database to create database: %w", err)
 				}
@@ -200,12 +188,24 @@ type Options struct {
 	DBName string
 	// ClientFoundRows makes UPDATE return matched rows instead of changed rows (MySQL).
 	ClientFoundRows bool
-	// ParseTime enables scanning DATE/DATETIME columns into time.Time (MySQL).
-	ParseTime bool
 	// MultiStatements allows multiple SQL statements in a single Exec call.
 	MultiStatements bool
 	// System identifies the database backend (Mem, MySQL, SQLite, or PostgreSQL).
 	System string
 	// DBFile is the file path for the SQLite database (required when System is SQLite).
 	DBFile string
+}
+
+// mysqlDSN builds the MySQL/MariaDB connection string:
+//   - clientFoundRows: UPDATE returns rows matched instead of rows changed
+//     (needed for isEntityFound).
+//   - parseTime: scan DATE/DATETIME into time.Time, which every repository
+//     relies on (time.Time / sql.NullTime fields); always on.
+//   - multiStatements: allow multiple SQL statements in one Exec (needed for
+//     migrations).
+func mysqlDSN(host string, port int, user, password, dbName string, ops Options) string {
+	return fmt.Sprintf(
+		"%s:%s@tcp(%s:%d)/%s?clientFoundRows=%t&parseTime=true&multiStatements=%t",
+		user, password, host, port, dbName, ops.ClientFoundRows, ops.MultiStatements,
+	)
 }

@@ -88,18 +88,16 @@ func (r *NotificationTypeRepository) Create(ctx context.Context, tc, pn string, 
 func (r *NotificationTypeRepository) Update(ctx context.Context, tc, pn, tn string, nt notiftype.NotificationType) error {
 	dbnt := newDBNotificationType(nt)
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE notification_types AS nt
+		UPDATE notification_types
 		SET name = ?, source = ?, notify = ?, params = ?, runner = ?
-		FROM (
-			SELECT nt.id
-			FROM notification_types AS nt
-			JOIN pipelines AS p
-				ON nt.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND nt.name = ?
-		) AS ntt
-		WHERE ntt.id = nt.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND name = ?
 	`, dbnt.Name, dbnt.Source, dbnt.Notify, dbnt.Params, dbnt.Runner, tc, pn, tn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)

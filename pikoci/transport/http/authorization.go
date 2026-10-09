@@ -76,7 +76,6 @@ var (
 		CreateTrigger:          requireRole(role.Maintain),
 
 		// Worker-internal routes (bypassed by isFromWorker JWT)
-		FireTriggerNotifications:       requireRole(role.Maintain),
 		CreateJobBuild:                 requireRole(role.Maintain),
 		CreateRetryJobBuild:            requireRole(role.Maintain),
 		UpdateJobBuild:                 requireRole(role.Maintain),
@@ -187,7 +186,6 @@ var (
 
 		// Triggers.
 		CreateTrigger:            true,
-		FireTriggerNotifications: true,
 
 		// Resolved values for the build. Listed in workerScopedRoutes too, so
 		// reaching it takes a team-scoped token whose salt is still current.

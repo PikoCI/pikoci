@@ -2159,6 +2159,12 @@ func (w *Worker) processResourceCheck(ctx context.Context, m workitem.Body, cwd 
 		return
 	}
 
+	// A manual re-trigger rides on a check claim, which also consumed any
+	// check a webhook or schedule asked for, so run the check after it.
+	if m.VersionID != 0 {
+		w.processResourceRetrigger(ctx, m, pp, r)
+	}
+
 	if rt.Source == "pikoci://trigger" {
 		w.processResourceCheckTrigger(ctx, m, pp, r)
 		return
@@ -2377,7 +2383,7 @@ func (w *Worker) triggerResourceJobs(ctx context.Context, m workitem.Body, pp *p
 	}
 
 	// Fire on_trigger notifications synchronously before any builds are created.
-	w.pikoci.FireTriggerNotifications(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, cv.Version)
+	w.runOnTriggerHooks(ctx, m, pp, r.Canonical, cv.Version)
 
 	for _, j := range pp.Jobs {
 		if j.Paused {
@@ -2417,6 +2423,170 @@ func (w *Worker) triggerResourceJobs(ctx context.Context, m workitem.Body, pp *p
 					"pipeline", pp.Canonical, "job", j.Name, "resource", r.Canonical,
 					"version_id", cv.ID, "step", g.Name, "build_id", nb.ID)
 			}
+		}
+	}
+}
+
+// runOnTriggerHooks runs the on_trigger notify hooks of every unpaused job
+// reachable from rCan, before any build for the new version exists, so
+// external systems see "queued" before "in_progress". The hooks run here
+// rather than on the server because only a worker can resolve secret-backed
+// params. They run in parallel, each in its own work dir, and a failing hook
+// is logged and never stops the builds from being created.
+func (w *Worker) runOnTriggerHooks(ctx context.Context, m workitem.Body, pp *pipeline.Pipeline, rCan string, versionMeta map[string]interface{}) {
+	if len(pp.Raw) == 0 {
+		return
+	}
+	// on_trigger blocks are not stored in the DB, so re-parse the raw HCL.
+	parsed, err := pikoci.ReadPipeline(ctx, pp.Raw, nil)
+	if err != nil {
+		w.logger.Warn("on_trigger: failed to parse pipeline HCL", "pipeline", m.PipelineCanonical, "error", err)
+		return
+	}
+
+	// Paused is runtime state kept in the DB, not in the HCL. A paused job
+	// gets no build, so announcing one as queued would never resolve.
+	paused := make(map[string]bool)
+	for _, j := range pp.Jobs {
+		if j.Paused {
+			paused[j.Name] = true
+		}
+	}
+
+	type hook struct {
+		jobName string
+		notify  job.NotifyStep
+	}
+	var hooks []hook
+	for _, j := range pikoci.ReachableJobs(parsed, rCan) {
+		if paused[j.Name] {
+			continue
+		}
+		for _, ps := range j.OnTrigger {
+			if ps.Type == job.StepTypeNotify && ps.Notify != nil {
+				hooks = append(hooks, hook{jobName: j.Name, notify: *ps.Notify})
+			}
+		}
+	}
+	if len(hooks) == 0 {
+		return
+	}
+
+	cwd, err := w.createWorkDir()
+	if err != nil {
+		w.logger.Warn("on_trigger: failed to create work dir", "error", err)
+		return
+	}
+	defer os.RemoveAll(cwd)
+
+	resolved, unmasked, err := w.resolveSecretVars(ctx, cwd, m.TeamCanonical, pp)
+	if err != nil {
+		w.logger.Warn("on_trigger: failed to resolve secrets, skipping hooks",
+			"pipeline", m.PipelineCanonical, "resource", rCan, "error", err)
+		return
+	}
+	secretVals := secretValuesFromResolved(resolved, unmasked)
+
+	// Same flattening as get and check steps, so $version_* match.
+	versionParams := make(map[string]string, len(versionMeta))
+	for k, v := range versionMeta {
+		flattenVersionValue(versionParams, "version_"+k, v)
+	}
+
+	var wg sync.WaitGroup
+	for _, h := range hooks {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Own dir per hook: scripts like github-check write files to
+			// $WORKDIR and would clobber each other in a shared one.
+			hookCwd, err := os.MkdirTemp(cwd, "hook-")
+			if err != nil {
+				w.logger.Warn("on_trigger: failed to create hook dir", "job", h.jobName, "error", err)
+				return
+			}
+			hm := m
+			hm.JobName = h.jobName
+			hm.BuildID = 0
+			n := h.notify
+			// Hook steps carry no timeout, attempts or nested hooks, so a bare
+			// plan step is all runNotifyStep needs (as in runHooks).
+			ps := job.PlanStep{Type: job.StepTypeNotify, Notify: &n}
+			// There is no build yet: SuppressUpdates keeps runNotifyStep from
+			// persisting anything, and BUILD_NUMBER stays empty.
+			b := &build.Build{SuppressUpdates: true}
+			if failed := w.runNotifyStep(ctx, hm, b, hookCwd, pp, n, ps, versionParams, secretVals, resolved); failed {
+				var logs string
+				if len(b.Steps) > 0 {
+					logs = b.Steps[len(b.Steps)-1].Logs
+				}
+				w.logger.Warn("on_trigger hook failed",
+					"pipeline", m.PipelineCanonical, "job", h.jobName,
+					"notification", n.NotificationCanonical(), "logs", logs)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// processResourceRetrigger handles a manual re-trigger of a resource version
+// (TriggerResourceVersion): it fires the on_trigger hooks and then creates a
+// pending build with that version for every job that gets the resource
+// without passed constraints, whether or not the get has trigger = true.
+func (w *Worker) processResourceRetrigger(ctx context.Context, m workitem.Body, pp *pipeline.Pipeline, r resource.Resource) {
+	// The newest version below VersionID+1 is VersionID itself if it belongs
+	// to this resource.
+	before := m.VersionID + 1
+	vers, _, err := w.pikoci.ListResourceVersions(ctx, m.TeamCanonical, m.PipelineCanonical, r.Canonical, &before, nil, 1)
+	if err != nil {
+		w.logger.Error("re-trigger: failed to list resource versions", "resource", r.Canonical, "error", err)
+		return
+	}
+	// Match by ID rather than trusting the order or the limit, so a server
+	// that returns more than asked still resolves the right version.
+	var cv *resource.Version
+	for _, v := range vers {
+		if v.ID == m.VersionID {
+			cv = v
+			break
+		}
+	}
+	if cv == nil {
+		w.logger.Error("re-trigger: version not found", "resource", r.Canonical, "version_id", m.VersionID)
+		return
+	}
+
+	w.runOnTriggerHooks(ctx, m, pp, r.Canonical, cv.Version)
+
+	for _, j := range pp.Jobs {
+		if j.Paused {
+			continue
+		}
+		for _, ps := range j.FlatPlanSteps() {
+			if ps.Type != job.StepTypeGet || ps.Get == nil {
+				continue
+			}
+			if ps.Get.ResourceCanonical() != r.Canonical || len(ps.Get.Passed) != 0 {
+				continue
+			}
+			var err error
+			for attempt := range 3 {
+				_, err = w.pikoci.CreateJobBuild(ctx, m.TeamCanonical, m.PipelineCanonical, j.Name, build.Build{
+					Status:            build.Pending,
+					VersionID:         cv.ID,
+					ResourceCanonical: r.Canonical,
+				})
+				if err == nil {
+					break
+				}
+				if attempt < 2 {
+					time.Sleep(50 * time.Millisecond)
+				}
+			}
+			if err != nil {
+				w.logger.Error("re-trigger: failed to create pending build", "job", j.Name, "error", err)
+			}
+			break // only trigger once per job
 		}
 	}
 }

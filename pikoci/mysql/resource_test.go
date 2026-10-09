@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pikoci/pikoci/pikoci/mysql"
+	"github.com/pikoci/pikoci/pikoci/resource"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -238,10 +239,106 @@ func TestFilterDueResources_RequestedChecksFirst(t *testing.T) {
 	assert.Equal(t, []string{"git.hooked", "git.backlog-a", "git.backlog-b"}, canonicals())
 
 	// Claiming clears the request, so the resource falls back to its schedule.
-	claimed, err := rr.ClaimResourceCheck(ctx, "main", "req-pipe", "git.hooked", now, now, now.Add(-time.Second))
+	claimed, err := rr.ClaimResourceCheck(ctx, "main", "req-pipe", "git.hooked", now, now, now.Add(-time.Second), 0)
 	require.NoError(t, err)
 	require.True(t, claimed)
 	assert.Equal(t, []string{"git.backlog-a", "git.backlog-b", "git.hooked"}, canonicals())
+}
+
+func TestRequestRetrigger_ClaimHandsVersionOutOnce(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'retrig-pipe', 'retrig-pipe')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+	now := time.Now()
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO resources (pipeline_id, name, type, canonical, tags, cache, next_check) VALUES (?, 'repo', 'git', 'git.repo', '', 0, ?)`,
+		ppID, now.Add(time.Hour))
+	require.NoError(t, err)
+
+	rr := mysql.NewResourceRepository(db, mysql.Mem)
+	due := func() []uint32 {
+		all, err := rr.FilterDueResources(ctx)
+		require.NoError(t, err)
+		var got []uint32
+		for _, r := range all {
+			// The in-memory database is shared across tests; ignore other pipelines.
+			if r.PipelineCanonical == "retrig-pipe" {
+				got = append(got, r.RetriggerVersionID)
+			}
+		}
+		return got
+	}
+	require.Empty(t, due(), "not due before the re-trigger request")
+
+	require.NoError(t, rr.RequestRetrigger(ctx, "main", "retrig-pipe", "git.repo", 7, now))
+	assert.Equal(t, []uint32{7}, due(), "the request makes the resource due and carries the version")
+
+	// A claim that read a different version (a newer click replaced it) loses
+	// and leaves the request in place.
+	claimed, err := rr.ClaimResourceCheck(ctx, "main", "retrig-pipe", "git.repo", now, now, now.Add(time.Hour), 3)
+	require.NoError(t, err)
+	assert.False(t, claimed)
+	assert.Equal(t, []uint32{7}, due())
+
+	claimed, err = rr.ClaimResourceCheck(ctx, "main", "retrig-pipe", "git.repo", now, now, now.Add(time.Hour), 7)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	assert.Empty(t, due(), "the claim clears the request")
+
+	// A second worker racing with the same read loses.
+	claimed, err = rr.ClaimResourceCheck(ctx, "main", "retrig-pipe", "git.repo", now, now, now.Add(time.Hour), 7)
+	require.NoError(t, err)
+	assert.False(t, claimed)
+}
+
+func TestRequestRetrigger_RefusesSecondVersionWhilePending(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	res, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'retrig2-pipe', 'retrig2-pipe')`)
+	require.NoError(t, err)
+	ppID, _ := res.LastInsertId()
+	now := time.Now()
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO resources (pipeline_id, name, type, canonical, tags, cache, next_check) VALUES (?, 'repo', 'git', 'git.repo', '', 0, ?)`,
+		ppID, now.Add(time.Hour))
+	require.NoError(t, err)
+
+	rr := mysql.NewResourceRepository(db, mysql.Mem)
+	require.NoError(t, rr.RequestRetrigger(ctx, "main", "retrig2-pipe", "git.repo", 10, now))
+
+	// Same version again (double click): fine, nothing changes.
+	require.NoError(t, rr.RequestRetrigger(ctx, "main", "retrig2-pipe", "git.repo", 10, now))
+
+	// A different version while 10 waits would silently replace it: refused.
+	err = rr.RequestRetrigger(ctx, "main", "retrig2-pipe", "git.repo", 12, now)
+	require.ErrorIs(t, err, resource.ErrRetriggerPending)
+
+	due, err := rr.FilterDueResources(ctx)
+	require.NoError(t, err)
+	for _, r := range due {
+		if r.PipelineCanonical == "retrig2-pipe" {
+			assert.Equal(t, uint32(10), r.RetriggerVersionID, "the first request is kept")
+		}
+	}
+
+	// Once a worker has claimed 10, the next version is accepted.
+	claimed, err := rr.ClaimResourceCheck(ctx, "main", "retrig2-pipe", "git.repo", now, now, now.Add(time.Hour), 10)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	require.NoError(t, rr.RequestRetrigger(ctx, "main", "retrig2-pipe", "git.repo", 12, now))
+}
+
+func TestRequestRetrigger_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	rr := mysql.NewResourceRepository(db, mysql.Mem)
+
+	err := rr.RequestRetrigger(context.Background(), "main", "nope", "git.nope", 1, time.Now())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
 }
 
 func TestRequestCheck_NotFound(t *testing.T) {

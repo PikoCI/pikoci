@@ -5,6 +5,7 @@ package backends_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -176,6 +177,45 @@ func TestDBBackends(t *testing.T) {
 				versions, err := rr.FilterVersions(ctx, "main", "test-pipeline", "git-test-resource", nil, nil, 0)
 				require.NoError(t, err)
 				assert.Len(t, versions, 1)
+			})
+
+			t.Run("ResourceRetrigger", func(t *testing.T) {
+				// Manual re-trigger (#707): request, refusal of a second
+				// version, and the claim that hands it to one worker. The
+				// column is read back with a plain query (no time columns).
+				rr := mysql.NewResourceRepository(setup.querier, system)
+				retriggerVersion := func() uint32 {
+					var v uint32
+					err := setup.querier.QueryRowContext(ctx, `
+						SELECT r.retrigger_version_id
+						FROM resources AS r
+						JOIN pipelines AS p ON r.pipeline_id = p.id
+						WHERE p.canonical = ? AND r.canonical = ?`,
+						"test-pipeline", "git-test-resource").Scan(&v)
+					require.NoError(t, err)
+					return v
+				}
+				require.Zero(t, retriggerVersion())
+
+				now := time.Now()
+				require.NoError(t, rr.RequestRetrigger(ctx, "main", "test-pipeline", "git-test-resource", 10, now))
+				require.NoError(t, rr.RequestRetrigger(ctx, "main", "test-pipeline", "git-test-resource", 10, now), "same version again is a no-op")
+				require.ErrorIs(t, rr.RequestRetrigger(ctx, "main", "test-pipeline", "git-test-resource", 12, now), resource.ErrRetriggerPending)
+				assert.Equal(t, uint32(10), retriggerVersion())
+
+				claimed, err := rr.ClaimResourceCheck(ctx, "main", "test-pipeline", "git-test-resource", now.Add(time.Second), now, now.Add(time.Hour), 12)
+				require.NoError(t, err)
+				assert.False(t, claimed, "a claim that read another version must lose")
+				assert.Equal(t, uint32(10), retriggerVersion())
+
+				claimed, err = rr.ClaimResourceCheck(ctx, "main", "test-pipeline", "git-test-resource", now.Add(time.Second), now, now.Add(time.Hour), 10)
+				require.NoError(t, err)
+				assert.True(t, claimed)
+				assert.Zero(t, retriggerVersion(), "the claim clears the request")
+
+				err = rr.RequestRetrigger(ctx, "main", "nope", "git-test-resource", 1, now)
+				require.Error(t, err)
+				assert.NotErrorIs(t, err, resource.ErrRetriggerPending, "a missing resource is not a pending re-trigger")
 			})
 
 			t.Run("BuildRepository", func(t *testing.T) {

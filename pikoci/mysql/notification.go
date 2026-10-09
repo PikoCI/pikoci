@@ -93,18 +93,16 @@ func (r *NotificationRepository) Create(ctx context.Context, tc, pn string, n no
 func (r *NotificationRepository) Update(ctx context.Context, tc, pn, nCan string, n notification.Notification) error {
 	dbn := newDBNotification(n)
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE notifications AS n
+		UPDATE notifications
 		SET type = ?, name = ?, canonical = ?, params = ?, message = ?, on_events = ?, jobs = ?, exclude_jobs = ?
-		FROM (
-			SELECT n.id
-			FROM notifications AS n
-			JOIN pipelines AS p
-				ON n.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND n.canonical = ?
-		) AS nn
-		WHERE nn.id = n.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
 	`, dbn.Type, dbn.Name, dbn.Canonical, dbn.Params, dbn.Message, dbn.OnEvents, dbn.Jobs, dbn.ExcludeJobs, tc, pn, nCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)

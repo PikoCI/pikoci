@@ -142,18 +142,16 @@ func (r *ResourceRepository) Create(ctx context.Context, tc, pn string, rs resou
 func (r *ResourceRepository) Update(ctx context.Context, tc, pn, rCan string, rs resource.Resource) error {
 	dbrs := newDBResource(rs)
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resources AS r
+		UPDATE resources
 		SET name = ?, type = ?, canonical = ?, params = ?, check_interval = ?, logs = ?, last_check = ?, next_check = ?, webhook_token = ?, tags = ?, cache = ?
-		FROM (
-			SELECT r.id
-			FROM resources AS r
-			JOIN pipelines AS p
-				ON r.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-		) AS rr
-		WHERE rr.id = r.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
 	`, dbrs.Name, dbrs.Type, dbrs.Canonical, dbrs.Params, dbrs.CheckInterval, dbrs.Logs, dbrs.LastCheck, dbrs.NextCheck, dbrs.WebhookToken, dbrs.Tags, dbrs.Cache, tc, pn, rCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -169,18 +167,16 @@ func (r *ResourceRepository) Update(ctx context.Context, tc, pn, rCan string, rs
 
 func (r *ResourceRepository) UpdateLogs(ctx context.Context, tc, pn, rCan, logs string) error {
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resources AS r
+		UPDATE resources
 		SET logs = ?
-		FROM (
-			SELECT r.id
-			FROM resources AS r
-			JOIN pipelines AS p
-				ON r.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-		) AS rr
-		WHERE rr.id = r.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
 	`, logs, tc, pn, rCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -292,7 +288,7 @@ func (r *ResourceRepository) Filter(ctx context.Context, tc, pn string) ([]*reso
 func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resource.ResourceWithPipeline, error) {
 	q := `
 		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.tags, r.cache, r.pinned_version_id,
-			t.canonical, p.canonical
+			r.retrigger_version_id, t.canonical, p.canonical
 		FROM resources AS r
 		JOIN pipelines AS p
 			ON r.pipeline_id = p.id
@@ -315,6 +311,7 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 	for rows.Next() {
 		var (
 			dbr dbResource
+			rvi uint32
 			tc  sql.NullString
 			pn  sql.NullString
 		)
@@ -332,6 +329,7 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 			&dbr.Tags,
 			&dbr.Cache,
 			&dbr.PinnedVersionID,
+			&rvi,
 			&tc,
 			&pn,
 		)
@@ -339,9 +337,10 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 			return nil, fmt.Errorf("failed to scan due resource: %w", err)
 		}
 		results = append(results, &resource.ResourceWithPipeline{
-			Resource:          *dbr.toDomainEntity(),
-			TeamCanonical:     tc.String,
-			PipelineCanonical: pn.String,
+			Resource:           *dbr.toDomainEntity(),
+			TeamCanonical:      tc.String,
+			PipelineCanonical:  pn.String,
+			RetriggerVersionID: rvi,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -350,23 +349,25 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 	return results, nil
 }
 
-func (r *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCan string, prevNextCheck time.Time, newLastCheck, newNextCheck time.Time) (bool, error) {
+func (r *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCan string, prevNextCheck time.Time, newLastCheck, newNextCheck time.Time, retriggerVersionID uint32) (bool, error) {
 	// Use next_check <= prevNextCheck instead of exact equality to avoid
 	// timestamp precision issues across database backends (SQLite stores
 	// timestamps as strings with second precision).
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resources AS r
-		SET last_check = ?, next_check = ?, check_requested = FALSE
-		FROM (
-			SELECT r.id
-			FROM resources AS r
-			JOIN pipelines AS p ON r.pipeline_id = p.id
-			JOIN teams AS t ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-				AND r.next_check IS NOT NULL AND r.next_check <= ?
-		) AS rr
-		WHERE rr.id = r.id
-	`, newLastCheck, newNextCheck, tc, pn, rCan, prevNextCheck)
+		UPDATE resources
+		SET last_check = ?, next_check = ?, check_requested = FALSE, retrigger_version_id = 0
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
+			JOIN teams AS t
+				ON p.team_id = t.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
+			AND next_check IS NOT NULL
+			AND next_check <= ?
+			AND retrigger_version_id = ?
+	`, newLastCheck, newNextCheck, tc, pn, rCan, prevNextCheck, retriggerVersionID)
 	if err != nil {
 		return false, fmt.Errorf("failed to claim resource check: %w", err)
 	}
@@ -376,18 +377,16 @@ func (r *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCa
 
 func (r *ResourceRepository) RequestCheck(ctx context.Context, tc, pn, rCan string, at time.Time) error {
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resources AS r
+		UPDATE resources
 		SET next_check = ?, check_requested = TRUE
-		FROM (
-			SELECT r.id
-			FROM resources AS r
-			JOIN pipelines AS p
-				ON r.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-		) AS rr
-		WHERE rr.id = r.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
 	`, at, tc, pn, rCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -396,6 +395,45 @@ func (r *ResourceRepository) RequestCheck(ctx context.Context, tc, pn, rCan stri
 	err = isEntityFound(res)
 	if err != nil {
 		return fmt.Errorf("failed to request resource check: %w", err)
+	}
+
+	return nil
+}
+
+func (r *ResourceRepository) RequestRetrigger(ctx context.Context, tc, pn, rCan string, versionID uint32, at time.Time) error {
+	res, err := r.querier.ExecContext(ctx, `
+		UPDATE resources
+		SET next_check = ?, check_requested = TRUE, retrigger_version_id = ?
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
+			JOIN teams AS t
+				ON p.team_id = t.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
+			AND (retrigger_version_id = 0 OR retrigger_version_id = ?)
+	`, at, versionID, tc, pn, rCan, versionID)
+	if err != nil {
+		return fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	if err := isEntityFound(res); err != nil {
+		// Either the resource does not exist or another version is pending.
+		var pending uint32
+		ferr := r.querier.QueryRowContext(ctx, `
+			SELECT r.retrigger_version_id
+			FROM resources AS r
+			JOIN pipelines AS p
+				ON r.pipeline_id = p.id
+			JOIN teams AS t
+				ON p.team_id = t.id
+			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
+		`, tc, pn, rCan).Scan(&pending)
+		if ferr == nil && pending != 0 {
+			return resource.ErrRetriggerPending
+		}
+		return fmt.Errorf("failed to request resource retrigger: %w", err)
 	}
 
 	return nil
@@ -521,18 +559,16 @@ func (r *ResourceRepository) FindVersionByID(ctx context.Context, versionID uint
 
 func (r *ResourceRepository) PinVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error {
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resources AS r
+		UPDATE resources
 		SET pinned_version_id = ?
-		FROM (
-			SELECT r.id
-			FROM resources AS r
-			JOIN pipelines AS p
-				ON r.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-		) AS rr
-		WHERE rr.id = r.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
 	`, versionID, tc, pn, rCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -548,18 +584,16 @@ func (r *ResourceRepository) PinVersion(ctx context.Context, tc, pn, rCan string
 
 func (r *ResourceRepository) UnpinVersion(ctx context.Context, tc, pn, rCan string) error {
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resources AS r
+		UPDATE resources
 		SET pinned_version_id = NULL
-		FROM (
-			SELECT r.id
-			FROM resources AS r
-			JOIN pipelines AS p
-				ON r.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-		) AS rr
-		WHERE rr.id = r.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
 	`, tc, pn, rCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)

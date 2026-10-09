@@ -43,18 +43,18 @@ func (m *ResourceRepository) EXPECT() *ResourceRepositoryMockRecorder {
 }
 
 // ClaimResourceCheck mocks base method.
-func (m *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCan string, prevNextCheck, newLastCheck, newNextCheck time.Time) (bool, error) {
+func (m *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCan string, prevNextCheck, newLastCheck, newNextCheck time.Time, retriggerVersionID uint32) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ClaimResourceCheck", ctx, tc, pn, rCan, prevNextCheck, newLastCheck, newNextCheck)
+	ret := m.ctrl.Call(m, "ClaimResourceCheck", ctx, tc, pn, rCan, prevNextCheck, newLastCheck, newNextCheck, retriggerVersionID)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ClaimResourceCheck indicates an expected call of ClaimResourceCheck.
-func (mr *ResourceRepositoryMockRecorder) ClaimResourceCheck(ctx, tc, pn, rCan, prevNextCheck, newLastCheck, newNextCheck any) *gomock.Call {
+func (mr *ResourceRepositoryMockRecorder) ClaimResourceCheck(ctx, tc, pn, rCan, prevNextCheck, newLastCheck, newNextCheck, retriggerVersionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimResourceCheck", reflect.TypeOf((*ResourceRepository)(nil).ClaimResourceCheck), ctx, tc, pn, rCan, prevNextCheck, newLastCheck, newNextCheck)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimResourceCheck", reflect.TypeOf((*ResourceRepository)(nil).ClaimResourceCheck), ctx, tc, pn, rCan, prevNextCheck, newLastCheck, newNextCheck, retriggerVersionID)
 }
 
 // Create mocks base method.
@@ -235,6 +235,20 @@ func (m *ResourceRepository) RequestCheck(ctx context.Context, tc, pn, rCan stri
 func (mr *ResourceRepositoryMockRecorder) RequestCheck(ctx, tc, pn, rCan, at any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestCheck", reflect.TypeOf((*ResourceRepository)(nil).RequestCheck), ctx, tc, pn, rCan, at)
+}
+
+// RequestRetrigger mocks base method.
+func (m *ResourceRepository) RequestRetrigger(ctx context.Context, tc, pn, rCan string, versionID uint32, at time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RequestRetrigger", ctx, tc, pn, rCan, versionID, at)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RequestRetrigger indicates an expected call of RequestRetrigger.
+func (mr *ResourceRepositoryMockRecorder) RequestRetrigger(ctx, tc, pn, rCan, versionID, at any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestRetrigger", reflect.TypeOf((*ResourceRepository)(nil).RequestRetrigger), ctx, tc, pn, rCan, versionID, at)
 }
 
 // UnpinVersion mocks base method.

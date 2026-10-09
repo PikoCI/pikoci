@@ -75,84 +75,84 @@ func NewStartUnitOfWork(db *sql.DB, dbSystem string) StartUnitOfWork {
 
 func (u *unitOfWork) Users() user.Repository {
 	if u.users == nil {
-		u.users = mysql.NewUserRepository(u.tx)
+		u.users = mysql.NewUserRepository(u.querier())
 	}
 	return u.users
 }
 
 func (u *unitOfWork) Teams() team.Repository {
 	if u.teams == nil {
-		u.teams = mysql.NewTeamRepository(u.tx)
+		u.teams = mysql.NewTeamRepository(u.querier())
 	}
 	return u.teams
 }
 
 func (u *unitOfWork) Pipelines() pipeline.Repository {
 	if u.pipelines == nil {
-		u.pipelines = mysql.NewPipelineRepository(u.tx)
+		u.pipelines = mysql.NewPipelineRepository(u.querier())
 	}
 	return u.pipelines
 }
 
 func (u *unitOfWork) Jobs() job.Repository {
 	if u.jobs == nil {
-		u.jobs = mysql.NewJobRepository(u.tx)
+		u.jobs = mysql.NewJobRepository(u.querier())
 	}
 	return u.jobs
 }
 
 func (u *unitOfWork) Resources() resource.Repository {
 	if u.resources == nil {
-		u.resources = mysql.NewResourceRepository(u.tx, u.dbSystem)
+		u.resources = mysql.NewResourceRepository(u.querier(), u.dbSystem)
 	}
 	return u.resources
 }
 
 func (u *unitOfWork) ResourceTypes() restype.Repository {
 	if u.resourceTypes == nil {
-		u.resourceTypes = mysql.NewResourceTypeRepository(u.tx)
+		u.resourceTypes = mysql.NewResourceTypeRepository(u.querier())
 	}
 	return u.resourceTypes
 }
 
 func (u *unitOfWork) Builds() build.Repository {
 	if u.builds == nil {
-		u.builds = mysql.NewBuildRepository(u.tx, u.dbSystem)
+		u.builds = mysql.NewBuildRepository(u.querier(), u.dbSystem)
 	}
 	return u.builds
 }
 
 func (u *unitOfWork) Runners() runner.Repository {
 	if u.runners == nil {
-		u.runners = mysql.NewRunnerRepository(u.tx)
+		u.runners = mysql.NewRunnerRepository(u.querier())
 	}
 	return u.runners
 }
 
 func (u *unitOfWork) SecretTypes() sectype.Repository {
 	if u.secretTypes == nil {
-		u.secretTypes = mysql.NewSecretTypeRepository(u.tx)
+		u.secretTypes = mysql.NewSecretTypeRepository(u.querier())
 	}
 	return u.secretTypes
 }
 
 func (u *unitOfWork) NotificationTypes() notiftype.Repository {
 	if u.notificationTypes == nil {
-		u.notificationTypes = mysql.NewNotificationTypeRepository(u.tx)
+		u.notificationTypes = mysql.NewNotificationTypeRepository(u.querier())
 	}
 	return u.notificationTypes
 }
 
 func (u *unitOfWork) Notifications() notification.Repository {
 	if u.notifications == nil {
-		u.notifications = mysql.NewNotificationRepository(u.tx)
+		u.notifications = mysql.NewNotificationRepository(u.querier())
 	}
 	return u.notifications
 }
 
 func (u *unitOfWork) ApiTokens() apitoken.Repository {
 	if u.apiTokens == nil {
-		u.apiTokens = mysql.NewApiTokenRepository(u.tx)
+		u.apiTokens = mysql.NewApiTokenRepository(u.querier())
 	}
 	return u.apiTokens
 }
@@ -168,14 +168,7 @@ func (u *unitOfWork) Secrets() secret.Repository {
 //
 // An *sql.Tx passes SQL through untouched, but PostgreSQL needs ? placeholders
 // rewritten to $N and INSERTs given a RETURNING clause, which is what
-// PGQuerier does for the non-transactional repositories in cmd/server.go.
-//
-// The accessors above still hand out the bare u.tx, so they are broken on
-// PostgreSQL — CreateTeam fails there with a syntax error. That is a
-// pre-existing bug, reported separately rather than fixed here: it is not
-// this branch's to change, and widening it would alter every UoW path. The
-// secret store, however, works on PostgreSQL today via the wrapped querier,
-// so it uses this to avoid regressing on the way into the transaction.
+// PGQuerier does, as for the non-transactional repositories in cmd/server.go.
 func (u *unitOfWork) querier() sqlr.Querier {
 	if mysql.IsPostgreSQL(u.dbSystem) {
 		return mysql.NewPGQuerier(u.tx)

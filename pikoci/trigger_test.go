@@ -2,15 +2,10 @@ package pikoci
 
 import (
 	"context"
-	"log/slog"
-	"os"
 	"testing"
 
 	"github.com/pikoci/pikoci/pikoci/job"
-	"github.com/pikoci/pikoci/pikoci/notification"
-	"github.com/pikoci/pikoci/pikoci/notiftype"
 	"github.com/pikoci/pikoci/pikoci/pipeline"
-	"github.com/pikoci/pikoci/pikoci/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,18 +23,18 @@ func makeJob(name string, steps ...job.PlanStep) job.Job {
 	return job.Job{Name: name, Plan: steps}
 }
 
-// ─── reachableJobs ────────────────────────────────────────────────────────────
+// ─── ReachableJobs ────────────────────────────────────────────────────────────
 
 func TestReachableJobs_Empty(t *testing.T) {
 	p := &pipeline.Pipeline{}
-	assert.Empty(t, reachableJobs(p, "git.repo"))
+	assert.Empty(t, ReachableJobs(p, "git.repo"))
 }
 
 func TestReachableJobs_DirectTrigger(t *testing.T) {
 	p := &pipeline.Pipeline{Jobs: []job.Job{
 		makeJob("build", makeGetStep("git", "repo", true)),
 	}}
-	result := reachableJobs(p, "git.repo")
+	result := ReachableJobs(p, "git.repo")
 	require.Len(t, result, 1)
 	assert.Equal(t, "build", result[0].Name)
 }
@@ -49,14 +44,14 @@ func TestReachableJobs_TriggerFalse_Excluded(t *testing.T) {
 	p := &pipeline.Pipeline{Jobs: []job.Job{
 		makeJob("build", makeGetStep("git", "repo", false)),
 	}}
-	assert.Empty(t, reachableJobs(p, "git.repo"))
+	assert.Empty(t, ReachableJobs(p, "git.repo"))
 }
 
 func TestReachableJobs_WrongResource_Excluded(t *testing.T) {
 	p := &pipeline.Pipeline{Jobs: []job.Job{
 		makeJob("build", makeGetStep("cron", "timer", true)),
 	}}
-	assert.Empty(t, reachableJobs(p, "git.repo"))
+	assert.Empty(t, ReachableJobs(p, "git.repo"))
 }
 
 func TestReachableJobs_PassedConstraint_NotDirectTrigger(t *testing.T) {
@@ -64,7 +59,7 @@ func TestReachableJobs_PassedConstraint_NotDirectTrigger(t *testing.T) {
 	p := &pipeline.Pipeline{Jobs: []job.Job{
 		makeJob("test", makeGetStep("git", "repo", true, "build")),
 	}}
-	assert.Empty(t, reachableJobs(p, "git.repo"))
+	assert.Empty(t, ReachableJobs(p, "git.repo"))
 }
 
 func TestReachableJobs_Transitive(t *testing.T) {
@@ -73,7 +68,7 @@ func TestReachableJobs_Transitive(t *testing.T) {
 		makeJob("build", makeGetStep("git", "repo", true)),
 		makeJob("test", makeGetStep("git", "repo", false, "build")),
 	}}
-	result := reachableJobs(p, "git.repo")
+	result := ReachableJobs(p, "git.repo")
 	require.Len(t, result, 2)
 	assert.Equal(t, "build", result[0].Name)
 	assert.Equal(t, "test", result[1].Name)
@@ -86,7 +81,7 @@ func TestReachableJobs_MultiLevel(t *testing.T) {
 		makeJob("test", makeGetStep("git", "repo", false, "build")),
 		makeJob("deploy", makeGetStep("git", "repo", false, "test")),
 	}}
-	result := reachableJobs(p, "git.repo")
+	result := ReachableJobs(p, "git.repo")
 	require.Len(t, result, 3)
 	assert.Equal(t, "build", result[0].Name)
 	assert.Equal(t, "test", result[1].Name)
@@ -99,7 +94,7 @@ func TestReachableJobs_UnreachableExcluded(t *testing.T) {
 		makeJob("build", makeGetStep("git", "repo", true)),
 		makeJob("other", makeGetStep("cron", "timer", true)),
 	}}
-	result := reachableJobs(p, "git.repo")
+	result := ReachableJobs(p, "git.repo")
 	require.Len(t, result, 1)
 	assert.Equal(t, "build", result[0].Name)
 }
@@ -110,7 +105,7 @@ func TestReachableJobs_DeclarationOrder(t *testing.T) {
 		makeJob("deploy", makeGetStep("git", "repo", false, "build")),
 		makeJob("build", makeGetStep("git", "repo", true)),
 	}}
-	result := reachableJobs(p, "git.repo")
+	result := ReachableJobs(p, "git.repo")
 	require.Len(t, result, 2)
 	assert.Equal(t, "deploy", result[0].Name)
 	assert.Equal(t, "build", result[1].Name)
@@ -122,75 +117,11 @@ func TestReachableJobs_MultipleDirect(t *testing.T) {
 		makeJob("backend", makeGetStep("git", "repo", true)),
 		makeJob("frontend", makeGetStep("git", "repo", true)),
 	}}
-	result := reachableJobs(p, "git.repo")
+	result := ReachableJobs(p, "git.repo")
 	require.Len(t, result, 2)
 	names := map[string]bool{result[0].Name: true, result[1].Name: true}
 	assert.True(t, names["backend"])
 	assert.True(t, names["frontend"])
-}
-
-// ─── buildTriggerParams ───────────────────────────────────────────────────────
-
-func TestBuildTriggerParams_BuildMetadata(t *testing.T) {
-	nt := notiftype.NotificationType{Notify: &utils.RunnerCommand{Runner: "exec"}}
-	n := job.NotifyStep{}
-	params := buildTriggerParams(nt, nil, n, "my-team", "my-pipeline", "my-job", nil)
-
-	assert.Equal(t, "my-team", params["BUILD_TEAM_NAME"])
-	assert.Equal(t, "my-pipeline", params["BUILD_PIPELINE_NAME"])
-	assert.Equal(t, "my-job", params["BUILD_JOB_NAME"])
-	assert.Equal(t, "", params["BUILD_NUMBER"])
-}
-
-func TestBuildTriggerParams_TypeLevelParams(t *testing.T) {
-	nt := notiftype.NotificationType{
-		Notify: &utils.RunnerCommand{
-			Runner: "exec",
-			Params: map[string]string{"endpoint": "https://api.example.com"},
-		},
-	}
-	params := buildTriggerParams(nt, nil, job.NotifyStep{}, "tc", "pc", "jn", nil)
-	assert.Equal(t, "https://api.example.com", params["endpoint"])
-}
-
-func TestBuildTriggerParams_NotificationParams(t *testing.T) {
-	nt := notiftype.NotificationType{Notify: &utils.RunnerCommand{Runner: "exec"}}
-	notifParams := map[string]string{"repo": "pikoci/pikoci", "app_id": "123"}
-	params := buildTriggerParams(nt, notifParams, job.NotifyStep{}, "tc", "pc", "jn", nil)
-	assert.Equal(t, "pikoci/pikoci", params["param_repo"])
-	assert.Equal(t, "123", params["param_app_id"])
-}
-
-func TestBuildTriggerParams_StepParams(t *testing.T) {
-	nt := notiftype.NotificationType{Notify: &utils.RunnerCommand{Runner: "exec"}}
-	n := job.NotifyStep{Params: map[string]string{"status": "queued", "name": "CI"}}
-	params := buildTriggerParams(nt, nil, n, "tc", "pc", "jn", nil)
-	assert.Equal(t, "queued", params["notify_status"])
-	assert.Equal(t, "CI", params["notify_name"])
-}
-
-func TestBuildTriggerParams_VersionMeta(t *testing.T) {
-	nt := notiftype.NotificationType{Notify: &utils.RunnerCommand{Runner: "exec"}}
-	versionMeta := map[string]interface{}{"ref": "abc123", "build": 42}
-	params := buildTriggerParams(nt, nil, job.NotifyStep{}, "tc", "pc", "jn", versionMeta)
-	assert.Equal(t, "abc123", params["version_ref"])
-	assert.Equal(t, "42", params["version_build"])
-}
-
-func TestBuildTriggerParams_ParamPrefixesDoNotCollide(t *testing.T) {
-	// type-level, notification-level, and step-level params use separate keys.
-	nt := notiftype.NotificationType{
-		Notify: &utils.RunnerCommand{
-			Runner: "exec",
-			Params: map[string]string{"base": "type-level"},
-		},
-	}
-	notifParams := map[string]string{"key": "notif-value"}
-	n := job.NotifyStep{Params: map[string]string{"key": "step-value"}}
-	params := buildTriggerParams(nt, notifParams, n, "tc", "pc", "jn", nil)
-	assert.Equal(t, "type-level", params["base"])
-	assert.Equal(t, "notif-value", params["param_key"])
-	assert.Equal(t, "step-value", params["notify_key"])
 }
 
 // ─── ReadPipeline on_trigger HCL parsing ─────────────────────────────────────
@@ -235,218 +166,7 @@ job "build" {
 	assert.Equal(t, "success", j.OnSuccess[0].Notify.Params["conclusion"])
 }
 
-// ─── fireOnTriggerHooks ───────────────────────────────────────────────────────
-
-func TestFireOnTriggerHooks_NilRaw(t *testing.T) {
-	q := &PikoCI{logger: slog.Default()}
-	pp := &pipeline.Pipeline{} // Raw is nil
-	// Should return immediately without panicking.
-	q.fireOnTriggerHooks(context.Background(), pp, "tc", "pc", "git.repo", nil)
-}
-
-func TestFireOnTriggerHooks_NoOnTriggerJobs(t *testing.T) {
-	// Pipeline has valid Raw HCL but no on_trigger blocks — no exec is run.
-	raw := []byte(`
-resource "git" "repo" {}
-job "build" {
-  get "git" "repo" { trigger = true }
-}
-`)
-	q := &PikoCI{logger: slog.Default()}
-	pp := &pipeline.Pipeline{Raw: raw}
-	// Should complete without error.
-	q.fireOnTriggerHooks(context.Background(), pp, "tc", "pc", "git.repo", nil)
-}
-
-func TestFireOnTriggerHooks_ExecSucceeds(t *testing.T) {
-	// Pipeline with on_trigger that runs /bin/true — verifies end-to-end exec.
-	raw := []byte(`
-resource "git" "repo" {}
-
-notification_type "test-notif" {
-  notify "exec" {
-    path = "/bin/true"
-  }
-}
-
-notification "test-notif" "ci" {}
-
-job "build" {
-  get "git" "repo" { trigger = true }
-  on_trigger {
-    notify "test-notif" "ci" {}
-  }
-}
-`)
-	q := &PikoCI{logger: slog.Default()}
-	pp := &pipeline.Pipeline{Raw: raw}
-	// Should complete without panicking; /bin/true always exits 0.
-	q.fireOnTriggerHooks(context.Background(), pp, "my-team", "my-pipeline", "git.repo",
-		map[string]interface{}{"ref": "abc123"})
-}
-
-func TestFireOnTriggerHooks_NotificationNotFound_LogsWarning(t *testing.T) {
-	// on_trigger references a notification that doesn't exist — hook logs warning but doesn't panic.
-	raw := []byte(`
-resource "git" "repo" {}
-
-notification_type "test-notif" {
-  notify "exec" {
-    path = "/bin/true"
-  }
-}
-
-job "build" {
-  get "git" "repo" { trigger = true }
-  on_trigger {
-    notify "test-notif" "missing" {}
-  }
-}
-`)
-	q := &PikoCI{logger: slog.Default()}
-	pp := &pipeline.Pipeline{Raw: raw}
-	// Missing notification: logged as warning, no panic.
-	q.fireOnTriggerHooks(context.Background(), pp, "tc", "pc", "git.repo", nil)
-}
-
-func TestFireOnTriggerHooks_InvalidHCL_LogsWarning(t *testing.T) {
-	// Invalid HCL raw bytes cause ReadPipeline to fail — should log and return without panic.
-	q := &PikoCI{logger: slog.Default()}
-	pp := &pipeline.Pipeline{Raw: []byte(`this is not valid HCL {{{`)}
-	q.fireOnTriggerHooks(context.Background(), pp, "tc", "pc", "git.repo", nil)
-}
-
-func TestFireOnTriggerHooks_NilNotifyPointer_Skipped(t *testing.T) {
-	// A job whose on_trigger hook has Notify==nil (e.g. invalid in-memory construction)
-	// must be silently skipped without panicking.
-	//
-	// fireOnTriggerHooks cannot be called directly here because it re-parses Raw
-	// HCL, and HCL parsing never produces Notify==nil for a notify step — this
-	// guard defends against corrupted in-memory pipelines only. We therefore
-	// verify the guard condition directly against the inner-loop logic that
-	// fireOnTriggerHooks executes inside each goroutine.
-	pp := &pipeline.Pipeline{
-		Jobs: []job.Job{
-			{
-				Name: "build",
-				Plan: []job.PlanStep{makeGetStep("git", "repo", true)},
-				OnTrigger: []job.HookStep{
-					{Type: job.StepTypeNotify, Notify: nil}, // nil Notify: should be skipped
-				},
-			},
-		},
-	}
-	for _, j := range pp.Jobs {
-		for _, hook := range j.OnTrigger {
-			if hook.Type != job.StepTypeNotify || hook.Notify == nil {
-				continue // guard being verified: nil Notify is skipped, not dereferenced
-			}
-			t.Fatal("should not reach here when Notify is nil")
-		}
-	}
-}
-
-// ─── runTriggerNotifyHook ─────────────────────────────────────────────────────
-
-func TestRunTriggerNotifyHook_NotifTypeNotFound(t *testing.T) {
-	// Pipeline has the notification but not the notification type — returns error.
-	pp := &pipeline.Pipeline{
-		Notifications: []notification.Notification{
-			{Type: "unknown-type", Name: "ci", Canonical: "unknown-type.ci"},
-		},
-		// No NotificationTypes — type lookup will fail.
-	}
-	n := job.NotifyStep{Type: "unknown-type", Name: "ci"}
-	err := runTriggerNotifyHook(context.Background(), slog.Default(), pp, "tc", "pc", "build", n, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "notification type")
-}
-
-func TestRunTriggerNotifyHook_NilNotifyBlock(t *testing.T) {
-	// Notification type exists but has no notify block — returns nil (no-op).
-	pp := &pipeline.Pipeline{
-		Notifications: []notification.Notification{
-			{Type: "noop-type", Name: "ci", Canonical: "noop-type.ci"},
-		},
-		NotificationTypes: []notiftype.NotificationType{
-			{Name: "noop-type", Notify: nil}, // no notify block
-		},
-	}
-	n := job.NotifyStep{Type: "noop-type", Name: "ci"}
-	err := runTriggerNotifyHook(context.Background(), slog.Default(), pp, "tc", "pc", "build", n, nil)
-	require.NoError(t, err)
-}
-
-// ─── execNotificationCommand ──────────────────────────────────────────────────
-
-func TestExecNotificationCommand_EmptyPath(t *testing.T) {
-	rc := &utils.RunnerCommand{Runner: "", Params: map[string]string{}}
-	err := execNotificationCommand(context.Background(), rc, t.TempDir(), nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "empty command path")
-}
-
-func TestExecNotificationCommand_ExecFails(t *testing.T) {
-	rc := &utils.RunnerCommand{
-		Runner: "exec",
-		Params: map[string]string{"path": "/bin/false"},
-	}
-	err := execNotificationCommand(context.Background(), rc, t.TempDir(), nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exec failed")
-}
-
-func TestExecNotificationCommand_Success(t *testing.T) {
-	rc := &utils.RunnerCommand{
-		Runner: "exec",
-		Params: map[string]string{"path": "/bin/true"},
-	}
-	err := execNotificationCommand(context.Background(), rc, t.TempDir(), map[string]string{"FOO": "bar"})
-	require.NoError(t, err)
-}
-
-func TestExecNotificationCommand_FallbackToRunner(t *testing.T) {
-	// When no path param is set, the Runner field is used as the command.
-	rc := &utils.RunnerCommand{
-		Runner: "/bin/true",
-		Params: map[string]string{}, // no path param → falls back to Runner
-	}
-	err := execNotificationCommand(context.Background(), rc, t.TempDir(), nil)
-	require.NoError(t, err)
-}
-
-func TestExecNotificationCommand_WithArgs(t *testing.T) {
-	rc := &utils.RunnerCommand{
-		Runner: "exec",
-		Params: map[string]string{"path": "/bin/echo"},
-		Args:   []string{"hello", "$BUILD_TEAM_NAME"},
-	}
-	err := execNotificationCommand(context.Background(), rc, t.TempDir(), map[string]string{"BUILD_TEAM_NAME": "my-team"})
-	require.NoError(t, err)
-}
-
-func TestExecNotificationCommand_ShellAssignedVarsNotExpandedByGo(t *testing.T) {
-	// Regression: args must NOT be pre-expanded by os.Expand before being passed
-	// to the shell. If they were, $VAL in the condition below would be expanded to
-	// "" by Go (it is not in the params map), causing the shell to exit non-zero.
-	// With the fix, the shell assigns VAL from the notify_status env var and the
-	// condition succeeds.
-	rc := &utils.RunnerCommand{
-		Runner: "exec",
-		Params: map[string]string{"path": "/bin/sh"},
-		Args: []string{
-			"-ec",
-			`VAL="$notify_status"
-[ "$VAL" = "queued" ]`,
-		},
-	}
-	err := execNotificationCommand(context.Background(), rc, t.TempDir(), map[string]string{
-		"notify_status": "queued",
-	})
-	require.NoError(t, err, "shell-assigned variable must not be destroyed by Go os.Expand before shell runs")
-}
-
-// ─── reachableJobs — production topology (3 direct + 1 downstream) ───────────
+// ─── ReachableJobs — production topology (3 direct + 1 downstream) ───────────
 
 func TestReachableJobs_ThreeDirectTriggers_DownstreamWithMultiplePassed(t *testing.T) {
 	// Mirrors the pikoci deploy pipeline: backend, frontend, test-integration
@@ -457,7 +177,7 @@ func TestReachableJobs_ThreeDirectTriggers_DownstreamWithMultiplePassed(t *testi
 		makeJob("test-integration", makeGetStep("git", "pikoci_pr", true)),
 		makeJob("test-backends", makeGetStep("git", "pikoci_pr", true, "backend", "frontend", "test-integration")),
 	}}
-	result := reachableJobs(p, "git.pikoci_pr")
+	result := ReachableJobs(p, "git.pikoci_pr")
 	require.Len(t, result, 4)
 	names := make(map[string]bool, 4)
 	for _, j := range result {
@@ -513,66 +233,7 @@ job "test-backends" {
 	require.Len(t, backend.OnTrigger, 1, "backend must have on_trigger populated by ReadPipeline")
 }
 
-func TestFireOnTriggerHooks_DownstreamJobWithPassed_ReceivesNotification(t *testing.T) {
-	// Verifies that on_trigger fires for a downstream job (passed constraints)
-	// not just for direct-trigger jobs. Uses per-job sentinel files to confirm
-	// each hook ran.
-	tmpDir := t.TempDir()
-	// Each job writes a sentinel file named after itself.
-	raw := []byte(`
-resource "git" "pikoci_pr" {}
-
-notification_type "recorder" {
-  notify "exec" {
-    path = "/bin/sh"
-    args = ["-c", "touch ` + tmpDir + `/$BUILD_JOB_NAME"]
-  }
-}
-
-notification "recorder" "ci" {}
-
-job "backend" {
-  get "git" "pikoci_pr" { trigger = true }
-  on_trigger {
-    notify "recorder" "ci" {}
-  }
-}
-
-job "frontend" {
-  get "git" "pikoci_pr" { trigger = true }
-  on_trigger {
-    notify "recorder" "ci" {}
-  }
-}
-
-job "test-integration" {
-  get "git" "pikoci_pr" { trigger = true }
-  on_trigger {
-    notify "recorder" "ci" {}
-  }
-}
-
-job "test-backends" {
-  get "git" "pikoci_pr" {
-    trigger = true
-    passed  = ["backend", "frontend", "test-integration"]
-  }
-  on_trigger {
-    notify "recorder" "ci" {}
-  }
-}
-`)
-	q := &PikoCI{logger: slog.Default()}
-	pp := &pipeline.Pipeline{Raw: raw}
-	q.fireOnTriggerHooks(context.Background(), pp, "main", "pikoci", "git.pikoci_pr", nil)
-
-	for _, jobName := range []string{"backend", "frontend", "test-integration", "test-backends"} {
-		_, err := os.Stat(tmpDir + "/" + jobName)
-		assert.NoError(t, err, "on_trigger must fire for job %q (sentinel file must exist)", jobName)
-	}
-}
-
-// ─── reachableJobs — outer-break branch ──────────────────────────────────────
+// ─── ReachableJobs — outer-break branch ──────────────────────────────────────
 
 func TestReachableJobs_MultiGetSteps_BreaksEarlyOnFirstMatch(t *testing.T) {
 	// A downstream job has two get steps; the first one has a passed constraint
@@ -587,7 +248,7 @@ func TestReachableJobs_MultiGetSteps_BreaksEarlyOnFirstMatch(t *testing.T) {
 			},
 		},
 	}}
-	result := reachableJobs(p, "git.repo")
+	result := ReachableJobs(p, "git.repo")
 	require.Len(t, result, 2)
 	assert.Equal(t, "build", result[0].Name)
 	assert.Equal(t, "test", result[1].Name)
