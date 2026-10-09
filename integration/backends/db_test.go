@@ -183,11 +183,6 @@ func TestDBBackends(t *testing.T) {
 				// Manual re-trigger (#707): request, refusal of a second
 				// version, and the claim that hands it to one worker. The
 				// column is read back with a plain query (no time columns).
-				if system == mysql.MySQL {
-					// Like every repository update (UpdateJobBuild, RequestCheck,
-					// ...), these use UPDATE ... FROM, which MariaDB rejects.
-					t.Skip("UPDATE ... FROM is not supported on MySQL/MariaDB")
-				}
 				rr := mysql.NewResourceRepository(setup.querier, system)
 				retriggerVersion := func() uint32 {
 					var v uint32

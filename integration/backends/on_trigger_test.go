@@ -15,9 +15,6 @@ import (
 	"time"
 
 	"github.com/gorilla/handlers"
-	"github.com/soheilhy/cmux"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	workerv1 "github.com/pikoci/pikoci/gen/worker/v1"
 	"github.com/pikoci/pikoci/pikoci"
 	"github.com/pikoci/pikoci/pikoci/build"
@@ -31,6 +28,9 @@ import (
 	"github.com/pikoci/pikoci/pikoci/unitwork"
 	"github.com/pikoci/pikoci/pikoci/user"
 	"github.com/pikoci/pikoci/worker"
+	"github.com/soheilhy/cmux"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -189,35 +189,12 @@ job "build" {
 func TestOnTrigger_SecretParam_EmbeddedWorker(t *testing.T) {
 	for _, system := range dbSystems() {
 		t.Run(system, func(t *testing.T) {
-			if system == mysql.MySQL || mysql.IsPostgreSQL(system) {
-				// The full service does not run on these yet, independent of
-				// on_trigger: on MySQL, next_check fails to scan (no parseTime)
-				// and UPDATE ... FROM is rejected; on PostgreSQL the unit of
-				// work skips the placeholder rewrite, so CreatePipeline fails.
-				// The re-trigger SQL is covered on PostgreSQL by
-				// TestDBBackends/ResourceRetrigger.
-				t.Skip("full service not supported on " + system + " yet")
-			}
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 
 			logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})).With("test", "on-trigger-embedded", "db", system)
 
-			setup := openDB(t, system)
-			migrateDB(t, setup)
-			q := setup.querier
-
-			svc := pikoci.New(ctx,
-				mysql.NewUserRepository(q), mysql.NewTeamRepository(q), mysql.NewPipelineRepository(q),
-				mysql.NewJobRepository(q), mysql.NewResourceRepository(q, system), mysql.NewResourceTypeRepository(q),
-				mysql.NewBuildRepository(q, system), mysql.NewRunnerRepository(q), mysql.NewSecretTypeRepository(q),
-				mysql.NewTriggerRepository(q), nil, nil, nil, nil,
-				unitwork.NewStartUnitOfWork(setup.db, system), []byte("test-secret"), notifier.New(), logger)
-			svc.StartScheduler(ctx)
-			_, _ = svc.CreateUser(ctx, user.User{
-				FullName: "admin", Username: "admin",
-				Password: "$2a$14$rwQk8Qvc2rij7qhFO4P1W.OiSF6AkgVU1RCrLaY2wawJcpkPEKwbm",
-			}, true)
+			svc := newFullService(t, ctx, system, logger)
 
 			w := worker.New(svc, logger.With("component", "worker"), "test-worker", "test", "", 1, nil, false)
 			go w.Run(ctx)
