@@ -119,8 +119,6 @@ const (
 	UnpinResourceVersion
 	// TriggerResourceVersion is the route for triggering downstream jobs with a specific version.
 	TriggerResourceVersion
-	// FireTriggerNotifications is the route for firing on_trigger hook notifications.
-	FireTriggerNotifications
 
 	// GetResourceVersionPath is the route for retrieving a version's path through the pipeline.
 	GetResourceVersionPath

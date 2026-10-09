@@ -298,25 +298,42 @@ func TestTriggerResourceVersion(t *testing.T) {
 	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
 		{ID: 10},
 	}, nil)
-	// Find pipeline to iterate jobs
-	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
-		Jobs: []job.Job{
-			{
-				Name: "my-job",
-				Plan: []job.PlanStep{
-					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo"}},
-				},
-			},
-		},
-	}, nil)
-	// FindVersionByID for on_trigger hooks (pipeline has no Raw, so hooks are skipped)
-	s.Resources.EXPECT().FindVersionByID(ctx, uint32(10)).Return(nil, "", assert.AnError)
-	// CreateJobBuild for the matching job
-	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").Return(&job.Job{Name: "my-job"}, nil)
-	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "my-job", gomock.Any()).Return(uint32(1), "1", nil)
+	// The request is recorded for a worker to claim; the server neither runs
+	// the on_trigger hooks nor creates builds itself (no Pipelines.Find,
+	// Jobs or Builds expectations).
+	s.Resources.EXPECT().RequestRetrigger(ctx, "main", "my-pipeline", "git.repo", uint32(10), gomock.Any()).Return(nil)
 
 	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
 	require.NoError(t, err)
+}
+
+func TestTriggerResourceVersion_UnknownVersion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
+		{ID: 11},
+	}, nil)
+
+	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not belong to resource")
+}
+
+func TestTriggerResourceVersion_RequestRetriggerFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
+		{ID: 10},
+	}, nil)
+	s.Resources.EXPECT().RequestRetrigger(ctx, "main", "my-pipeline", "git.repo", uint32(10), gomock.Any()).Return(assert.AnError)
+
+	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, assert.AnError)
 }
 
 func TestTriggerResourceVersion_InvalidCanonical(t *testing.T) {
@@ -332,35 +349,6 @@ func TestTriggerResourceVersion_InvalidCanonical(t *testing.T) {
 
 	err = s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "INVALID", 10)
 	require.Error(t, err)
-}
-
-func TestTriggerResourceVersion_SkipsPausedJobs(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	s := newService(ctrl)
-	ctx := context.TODO()
-
-	// validateResourceVersion
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
-		{ID: 10},
-	}, nil)
-	// Pipeline has one paused job with a matching get step
-	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
-		Jobs: []job.Job{
-			{
-				Name:   "paused-job",
-				Paused: true,
-				Plan: []job.PlanStep{
-					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo"}},
-				},
-			},
-		},
-	}, nil)
-	// FindVersionByID for on_trigger hooks (pipeline has no Raw, so hooks are skipped)
-	s.Resources.EXPECT().FindVersionByID(ctx, uint32(10)).Return(nil, "", assert.AnError)
-	// No builds or sends should happen for paused jobs
-
-	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
-	require.NoError(t, err)
 }
 
 func TestWebhookTrigger(t *testing.T) {
@@ -518,87 +506,6 @@ func TestTriggerPipelineResource_ResourceNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to find Resource")
 }
 
-func TestTriggerResourceVersion_SkipsPassedConstraints(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	s := newService(ctrl)
-	ctx := context.TODO()
-
-	// validateResourceVersion
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
-		{ID: 10},
-	}, nil)
-	// Pipeline has a job with passed constraints (should be skipped)
-	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
-		Jobs: []job.Job{
-			{
-				Name: "downstream-job",
-				Plan: []job.PlanStep{
-					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "git", Name: "repo", Passed: []string{"upstream"}}},
-				},
-			},
-		},
-	}, nil)
-	// FindVersionByID for on_trigger hooks (pipeline has no Raw, so hooks are skipped)
-	s.Resources.EXPECT().FindVersionByID(ctx, uint32(10)).Return(nil, "", assert.AnError)
-	// No builds should be created since the get has passed constraints
-
-	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
-	require.NoError(t, err)
-}
-
-func TestTriggerResourceVersion_SkipsNonMatchingResource(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	s := newService(ctrl)
-	ctx := context.TODO()
-
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
-		{ID: 10},
-	}, nil)
-	// Pipeline has a job with a different resource
-	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
-		Jobs: []job.Job{
-			{
-				Name: "other-job",
-				Plan: []job.PlanStep{
-					{Type: job.StepTypeGet, Get: &job.GetStep{Type: "cron", Name: "timer"}},
-				},
-			},
-		},
-	}, nil)
-	// FindVersionByID for on_trigger hooks (pipeline has no Raw, so hooks are skipped)
-	s.Resources.EXPECT().FindVersionByID(ctx, uint32(10)).Return(nil, "", assert.AnError)
-	// No builds should be created
-
-	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
-	require.NoError(t, err)
-}
-
-func TestTriggerResourceVersion_SkipsTaskSteps(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	s := newService(ctrl)
-	ctx := context.TODO()
-
-	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
-		{ID: 10},
-	}, nil)
-	// Pipeline has a job with only task steps (no get)
-	s.Pipelines.EXPECT().Find(ctx, "main", "my-pipeline").Return(&pipeline.Pipeline{
-		Jobs: []job.Job{
-			{
-				Name: "task-only",
-				Plan: []job.PlanStep{
-					{Type: job.StepTypeTask},
-				},
-			},
-		},
-	}, nil)
-	// FindVersionByID for on_trigger hooks (pipeline has no Raw, so hooks are skipped)
-	s.Resources.EXPECT().FindVersionByID(ctx, uint32(10)).Return(nil, "", assert.AnError)
-
-	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 10)
-	require.NoError(t, err)
-}
-
 func TestCancelMismatchedPendingBuilds_NoMismatch(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
@@ -664,4 +571,18 @@ func TestRegenerateWebhookToken_FindError(t *testing.T) {
 	_, err := s.S.RegenerateWebhookToken(ctx, "main", "my-pipeline", "git.repo")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to find Resource")
+}
+
+func TestTriggerResourceVersion_AnotherVersionPending(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Resources.EXPECT().FilterVersions(ctx, "main", "my-pipeline", "git.repo", (*uint32)(nil), (*uint32)(nil), uint32(0)).Return([]*resource.Version{
+		{ID: 12},
+	}, nil)
+	s.Resources.EXPECT().RequestRetrigger(ctx, "main", "my-pipeline", "git.repo", uint32(12), gomock.Any()).Return(resource.ErrRetriggerPending)
+
+	err := s.S.TriggerResourceVersion(ctx, "main", "my-pipeline", "git.repo", 12)
+	require.ErrorIs(t, err, resource.ErrRetriggerPending, "the user must be told instead of the click being dropped")
 }

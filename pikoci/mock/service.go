@@ -505,18 +505,6 @@ func (mr *ServiceMockRecorder) FindUserByID(ctx, userID any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindUserByID", reflect.TypeOf((*Service)(nil).FindUserByID), ctx, userID)
 }
 
-// FireTriggerNotifications mocks base method.
-func (m *Service) FireTriggerNotifications(ctx context.Context, tc, pc, triggeringRCan string, versionMeta map[string]any) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "FireTriggerNotifications", ctx, tc, pc, triggeringRCan, versionMeta)
-}
-
-// FireTriggerNotifications indicates an expected call of FireTriggerNotifications.
-func (mr *ServiceMockRecorder) FireTriggerNotifications(ctx, tc, pc, triggeringRCan, versionMeta any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FireTriggerNotifications", reflect.TypeOf((*Service)(nil).FireTriggerNotifications), ctx, tc, pc, triggeringRCan, versionMeta)
-}
-
 // GenerateTeamWorkerToken mocks base method.
 func (m *Service) GenerateTeamWorkerToken(ctx context.Context, tc string) (string, error) {
 	m.ctrl.T.Helper()

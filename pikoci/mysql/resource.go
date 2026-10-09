@@ -292,7 +292,7 @@ func (r *ResourceRepository) Filter(ctx context.Context, tc, pn string) ([]*reso
 func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resource.ResourceWithPipeline, error) {
 	q := `
 		SELECT r.id, r.name, r.type, r.canonical, r.params, r.check_interval, r.logs, r.last_check, r.next_check, r.webhook_token, r.tags, r.cache, r.pinned_version_id,
-			t.canonical, p.canonical
+			r.retrigger_version_id, t.canonical, p.canonical
 		FROM resources AS r
 		JOIN pipelines AS p
 			ON r.pipeline_id = p.id
@@ -315,6 +315,7 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 	for rows.Next() {
 		var (
 			dbr dbResource
+			rvi uint32
 			tc  sql.NullString
 			pn  sql.NullString
 		)
@@ -332,6 +333,7 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 			&dbr.Tags,
 			&dbr.Cache,
 			&dbr.PinnedVersionID,
+			&rvi,
 			&tc,
 			&pn,
 		)
@@ -339,9 +341,10 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 			return nil, fmt.Errorf("failed to scan due resource: %w", err)
 		}
 		results = append(results, &resource.ResourceWithPipeline{
-			Resource:          *dbr.toDomainEntity(),
-			TeamCanonical:     tc.String,
-			PipelineCanonical: pn.String,
+			Resource:           *dbr.toDomainEntity(),
+			TeamCanonical:      tc.String,
+			PipelineCanonical:  pn.String,
+			RetriggerVersionID: rvi,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -350,13 +353,13 @@ func (r *ResourceRepository) FilterDueResources(ctx context.Context) ([]*resourc
 	return results, nil
 }
 
-func (r *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCan string, prevNextCheck time.Time, newLastCheck, newNextCheck time.Time) (bool, error) {
+func (r *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCan string, prevNextCheck time.Time, newLastCheck, newNextCheck time.Time, retriggerVersionID uint32) (bool, error) {
 	// Use next_check <= prevNextCheck instead of exact equality to avoid
 	// timestamp precision issues across database backends (SQLite stores
 	// timestamps as strings with second precision).
 	res, err := r.querier.ExecContext(ctx, `
 		UPDATE resources AS r
-		SET last_check = ?, next_check = ?, check_requested = FALSE
+		SET last_check = ?, next_check = ?, check_requested = FALSE, retrigger_version_id = 0
 		FROM (
 			SELECT r.id
 			FROM resources AS r
@@ -364,9 +367,10 @@ func (r *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCa
 			JOIN teams AS t ON p.team_id = t.id
 			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
 				AND r.next_check IS NOT NULL AND r.next_check <= ?
+				AND r.retrigger_version_id = ?
 		) AS rr
 		WHERE rr.id = r.id
-	`, newLastCheck, newNextCheck, tc, pn, rCan, prevNextCheck)
+	`, newLastCheck, newNextCheck, tc, pn, rCan, prevNextCheck, retriggerVersionID)
 	if err != nil {
 		return false, fmt.Errorf("failed to claim resource check: %w", err)
 	}
@@ -396,6 +400,37 @@ func (r *ResourceRepository) RequestCheck(ctx context.Context, tc, pn, rCan stri
 	err = isEntityFound(res)
 	if err != nil {
 		return fmt.Errorf("failed to request resource check: %w", err)
+	}
+
+	return nil
+}
+
+func (r *ResourceRepository) RequestRetrigger(ctx context.Context, tc, pn, rCan string, versionID uint32, at time.Time) error {
+	res, err := r.querier.ExecContext(ctx, `
+		UPDATE resources AS r
+		SET next_check = ?, check_requested = TRUE, retrigger_version_id = ?
+		FROM (
+			SELECT r.id
+			FROM resources AS r
+			JOIN pipelines AS p
+				ON r.pipeline_id = p.id
+			JOIN teams AS t
+				ON p.team_id = t.id
+			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
+				AND (r.retrigger_version_id = 0 OR r.retrigger_version_id = ?)
+		) AS rr
+		WHERE rr.id = r.id
+	`, at, versionID, tc, pn, rCan, versionID)
+	if err != nil {
+		return fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	if err := isEntityFound(res); err != nil {
+		// Either the resource does not exist or another version is pending.
+		if _, ferr := r.Find(ctx, tc, pn, rCan); ferr == nil {
+			return resource.ErrRetriggerPending
+		}
+		return fmt.Errorf("failed to request resource retrigger: %w", err)
 	}
 
 	return nil

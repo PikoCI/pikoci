@@ -136,7 +136,7 @@ func (q *PikoCI) NextWork(ctx context.Context, wc workitem.WorkerContext) (*work
 		// after round-tripping through the database driver.
 		claimed, err := q.Resources.ClaimResourceCheck(ctx,
 			rwp.TeamCanonical, rwp.PipelineCanonical, rwp.Canonical,
-			now, now, nextCheck)
+			now, now, nextCheck, rwp.RetriggerVersionID)
 		if err != nil {
 			q.logger.Error("NextWork: failed to claim resource check",
 				"pipeline", rwp.PipelineCanonical, "resource", rwp.Canonical, "error", err)
@@ -153,6 +153,9 @@ func (q *PikoCI) NextWork(ctx context.Context, wc workitem.WorkerContext) (*work
 				TeamCanonical:     rwp.TeamCanonical,
 				PipelineCanonical: rwp.PipelineCanonical,
 				ResourceCanonical: rwp.Canonical,
+				// A manual re-trigger: the worker runs the on_trigger hooks
+				// and builds for this version instead of the check.
+				VersionID: rwp.RetriggerVersionID,
 			},
 		}, nil
 	}

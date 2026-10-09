@@ -238,6 +238,8 @@ func (q *PikoCI) UnpinResourceVersion(ctx context.Context, tc, pc, rCan string) 
 
 // TriggerResourceVersion triggers immediate downstream jobs (those with get
 // steps that have no passed constraints) with a specific resource version.
+// A worker fires the on_trigger hooks and creates the builds (see
+// RequestRetrigger); this only validates and records the request.
 func (q *PikoCI) TriggerResourceVersion(ctx context.Context, tc, pc, rCan string, versionID uint32) error {
 	if !utils.ValidateCanonical(tc) {
 		return fmt.Errorf("invalid Team Canonical format %q", tc)
@@ -251,47 +253,12 @@ func (q *PikoCI) TriggerResourceVersion(ctx context.Context, tc, pc, rCan string
 		return err
 	}
 
-	p, err := q.Pipelines.Find(ctx, tc, pc)
-	if err != nil {
-		return fmt.Errorf("failed to find Pipeline %q: %w", pc, err)
-	}
-
-	// Look up version metadata to pass to on_trigger hooks.
-	var versionMeta map[string]interface{}
-	if v, _, vErr := q.Resources.FindVersionByID(ctx, versionID); vErr == nil && v != nil {
-		versionMeta = v.Version
-	}
-
-	// Fire on_trigger notifications synchronously before any builds are created.
-	// This guarantees that external systems see the queued state before in_progress.
-	q.fireOnTriggerHooks(ctx, p, tc, pc, rCan, versionMeta)
-
-	for _, j := range p.Jobs {
-		if j.Paused {
-			continue
-		}
-		for _, ps := range j.FlatPlanSteps() {
-			if ps.Type != job.StepTypeGet || ps.Get == nil {
-				continue
-			}
-			g := ps.Get
-			if g.ResourceCanonical() != rCan || len(g.Passed) != 0 {
-				continue
-			}
-
-			bb := build.Build{
-				Status:            build.Pending,
-				VersionID:         versionID,
-				ResourceCanonical: rCan,
-			}
-
-			_, err := q.CreateJobBuild(ctx, tc, pc, j.Name, bb)
-			if err != nil {
-				return fmt.Errorf("failed to create pending build for Job %q: %w", j.Name, err)
-			}
-
-			break // only trigger once per job
-		}
+	// The on_trigger hooks may need secrets only a worker can resolve, and
+	// must run before the builds exist, so the worker that claims this check
+	// runs the hooks and then creates the builds. Recording the request on
+	// the resource row keeps it across restarts until a worker claims it.
+	if err := q.Resources.RequestRetrigger(ctx, tc, pc, rCan, versionID, time.Now()); err != nil {
+		return fmt.Errorf("failed to request re-trigger of version %d: %w", versionID, err)
 	}
 
 	q.Notifier.Notify()
