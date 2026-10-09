@@ -427,7 +427,17 @@ func (r *ResourceRepository) RequestRetrigger(ctx context.Context, tc, pn, rCan 
 
 	if err := isEntityFound(res); err != nil {
 		// Either the resource does not exist or another version is pending.
-		if _, ferr := r.Find(ctx, tc, pn, rCan); ferr == nil {
+		var pending uint32
+		ferr := r.querier.QueryRowContext(ctx, `
+			SELECT r.retrigger_version_id
+			FROM resources AS r
+			JOIN pipelines AS p
+				ON r.pipeline_id = p.id
+			JOIN teams AS t
+				ON p.team_id = t.id
+			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
+		`, tc, pn, rCan).Scan(&pending)
+		if ferr == nil && pending != 0 {
 			return resource.ErrRetriggerPending
 		}
 		return fmt.Errorf("failed to request resource retrigger: %w", err)
