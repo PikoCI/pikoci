@@ -165,18 +165,16 @@ func (r *JobRepository) Create(ctx context.Context, tc, pn string, j job.Job) (u
 func (r *JobRepository) Update(ctx context.Context, tc, pn, jn string, j job.Job) error {
 	dbj := newDBJob(j)
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE jobs AS j
+		UPDATE jobs
 		SET name = ?, `+"`order`"+` = ?, tags = ?, plan = ?, on_success = ?, on_failure = ?, on_cancel = ?, ensure = ?, concurrency = ?, timeout = ?, for_each_group = ?, for_each_key = ?, approve_label = ?, approve_timeout = ?, approve_count = ?, disable_retry = ?, allow_failure = ?, interruptible = ?, inputs = ?
-		FROM (
-			SELECT j.id
-			FROM jobs AS j
-			JOIN pipelines AS p
-				ON j.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
-		) AS jj
-		WHERE jj.id = j.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND name = ?
 	`, dbj.Name, dbj.Order, dbj.Tags, dbj.Plan, dbj.OnSuccess, dbj.OnFailure, dbj.OnCancel, dbj.Ensure, dbj.Concurrency, dbj.Timeout, dbj.ForEachGroup, dbj.ForEachKey, dbj.ApproveLabel, dbj.ApproveTimeout, dbj.ApproveCount, dbj.DisableRetry, dbj.AllowFailure, dbj.Interruptible, dbj.Inputs, tc, pn, jn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -294,18 +292,16 @@ func (r *JobRepository) Delete(ctx context.Context, tc, pn, jn string) error {
 
 func (r *JobRepository) SetPaused(ctx context.Context, tc, pn, jn string, paused bool) error {
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE jobs AS j
+		UPDATE jobs
 		SET paused = ?
-		FROM (
-			SELECT j.id
-			FROM jobs AS j
-			JOIN pipelines AS p
-				ON j.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND j.name = ?
-		) AS jj
-		WHERE j.id = jj.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND name = ?
 	`, paused, tc, pn, jn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -321,18 +317,15 @@ func (r *JobRepository) SetPaused(ctx context.Context, tc, pn, jn string, paused
 
 func (r *JobRepository) PauseAll(ctx context.Context, tc, pn string) error {
 	_, err := r.querier.ExecContext(ctx, `
-		UPDATE jobs AS j
+		UPDATE jobs
 		SET paused = TRUE
-		FROM (
-			SELECT j.id
-			FROM jobs AS j
-			JOIN pipelines AS p
-				ON j.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
 			WHERE t.canonical = ? AND p.canonical = ?
-		) AS jj
-		WHERE j.id = jj.id
+		)
 	`, tc, pn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -342,18 +335,15 @@ func (r *JobRepository) PauseAll(ctx context.Context, tc, pn string) error {
 
 func (r *JobRepository) UnpauseAll(ctx context.Context, tc, pn string) error {
 	_, err := r.querier.ExecContext(ctx, `
-		UPDATE jobs AS j
+		UPDATE jobs
 		SET paused = FALSE
-		FROM (
-			SELECT j.id
-			FROM jobs AS j
-			JOIN pipelines AS p
-				ON j.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
 			WHERE t.canonical = ? AND p.canonical = ?
-		) AS jj
-		WHERE j.id = jj.id
+		)
 	`, tc, pn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)

@@ -74,16 +74,14 @@ func (r *PipelineRepository) Create(ctx context.Context, tc string, p pipeline.P
 func (r *PipelineRepository) Update(ctx context.Context, tc, pCan string, p pipeline.Pipeline) error {
 	dbp := newDBPipeline(p)
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE pipelines AS p
+		UPDATE pipelines
 		SET name = ?, canonical = ?, raw = ?, public = ?
-		FROM (
-			SELECT p.id
-			FROM pipelines AS p
-			JOIN teams AS t
-				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ?
-		) AS pp
-		WHERE p.id = pp.id
+		WHERE team_id = (
+			SELECT t.id
+			FROM teams AS t
+			WHERE t.canonical = ?
+		)
+			AND canonical = ?
 	`, dbp.Name, dbp.Canonical, dbp.Raw, dbp.Public, tc, pCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -139,16 +137,14 @@ func (r *PipelineRepository) FindPublic(ctx context.Context, tc, pCan string) (*
 
 func (r *PipelineRepository) SetPublic(ctx context.Context, tc, pCan string, public bool) error {
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE pipelines AS p
+		UPDATE pipelines
 		SET public = ?
-		FROM (
-			SELECT p.id
-			FROM pipelines AS p
-			JOIN teams AS t
-				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ?
-		) AS pp
-		WHERE p.id = pp.id
+		WHERE team_id = (
+			SELECT t.id
+			FROM teams AS t
+			WHERE t.canonical = ?
+		)
+			AND canonical = ?
 	`, public, tc, pCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
