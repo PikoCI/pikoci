@@ -76,18 +76,16 @@ func (r *RunnerRepository) Create(ctx context.Context, tc, pn string, ru runner.
 func (r *RunnerRepository) Update(ctx context.Context, tc, pn, run string, ru runner.Runner) error {
 	dbru := newDBRunner(ru)
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE runners AS ru
+		UPDATE runners
 		SET name = ?, source = ?, run = ?
-		FROM (
-			SELECT ru.id
-			FROM runners AS ru
-			JOIN pipelines AS p
-				ON ru.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND ru.name = ?
-		) AS ruru
-		WHERE ruru.id = ru.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND name = ?
 	`, dbru.Name, dbru.Source, dbru.Run, tc, pn, run)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)

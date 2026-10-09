@@ -142,18 +142,16 @@ func (r *ResourceRepository) Create(ctx context.Context, tc, pn string, rs resou
 func (r *ResourceRepository) Update(ctx context.Context, tc, pn, rCan string, rs resource.Resource) error {
 	dbrs := newDBResource(rs)
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resources AS r
+		UPDATE resources
 		SET name = ?, type = ?, canonical = ?, params = ?, check_interval = ?, logs = ?, last_check = ?, next_check = ?, webhook_token = ?, tags = ?, cache = ?
-		FROM (
-			SELECT r.id
-			FROM resources AS r
-			JOIN pipelines AS p
-				ON r.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-		) AS rr
-		WHERE rr.id = r.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
 	`, dbrs.Name, dbrs.Type, dbrs.Canonical, dbrs.Params, dbrs.CheckInterval, dbrs.Logs, dbrs.LastCheck, dbrs.NextCheck, dbrs.WebhookToken, dbrs.Tags, dbrs.Cache, tc, pn, rCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -169,18 +167,16 @@ func (r *ResourceRepository) Update(ctx context.Context, tc, pn, rCan string, rs
 
 func (r *ResourceRepository) UpdateLogs(ctx context.Context, tc, pn, rCan, logs string) error {
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resources AS r
+		UPDATE resources
 		SET logs = ?
-		FROM (
-			SELECT r.id
-			FROM resources AS r
-			JOIN pipelines AS p
-				ON r.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-		) AS rr
-		WHERE rr.id = r.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
 	`, logs, tc, pn, rCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -358,18 +354,19 @@ func (r *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCa
 	// timestamp precision issues across database backends (SQLite stores
 	// timestamps as strings with second precision).
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resources AS r
+		UPDATE resources
 		SET last_check = ?, next_check = ?, check_requested = FALSE, retrigger_version_id = 0
-		FROM (
-			SELECT r.id
-			FROM resources AS r
-			JOIN pipelines AS p ON r.pipeline_id = p.id
-			JOIN teams AS t ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-				AND r.next_check IS NOT NULL AND r.next_check <= ?
-				AND r.retrigger_version_id = ?
-		) AS rr
-		WHERE rr.id = r.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
+			JOIN teams AS t
+				ON p.team_id = t.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
+			AND next_check IS NOT NULL
+			AND next_check <= ?
+			AND retrigger_version_id = ?
 	`, newLastCheck, newNextCheck, tc, pn, rCan, prevNextCheck, retriggerVersionID)
 	if err != nil {
 		return false, fmt.Errorf("failed to claim resource check: %w", err)
@@ -380,18 +377,16 @@ func (r *ResourceRepository) ClaimResourceCheck(ctx context.Context, tc, pn, rCa
 
 func (r *ResourceRepository) RequestCheck(ctx context.Context, tc, pn, rCan string, at time.Time) error {
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resources AS r
+		UPDATE resources
 		SET next_check = ?, check_requested = TRUE
-		FROM (
-			SELECT r.id
-			FROM resources AS r
-			JOIN pipelines AS p
-				ON r.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-		) AS rr
-		WHERE rr.id = r.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
 	`, at, tc, pn, rCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -407,19 +402,17 @@ func (r *ResourceRepository) RequestCheck(ctx context.Context, tc, pn, rCan stri
 
 func (r *ResourceRepository) RequestRetrigger(ctx context.Context, tc, pn, rCan string, versionID uint32, at time.Time) error {
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resources AS r
+		UPDATE resources
 		SET next_check = ?, check_requested = TRUE, retrigger_version_id = ?
-		FROM (
-			SELECT r.id
-			FROM resources AS r
-			JOIN pipelines AS p
-				ON r.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-				AND (r.retrigger_version_id = 0 OR r.retrigger_version_id = ?)
-		) AS rr
-		WHERE rr.id = r.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
+			AND (retrigger_version_id = 0 OR retrigger_version_id = ?)
 	`, at, versionID, tc, pn, rCan, versionID)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -566,18 +559,16 @@ func (r *ResourceRepository) FindVersionByID(ctx context.Context, versionID uint
 
 func (r *ResourceRepository) PinVersion(ctx context.Context, tc, pn, rCan string, versionID uint32) error {
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resources AS r
+		UPDATE resources
 		SET pinned_version_id = ?
-		FROM (
-			SELECT r.id
-			FROM resources AS r
-			JOIN pipelines AS p
-				ON r.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-		) AS rr
-		WHERE rr.id = r.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
 	`, versionID, tc, pn, rCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -593,18 +584,16 @@ func (r *ResourceRepository) PinVersion(ctx context.Context, tc, pn, rCan string
 
 func (r *ResourceRepository) UnpinVersion(ctx context.Context, tc, pn, rCan string) error {
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resources AS r
+		UPDATE resources
 		SET pinned_version_id = NULL
-		FROM (
-			SELECT r.id
-			FROM resources AS r
-			JOIN pipelines AS p
-				ON r.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND r.canonical = ?
-		) AS rr
-		WHERE rr.id = r.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND canonical = ?
 	`, tc, pn, rCan)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)

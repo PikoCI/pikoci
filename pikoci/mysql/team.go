@@ -198,18 +198,10 @@ func (r *TeamRepository) CreateMember(ctx context.Context, tc string, tm team.Me
 
 func (r *TeamRepository) UpdateMember(ctx context.Context, tc, mc string, tm team.Member) error {
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE teams_users AS tu
+		UPDATE teams_users
 		SET role = ?
-		FROM (
-			SELECT tu.id
-			FROM teams_users AS tu
-			JOIN teams AS t
-				ON tu.team_id = t.id
-			JOIN users AS u
-				ON tu.user_id = u.id
-			WHERE t.canonical = ? AND u.username = ?
-		) AS ptu
-		WHERE tu.id = ptu.id
+		WHERE team_id = (SELECT t.id FROM teams AS t WHERE t.canonical = ?)
+			AND user_id = (SELECT u.id FROM users AS u WHERE u.username = ?)
 	`, string(tm.Role), tc, mc)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)

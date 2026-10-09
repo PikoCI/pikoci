@@ -100,18 +100,16 @@ func (r *ResourceTypeRepository) Create(ctx context.Context, tc, pn string, rt r
 func (r *ResourceTypeRepository) Update(ctx context.Context, tc, pn, rtn string, rt restype.ResourceType) error {
 	dbrt := newDBResourceType(rt)
 	res, err := r.querier.ExecContext(ctx, `
-		UPDATE resource_types AS rt
+		UPDATE resource_types
 		SET name = ?, source = ?, `+"`check`"+` = ?, pull = ?, push = ?, params = ?, cache = ?, runner = ?
-		FROM (
-			SELECT rt.id
-			FROM resource_types AS rt
-			JOIN pipelines AS p
-				ON rt.pipeline_id = p.id
+		WHERE pipeline_id = (
+			SELECT p.id
+			FROM pipelines AS p
 			JOIN teams AS t
 				ON p.team_id = t.id
-			WHERE t.canonical = ? AND p.canonical = ? AND rt.name = ?
-		) AS rtt
-		WHERE rtt.id = rt.id
+			WHERE t.canonical = ? AND p.canonical = ?
+		)
+			AND name = ?
 	`, dbrt.Name, dbrt.Source, dbrt.Check, dbrt.Pull, dbrt.Push, dbrt.Params, dbrt.Cache, dbrt.Runner, tc, pn, rtn)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
