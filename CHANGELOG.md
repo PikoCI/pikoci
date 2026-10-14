@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`on_trigger` hooks could not use secret-backed params**: hooks now run on the worker, so params from `secret` blocks resolve and the GitHub check `queued` status is reported; a manual re-trigger now survives a server restart ([#707](https://github.com/PikoCI/pikoci/issues/707)).
+- **Full service on MySQL and PostgreSQL**: fixed queries that only worked on SQLite, and the on_trigger and re-trigger tests now run on every backend ([#714](https://github.com/PikoCI/pikoci/issues/714)).
 - **OAuth login failed without `--external-url`**: the server sent a relative `redirect_uri`, which providers reject. It now derives the URL from the request (including forwarded headers) when the flag is unset, and the admin page shows the callback URL the server actually sends.
 
 ### Added
