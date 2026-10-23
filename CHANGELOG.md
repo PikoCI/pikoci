@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Images and `deploy.sh` builds reported `dev (unknown)`**: published Docker images and self-deploy binaries now get the version and commit, so assets key off the commit. ([#699](https://github.com/PikoCI/pikoci/issues/699))
 - **OAuth login failed without `--external-url`**: the server now derives the redirect URL from the request when the flag is unset, and the admin page shows the callback URL it sends.
 
 ### Added
