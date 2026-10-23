@@ -131,7 +131,7 @@ arch = $(word 2, $(temp))
 release: $(PLATFORMS) ## Creates the bin on the ./builds/
 
 VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
-COMMIT := $(shell git rev-parse --short HEAD)
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 LDFLAGS := -X github.com/pikoci/pikoci/cmd.Version=$(VERSION) -X github.com/pikoci/pikoci/cmd.Commit=$(COMMIT)
 
 $(PLATFORMS):

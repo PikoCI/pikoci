@@ -121,7 +121,7 @@ BINARY="$REPO_ROOT/builds/pikoci-linux-$GOARCH"
 if [ "$BUILD" = true ]; then
     echo "==> Building PikoCI binary (linux/$GOARCH)..."
     cd "$REPO_ROOT"
-    GOOS=linux GOARCH="$GOARCH" go build -o "$BINARY" .
+    make "linux/$GOARCH"
 else
     echo "==> Downloading latest PikoCI release (linux/$GOARCH)..."
     mkdir -p "$REPO_ROOT/builds"
