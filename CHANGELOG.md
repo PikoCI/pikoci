@@ -7,11 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- **Images and `deploy.sh` builds reported `dev (unknown)`**: published Docker images and self-deploy binaries now get the version and commit, so assets key off the commit. ([#699](https://github.com/PikoCI/pikoci/issues/699))
-- **OAuth login failed without `--external-url`**: the server now derives the redirect URL from the request when the flag is unset, and the admin page shows the callback URL it sends.
-
 ### Added
 
 - **Pipelines list pagination**: the grid loads 24 at a time with search and sort via `limit`, `offset`, `q` and `sort`; status polling is limited to visible cards. ([#696](https://github.com/PikoCI/pikoci/issues/696))
@@ -28,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Graph zoom**: plain mouse wheel now scrolls the page over a pipeline graph; zoom with Ctrl/⌘+wheel, trackpad pinch, or the +/− buttons. Fullscreen still zooms on wheel.
 - **Pipeline editor**: the Update/Create button now sits above the graph preview instead of below it.
-- **Static asset caching**: assets serve from a per-build path with a one-year immutable cache, fixing Safari running stale JS after a deploy. ([#699](https://github.com/PikoCI/pikoci/issues/699))
+- **Static asset caching**: assets serve from a per-build path with a one-year immutable cache, fixing Safari running stale JS after a deploy. ([#693](https://github.com/PikoCI/pikoci/pull/693))
 - **Build list page load**: `GET /jobs/:name/builds` omits `steps` for list views (~16MB to ~50KB for 50 builds); steps load when a tab is opened. ([#652](https://github.com/PikoCI/pikoci/issues/652))
 - **Pipeline image query**: `image.dot` uses a lightweight query, cutting response time from 6-8s to under 1s. ([#652](https://github.com/PikoCI/pikoci/issues/652))
 
@@ -38,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Images and `deploy.sh` builds reported `dev (unknown)`**: published Docker images and self-deploy binaries now get the version and commit, so assets key off the commit. ([#699](https://github.com/PikoCI/pikoci/issues/699))
+- **OAuth login failed without `--external-url`**: the server now derives the redirect URL from the request when the flag is unset, and the admin page shows the callback URL it sends. ([#702](https://github.com/PikoCI/pikoci/issues/702))
 - **Resource checks starved on busy servers**: due resources are now checked longest-waiting first, with webhook and manual triggers ahead. ([#708](https://github.com/PikoCI/pikoci/issues/708))
 - **Server failed to restart with `--pipeline-*` flags**: startup seeding now updates an existing pipeline instead of failing on the unique index. ([#686](https://github.com/PikoCI/pikoci/issues/686))
 - **Unpinned `get` pulled the oldest version**: `buildPullParams` reversed an already newest-first list; it now picks the newest version by id ([#694](https://github.com/PikoCI/pikoci/issues/694)).
