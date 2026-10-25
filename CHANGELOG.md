@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-25
+
 ### Added
 
 - **Pipelines list pagination**: the grid loads 24 at a time with search and sort via `limit`, `offset`, `q` and `sort`; status polling is limited to visible cards. ([#696](https://github.com/PikoCI/pikoci/issues/696))
