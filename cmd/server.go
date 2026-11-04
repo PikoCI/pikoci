@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -47,6 +48,43 @@ var mainTeamCanonical = "main"
 // serverViper is the viper instance used for server command flag and env var binding.
 var serverViper = viper.New()
 
+// sqliteDBFile returns the SQLite file to open: dbName resolved as a filesystem
+// path, or defaultFile when dbName is empty.
+//
+// Before --db-name was honoured for SQLite, all data lived in defaultFile even
+// when --db-name was set. Silently opening a new empty file would look like
+// data loss after an upgrade, so that combination is an error until the operator
+// says which database they want.
+func sqliteDBFile(dbName, defaultFile string) (string, error) {
+	if dbName == "" {
+		return defaultFile, nil
+	}
+
+	path, err := filepath.Abs(dbName)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve --db-name %q: %w", dbName, err)
+	}
+	// The SQLite driver takes everything after the first '?' as DSN parameters,
+	// so it would open a different file than the one requested.
+	if strings.Contains(path, "?") {
+		return "", fmt.Errorf("invalid --db-name %q: a SQLite path cannot contain '?'", dbName)
+	}
+
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(defaultFile); err == nil {
+			return "", fmt.Errorf(
+				"--db-name selects the SQLite file %[1]s, which does not exist, but there is an existing database at %[2]s "+
+					"(earlier versions ignored --db-name for SQLite). "+
+					"To keep your data, stop the server and move that file, with any -wal and -shm files, to %[1]s, or unset --db-name. "+
+					"To start with a new empty database, create it first: touch %[1]s",
+				path, defaultFile,
+			)
+		}
+	}
+
+	return path, nil
+}
+
 // serverCmd is the cobra command that starts the PikoCI server.
 var serverCmd = &cobra.Command{
 	Use:   "server",
@@ -81,9 +119,19 @@ var serverCmd = &cobra.Command{
 			return fmt.Errorf("invalid DBSystem %q, should be one of: %s, %s, %s or %s", cfg.DBSystem, mysql.Mem, mysql.MySQL, mysql.SQLite, mysql.PostgreSQL)
 		}
 
-		dbFile, err := xdg.DataFile(filepath.Join(AppName, AppName+".db"))
-		if err != nil {
-			return fmt.Errorf("failed to create dbFile: %v", err)
+		var dbFile string
+		if cfg.DBSystem == mysql.SQLite {
+			var err error
+			dbFile, err = sqliteDBFile(cfg.DBName, filepath.Join(xdg.DataHome, AppName, AppName+".db"))
+			if err != nil {
+				return err
+			}
+			if cfg.DBName == "" {
+				if err := os.MkdirAll(filepath.Dir(dbFile), 0o755); err != nil {
+					return fmt.Errorf("failed to create dbFile: %v", err)
+				}
+			}
+			logger.Info("Using SQLite database", "path", dbFile)
 		}
 		logger.Info("DB connection starting ...", "db-system", cfg.DBSystem)
 		db, err := mysql.New(cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, mysql.Options{
@@ -431,7 +479,7 @@ func init() {
 	serverCmd.Flags().Int("db-port", 0, "Database Port")
 	serverCmd.Flags().String("db-user", "", "Database User")
 	serverCmd.Flags().String("db-password", "", "Database Password")
-	serverCmd.Flags().String("db-name", "", "Database Name")
+	serverCmd.Flags().String("db-name", "", "Database name, or for sqlite the path of the database file (default: pikoci/pikoci.db in the XDG data directory)")
 	serverCmd.Flags().Bool("run-migrations", true, "Flag to know if migrations should be ran")
 	serverCmd.Flags().Bool("run-worker", true, "Runs a worker with PikoCI server")
 	serverCmd.Flags().Int("concurrency", 1, "Number of workers to start in one instance")
