@@ -2814,6 +2814,18 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 		return "", 0, nil
 	}
 
+	// Cancelling the command only kills the docker client: the container keeps
+	// running, so label it to be able to find and remove it afterwards.
+	var containerLabel string
+	if isDockerRun(cmdPath, args) {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return "", 0, fmt.Errorf("failed to create container label: %w", err)
+		}
+		containerLabel = dockerRunLabel + "=" + id.String()
+		args = append([]string{args[0], "--label", containerLabel}, args[1:]...)
+	}
+
 	cmd := exec.CommandContext(ctx, cmdPath, args...)
 	cmd.Dir = cwd
 	cmd.Env = cmd.Environ()
@@ -2869,8 +2881,20 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 	close(done)
 	wg.Wait()
 
+	// Before returning: the caller deletes the workdir the container mounts.
+	var removeErr error
+	if containerLabel != "" && ctx.Err() != nil {
+		removeErr = removeDockerContainers(cmdPath, cwd, cmd.Env, containerLabel)
+		if removeErr != nil {
+			w.logger.Error("failed to remove container of cancelled step", "label", containerLabel, "error", removeErr)
+		}
+	}
+
 	duration := time.Since(start)
 	out += sw.String()
+	if removeErr != nil {
+		out += "\nfailed to remove container: " + removeErr.Error()
+	}
 	if err != nil {
 		out += "\n" + err.Error()
 		// List available env var names (not values) to help diagnose typos.
@@ -2890,6 +2914,57 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 	w.logger.Debug("finished running command", "out", out)
 
 	return out, duration, err
+}
+
+// dockerRunLabel marks the container of one docker run, with a value unique
+// to that run.
+const dockerRunLabel = "pikoci.run"
+
+// dockerRemoveTimeout bounds removing the container of a cancelled step.
+const dockerRemoveTimeout = 30 * time.Second
+
+// isDockerRun reports whether a runner command starts a docker container
+// directly. A docker run inside a shell script is not recognized.
+func isDockerRun(cmdPath string, args []string) bool {
+	return filepath.Base(cmdPath) == "docker" && len(args) > 0 && args[0] == "run"
+}
+
+// removeDockerContainers force-removes the containers with the given label.
+// It does not use the step's context, which is already cancelled.
+func removeDockerContainers(dockerPath, cwd string, env []string, label string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), dockerRemoveTimeout)
+	defer cancel()
+
+	docker := func(args ...string) ([]byte, error) {
+		cmd := exec.CommandContext(ctx, dockerPath, args...)
+		cmd.Dir = cwd
+		cmd.Env = env
+		return cmd.CombinedOutput()
+	}
+
+	out, err := docker("ps", "-aq", "--filter", "label="+label)
+	if err != nil {
+		return fmt.Errorf("failed to list containers: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	ids := strings.Fields(string(out))
+	if len(ids) == 0 {
+		return nil
+	}
+
+	rmOut, rmErr := docker(append([]string{"rm", "-f"}, ids...)...)
+	if rmErr == nil {
+		return nil
+	}
+	// A --rm container is also being removed by the daemon once it dies, and
+	// docker rm then fails even though the container is gone or stopped.
+	out, err = docker("ps", "-q", "--filter", "label="+label)
+	if err != nil {
+		return fmt.Errorf("failed to list containers: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	if len(strings.Fields(string(out))) > 0 {
+		return fmt.Errorf("%w: %s", rmErr, strings.TrimSpace(string(rmOut)))
+	}
+	return nil
 }
 
 // fetchSecrets resolves secret values for the given secrets map (secret_type

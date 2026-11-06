@@ -25,6 +25,8 @@ runner_type "docker" {
 }
 ```
 
+When a step is cancelled or times out, PikoCI force-removes its container, found by a `pikoci.run` label it adds to each `docker run`. This applies to any runner whose `path` is `docker` and whose first argument is `run`; a `docker run` inside a shell script is not tracked and keeps running.
+
 | Field    | Required | Description                          |
 |----------|----------|--------------------------------------|
 | `name`   | yes      | Label on the block                   |
