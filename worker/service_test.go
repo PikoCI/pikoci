@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -10682,4 +10683,154 @@ func TestProcessJob_ServiceStep_InsideFailingIfBranchIsStopped(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "service started inside a failing if branch must still be stopped")
+}
+
+// fakeDocker puts a docker script on PATH that logs each call. "run" lasts
+// until killed unless runSeconds is 0; "ps -aq" lists psIDs and "ps -q" nothing;
+// "rm" exits with rmExit.
+func fakeDocker(t *testing.T, runSeconds int, psIDs string, rmExit int) (callLog string) {
+	t.Helper()
+	dir := t.TempDir()
+	callLog = filepath.Join(dir, "calls")
+	script := fmt.Sprintf(`#!/bin/sh
+echo "$*" >> %q
+case "$1" in
+run) exec sleep %d ;;
+ps) case "$2" in -aq) echo %q ;; esac ;;
+rm) exit %d ;;
+esac
+`, callLog, runSeconds, psIDs, rmExit)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return callLog
+}
+
+func dockerCalls(t *testing.T, callLog string) []string {
+	t.Helper()
+	b, err := os.ReadFile(callLog)
+	require.NoError(t, err)
+	return strings.Split(strings.TrimSpace(string(b)), "\n")
+}
+
+func dockerRunRunner() runner.Runner {
+	return runner.Runner{
+		Name: "docker",
+		Run:  utils.RunCommand{Path: "docker", Args: []string{"run", "--rm", "$image"}},
+	}
+}
+
+func runDockerStep(t *testing.T, ctx context.Context) (string, error) {
+	t.Helper()
+	ctrl := gomock.NewController(t)
+	w, _ := newTestWorker(ctrl)
+	rc := utils.RunnerCommand{Runner: "docker", Params: map[string]string{"image": "alpine"}}
+	out, _, err := w.runRunner(ctx, dockerRunRunner(), t.TempDir(), rc, nil)
+	return out, err
+}
+
+// cancelOnceRunning cancels the returned context once fake docker logs "run".
+func cancelOnceRunning(t *testing.T, callLog string) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() {
+		for ctx.Err() == nil {
+			if b, err := os.ReadFile(callLog); err == nil && strings.HasPrefix(string(b), "run ") {
+				cancel()
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
+	return ctx
+}
+
+func TestRunRunner_DockerRun_RemovesContainerWhenTimedOut(t *testing.T) {
+	callLog := fakeDocker(t, 30, "c1 c2", 0)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_, err := runDockerStep(t, ctx)
+	require.Error(t, err)
+	assert.Contains(t, dockerCalls(t, callLog), "rm -f c1 c2")
+}
+
+func TestRunRunner_DockerRun_RemovesContainerWhenCancelled(t *testing.T) {
+	callLog := fakeDocker(t, 30, "c1", 0)
+
+	_, err := runDockerStep(t, cancelOnceRunning(t, callLog))
+	require.Error(t, err)
+
+	// The container is found by the label its docker run was given.
+	calls := dockerCalls(t, callLog)
+	require.Len(t, calls, 3)
+	require.True(t, strings.HasPrefix(calls[0], "run --label "+dockerRunLabel+"="), calls[0])
+	assert.Equal(t, "ps -aq --filter label="+strings.Fields(calls[0])[2], calls[1])
+	assert.Equal(t, "rm -f c1", calls[2])
+}
+
+func TestRunRunner_DockerRun_NoContainerYet(t *testing.T) {
+	// Cancelled while pulling the image: nothing to remove.
+	callLog := fakeDocker(t, 30, "", 0)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	out, err := runDockerStep(t, ctx)
+	require.Error(t, err)
+	for _, call := range dockerCalls(t, callLog) {
+		assert.False(t, strings.HasPrefix(call, "rm "), call)
+	}
+	assert.NotContains(t, out, "failed to remove container")
+}
+
+func TestRunRunner_DockerRun_RemoveFailureIsReported(t *testing.T) {
+	// docker rm fails and the container is still running.
+	dir := t.TempDir()
+	script := `#!/bin/sh
+case "$1" in
+run) exec sleep 30 ;;
+ps) echo c1 ;;
+rm) echo "daemon says no"; exit 1 ;;
+esac
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	out, err := runDockerStep(t, ctx)
+	require.Error(t, err)
+	assert.Contains(t, out, "failed to remove container")
+	assert.Contains(t, out, "daemon says no")
+}
+
+func TestRunRunner_DockerRun_RemoveRaceIsNotAnError(t *testing.T) {
+	// docker rm fails because the daemon is already removing the --rm
+	// container, which is no longer running.
+	fakeDocker(t, 30, "c1", 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	out, err := runDockerStep(t, ctx)
+	require.Error(t, err)
+	assert.NotContains(t, out, "failed to remove container")
+}
+
+func TestRunRunner_DockerRun_FinishedStepRemovesNothing(t *testing.T) {
+	callLog := fakeDocker(t, 0, "c1", 0)
+
+	_, err := runDockerStep(t, context.Background())
+	require.NoError(t, err)
+
+	calls := dockerCalls(t, callLog)
+	require.Len(t, calls, 1)
+	assert.True(t, strings.HasPrefix(calls[0], "run --label "), calls[0])
+}
+
+func TestIsDockerRun(t *testing.T) {
+	assert.True(t, isDockerRun("docker", []string{"run", "--rm"}))
+	assert.True(t, isDockerRun("/usr/bin/docker", []string{"run"}))
+	assert.False(t, isDockerRun("docker", []string{"build", "."}))
+	assert.False(t, isDockerRun("docker", nil))
+	assert.False(t, isDockerRun("/bin/sh", []string{"run"}))
 }

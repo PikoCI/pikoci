@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Containers outliving a timed-out or cancelled step**: only the `docker run` client was killed, so the container kept running with its workdir deleted. The container is now force-removed before the step ends. ([#723](https://github.com/PikoCI/pikoci/issues/723))
+
 ## [0.8.0] - 2026-10-25
 
 ### Added
