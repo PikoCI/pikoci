@@ -29,6 +29,7 @@ import (
 	"github.com/xescugc/duration"
 	pikogrpc "github.com/pikoci/pikoci/pikoci/grpc"
 	"github.com/pikoci/pikoci/pikoci/notifier"
+	"github.com/pikoci/pikoci/pikoci/scheduler"
 	"github.com/pikoci/pikoci/pikoci/mysql"
 	"github.com/pikoci/pikoci/pikoci/mysql/migrate"
 	"github.com/xyproto/randomstring"
@@ -152,6 +153,11 @@ var serverCmd = &cobra.Command{
 			svc.SessionLifetime = d
 			logger.Info("session lifetime configured", "duration", d)
 		}
+
+		if err := scheduler.ValidateCheckInterval(cfg.DefaultCheckInterval); err != nil {
+			return fmt.Errorf("invalid --default-check-interval value %q: %w", cfg.DefaultCheckInterval, err)
+		}
+		svc.DefaultCheckInterval = cfg.DefaultCheckInterval
 
 		// Recover builds orphaned by a previous crash or unclean shutdown.
 		if n, err := svc.RecoverOrphanedBuilds(ctx); err != nil {
@@ -439,6 +445,7 @@ func init() {
 	serverCmd.Flags().String("log-level", "info", "Sets the log level ('debug', 'info', 'warn', 'error')")
 	serverCmd.Flags().String("external-url", "", "External URL for OAuth callbacks (e.g. https://ci.pikoci.com)")
 	serverCmd.Flags().String("session-lifetime", "0", "Maximum session duration before re-login is required (e.g. 24h, 7d, 30d). 0 means sessions never expire")
+	serverCmd.Flags().String("default-check-interval", scheduler.DefaultCheckInterval, "Check schedule for resources with no check_interval (cron syntax or '@every <duration>', e.g. '@every 6h')")
 	serverCmd.Flags().String("team-canonical", mainTeamCanonical, "Team Canonical to scope the action")
 	serverCmd.Flags().String("pipeline-config", "", "Path to the Pipeline config file")
 	serverCmd.Flags().StringP("vars", "v", "", "Path to the Pipeline var file (JSON)")

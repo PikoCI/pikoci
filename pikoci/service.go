@@ -393,6 +393,10 @@ type PikoCI struct {
 	// Zero means sessions never expire.
 	SessionLifetime time.Duration
 
+	// DefaultCheckInterval is the check schedule of resources with no
+	// check_interval. Empty means scheduler.DefaultCheckInterval.
+	DefaultCheckInterval string
+
 	// GRPCServer is set by the server command to enable cancellation routing
 	// via gRPC streams. It is nil when no gRPC server is running.
 	GRPCServer interface {
@@ -442,6 +446,18 @@ func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipelin
 	}
 	sched.SetEvaluator(p)
 	return p
+}
+
+// checkIntervalSpec returns the schedule for a resource's check_interval,
+// falling back to the server default when the resource does not set one.
+func (q *PikoCI) checkIntervalSpec(spec string) string {
+	if spec != "" {
+		return spec
+	}
+	if q.DefaultCheckInterval != "" {
+		return q.DefaultCheckInterval
+	}
+	return scheduler.DefaultCheckInterval
 }
 
 // StartScheduler starts the background scheduler that polls for due resources.

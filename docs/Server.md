@@ -30,6 +30,7 @@ pikoci server [flags]
 | `--log-level` | | `info` | no | Log level: `debug`, `info`, `warn`, `error` |
 | `--external-url` | | | no | Public URL users reach the server at (e.g., `https://ci.example.com`). It is the base of the `/auth/oauth/<provider>/callback` redirect URI. When unset, the URL is derived from each request (`X-Forwarded-Proto`/`X-Forwarded-Host`/`X-Forwarded-Port`, else scheme and `Host`); set it when the server is reachable under several hostnames or the proxy does not forward the original host. |
 | `--session-lifetime` | | `0` | no | Maximum session duration before re-login is required. Supports Go duration syntax plus days/weeks/months (e.g. `24h`, `7d`, `30d`). `0` means sessions never expire. |
+| `--default-check-interval` | | `@every 1m` | no | Check schedule for resources with no `check_interval`, as cron syntax or `@every <duration>` (minimum 10s). |
 | `--config` | `-c` | | no | Path to a config file |
 | `--team-canonical` | | `main` | no | Team to use for `--pipeline-*` flags |
 | `--pipeline-config` | | | no | Load a pipeline config file at startup |
