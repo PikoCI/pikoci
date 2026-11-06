@@ -117,7 +117,7 @@ func (q *PikoCI) NextWork(ctx context.Context, wc workitem.WorkerContext) (*work
 		}
 		now := time.Now()
 
-		spec := q.checkIntervalSpec(rwp.CheckInterval)
+		spec := q.checkIntervalSpec(rwp.Type, rwp.CheckInterval)
 		nextCheck, err := scheduler.ComputeNextCheck(spec, now)
 		if err != nil {
 			q.logger.Error("NextWork: failed to compute next check",

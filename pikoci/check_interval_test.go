@@ -18,12 +18,15 @@ func TestNextWork_CheckIntervalFallback(t *testing.T) {
 	tests := []struct {
 		name          string
 		serverDefault string
+		resourceType  string
 		resourceSpec  string
 		want          time.Duration
 	}{
 		{name: "built-in default", want: time.Minute},
 		{name: "server default", serverDefault: "@every 6h", want: 6 * time.Hour},
 		{name: "resource overrides server default", serverDefault: "@every 6h", resourceSpec: "@every 5m", want: 5 * time.Minute},
+		{name: "cron ignores server default", serverDefault: "@every 6h", resourceType: "cron", want: time.Minute},
+		{name: "cron keeps its own interval", serverDefault: "@every 6h", resourceType: "cron", resourceSpec: "@every 2h", want: 2 * time.Hour},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -34,7 +37,7 @@ func TestNextWork_CheckIntervalFallback(t *testing.T) {
 
 			s.Pipelines.EXPECT().FilterAll(ctx).Return(nil, nil)
 			s.Resources.EXPECT().FilterDueResources(ctx).Return([]*resource.ResourceWithPipeline{{
-				Resource:          resource.Resource{Canonical: "git.repo", CheckInterval: tt.resourceSpec},
+				Resource:          resource.Resource{Canonical: "git.repo", Type: tt.resourceType, CheckInterval: tt.resourceSpec},
 				TeamCanonical:     "main",
 				PipelineCanonical: "p",
 			}}, nil)
@@ -58,10 +61,15 @@ func TestCreatePipeline_ResourceWithoutIntervalUsesServerDefault(t *testing.T) {
 	s.P.DefaultCheckInterval = "@every 6h"
 
 	hclConfig := []byte(`
-resource "cron" "timer" {}
+resource "git" "repo" {
+  params {
+    url  = "https://example.com/repo.git"
+    name = "repo"
+  }
+}
 
 job "test" {
-  get "cron" "timer" { trigger = true }
+  get "git" "repo" { trigger = true }
   task "echo" {
     run "exec" {
       path = "echo"
@@ -92,10 +100,15 @@ func TestUpdatePipeline_ServerDefaultDoesNotRescheduleResource(t *testing.T) {
 	s.P.DefaultCheckInterval = "@every 6h"
 
 	hclConfig := []byte(`
-resource "cron" "timer" {}
+resource "git" "repo" {
+  params {
+    url  = "https://example.com/repo.git"
+    name = "repo"
+  }
+}
 
 job "test" {
-  get "cron" "timer" { trigger = true }
+  get "git" "repo" { trigger = true }
   task "echo" {
     run "exec" {
       path = "echo"
@@ -109,12 +122,12 @@ job "test" {
 	existing := &pipeline.Pipeline{
 		ID: 1, Name: "p", Canonical: "p",
 		Jobs:      []job.Job{{ID: 1, Name: "test"}},
-		Resources: []resource.Resource{{ID: 1, Canonical: "cron.timer", Name: "timer", Type: "cron", NextCheck: next}},
+		Resources: []resource.Resource{{ID: 1, Canonical: "git.repo", Name: "repo", Type: "git", NextCheck: next}},
 	}
 	s.Pipelines.EXPECT().Find(ctx, "main", "p").Return(existing, nil).Times(3)
 	s.Pipelines.EXPECT().Update(ctx, "main", "p", gomock.Any()).Return(nil)
 	s.Jobs.EXPECT().Update(ctx, "main", "p", "test", gomock.Any()).Return(nil)
-	s.Resources.EXPECT().Update(ctx, "main", "p", "cron.timer", gomock.Any()).DoAndReturn(
+	s.Resources.EXPECT().Update(ctx, "main", "p", "git.repo", gomock.Any()).DoAndReturn(
 		func(_ context.Context, _, _, _ string, r resource.Resource) error {
 			assert.Empty(t, r.CheckInterval)
 			assert.True(t, r.NextCheck.Equal(next), "saving a pipeline must not reschedule its resource")
@@ -123,4 +136,62 @@ job "test" {
 
 	_, err := s.S.UpdatePipeline(ctx, "main", "p", hclConfig, nil)
 	require.NoError(t, err)
+}
+
+func TestCreatePipeline_CronResourceIgnoresServerDefault(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	s.P.DefaultCheckInterval = "@every 6h"
+
+	hclConfig := []byte(`
+resource "cron" "timer" {}
+
+job "test" {
+  get "cron" "timer" { trigger = true }
+  task "echo" {
+    run "exec" {
+      path = "echo"
+      args = ["hello"]
+    }
+  }
+}
+`)
+
+	s.Pipelines.EXPECT().Create(ctx, "main", gomock.Any()).Return(uint32(1), nil)
+	s.Jobs.EXPECT().Create(ctx, "main", "p", gomock.Any()).Return(uint32(1), nil)
+	s.Resources.EXPECT().Create(ctx, "main", "p", gomock.Any()).DoAndReturn(
+		func(_ context.Context, _, _ string, r resource.Resource) (uint32, error) {
+			assert.WithinDuration(t, time.Now().Add(time.Minute), r.NextCheck, 5*time.Second)
+			return 1, nil
+		})
+	s.Pipelines.EXPECT().Find(ctx, "main", "p").Return(&pipeline.Pipeline{ID: 1, Name: "p", Canonical: "p"}, nil)
+
+	_, err := s.S.CreatePipeline(ctx, "main", "p", hclConfig, nil)
+	require.NoError(t, err)
+}
+
+func TestPipelineResources_EffectiveCheckInterval(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	s.P.DefaultCheckInterval = "@every 6h"
+
+	git := func() *resource.Resource { return &resource.Resource{Canonical: "git.repo", Type: "git"} }
+	cron := &resource.Resource{Canonical: "cron.timer", Type: "cron"}
+	explicit := &resource.Resource{Canonical: "git.fast", Type: "git", CheckInterval: "@every 5m"}
+
+	s.Resources.EXPECT().Find(ctx, "main", "p", "git.repo").Return(git(), nil)
+	r, err := s.P.GetPipelineResource(ctx, "main", "p", "git.repo")
+	require.NoError(t, err)
+	assert.Equal(t, "@every 6h", r.EffectiveCheckInterval)
+	assert.Empty(t, r.CheckInterval)
+
+	s.Resources.EXPECT().Filter(ctx, "main", "p").Return([]*resource.Resource{git(), cron, explicit}, nil)
+	s.Resources.EXPECT().LatestVersionByResources(ctx, "main", "p").Return(nil, nil)
+	rs, err := s.P.ListPipelineResources(ctx, "main", "p")
+	require.NoError(t, err)
+	assert.Equal(t, "@every 6h", rs[0].EffectiveCheckInterval)
+	assert.Equal(t, "@every 1m", rs[1].EffectiveCheckInterval)
+	assert.Equal(t, "@every 5m", rs[2].EffectiveCheckInterval)
 }

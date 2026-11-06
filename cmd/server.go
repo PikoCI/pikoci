@@ -75,6 +75,11 @@ var serverCmd = &cobra.Command{
 		}
 		jwtSecret := []byte(cfg.JWTSecret)
 
+		// Before connecting: a bad value must not leave migrations applied.
+		if err := validateDefaultCheckInterval(cfg.DefaultCheckInterval); err != nil {
+			return err
+		}
+
 		logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: parseSlogLevel(cfg.LogLevel)}))
 		logger = logger.With("service", "pikoci")
 
@@ -154,9 +159,6 @@ var serverCmd = &cobra.Command{
 			logger.Info("session lifetime configured", "duration", d)
 		}
 
-		if err := scheduler.ValidateCheckInterval(cfg.DefaultCheckInterval); err != nil {
-			return fmt.Errorf("invalid --default-check-interval value %q: %w", cfg.DefaultCheckInterval, err)
-		}
 		svc.DefaultCheckInterval = cfg.DefaultCheckInterval
 
 		// Recover builds orphaned by a previous crash or unclean shutdown.
@@ -486,4 +488,16 @@ func generateWorkerJWT(js []byte) string {
 		panic(err)
 	}
 	return tokenString
+}
+
+// validateDefaultCheckInterval checks the --default-check-interval value. An
+// empty one means the built-in default.
+func validateDefaultCheckInterval(spec string) error {
+	if spec == "" {
+		return nil
+	}
+	if err := scheduler.ValidateCheckInterval(spec); err != nil {
+		return fmt.Errorf("invalid --default-check-interval value %q: %w", spec, err)
+	}
+	return nil
 }

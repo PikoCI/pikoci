@@ -448,11 +448,21 @@ func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipelin
 	return p
 }
 
+// cronResourceType is the name of the built-in resource type that emits a new
+// version on each check.
+const cronResourceType = "cron"
+
 // checkIntervalSpec returns the schedule for a resource's check_interval,
-// falling back to the server default when the resource does not set one.
-func (q *PikoCI) checkIntervalSpec(spec string) string {
+// falling back to the server default when the resource does not set one. A
+// cron resource does not take the server default: its interval is how often
+// it fires, not how often it is polled, so it must not change with a setting
+// meant to reduce polling.
+func (q *PikoCI) checkIntervalSpec(resourceType, spec string) string {
 	if spec != "" {
 		return spec
+	}
+	if resourceType == cronResourceType {
+		return scheduler.DefaultCheckInterval
 	}
 	if q.DefaultCheckInterval != "" {
 		return q.DefaultCheckInterval

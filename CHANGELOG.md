@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Default check interval**: `--default-check-interval` sets the check schedule for resources with no `check_interval`, so busy servers can poll less often. ([#719](https://github.com/PikoCI/pikoci/issues/719))
+- **Default check interval**: `--default-check-interval` sets the check schedule for resources with no `check_interval`, so busy servers can poll less often. `cron` resources keep `@every 1m`, and the API returns the schedule in force as `effective_check_interval`. ([#719](https://github.com/PikoCI/pikoci/issues/719))
 
 ## [0.8.0] - 2026-10-25
 

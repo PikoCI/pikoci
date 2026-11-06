@@ -100,6 +100,9 @@ func (q *PikoCI) ListPipelineResources(ctx context.Context, tc, pc string) ([]*r
 	if err != nil {
 		return nil, fmt.Errorf("failed to list Pipeline Resources: %w", err)
 	}
+	for _, r := range rs {
+		r.EffectiveCheckInterval = q.checkIntervalSpec(r.Type, r.CheckInterval)
+	}
 
 	// Fetch latest version for each resource in a single batch query
 	var versionIDs []uint32
@@ -147,6 +150,7 @@ func (q *PikoCI) GetPipelineResource(ctx context.Context, tc, pc, rCan string) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to find Resource: %w", err)
 	}
+	r.EffectiveCheckInterval = q.checkIntervalSpec(r.Type, r.CheckInterval)
 
 	return r, nil
 }
