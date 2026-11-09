@@ -253,6 +253,8 @@ The minimum `check_interval` is 10 seconds. Intervals shorter than 10s will be r
 
 A resource with no `check_interval` uses the server's [`--default-check-interval`](Server.md), which is `@every 1m` unless changed. A `cron` resource with no `check_interval` always uses `@every 1m`, because its interval is how often it fires. A new resource waits one interval before its first check, so a long default also delays the first build of a new pipeline unless a webhook or manual trigger runs the check sooner.
 
+A changed default takes effect at each resource's next check, which was scheduled with the old interval. After lowering it from `@every 6h` to `@every 1h`, for example, a resource can wait up to 6 hours before it moves to the new schedule.
+
 Manual triggers (via the UI or API) and webhook triggers reset the check timer, so the next automatic check happens one full interval after the trigger.
 
 ## Built-in: fs

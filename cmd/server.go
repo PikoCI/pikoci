@@ -159,7 +159,9 @@ var serverCmd = &cobra.Command{
 			logger.Info("session lifetime configured", "duration", d)
 		}
 
-		svc.DefaultCheckInterval = cfg.DefaultCheckInterval
+		if cfg.DefaultCheckInterval != "" {
+			svc.DefaultCheckInterval = cfg.DefaultCheckInterval
+		}
 
 		// Recover builds orphaned by a previous crash or unclean shutdown.
 		if n, err := svc.RecoverOrphanedBuilds(ctx); err != nil {

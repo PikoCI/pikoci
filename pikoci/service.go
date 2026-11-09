@@ -394,7 +394,7 @@ type PikoCI struct {
 	SessionLifetime time.Duration
 
 	// DefaultCheckInterval is the check schedule of resources with no
-	// check_interval. Empty means scheduler.DefaultCheckInterval.
+	// check_interval. New sets it to scheduler.DefaultCheckInterval.
 	DefaultCheckInterval string
 
 	// GRPCServer is set by the server command to enable cancellation routing
@@ -441,6 +441,7 @@ func New(ctx context.Context, ur user.Repository, tr team.Repository, pr pipelin
 		OAuthProviders: opr,
 		StartUoW:      suow,
 		JWTSecret:     js,
+		DefaultCheckInterval: scheduler.DefaultCheckInterval,
 		logger:        l,
 		scheduler:     sched,
 	}
@@ -464,10 +465,7 @@ func (q *PikoCI) checkIntervalSpec(resourceType, spec string) string {
 	if resourceType == cronResourceType {
 		return scheduler.DefaultCheckInterval
 	}
-	if q.DefaultCheckInterval != "" {
-		return q.DefaultCheckInterval
-	}
-	return scheduler.DefaultCheckInterval
+	return q.DefaultCheckInterval
 }
 
 // StartScheduler starts the background scheduler that polls for due resources.

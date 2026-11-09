@@ -33,7 +33,9 @@ func TestNextWork_CheckIntervalFallback(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			s := newService(ctrl)
 			ctx := context.TODO()
-			s.P.DefaultCheckInterval = tt.serverDefault
+			if tt.serverDefault != "" {
+				s.P.DefaultCheckInterval = tt.serverDefault
+			}
 
 			s.Pipelines.EXPECT().FilterAll(ctx).Return(nil, nil)
 			s.Resources.EXPECT().FilterDueResources(ctx).Return([]*resource.ResourceWithPipeline{{
