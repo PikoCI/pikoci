@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`--db-name` for SQLite**: it now sets the database file path instead of being ignored. Existing servers keep using their current database until you move it, together with its `-wal` and `-shm` files, as described in [Deployment](docs/Deployment.md#upgrading-from-080-or-earlier). ([#688](https://github.com/PikoCI/pikoci/issues/688))
+
 ## [0.8.0] - 2026-10-25
 
 ### Added

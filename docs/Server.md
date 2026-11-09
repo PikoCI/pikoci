@@ -22,7 +22,7 @@ pikoci server [flags]
 | `--db-port` | | | no | Database port |
 | `--db-user` | | | no | Database user |
 | `--db-password` | | | no | Database password |
-| `--db-name` | | | no | Database name |
+| `--db-name` | | | no | Database name. For `sqlite`, the path of the database file (default: `pikoci/pikoci.db` in the XDG data directory) |
 | `--run-migrations` | | `true` | no | Run database migrations on startup |
 | `--run-worker` | | `true` | no | Run an embedded worker |
 | `--concurrency` | | `1` | no | Number of worker goroutines |

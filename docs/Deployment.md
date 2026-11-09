@@ -157,6 +157,21 @@ Point your domain's A record to the server IP:
 
 Caddy handles TLS certificates automatically via Let's Encrypt.
 
+## Upgrading from 0.8.0 or earlier
+
+Earlier versions ignored `DB_NAME` for SQLite, so a server using the example env file kept its database in `/var/lib/pikoci/.local/share/pikoci/` instead of at `/var/lib/pikoci/pikoci.db`. After upgrading, the server keeps using the old location and logs a warning until you move the database.
+
+To move it, stop the server and move the database with its `-wal` and `-shm` files. The glob matters, because the `-wal` file can hold most recent writes:
+
+```bash
+systemctl stop pikoci
+mv /var/lib/pikoci/.local/share/pikoci/pikoci.db* /var/lib/pikoci/
+chmod 700 /var/lib/pikoci
+systemctl start pikoci
+```
+
+The `chmod` keeps other local users out: the database files are readable by everyone, and the old XDG directory was the only thing protecting them.
+
 ## Secrets management
 
 - Keep your secrets in `deploy/pikoci.env` locally (gitignored). The deploy script copies it to the server with correct permissions (`chmod 600`)

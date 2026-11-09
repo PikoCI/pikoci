@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -47,6 +48,88 @@ var mainTeamCanonical = "main"
 // serverViper is the viper instance used for server command flag and env var binding.
 var serverViper = viper.New()
 
+// sqliteDBFile returns the SQLite file to open for --db-name, and a warning
+// to log when it opens a different file than the one named.
+//
+// Before --db-name was honoured for SQLite, all data lived in legacyFile even
+// when --db-name was set. If the named file does not exist yet but legacyFile
+// does, legacyFile is kept so an upgrade neither loses data nor stops the
+// server. If legacyFile was moved without its -wal file, which can hold all
+// recent writes, opening the moved file would look like data loss, so that is
+// an error.
+func sqliteDBFile(dbName, legacyFile string) (path, warning string, err error) {
+	path, err = filepath.Abs(dbName)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to resolve --db-name %q: %w", dbName, err)
+	}
+	// The SQLite driver takes everything after the first '?' as DSN parameters,
+	// so it would open a different file than the one requested.
+	if strings.Contains(path, "?") {
+		return "", "", fmt.Errorf("invalid --db-name %q: a SQLite path cannot contain '?'", dbName)
+	}
+
+	dir := filepath.Dir(path)
+	if fi, err := os.Stat(dir); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", "", fmt.Errorf("--db-name %q: directory %s does not exist", dbName, dir)
+		}
+		return "", "", fmt.Errorf("--db-name %q: %w", dbName, err)
+	} else if !fi.IsDir() {
+		return "", "", fmt.Errorf("--db-name %q: %s is not a directory", dbName, dir)
+	}
+
+	if path == legacyFile {
+		return path, "", nil
+	}
+
+	pathExists, err := fileExists(path)
+	if err != nil {
+		return "", "", fmt.Errorf("--db-name %q: %w", dbName, err)
+	}
+	legacyExists, err := fileExists(legacyFile)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to check for an existing database at %s: %w", legacyFile, err)
+	}
+
+	if !pathExists && legacyExists {
+		return legacyFile, fmt.Sprintf(
+			"--db-name selects %[1]s, which does not exist, so the existing database at %[2]s is used instead "+
+				"(earlier versions ignored --db-name for SQLite). "+
+				"To use %[1]s, stop the server and move %[2]s with its -wal and -shm files there.",
+			path, legacyFile,
+		), nil
+	}
+
+	if pathExists && !legacyExists {
+		fi, err := os.Stat(legacyFile + "-wal")
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", "", fmt.Errorf("failed to check for an existing database at %s: %w", legacyFile, err)
+		}
+		if err == nil && fi.Size() > 0 {
+			return "", "", fmt.Errorf(
+				"%[1]s-wal still holds data, but %[1]s is gone. Recent writes are in that -wal file, so opening %[2]s without it would lose them. "+
+					"Stop the server and move %[1]s-wal and %[1]s-shm next to %[2]s, renamed to %[2]s-wal and %[2]s-shm",
+				legacyFile, path,
+			)
+		}
+	}
+
+	return path, "", nil
+}
+
+// fileExists reports whether path exists. Errors other than "not found", such
+// as a permission error, are returned rather than treated as missing.
+func fileExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
+}
+
 // serverCmd is the cobra command that starts the PikoCI server.
 var serverCmd = &cobra.Command{
 	Use:   "server",
@@ -81,9 +164,25 @@ var serverCmd = &cobra.Command{
 			return fmt.Errorf("invalid DBSystem %q, should be one of: %s, %s, %s or %s", cfg.DBSystem, mysql.Mem, mysql.MySQL, mysql.SQLite, mysql.PostgreSQL)
 		}
 
-		dbFile, err := xdg.DataFile(filepath.Join(AppName, AppName+".db"))
-		if err != nil {
-			return fmt.Errorf("failed to create dbFile: %v", err)
+		var dbFile string
+		if cfg.DBSystem == mysql.SQLite {
+			var err error
+			if cfg.DBName == "" {
+				dbFile, err = xdg.DataFile(filepath.Join(AppName, AppName+".db"))
+				if err != nil {
+					return fmt.Errorf("failed to create dbFile: %v", err)
+				}
+			} else {
+				var warning string
+				dbFile, warning, err = sqliteDBFile(cfg.DBName, filepath.Join(xdg.DataHome, AppName, AppName+".db"))
+				if err != nil {
+					return err
+				}
+				if warning != "" {
+					logger.Warn(warning)
+				}
+			}
+			logger.Info("Using SQLite database", "path", dbFile)
 		}
 		logger.Info("DB connection starting ...", "db-system", cfg.DBSystem)
 		db, err := mysql.New(cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, mysql.Options{
@@ -431,7 +530,7 @@ func init() {
 	serverCmd.Flags().Int("db-port", 0, "Database Port")
 	serverCmd.Flags().String("db-user", "", "Database User")
 	serverCmd.Flags().String("db-password", "", "Database Password")
-	serverCmd.Flags().String("db-name", "", "Database Name")
+	serverCmd.Flags().String("db-name", "", "Database name, or for sqlite the path of the database file (default: pikoci/pikoci.db in the XDG data directory)")
 	serverCmd.Flags().Bool("run-migrations", true, "Flag to know if migrations should be ran")
 	serverCmd.Flags().Bool("run-worker", true, "Runs a worker with PikoCI server")
 	serverCmd.Flags().Int("concurrency", 1, "Number of workers to start in one instance")
