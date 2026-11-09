@@ -41,4 +41,6 @@ type Config struct {
 	PipelineVars        string `mapstructure:"vars"`
 
 	SessionLifetime string `mapstructure:"session-lifetime"`
+
+	DefaultCheckInterval string `mapstructure:"default-check-interval"`
 }
