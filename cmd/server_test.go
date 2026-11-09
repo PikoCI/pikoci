@@ -10,26 +10,19 @@ import (
 )
 
 func TestSQLiteDBFile(t *testing.T) {
-	touch := func(t *testing.T, path string) {
+	write := func(t *testing.T, path, content string) {
 		t.Helper()
-		require.NoError(t, os.WriteFile(path, nil, 0o600))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 	}
-
-	t.Run("UnsetUsesDefault", func(t *testing.T) {
-		def := filepath.Join(t.TempDir(), "default.db")
-
-		got, err := sqliteDBFile("", def)
-		require.NoError(t, err)
-		assert.Equal(t, def, got)
-	})
 
 	t.Run("AbsolutePathUsedAsIs", func(t *testing.T) {
 		dir := t.TempDir()
 		want := filepath.Join(dir, "explicit.db")
 
-		got, err := sqliteDBFile(want, filepath.Join(dir, "default.db"))
+		got, warning, err := sqliteDBFile(want, filepath.Join(dir, "default.db"))
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
+		assert.Empty(t, warning)
 	})
 
 	t.Run("RelativePathResolvesAgainstWorkingDir", func(t *testing.T) {
@@ -38,49 +31,101 @@ func TestSQLiteDBFile(t *testing.T) {
 		wd, err := os.Getwd()
 		require.NoError(t, err)
 
-		got, err := sqliteDBFile("pikoci.db", filepath.Join(dir, "default.db"))
+		got, _, err := sqliteDBFile("pikoci.db", filepath.Join(dir, "default.db"))
 		require.NoError(t, err)
 		assert.Equal(t, filepath.Join(wd, "pikoci.db"), got)
 	})
 
-	t.Run("RefusesToAbandonExistingDefaultDatabase", func(t *testing.T) {
+	t.Run("FallsBackToExistingLegacyDatabase", func(t *testing.T) {
 		dir := t.TempDir()
-		def := filepath.Join(dir, "default.db")
+		legacy := filepath.Join(dir, "default.db")
 		target := filepath.Join(dir, "explicit.db")
-		touch(t, def)
+		write(t, legacy, "")
 
-		_, err := sqliteDBFile(target, def)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), target)
-		assert.Contains(t, err.Error(), def)
+		got, warning, err := sqliteDBFile(target, legacy)
+		require.NoError(t, err)
+		assert.Equal(t, legacy, got)
+		assert.Contains(t, warning, target)
+		assert.Contains(t, warning, legacy)
 		assert.NoFileExists(t, target)
 	})
 
-	t.Run("ExistingTargetWinsOverDefaultDatabase", func(t *testing.T) {
+	t.Run("ExistingTargetWinsOverLegacyDatabase", func(t *testing.T) {
 		dir := t.TempDir()
-		def := filepath.Join(dir, "default.db")
+		legacy := filepath.Join(dir, "default.db")
 		target := filepath.Join(dir, "explicit.db")
-		touch(t, def)
-		touch(t, target)
+		write(t, legacy, "")
+		write(t, target, "")
 
-		got, err := sqliteDBFile(target, def)
+		got, warning, err := sqliteDBFile(target, legacy)
+		require.NoError(t, err)
+		assert.Equal(t, target, got)
+		assert.Empty(t, warning)
+	})
+
+	t.Run("NamingTheLegacyPathIsAllowed", func(t *testing.T) {
+		legacy := filepath.Join(t.TempDir(), "default.db")
+		write(t, legacy, "")
+
+		got, _, err := sqliteDBFile(legacy, legacy)
+		require.NoError(t, err)
+		assert.Equal(t, legacy, got)
+	})
+
+	t.Run("RefusesWhenOnlyTheMainFileWasMoved", func(t *testing.T) {
+		dir := t.TempDir()
+		legacy := filepath.Join(dir, "default.db")
+		target := filepath.Join(dir, "explicit.db")
+		write(t, target, "")
+		write(t, legacy+"-wal", "pending writes")
+
+		_, _, err := sqliteDBFile(target, legacy)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), legacy+"-wal")
+	})
+
+	t.Run("EmptyLeftoverWalIsIgnored", func(t *testing.T) {
+		dir := t.TempDir()
+		legacy := filepath.Join(dir, "default.db")
+		target := filepath.Join(dir, "explicit.db")
+		write(t, target, "")
+		write(t, legacy+"-wal", "")
+
+		got, _, err := sqliteDBFile(target, legacy)
 		require.NoError(t, err)
 		assert.Equal(t, target, got)
 	})
 
-	t.Run("NamingTheDefaultPathIsAllowed", func(t *testing.T) {
-		def := filepath.Join(t.TempDir(), "default.db")
-		touch(t, def)
+	t.Run("StatErrorOnLegacyIsReturned", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("root ignores directory permissions")
+		}
+		dir := t.TempDir()
+		locked := filepath.Join(dir, "locked")
+		require.NoError(t, os.Mkdir(locked, 0o700))
+		write(t, filepath.Join(locked, "default.db"), "")
+		require.NoError(t, os.Chmod(locked, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
 
-		got, err := sqliteDBFile(def, def)
-		require.NoError(t, err)
-		assert.Equal(t, def, got)
+		_, _, err := sqliteDBFile(filepath.Join(dir, "explicit.db"), filepath.Join(locked, "default.db"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, os.ErrPermission)
+	})
+
+	t.Run("MissingParentDirectoryIsNamed", func(t *testing.T) {
+		dir := t.TempDir()
+		missing := filepath.Join(dir, "nope")
+
+		_, _, err := sqliteDBFile(filepath.Join(missing, "pikoci.db"), filepath.Join(dir, "default.db"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), missing)
+		assert.Contains(t, err.Error(), "does not exist")
 	})
 
 	t.Run("RejectsQuestionMarkInPath", func(t *testing.T) {
 		dir := t.TempDir()
 
-		_, err := sqliteDBFile(filepath.Join(dir, "a?b.db"), filepath.Join(dir, "default.db"))
+		_, _, err := sqliteDBFile(filepath.Join(dir, "a?b.db"), filepath.Join(dir, "default.db"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cannot contain")
 	})

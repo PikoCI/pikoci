@@ -31,7 +31,7 @@ pikoci server --jwt-secret my-secret --db-system sqlite --db-name pikoci.db
 Without `--db-name`, the database is stored at `pikoci/pikoci.db` in the [XDG data directory](https://specifications.freedesktop.org/basedir-spec/latest/) (`~/.local/share/pikoci/pikoci.db` by default on Linux).
 
 !!! warning "Upgrading from 0.8.0 or earlier"
-    Earlier versions ignored `--db-name` for SQLite and always used the XDG path. If you set `--db-name` (or `DB_NAME`) and the file it names does not exist yet, the server refuses to start rather than open an empty database. Either move your existing database, along with any `-wal` and `-shm` files, to the path you set, or unset `--db-name` to keep using the XDG path. To really start with a new database, create the file first with `touch`.
+    Earlier versions ignored `--db-name` for SQLite and always used the XDG path. If you set `--db-name` (or `DB_NAME`) and the file it names does not exist yet, but a database exists at the XDG path, the server keeps using the XDG database and logs a warning. To switch to the path you set, stop the server and move the database together with its `-wal` and `-shm` files. The `-wal` file can hold most recent writes, so the server refuses to start if the main file was moved without it. See [Deployment](Deployment.md#upgrading-from-080-or-earlier) for the commands.
 
 PikoCI automatically enables [WAL mode](https://www.sqlite.org/wal.html) and a 5-second `busy_timeout` on file-backed SQLite connections. WAL allows concurrent reads during writes, and `busy_timeout` prevents immediate `SQLITE_BUSY` errors when multiple workers access the database simultaneously. In-memory databases (`mem`) only use `busy_timeout` since WAL requires a file on disk.
 
