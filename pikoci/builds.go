@@ -83,8 +83,8 @@ func (q *PikoCI) CreateJobBuild(ctx context.Context, tc, pc, jn string, b build.
 		return nil, err
 	}
 
-	if jErr == nil && j.Interruptible {
-		q.cancelOlderBuilds(ctx, tc, pc, jn, b.ID)
+	if jErr == nil {
+		q.supersedeOlderBuilds(ctx, tc, pc, jn, j, b.ID)
 	}
 
 	if b.Status != build.WaitingForApproval {
@@ -456,9 +456,7 @@ func (q *PikoCI) CreateRetryJobBuild(ctx context.Context, tc, pc, jn, parentBuil
 		return nil, err
 	}
 
-	if j.Interruptible {
-		q.cancelOlderBuilds(ctx, tc, pc, jn, b.ID)
-	}
+	q.supersedeOlderBuilds(ctx, tc, pc, jn, j, b.ID)
 
 	return &b, nil
 }
@@ -539,17 +537,30 @@ func (q *PikoCI) FindOldestPendingBuild(ctx context.Context, tc, pn, jn string) 
 	return q.Builds.FindOldestPending(ctx, tc, pn, jn)
 }
 
-// cancelOlderBuilds cancels all running, pending, and waiting-for-approval builds
-// for the given job that are older than newBuildID. This implements the interruptible
-// job behavior: only the newest build should run.
-func (q *PikoCI) cancelOlderBuilds(ctx context.Context, tc, pc, jn string, newBuildID uint32) {
+// supersedeOlderBuilds applies the job's interruptible or squash_pending flag
+// after newBuildID was created. interruptible wins, as it covers pending builds.
+func (q *PikoCI) supersedeOlderBuilds(ctx context.Context, tc, pc, jn string, j *job.Job, newBuildID uint32) {
+	if j.Interruptible {
+		q.cancelOlderBuilds(ctx, tc, pc, jn, newBuildID, false)
+	} else if j.SquashPending {
+		q.cancelOlderBuilds(ctx, tc, pc, jn, newBuildID, true)
+	}
+}
+
+// cancelOlderBuilds cancels the builds of the given job that are older than
+// newBuildID: running, pending, and waiting-for-approval ones (interruptible),
+// or only pending ones when pendingOnly is set (squash_pending).
+func (q *PikoCI) cancelOlderBuilds(ctx context.Context, tc, pc, jn string, newBuildID uint32, pendingOnly bool) {
 	older, err := q.Builds.FindActiveBuilds(ctx, tc, pc, jn, newBuildID)
 	if err != nil {
-		q.logger.Error("failed to find active builds for interruptible cancellation",
+		q.logger.Error("failed to find active builds for cancellation",
 			"pipeline", pc, "job", jn, "error", err)
 		return
 	}
 	for _, ob := range older {
+		if pendingOnly && ob.Status != build.Pending {
+			continue
+		}
 		wasRunning := ob.Status == build.Started
 		ob.Status = build.Cancelled
 		ob.Error = "superseded by newer build"
@@ -568,8 +579,8 @@ func (q *PikoCI) cancelOlderBuilds(ctx context.Context, tc, pc, jn string, newBu
 					"build_id", buildID, "error", err)
 			}
 		}
-		q.logger.Info("cancelled older build (interruptible)",
-			"pipeline", pc, "job", jn, "build_number", ob.BuildNumber)
+		q.logger.Info("cancelled older build",
+			"pipeline", pc, "job", jn, "build_number", ob.BuildNumber, "pending_only", pendingOnly)
 	}
 }
 
@@ -822,8 +833,8 @@ func (q *PikoCI) evaluateJobDownstream(ctx context.Context, tc, pn, completedJob
 	if err != nil {
 		return err
 	}
-	if triggered && j.Interruptible {
-		q.cancelOlderBuilds(ctx, tc, pn, j.Name, createdBuildID)
+	if triggered {
+		q.supersedeOlderBuilds(ctx, tc, pn, j.Name, j, createdBuildID)
 	}
 	if triggered && j.ApproveLabel == "" {
 		q.Notifier.Notify()

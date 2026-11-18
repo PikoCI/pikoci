@@ -65,6 +65,7 @@ type Job struct {
 	DisableRetry bool          `json:"disable_retry,omitempty"`
 	AllowFailure    bool          `json:"allow_failure,omitempty"`
 	Interruptible   bool          `json:"interruptible,omitempty"`
+	SquashPending   bool          `json:"squash_pending,omitempty"`
 	Timeout      time.Duration `json:"timeout,omitempty"`
 	Plan         []PlanStep    `json:"plan"`
 

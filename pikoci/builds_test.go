@@ -1481,6 +1481,81 @@ func TestCreateJobBuild_NotInterruptible_KeepsOlderBuilds(t *testing.T) {
 	assert.Equal(t, uint32(5), b.ID)
 }
 
+func TestCreateJobBuild_SquashPending_CancelsOnlyOlderPending(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
+		Return(&job.Job{Name: "my-job", SquashPending: true}, nil)
+	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "my-job", gomock.Any()).
+		Return(uint32(5), "5", nil)
+	s.Builds.EXPECT().FindActiveBuilds(ctx, "main", "my-pipeline", "my-job", uint32(5)).
+		Return([]*build.Build{
+			{ID: 2, BuildNumber: "2", Status: build.Started},
+			{ID: 3, BuildNumber: "3", Status: build.WaitingForApproval},
+			{ID: 4, BuildNumber: "4", Status: build.Pending},
+		}, nil)
+	// Only the pending build is cancelled; gomock fails on an Update of 2 or 3.
+	s.Builds.EXPECT().Update(ctx, "main", "my-pipeline", "my-job", "4", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			assert.Equal(t, build.Cancelled, b.Status)
+			assert.Equal(t, "superseded by newer build", b.Error)
+			assert.Zero(t, b.Duration)
+			return nil
+		})
+
+	b, err := s.S.CreateJobBuild(ctx, "main", "my-pipeline", "my-job", build.Build{})
+	require.NoError(t, err)
+	assert.Equal(t, uint32(5), b.ID)
+}
+
+func TestCreateJobBuild_InterruptibleAndSquashPending_CancelsRunningToo(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
+		Return(&job.Job{Name: "my-job", Interruptible: true, SquashPending: true}, nil)
+	s.Builds.EXPECT().Create(ctx, "main", "my-pipeline", "my-job", gomock.Any()).
+		Return(uint32(5), "5", nil)
+	s.Builds.EXPECT().FindActiveBuilds(ctx, "main", "my-pipeline", "my-job", uint32(5)).
+		Return([]*build.Build{
+			{ID: 3, BuildNumber: "3", Status: build.Started},
+		}, nil)
+	s.Builds.EXPECT().Update(ctx, "main", "my-pipeline", "my-job", "3", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			assert.Equal(t, build.Cancelled, b.Status)
+			return nil
+		})
+
+	_, err := s.S.CreateJobBuild(ctx, "main", "my-pipeline", "my-job", build.Build{})
+	require.NoError(t, err)
+}
+
+func TestCreateRetryJobBuild_SquashPending_CancelsOlderPending(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+
+	s.Jobs.EXPECT().Find(ctx, "main", "my-pipeline", "my-job").
+		Return(&job.Job{Name: "my-job", SquashPending: true}, nil)
+	s.Builds.EXPECT().CreateRetry(ctx, "main", "my-pipeline", "my-job", "3", gomock.Any()).
+		Return(uint32(10), "3.1", nil)
+	s.Builds.EXPECT().FindActiveBuilds(ctx, "main", "my-pipeline", "my-job", uint32(10)).
+		Return([]*build.Build{
+			{ID: 4, BuildNumber: "4", Status: build.Pending},
+		}, nil)
+	s.Builds.EXPECT().Update(ctx, "main", "my-pipeline", "my-job", "4", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _, _, _ string, b build.Build) error {
+			assert.Equal(t, build.Cancelled, b.Status)
+			return nil
+		})
+
+	_, err := s.S.CreateRetryJobBuild(ctx, "main", "my-pipeline", "my-job", "3", build.Build{})
+	require.NoError(t, err)
+}
+
 func TestCreateRetryJobBuild_Interruptible_CancelsOlder(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)
