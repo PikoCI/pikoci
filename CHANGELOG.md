@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`squash_pending` on jobs**: when `true`, a new build cancels the job's older pending builds, so a job with a frequent trigger and a long run (e.g. `cron` every minute) does not pile up a queue; running builds are kept.
+
 ## [0.8.0] - 2026-10-25
 
 ### Added

@@ -633,3 +633,31 @@ func TestPipelineFilterSummary(t *testing.T) {
 		assert.Equal(t, uint32(0), total)
 	})
 }
+
+func TestJob_PersistsSquashPending(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `INSERT INTO pipelines (team_id, name, canonical) VALUES (1, 'squash', 'squash')`)
+	require.NoError(t, err)
+
+	jr := mysql.NewJobRepository(db)
+	j := job.Job{Name: "train", SquashPending: true}
+	_, err = jr.Create(ctx, "main", "squash", j)
+	require.NoError(t, err)
+
+	found, err := jr.Find(ctx, "main", "squash", "train")
+	require.NoError(t, err)
+	assert.True(t, found.SquashPending)
+
+	pp, err := mysql.NewPipelineRepository(db).Find(ctx, "main", "squash")
+	require.NoError(t, err)
+	require.Len(t, pp.Jobs, 1)
+	assert.True(t, pp.Jobs[0].SquashPending)
+
+	j.SquashPending = false
+	require.NoError(t, jr.Update(ctx, "main", "squash", "train", j))
+	found, err = jr.Find(ctx, "main", "squash", "train")
+	require.NoError(t, err)
+	assert.False(t, found.SquashPending)
+}

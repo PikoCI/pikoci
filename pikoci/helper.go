@@ -102,6 +102,7 @@ type hclJob struct {
 	DisableRetry  bool                 `hcl:"disable_retry,optional"`
 	AllowFailure  bool                 `hcl:"allow_failure,optional"`
 	Interruptible bool                 `hcl:"interruptible,optional"`
+	SquashPending bool                 `hcl:"squash_pending,optional"`
 	Get           []hclGetStep         `hcl:"get,block"`
 	Task          []hclTaskStep        `hcl:"task,block"`
 	Put           []hclPutStep         `hcl:"put,block"`
@@ -689,7 +690,7 @@ var (
 	taskStepKnownAttrs   = []string{"timeout", "attempts", "inputs", "outputs"}
 	putStepKnownAttrs    = []string{"timeout", "attempts"}
 	notifyStepKnownAttrs = []string{"message"}
-	jobKnownAttrs        = []string{"concurrency", "serial_groups", "timeout", "disable_retry", "allow_failure", "interruptible"}
+	jobKnownAttrs        = []string{"concurrency", "serial_groups", "timeout", "disable_retry", "allow_failure", "interruptible", "squash_pending"}
 	inParallelKnownAttrs = []string{"limit", "fail_fast"}
 	inParallelBlocks     = map[string]bool{
 		"get": true, "task": true, "put": true, "notify": true,
@@ -1581,6 +1582,7 @@ func ReadPipeline(ctx context.Context, rpp []byte, vars map[string]interface{}) 
 			DisableRetry:  hj.DisableRetry,
 			AllowFailure:  hj.AllowFailure,
 			Interruptible: hj.Interruptible,
+			SquashPending: hj.SquashPending,
 			Plan:          jobPlans[hj.Name],
 			OnSuccess:     jh.OnSuccess,
 			OnFailure:     jh.OnFailure,
