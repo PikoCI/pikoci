@@ -42,14 +42,30 @@ ls -l /var/lib/pikoci/pikoci.db
 ```
 
 !!! danger "Do not fix this by changing the file's owner"
-    Giving the server ownership of an empty file makes it start cleanly on an empty database, and your pipelines and build history will look like they are gone. The data is still at the XDG path. Delete the empty file instead, or move your database onto it as shown below.
+    Giving the server ownership of an empty file makes it start cleanly on an empty database, and your pipelines and build history will look like they are gone. The data is still at the XDG path. Use one of the fixes below instead.
 
-If the file is empty, deleting it is enough. The server then falls back to the database it was already using:
+There are two ways out, and both keep the database you already have.
+
+**Unset `DB_NAME`.** Prefer this if you never meant to move the database. The server goes back to the XDG path it was already using, and no database file is touched:
+
+```bash
+# in /etc/pikoci/pikoci.env, comment the setting out
+#DB_NAME=/var/lib/pikoci/pikoci.db
+
+systemctl restart pikoci
+```
+
+!!! warning "If you deploy with `deploy.sh`"
+    `deploy/deploy.sh` copies your local `deploy/pikoci.env` over `/etc/pikoci/pikoci.env`. Comment `DB_NAME` out there as well, otherwise the next deploy restores it and the server stops again.
+
+**Or delete the file at the named path**, if it is empty. The server then falls back to the database it was already using and logs a warning naming both paths:
 
 ```bash
 rm /var/lib/pikoci/pikoci.db
 systemctl restart pikoci
 ```
+
+The warning stays until the two agree, so either unset `DB_NAME` or move the database as shown next.
 
 #### Moving the database to the path you named
 
