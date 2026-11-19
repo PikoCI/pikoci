@@ -75,6 +75,7 @@ The deploy script (`deploy/deploy.sh`) installs these automatically if missing.
 useradd --system --no-create-home pikoci
 mkdir -p /var/lib/pikoci /etc/pikoci
 chown pikoci:pikoci /var/lib/pikoci
+chmod 700 /var/lib/pikoci
 ```
 
 ### 4. Configure PikoCI
