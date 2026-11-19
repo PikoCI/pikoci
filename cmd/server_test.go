@@ -55,12 +55,43 @@ func TestSQLiteDBFile(t *testing.T) {
 		legacy := filepath.Join(dir, "default.db")
 		target := filepath.Join(dir, "explicit.db")
 		write(t, legacy, "")
-		write(t, target, "")
+		write(t, target, "a database")
 
 		got, warning, err := sqliteDBFile(target, legacy)
 		require.NoError(t, err)
 		assert.Equal(t, target, got)
 		assert.Empty(t, warning)
+	})
+
+	t.Run("EmptyTargetDoesNotWinOverLegacyDatabase", func(t *testing.T) {
+		dir := t.TempDir()
+		legacy := filepath.Join(dir, "default.db")
+		target := filepath.Join(dir, "explicit.db")
+		write(t, legacy, "a database")
+		write(t, target, "")
+
+		got, warning, err := sqliteDBFile(target, legacy)
+		require.NoError(t, err)
+		assert.Equal(t, legacy, got)
+		assert.Contains(t, warning, "empty file")
+		assert.Contains(t, warning, target)
+		assert.Contains(t, warning, legacy)
+	})
+
+	t.Run("RefusesUnwritableTarget", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("root ignores file permissions")
+		}
+		dir := t.TempDir()
+		target := filepath.Join(dir, "explicit.db")
+		write(t, target, "a database")
+		require.NoError(t, os.Chmod(target, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(target, 0o600) })
+
+		_, _, err := sqliteDBFile(target, filepath.Join(dir, "default.db"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), target)
+		assert.Contains(t, err.Error(), "not writable")
 	})
 
 	t.Run("NamingTheLegacyPathIsAllowed", func(t *testing.T) {
