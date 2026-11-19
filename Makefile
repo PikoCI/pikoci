@@ -113,8 +113,8 @@ else ifeq ($(SEMVER),patch)
 	$(eval NEXT := v$(MAJOR).$(MINOR).$(shell echo $$(($(PATCH)+1))))
 endif
 	$(eval NEXT_BARE := $(shell echo $(NEXT) | sed 's/^v//'))
-	sed -i 's/^## \[Unreleased\]$$/## [Unreleased]\n\n## [$(NEXT_BARE)] - $(shell date +%Y-%m-%d)/' CHANGELOG.md
-	git add CHANGELOG.md
+	sed -i 's/^## \[Unreleased\]$$/## [Unreleased]\n\n## [$(NEXT_BARE)] - $(shell date +%Y-%m-%d)/' CHANGELOG.md docs/Upgrading.md
+	git add CHANGELOG.md docs/Upgrading.md
 	git commit -m "Release $(NEXT)"
 	git tag -a $(NEXT) -m "Release $(NEXT)"
 	git push origin master $(NEXT)
