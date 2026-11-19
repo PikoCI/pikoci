@@ -201,6 +201,44 @@ func TestUpdatePipeline_PreserveName(t *testing.T) {
 	assert.Equal(t, pCan, pp.Canonical)
 }
 
+// A config update (the server's --pipeline-config reconcile at start, or
+// `pipelines update` without --public) must not flip a public pipeline back
+// to private: the visibility is set only through SetPipelinePublic.
+func TestUpdatePipeline_PreservePublic(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	s := newService(ctrl)
+	ctx := context.TODO()
+	tc := "main"
+	pCan := "my-pipeline"
+
+	b, err := os.ReadFile("testdata/pipeline.hcl")
+	require.NoError(t, err)
+
+	mvars := map[string]interface{}{
+		"repo_name": "repo",
+	}
+
+	existing := &pipeline.Pipeline{
+		ID: 1, Name: "My Pipeline", Canonical: pCan, Public: true,
+		Jobs:      []job.Job{{ID: 1, Name: "gen"}, {ID: 2, Name: "test"}, {ID: 3, Name: "build"}},
+		Resources: []resource.Resource{{ID: 1, Canonical: "git.qid", Name: "qid", Type: "git", Params: &resource.Params{Params: map[string]string{"url": "u", "name": "repo"}}}},
+	}
+
+	s.Pipelines.EXPECT().Find(ctx, tc, pCan).Return(existing, nil).Times(3)
+	s.Pipelines.EXPECT().Update(ctx, tc, pCan, gomock.Any()).DoAndReturn(
+		func(_ context.Context, _, _ string, pp pipeline.Pipeline) error {
+			assert.True(t, pp.Public, "the update must keep the pipeline public")
+			return nil
+		})
+	s.Jobs.EXPECT().Update(ctx, tc, pCan, "gen", gomock.Any()).Return(nil)
+	s.Jobs.EXPECT().Update(ctx, tc, pCan, "test", gomock.Any()).Return(nil)
+	s.Jobs.EXPECT().Update(ctx, tc, pCan, "build", gomock.Any()).Return(nil)
+	s.Resources.EXPECT().Update(ctx, tc, pCan, "git.qid", gomock.Any()).Return(nil)
+
+	_, err = s.S.UpdatePipeline(ctx, tc, pCan, b, mvars)
+	require.NoError(t, err)
+}
+
 func TestDeletePipeline(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := newService(ctrl)

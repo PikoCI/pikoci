@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Updating a public pipeline made it private again**: a config update (`pipelines update` without `--public`, or the server's `--pipeline-config` reconcile at every start) now keeps the pipeline's visibility; only `--public` changes it. ([#729](https://github.com/PikoCI/pikoci/pull/729))
 - **Server crash-looped when `DB_NAME` named a stray empty file**: an empty file is now ignored so the existing database is kept, and a file the server cannot write is reported by name instead of failing during migrations. ([#727](https://github.com/PikoCI/pikoci/issues/727))
 - **`deploy/pikoci.env.example` named a path that held no database**: `DB_NAME` is now commented out, so servers created from it keep using the XDG default instead of failing to start once `--db-name` is honoured. ([#718](https://github.com/PikoCI/pikoci/pull/718))
 
