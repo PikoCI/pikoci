@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`--db-name` now sets the SQLite database file path** instead of being ignored: before upgrading, check that `DB_NAME` does not name a different database, or leave it unset to keep the one in use. Existing databases are kept until you move them, with their `-wal` and `-shm` files, as described in [Upgrading](docs/Upgrading.md#sqlite-db_name-is-now-honoured). ([#688](https://github.com/PikoCI/pikoci/issues/688))
 
+### Added
+
+- **Default check interval**: `--default-check-interval` sets the check schedule for resources with no `check_interval`, so busy servers can poll less often. `cron` resources keep `@every 1m`, and the API returns the schedule in force as `effective_check_interval`. ([#719](https://github.com/PikoCI/pikoci/issues/719))
+
 ### Fixed
 
 - **Server crash-looped when `DB_NAME` named a stray empty file**: an empty file is now ignored so the existing database is kept, and a file the server cannot write is reported by name instead of failing during migrations. ([#727](https://github.com/PikoCI/pikoci/issues/727))

@@ -227,7 +227,7 @@ export function ResourceVersions({ tc, pn, rCan }) {
     ` : null}
 
     <div class="piko-resource-info">
-      <span class="piko-build-label">Last checked</span> (${resource.check_interval || '@every 1m'})${(!resource.last_check || resource.last_check.startsWith('0001-01-01')) ? ':' : ' at:'} ${' '}
+      <span class="piko-build-label">Last checked</span> (${resource.effective_check_interval})${(!resource.last_check || resource.last_check.startsWith('0001-01-01')) ? ':' : ' at:'} ${' '}
       <span class="piko-time-ago" data-time=${resource.last_check} title=${resource.last_check ? new Date(resource.last_check).toLocaleString() : ''} style="color: var(--text-primary);">
         ${pikoTimeAgo(resource.last_check)}
       </span>

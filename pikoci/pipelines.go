@@ -82,10 +82,7 @@ func (q *PikoCI) CreatePipeline(ctx context.Context, tc, pn string, rpp []byte, 
 			if !utils.ValidateCanonical(r.Name) {
 				return fmt.Errorf("invalid Resource Name format %q", r.Name)
 			}
-			spec := r.CheckInterval
-			if spec == "" {
-				spec = "@every 1m"
-			}
+			spec := q.checkIntervalSpec(r.Type, r.CheckInterval)
 			if err := scheduler.ValidateCheckInterval(spec); err != nil {
 				return fmt.Errorf("invalid check_interval for resource %q: %w", r.Name, err)
 			}
@@ -272,10 +269,7 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pCan string, rpp []byte
 			if !utils.ValidateCanonical(r.Name) {
 				return fmt.Errorf("invalid Resource Name format %q", r.Name)
 			}
-			spec := r.CheckInterval
-			if spec == "" {
-				spec = "@every 1m"
-			}
+			spec := q.checkIntervalSpec(r.Type, r.CheckInterval)
 			if err := scheduler.ValidateCheckInterval(spec); err != nil {
 				return fmt.Errorf("invalid check_interval for resource %q: %w", r.Name, err)
 			}

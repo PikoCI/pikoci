@@ -12,6 +12,10 @@ import (
 // of 10 seconds.
 var parser = cron.MustNewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor).WithMinEveryInterval(10 * time.Second)
 
+// DefaultCheckInterval is the check schedule of a resource with no
+// check_interval, unless the server is configured with a different default.
+const DefaultCheckInterval = "@every 1m"
+
 // minCheckInterval is the minimum allowed duration between consecutive
 // resource checks.
 const minCheckInterval = 10 * time.Second

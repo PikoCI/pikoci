@@ -19,6 +19,9 @@ type Resource struct {
 
 	Params        *Params `json:"params,omitempty" hcl:"params,block"`
 	CheckInterval string  `json:"check_interval" hcl:"check_interval,optional"`
+	// EffectiveCheckInterval is the schedule in force: CheckInterval or the
+	// server's default. Set on API responses, not stored.
+	EffectiveCheckInterval string `json:"effective_check_interval,omitempty"`
 
 	Tags []string `json:"tags,omitempty" hcl:"tags,optional"`
 
