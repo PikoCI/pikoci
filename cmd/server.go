@@ -53,11 +53,13 @@ var serverViper = viper.New()
 // to log when it opens a different file than the one named.
 //
 // Before --db-name was honoured for SQLite, all data lived in legacyFile even
-// when --db-name was set. If the named file does not exist yet but legacyFile
+// when --db-name was set. If the named file holds no database but legacyFile
 // does, legacyFile is kept so an upgrade neither loses data nor stops the
-// server. If legacyFile was moved without its -wal file, which can hold all
-// recent writes, opening the moved file would look like data loss, so that is
-// an error.
+// server. An empty file counts as holding no database, because a path that was
+// never used can still have one left behind by a touch or a failed run. If
+// legacyFile was moved without its -wal file, which can hold all recent
+// writes, opening the moved file would look like data loss, so that is an
+// error.
 func sqliteDBFile(dbName, legacyFile string) (path, warning string, err error) {
 	path, err = filepath.Abs(dbName)
 	if err != nil {
@@ -80,10 +82,13 @@ func sqliteDBFile(dbName, legacyFile string) (path, warning string, err error) {
 	}
 
 	if path == legacyFile {
+		if err := dbFileWritable(path); err != nil {
+			return "", "", err
+		}
 		return path, "", nil
 	}
 
-	pathExists, err := fileExists(path)
+	pathExists, pathSize, err := statFile(path)
 	if err != nil {
 		return "", "", fmt.Errorf("--db-name %q: %w", dbName, err)
 	}
@@ -92,11 +97,23 @@ func sqliteDBFile(dbName, legacyFile string) (path, warning string, err error) {
 		return "", "", fmt.Errorf("failed to check for an existing database at %s: %w", legacyFile, err)
 	}
 
-	if !pathExists && legacyExists {
+	// An empty file holds no database, so it must not keep the fallback below
+	// from finding the one that is already in use. The -wal guard further down
+	// still keys off mere existence, so an empty file cannot mask a legacyFile
+	// that was moved without its -wal.
+	if pathSize == 0 && legacyExists {
+		if err := dbFileWritable(legacyFile); err != nil {
+			return "", "", err
+		}
+		reason := "does not exist"
+		move := "To use %[1]s, stop the server and move %[2]s with its -wal and -shm files there."
+		if pathExists {
+			reason = "is an empty file and holds no database"
+			move = "To use %[1]s, stop the server, delete the empty file, and move %[2]s with its -wal and -shm files there."
+		}
 		return legacyFile, fmt.Sprintf(
-			"--db-name selects %[1]s, which does not exist, so the existing database at %[2]s is used instead "+
-				"(earlier versions ignored --db-name for SQLite). "+
-				"To use %[1]s, stop the server and move %[2]s with its -wal and -shm files there.",
+			"--db-name selects %[1]s, which "+reason+", so the existing database at %[2]s is used instead "+
+				"(earlier versions ignored --db-name for SQLite). "+move,
 			path, legacyFile,
 		), nil
 	}
@@ -115,7 +132,49 @@ func sqliteDBFile(dbName, legacyFile string) (path, warning string, err error) {
 		}
 	}
 
+	if err := dbFileWritable(path); err != nil {
+		return "", "", err
+	}
+
 	return path, "", nil
+}
+
+// statFile reports whether path exists and, if it does, its size. Errors other
+// than "not found", such as a permission error, are returned rather than
+// treated as missing.
+func statFile(path string) (exists bool, size int64, err error) {
+	fi, err := os.Stat(path)
+	if err == nil {
+		return true, fi.Size(), nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, 0, nil
+	}
+	return false, 0, err
+}
+
+// dbFileWritable reports an error when path exists but cannot be opened for
+// writing. Without this check SQLite fails later, during migrations, with
+// "attempt to write a readonly database", which under a supervisor that
+// restarts the server becomes a crash loop that never names the file at fault.
+// A missing file is fine: SQLite creates it, and the parent directory is
+// already checked by the caller.
+func dbFileWritable(path string) error {
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if errors.Is(err, os.ErrPermission) {
+			return fmt.Errorf(
+				"database file %s exists but is not writable by the user running the server, so migrations would fail. "+
+					"Check its owner and mode. Do not replace it with an empty file: the database in use may be at another path",
+				path,
+			)
+		}
+		return fmt.Errorf("failed to open database file %s for writing: %w", path, err)
+	}
+	return f.Close()
 }
 
 // fileExists reports whether path exists. Errors other than "not found", such

@@ -51,6 +51,7 @@ nav:
   - Scaling: Scaling.md
   - Running Workers Separately: Workers.md
   - Deployment: Deployment.md
+  - Upgrading: Upgrading.md
   - Portability: Portability.md
   - Coming from Concourse: Concourse.md
 

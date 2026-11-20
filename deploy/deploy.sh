@@ -146,7 +146,7 @@ ssh "$SSH_HOST" 'chown pikoci:pikoci /usr/local/bin/pikoci'
 # Creates directories and the pikoci system user on first run.
 
 echo "==> Syncing deploy configs..."
-ssh "$SSH_HOST" 'mkdir -p /opt/pikoci /etc/pikoci /var/lib/pikoci /var/www/pikoci.com /var/www/docs.pikoci.com && id -u pikoci &>/dev/null || useradd --system --no-create-home pikoci && chown pikoci:pikoci /var/lib/pikoci /var/www/pikoci.com /var/www/docs.pikoci.com && usermod -aG docker pikoci 2>/dev/null || true'
+ssh "$SSH_HOST" 'mkdir -p /opt/pikoci /etc/pikoci /var/lib/pikoci /var/www/pikoci.com /var/www/docs.pikoci.com && id -u pikoci &>/dev/null || useradd --system --no-create-home pikoci && chown pikoci:pikoci /var/lib/pikoci /var/www/pikoci.com /var/www/docs.pikoci.com && chmod 700 /var/lib/pikoci && usermod -aG docker pikoci 2>/dev/null || true'
 scp "$DEPLOY_DIR/pikoci.service" "$SSH_HOST":/etc/systemd/system/pikoci.service
 scp "$DEPLOY_DIR/pikoci-worker@.service" "$SSH_HOST":/etc/systemd/system/pikoci-worker@.service
 scp "$DEPLOY_DIR/docker-compose.yml" "$SSH_HOST":/opt/pikoci/docker-compose.yml
