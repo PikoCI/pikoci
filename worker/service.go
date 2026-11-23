@@ -2880,17 +2880,21 @@ func (w *Worker) runRunner(ctx context.Context, ru runner.Runner, cwd string, rc
 	}
 	close(done)
 	wg.Wait()
+	duration := time.Since(start)
 
 	// Before returning: the caller deletes the workdir the container mounts.
+	// Only the command's own failure (the step having been cancelled or timed
+	// out, which kills the docker client) warrants a forced removal; a docker
+	// run that already exited successfully must not be torn down just because
+	// ctx happened to be cancelled a moment later.
 	var removeErr error
-	if containerLabel != "" && ctx.Err() != nil {
+	if containerLabel != "" && ctx.Err() != nil && err != nil {
 		removeErr = removeDockerContainers(cmdPath, cwd, cmd.Env, containerLabel)
 		if removeErr != nil {
 			w.logger.Error("failed to remove container of cancelled step", "label", containerLabel, "error", removeErr)
 		}
 	}
 
-	duration := time.Since(start)
 	out += sw.String()
 	if removeErr != nil {
 		out += "\nfailed to remove container: " + removeErr.Error()

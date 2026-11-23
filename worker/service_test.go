@@ -10827,6 +10827,30 @@ func TestRunRunner_DockerRun_FinishedStepRemovesNothing(t *testing.T) {
 	assert.True(t, strings.HasPrefix(calls[0], "run --label "), calls[0])
 }
 
+func TestRunRunner_DockerRun_DurationExcludesRemoval(t *testing.T) {
+	// "rm" is slow; the reported step duration must not include it.
+	dir := t.TempDir()
+	script := `#!/bin/sh
+case "$1" in
+run) exec sleep 30 ;;
+ps) echo c1 ;;
+rm) sleep 0.3; exit 0 ;;
+esac
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	ctrl := gomock.NewController(t)
+	w, _ := newTestWorker(ctrl)
+	rc := utils.RunnerCommand{Runner: "docker", Params: map[string]string{"image": "alpine"}}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, duration, err := w.runRunner(ctx, dockerRunRunner(), t.TempDir(), rc, nil)
+	require.Error(t, err)
+	assert.Less(t, duration, 250*time.Millisecond)
+}
+
 func TestIsDockerRun(t *testing.T) {
 	assert.True(t, isDockerRun("docker", []string{"run", "--rm"}))
 	assert.True(t, isDockerRun("/usr/bin/docker", []string{"run"}))
