@@ -187,6 +187,8 @@ func (q *PikoCI) UpdatePipeline(ctx context.Context, tc, pCan string, rpp []byte
 		pp.Canonical = pCan
 	}
 	pp.Raw = rpp
+	// Visibility is not part of the config; only SetPipelinePublic changes it.
+	pp.Public = existingPP.Public
 
 	newCan := pp.Canonical
 	var up *pipeline.Pipeline
